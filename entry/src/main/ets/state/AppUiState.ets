@@ -62,9 +62,6 @@ export class AppUiState {
   @Trace materialType: number = 100   // ADAPTIVE
   @Trace materialLevel: number = 10   // ADAPTIVE
   @Trace lightColorMode: string = 'default'
-  @Trace hwAccountLoggedIn: boolean = false
-  @Trace hwAccountNickName: string = ''
-  @Trace hwAccountAvatarUri: string = ''
 }
 
 function readStorageValue<T>(key: string, fallback: T): T {
@@ -236,15 +233,6 @@ function applyAppUiStateValue<T extends string | number | boolean>(state: AppUiS
     case AppStorageKeys.LIGHT_COLOR_MODE:
       state.lightColorMode = value as string
       return
-    case AppStorageKeys.HW_ACCOUNT_LOGGED_IN:
-      state.hwAccountLoggedIn = value as boolean
-      return
-    case AppStorageKeys.HW_ACCOUNT_NICK_NAME:
-      state.hwAccountNickName = value as string
-      return
-    case AppStorageKeys.HW_ACCOUNT_AVATAR_URI:
-      state.hwAccountAvatarUri = value as string
-      return
     default:
       return
   }
@@ -351,12 +339,6 @@ function createAppUiStateFromStorage(): AppUiState {
     readStorageValue<number>(AppStorageKeys.MATERIAL_LEVEL, 10))
   applyAppUiStateValue(state, AppStorageKeys.LIGHT_COLOR_MODE,
     readStorageValue<string>(AppStorageKeys.LIGHT_COLOR_MODE, 'default'))
-  applyAppUiStateValue(state, AppStorageKeys.HW_ACCOUNT_LOGGED_IN,
-    readStorageValue<boolean>(AppStorageKeys.HW_ACCOUNT_LOGGED_IN, false))
-  applyAppUiStateValue(state, AppStorageKeys.HW_ACCOUNT_NICK_NAME,
-    readStorageValue<string>(AppStorageKeys.HW_ACCOUNT_NICK_NAME, ''))
-  applyAppUiStateValue(state, AppStorageKeys.HW_ACCOUNT_AVATAR_URI,
-    readStorageValue<string>(AppStorageKeys.HW_ACCOUNT_AVATAR_URI, ''))
   return state
 }
 
@@ -425,9 +407,6 @@ export function syncAppUiStateFromStorage(): void {
   state.materialType = freshState.materialType
   state.materialLevel = freshState.materialLevel
   state.lightColorMode = freshState.lightColorMode
-  state.hwAccountLoggedIn = freshState.hwAccountLoggedIn
-  state.hwAccountNickName = freshState.hwAccountNickName
-  state.hwAccountAvatarUri = freshState.hwAccountAvatarUri
 }
 
 export function applyThemeToAppUiState(themeId: string, colors: ThemeColorConfig): void {
@@ -564,12 +543,6 @@ function resolveAppUiStatePath(path: string): string {
       return 'materialLevel'
     case AppStorageKeys.LIGHT_COLOR_MODE:
       return 'lightColorMode'
-    case AppStorageKeys.HW_ACCOUNT_LOGGED_IN:
-      return 'hwAccountLoggedIn'
-    case AppStorageKeys.HW_ACCOUNT_NICK_NAME:
-      return 'hwAccountNickName'
-    case AppStorageKeys.HW_ACCOUNT_AVATAR_URI:
-      return 'hwAccountAvatarUri'
     default:
       return path
   }

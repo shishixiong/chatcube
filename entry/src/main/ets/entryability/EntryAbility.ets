@@ -134,10 +134,6 @@ export default class EntryAbility extends UIAbility {
       await ServiceRegistry.assistant().initialize();
       hilog.info(DOMAIN, 'testTag', 'AssistantService initialized successfully');
 
-      // 初始化华为账号登录态（从 Preferences 读并同步到 AppStorage）
-      await ServiceRegistry.account().initialize(this.context);
-      hilog.info(DOMAIN, 'testTag', 'AccountService initialized successfully');
-
       // 应用保存的主题设置
       // 在调用 setAppColorMode 之前先记录系统色彩模式：
       // 此时 context.config.colorMode 反映的是系统真实值（应用尚未注入覆盖），
@@ -235,9 +231,6 @@ export default class EntryAbility extends UIAbility {
     // 初始化 WindowManager（TextReader 需要）
     WindowManager.setWindowStage(windowStage);
 
-    // 把 WindowStage 放到 AppStorage，供 LoginPage/Index 切换主内容使用
-    AppStorage.setOrCreate(AppStorageKeys.MAIN_WINDOW_STAGE, windowStage);
-
     // ChatPage 已迁移为 NavDestination，始终加载 Index
     // 如果从卡片进入需要新建对话，通过 AppStorage 通知 Index
     if (this.pendingNewChat) {
@@ -267,11 +260,7 @@ export default class EntryAbility extends UIAbility {
         }
       }
 
-      // 初始化完成后，根据华为账号登录态选择首页：未登录进登录页
-      const pagePath: string = ServiceRegistry.account().isLoggedIn() ? 'pages/Index' : 'pages/LoginPage';
-      hilog.info(DOMAIN, 'testTag', 'Loading initial page: %{public}s', pagePath);
-
-      windowStage.loadContent(pagePath, (err) => {
+      windowStage.loadContent('pages/Index', (err) => {
       if (err.code) {
         hilog.error(DOMAIN, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));
         return;
