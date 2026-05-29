@@ -1068,6 +1068,10 @@ struct ImageGenerationPage {
       quality: this.viewModel.quality,
       outputFormat: this.viewModel.outputFormat,
       outputCompression: this.viewModel.outputCompression,
+      promptOptimizer: this.viewModel.promptOptimizer,
+      seed: this.viewModel.seed,
+      styleType: this.viewModel.styleType,
+      styleWeight: this.viewModel.styleWeight,
       capabilities: this.viewModel.getCurrentRouteCapabilities(),
       onNumberChange: (value: number): void => {
         this.viewModel.updateNumberOfImages(value)
@@ -1083,6 +1087,18 @@ struct ImageGenerationPage {
       },
       onOutputCompressionChange: (value: number): void => {
         this.viewModel.updateOutputCompression(value)
+      },
+      onPromptOptimizerChange: (value: boolean): void => {
+        this.viewModel.promptOptimizer = value
+      },
+      onSeedChange: (value: number): void => {
+        this.viewModel.seed = value
+      },
+      onStyleTypeChange: (value: string): void => {
+        this.viewModel.styleType = value
+      },
+      onStyleWeightChange: (value: number): void => {
+        this.viewModel.styleWeight = value
       }
     })
   }

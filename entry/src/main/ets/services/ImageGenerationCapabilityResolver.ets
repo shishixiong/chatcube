@@ -16,6 +16,10 @@ export class ImageGenerationRouteCapabilities {
   supportsCustomSize: boolean = false
   supportsMultipleReferences: boolean = true
   maxReferenceImages: number = 4
+  maxImageCount: number = 4
+  supportsPromptOptimizer: boolean = false
+  supportsSeed: boolean = false
+  supportsStyle: boolean = false
 }
 
 export class ImageGenerationRequestOptionsSnapshot {
@@ -25,6 +29,10 @@ export class ImageGenerationRequestOptionsSnapshot {
   outputFormat: string = ''
   outputCompression: number = -1
   moderation: string = ''
+  promptOptimizer: boolean = false
+  seed: number = -1
+  styleType: string = ''
+  styleWeight: number = -1
 }
 
 export class ImageGenerationActualOptionsSnapshot {
@@ -48,6 +56,17 @@ export class ImageGenerationCapabilityResolver {
         : ImageGenerationApiRoute.GOOGLE_GEMINI_IMAGE
       capabilities.supportsMultipleReferences = capabilities.route !== ImageGenerationApiRoute.GOOGLE_IMAGEN
       capabilities.maxReferenceImages = capabilities.supportsMultipleReferences ? 4 : 0
+      return capabilities
+    }
+
+    if (ImageGenerationCapabilityResolver.isMinimaxProvider(provider)) {
+      capabilities.route = ImageGenerationApiRoute.MINIMAX_IMAGE
+      capabilities.supportsMultipleReferences = true
+      capabilities.maxReferenceImages = 4
+      capabilities.maxImageCount = 9
+      capabilities.supportsPromptOptimizer = true
+      capabilities.supportsSeed = true
+      capabilities.supportsStyle = true
       return capabilities
     }
 
@@ -145,7 +164,11 @@ export class ImageGenerationCapabilityResolver {
     quality: ImageGenerationQuality,
     outputFormat: ImageGenerationOutputFormat,
     outputCompression: number,
-    moderation: ImageGenerationModeration
+    moderation: ImageGenerationModeration,
+    promptOptimizer: boolean = false,
+    seed: number = -1,
+    styleType: string = '',
+    styleWeight: number = -1
   ): ImageGenerationRequestOptionsSnapshot {
     const snapshot = new ImageGenerationRequestOptionsSnapshot()
     snapshot.route = route
@@ -155,6 +178,12 @@ export class ImageGenerationCapabilityResolver {
       snapshot.outputFormat = outputFormat
       snapshot.outputCompression = outputCompression
       snapshot.moderation = moderation
+    }
+    if (route === ImageGenerationApiRoute.MINIMAX_IMAGE) {
+      snapshot.promptOptimizer = promptOptimizer
+      snapshot.seed = seed
+      snapshot.styleType = styleType
+      snapshot.styleWeight = styleWeight
     }
     return snapshot
   }
@@ -175,5 +204,44 @@ export class ImageGenerationCapabilityResolver {
     return id.includes('grok') || id.includes('xai') ||
       name.includes('grok') || name.includes('xai') ||
       baseUrl.includes('api.x.ai')
+  }
+
+  static isMinimaxProvider(provider: ModelProvider): boolean {
+    const id = provider.id.toLowerCase()
+    const name = provider.name.toLowerCase()
+    const baseUrl = provider.baseUrl.toLowerCase()
+    return id.includes('minimax') || id.includes('minimaxi') ||
+      name.includes('minimax') || name.includes('minimaxi') ||
+      baseUrl.includes('api.minimax.io') || baseUrl.includes('api.minimaxi.com')
+  }
+
+  static normalizeSeed(seed: number, capabilities: ImageGenerationRouteCapabilities): number {
+    if (!capabilities.supportsSeed) {
+      return -1
+    }
+    if (seed < 0) {
+      return -1
+    }
+    return Math.floor(seed)
+  }
+
+  static normalizeStyleWeight(weight: number, capabilities: ImageGenerationRouteCapabilities): number {
+    if (!capabilities.supportsStyle) {
+      return -1
+    }
+    if (weight < 0) {
+      return -1
+    }
+    if (weight > 100) {
+      return 100
+    }
+    return Math.floor(weight)
+  }
+
+  static normalizeStyleType(styleType: string, capabilities: ImageGenerationRouteCapabilities): string {
+    if (!capabilities.supportsStyle) {
+      return ''
+    }
+    return styleType.trim()
   }
 }

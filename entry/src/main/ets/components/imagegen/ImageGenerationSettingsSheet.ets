@@ -16,12 +16,20 @@ export struct ImageGenerationSettingsSheet {
   @Param quality: ImageGenerationQuality = ImageGenerationQuality.AUTO
   @Param outputFormat: ImageGenerationOutputFormat = ImageGenerationOutputFormat.PNG
   @Param outputCompression: number = -1
+  @Param promptOptimizer: boolean = false
+  @Param seed: number = -1
+  @Param styleType: string = ''
+  @Param styleWeight: number = -1
   @Param capabilities: ImageGenerationRouteCapabilities = new ImageGenerationRouteCapabilities()
   @Event onNumberChange: (value: number) => void = (_value: number): void => {}
   @Event onAspectRatioChange: (value: ImageAspectRatio) => void = (_value: ImageAspectRatio): void => {}
   @Event onQualityChange: (value: ImageGenerationQuality) => void = (_value: ImageGenerationQuality): void => {}
   @Event onOutputFormatChange: (value: ImageGenerationOutputFormat) => void = (_value: ImageGenerationOutputFormat): void => {}
   @Event onOutputCompressionChange: (value: number) => void = (_value: number): void => {}
+  @Event onPromptOptimizerChange: (value: boolean) => void = (_value: boolean): void => {}
+  @Event onSeedChange: (value: number) => void = (_value: number): void => {}
+  @Event onStyleTypeChange: (value: string) => void = (_value: string): void => {}
+  @Event onStyleWeightChange: (value: number) => void = (_value: number): void => {}
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
@@ -37,6 +45,15 @@ export struct ImageGenerationSettingsSheet {
       this.AspectRatioSetting()
       if (this.capabilities.supportsQuality) {
         this.QualitySetting()
+      }
+      if (this.capabilities.supportsPromptOptimizer) {
+        this.PromptOptimizerSetting()
+      }
+      if (this.capabilities.supportsSeed) {
+        this.SeedSetting()
+      }
+      if (this.capabilities.supportsStyle) {
+        this.StyleSetting()
       }
       if (this.shouldShowAdvancedSettings()) {
         this.AdvancedSettings()
@@ -384,6 +401,142 @@ export struct ImageGenerationSettingsSheet {
       return $r('app.string.image_generation_output_compression_auto')
     }
     return `${this.outputCompression}`
+  }
+
+  @Builder
+  private PromptOptimizerSetting() {
+    Column() {
+      Row() {
+        Text($r('app.string.image_generation_prompt_optimizer'))
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_secondary'))
+          .layoutWeight(1)
+        Toggle({ type: ToggleType.Switch, isOn: this.promptOptimizer })
+          .onChange((isOn: boolean): void => {
+            this.onPromptOptimizerChange(isOn)
+          })
+      }
+      .width('100%')
+      .height(48)
+      .padding({ left: 12, right: 12 })
+      .backgroundColor(this.themeSurface)
+      .borderRadius(12)
+    }
+    .width('100%')
+  }
+
+  @Builder
+  private SeedSetting() {
+    Column() {
+      Text($r('app.string.image_generation_seed'))
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_secondary'))
+        .width('100%')
+        .margin({ bottom: 8 })
+
+      Row() {
+        TextInput({ text: this.seed >= 0 ? `${this.seed}` : '', placeholder: $r('app.string.image_generation_seed_placeholder') })
+          .type(InputType.Number)
+          .fontSize(15)
+          .fontColor($r('app.color.text_primary'))
+          .placeholderColor($r('app.color.text_tertiary'))
+          .backgroundColor(Color.Transparent)
+          .layoutWeight(1)
+          .onChange((value: string): void => {
+            if (value === '') {
+              this.onSeedChange(-1)
+              return
+            }
+            const parsed: number = Number.parseInt(value)
+            if (!isNaN(parsed)) {
+              this.onSeedChange(parsed)
+            }
+          })
+        if (this.seed >= 0) {
+          Button() {
+            SymbolGlyph($r('sys.symbol.xmark_circle_fill'))
+              .fontSize(18)
+              .fontColor([$r('app.color.text_tertiary')])
+          }
+          .type(ButtonType.Circle)
+          .width(32)
+          .height(32)
+          .backgroundColor(Color.Transparent)
+          .onClick(() => {
+            this.onSeedChange(-1)
+          })
+        }
+      }
+      .width('100%')
+      .height(48)
+      .padding({ left: 12, right: 8 })
+      .backgroundColor(this.themeSurface)
+      .borderRadius(12)
+    }
+    .width('100%')
+  }
+
+  @Builder
+  private StyleSetting() {
+    Column({ space: 12 }) {
+      Text($r('app.string.image_generation_style'))
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_secondary'))
+        .width('100%')
+
+      TextInput({ text: this.styleType, placeholder: $r('app.string.image_generation_style_placeholder') })
+        .fontSize(15)
+        .fontColor($r('app.color.text_primary'))
+        .placeholderColor($r('app.color.text_tertiary'))
+        .width('100%')
+        .height(48)
+        .padding({ left: 12, right: 12 })
+        .backgroundColor(this.themeSurface)
+        .borderRadius(12)
+        .onChange((value: string): void => {
+          this.onStyleTypeChange(value)
+        })
+
+      if (this.styleType.trim() !== '') {
+        Column() {
+          Row() {
+            Text($r('app.string.image_generation_style_weight'))
+              .fontSize(13)
+              .fontColor($r('app.color.text_secondary'))
+            Text(`${this.styleWeight > 0 ? this.styleWeight : 50}`)
+              .fontSize(13)
+              .fontColor($r('app.color.text_secondary'))
+              .layoutWeight(1)
+              .textAlign(TextAlign.End)
+          }
+          .width('100%')
+          .margin({ bottom: 4 })
+
+          Slider({
+            value: this.styleWeight > 0 ? this.styleWeight : 50,
+            min: 1,
+            max: 100,
+            step: 5,
+            style: SliderStyle.OutSet
+          })
+            .width('100%')
+            .blockColor(this.themePrimary)
+            .selectedColor(this.themePrimary)
+            .trackColor($r('app.color.divider'))
+            .onChange((value: number): void => {
+              this.onStyleWeightChange(Math.round(value))
+            })
+        }
+        .width('100%')
+        .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+        .backgroundColor(this.themeSurface)
+        .borderRadius(12)
+      }
+    }
+    .width('100%')
   }
 
   @Builder

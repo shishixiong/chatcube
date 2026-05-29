@@ -28,6 +28,7 @@ export enum ImageGenerationApiRoute {
   GOOGLE_IMAGEN = 'google_imagen',
   GOOGLE_GEMINI_IMAGE = 'google_gemini_image',
   XAI_GROK_IMAGE = 'xai_grok_image',
+  MINIMAX_IMAGE = 'minimax_image',
   UNKNOWN = 'unknown'
 }
 
@@ -53,6 +54,10 @@ export class ImageGenerationRequest {
   outputFormat: ImageGenerationOutputFormat = ImageGenerationOutputFormat.PNG
   outputCompression: number = -1
   moderation: ImageGenerationModeration = ImageGenerationModeration.LOW
+  promptOptimizer: boolean = false
+  seed: number = -1
+  styleType: string = ''
+  styleWeight: number = -1
 }
 
 export class ImageGenerationItem {

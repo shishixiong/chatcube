@@ -2801,6 +2801,30 @@
       "value": "自动"
     },
     {
+      "name": "image_generation_prompt_optimizer",
+      "value": "自动优化提示词"
+    },
+    {
+      "name": "image_generation_seed",
+      "value": "随机种子"
+    },
+    {
+      "name": "image_generation_seed_placeholder",
+      "value": "留空使用随机种子"
+    },
+    {
+      "name": "image_generation_style",
+      "value": "风格控制"
+    },
+    {
+      "name": "image_generation_style_placeholder",
+      "value": "描述你想要的风格..."
+    },
+    {
+      "name": "image_generation_style_weight",
+      "value": "风格权重"
+    },
+    {
       "name": "image_generation_add_reference",
       "value": "添加参考图"
     },

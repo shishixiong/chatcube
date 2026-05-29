@@ -148,6 +148,42 @@ interface XAIImageEditBody {
   image?: XAIImageInput
 }
 
+interface MinimaxSubjectReference {
+  type: string
+  image_file: string
+}
+
+interface MinimaxImageStyle {
+  style_type: string
+  style_weight: number
+}
+
+interface MinimaxImageGenerationBody {
+  model: string
+  prompt: string
+  aspect_ratio: string
+  n: number
+  response_format: string
+  prompt_optimizer?: boolean
+  seed?: number
+  subject_reference?: MinimaxSubjectReference[]
+  style?: MinimaxImageStyle
+}
+
+interface MinimaxImageData {
+  image_urls: string[]
+}
+
+interface MinimaxBaseResp {
+  status_code: number
+  status_msg: string
+}
+
+interface MinimaxImageResponse {
+  data?: MinimaxImageData
+  base_resp?: MinimaxBaseResp
+}
+
 class ImageApiUrlResolver {
   static buildUrl(baseUrl: string, path: string): string {
     let url = ImageApiUrlResolver.normalizeImageBaseUrl(baseUrl)
@@ -230,6 +266,9 @@ export class ImageGenerationService {
     if (provider.apiStyle === ApiStyle.GOOGLE) {
       return await this.generateGoogleImage(provider, model, request, controller)
     }
+    if (this.isMinimaxProvider(provider)) {
+      return await this.generateMinimaxImage(provider, model, request, controller)
+    }
     if (this.isXAIProvider(provider)) {
       return await this.generateXAIImage(provider, model, request, controller)
     }
@@ -247,6 +286,9 @@ export class ImageGenerationService {
   ): Promise<ImageGenerationResult> {
     if (provider.apiStyle === ApiStyle.GOOGLE) {
       return await this.editGoogleImage(provider, model, request, controller)
+    }
+    if (this.isMinimaxProvider(provider)) {
+      return await this.editMinimaxImage(provider, model, request, controller)
     }
     if (this.isXAIProvider(provider)) {
       return await this.editXAIImage(provider, model, request, controller)
@@ -306,13 +348,17 @@ export class ImageGenerationService {
     next.providerId = request.providerId
     next.modelId = request.modelId
     next.prompt = request.prompt
-    next.numberOfImages = this.normalizeCount(count)
+    next.numberOfImages = Math.floor(count > 0 ? count : 1)
     next.aspectRatio = request.aspectRatio
     next.referenceImagePaths = request.referenceImagePaths.slice()
     next.quality = request.quality
     next.outputFormat = request.outputFormat
     next.outputCompression = request.outputCompression
     next.moderation = request.moderation
+    next.promptOptimizer = request.promptOptimizer
+    next.seed = request.seed
+    next.styleType = request.styleType
+    next.styleWeight = request.styleWeight
     return next
   }
 
@@ -376,6 +422,85 @@ export class ImageGenerationService {
     const multipart = this.buildOpenAIEditMultipartForm(model.id, request, capabilities)
     const response = await this.rcpClient.postMultipart(url, headers, multipart, controller)
     return await this.parseOpenAIImageResponse(response, provider, controller, this.getRequestOutputMimeType(request, capabilities))
+  }
+
+  private async generateMinimaxImage(
+    provider: ModelProvider,
+    model: ModelInfo,
+    request: ImageGenerationRequest,
+    controller?: HttpRequestController
+  ): Promise<ImageGenerationResult> {
+    const body: MinimaxImageGenerationBody = {
+      model: model.id,
+      prompt: request.prompt,
+      aspect_ratio: this.getGoogleAspectRatio(request.aspectRatio),
+      n: this.normalizeCount(request.numberOfImages, 9),
+      response_format: 'url'
+    }
+    if (request.promptOptimizer) {
+      body.prompt_optimizer = true
+    }
+    if (request.seed >= 0) {
+      body.seed = request.seed
+    }
+    if (request.styleType.trim() !== '') {
+      const style: MinimaxImageStyle = {
+        style_type: request.styleType.trim(),
+        style_weight: request.styleWeight > 0 ? request.styleWeight : 50
+      }
+      body.style = style
+    }
+    const response = await this.rcpClient.postJson(
+      this.buildOpenAIImageUrl(provider, '/image_generation'),
+      this.buildJsonHeaders(provider),
+      JSON.stringify(body),
+      controller
+    )
+    return await this.parseMinimaxResponse(response, controller)
+  }
+
+  private async editMinimaxImage(
+    provider: ModelProvider,
+    model: ModelInfo,
+    request: ImageGenerationRequest,
+    controller?: HttpRequestController
+  ): Promise<ImageGenerationResult> {
+    this.validateReferenceImages(request.referenceImagePaths)
+    const subjectReferences: MinimaxSubjectReference[] = []
+    for (let i = 0; i < request.referenceImagePaths.length; i++) {
+      subjectReferences.push({
+        type: 'character',
+        image_file: `data:${this.resolveMimeType(request.referenceImagePaths[i])};base64,${this.encodeFileBase64(request.referenceImagePaths[i])}`
+      })
+    }
+    const body: MinimaxImageGenerationBody = {
+      model: model.id,
+      prompt: request.prompt,
+      aspect_ratio: this.getGoogleAspectRatio(request.aspectRatio),
+      n: this.normalizeCount(request.numberOfImages, 9),
+      response_format: 'url',
+      subject_reference: subjectReferences
+    }
+    if (request.promptOptimizer) {
+      body.prompt_optimizer = true
+    }
+    if (request.seed >= 0) {
+      body.seed = request.seed
+    }
+    if (request.styleType.trim() !== '') {
+      const style: MinimaxImageStyle = {
+        style_type: request.styleType.trim(),
+        style_weight: request.styleWeight > 0 ? request.styleWeight : 50
+      }
+      body.style = style
+    }
+    const response = await this.rcpClient.postJson(
+      this.buildOpenAIImageUrl(provider, '/image_generation'),
+      this.buildJsonHeaders(provider),
+      JSON.stringify(body),
+      controller
+    )
+    return await this.parseMinimaxResponse(response, controller)
   }
 
   private async generateXAIImage(
@@ -550,6 +675,10 @@ export class ImageGenerationService {
     return this.parseGoogleInlineResponse(response)
   }
 
+  private isMinimaxProvider(provider: ModelProvider): boolean {
+    return ImageGenerationCapabilityResolver.isMinimaxProvider(provider)
+  }
+
   private isXAIProvider(provider: ModelProvider): boolean {
     const id = provider.id.toLowerCase()
     const name = provider.name.toLowerCase()
@@ -707,12 +836,12 @@ export class ImageGenerationService {
     return 'image/png'
   }
 
-  private normalizeCount(value: number): number {
+  private normalizeCount(value: number, max: number = 4): number {
     if (value < 1) {
       return 1
     }
-    if (value > 4) {
-      return 4
+    if (value > max) {
+      return max
     }
     return Math.floor(value)
   }
@@ -769,6 +898,34 @@ export class ImageGenerationService {
     }
     if (result.items.length === 0) {
       throw new Error('图片生成接口未返回图片')
+    }
+    return result
+  }
+
+  private async parseMinimaxResponse(
+    response: HttpResponse,
+    controller?: HttpRequestController
+  ): Promise<ImageGenerationResult> {
+    if (!response.success) {
+      throw new Error(this.formatImageHttpError(response))
+    }
+    const parsed = JSON.parse(response.data) as MinimaxImageResponse
+    if (parsed.base_resp !== undefined && parsed.base_resp.status_code !== 0) {
+      throw new Error(parsed.base_resp.status_msg !== undefined && parsed.base_resp.status_msg !== '' ? parsed.base_resp.status_msg : `MiniMax 图片生成失败 (${parsed.base_resp.status_code})`)
+    }
+    const result = new ImageGenerationResult()
+    if (parsed.data === undefined || parsed.data.image_urls === undefined || parsed.data.image_urls.length === 0) {
+      throw new Error('图片生成接口未返回图片')
+    }
+    for (let i = 0; i < parsed.data.image_urls.length; i++) {
+      const url = parsed.data.image_urls[i]
+      if (url !== '') {
+        const imageItem = await this.downloadImageAsItem(url, controller)
+        result.items.push(imageItem)
+      }
+    }
+    if (result.items.length === 0) {
+      throw new Error('图片生成接口未返回可用图片')
     }
     return result
   }
@@ -1025,13 +1182,24 @@ export class ImageGenerationService {
       return ''
     }
     try {
-      const parsed = JSON.parse(trimmed) as OpenAIImageResponse
-      const error = parsed.error
-      if (error !== undefined && error.message !== undefined && error.message !== '') {
-        if (error.param !== undefined && error.param !== '') {
-          return `${error.message} (${error.param})`
+      const parsed = JSON.parse(trimmed) as Record<string, Object>
+      const errorObj = parsed['error'] as Record<string, string> | undefined
+      if (errorObj !== undefined) {
+        const error = errorObj
+        if (error['message'] !== undefined && error['message'] !== '') {
+          if (error['param'] !== undefined && error['param'] !== '') {
+            return `${error['message']} (${error['param']})`
+          }
+          return error['message']
         }
-        return error.message
+      }
+      const baseRespObj = parsed['base_resp'] as Record<string, Object> | undefined
+      if (baseRespObj !== undefined) {
+        const statusCode = baseRespObj['status_code'] as number | undefined
+        const statusMsg = baseRespObj['status_msg'] as string | undefined
+        if (statusCode !== undefined && statusCode !== 0 && statusMsg !== undefined && statusMsg !== '') {
+          return statusMsg
+        }
       }
     } catch (_error) {
       if (trimmed.length <= 240 && !trimmed.startsWith('<')) {
