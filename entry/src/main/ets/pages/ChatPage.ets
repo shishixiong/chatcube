@@ -199,6 +199,11 @@ export struct ChatPage {
   @Local multiSelectToolbarHeightVp: number = 0
   // 输入框是否处于焦点状态（用于控制预览气泡显示）
   @Local isInputFocused: boolean = false
+  // 语音输入模式状态
+  @Local isVoiceMode: boolean = false
+  @Local isRecording: boolean = false
+  @Local isRecordingCancelZone: boolean = false
+  private waveformTimerId: number = -1
   // 计算滚动偏移
   private lastScrollOffset: number = 0
   private readonly inputBarShowThreshold: number = 6
@@ -554,6 +559,9 @@ export struct ChatPage {
     this.resetDocumentParseQueue()
     // 释放TTS资源
     this.ttsService.destroy()
+    // 释放语音识别资源
+    this.stopWaveformAnimation()
+    ServiceRegistry.speechRecognition().shutdown()
     // 解绑 UIContext 防止 ChatPage 销毁后 typewriter 仍持有过期引用
     this.chatViewModel.setStreamingUIContext(null)
     this.clearInitialAlignmentTimers()
@@ -2489,15 +2497,22 @@ export struct ChatPage {
               },
               isSending: this.isSending,
               isAwaitingResponse: this.calcIsAwaitingAiOutput(),
-              currentModelId: this.currentModelId,
-              currentProviderId: this.currentProvider?.id ?? '',
-              currentModelName: this.currentModel,
-              currentProviderIconType: this.currentProvider?.iconType ?? 'svg',
-              currentProviderIconPath: this.currentProvider?.iconPath ?? '',
-              currentProviderTextIcon: this.currentProvider?.textIcon ?? '',
-              currentProviderTextIconBgColor: this.currentProvider?.textIconBgColor ?? '',
-              currentProviderCustomImagePath: this.currentProvider?.customImagePath ?? '',
-              currentProviderBrandColor: this.currentProvider?.brandColor ?? '',
+              isVoiceMode: this.isVoiceMode,
+              onVoiceModeToggle: (): void => {
+                this.handleVoiceModeToggle()
+              },
+              onVoiceRecordStart: (): void => {
+                this.handleVoiceRecordStart()
+              },
+              onVoiceRecordCancel: (): void => {
+                this.handleVoiceRecordCancel()
+              },
+              onVoiceRecordFinish: (): void => {
+                this.handleVoiceRecordFinish()
+              },
+              onVoiceCancelZoneChange: (isCancel: boolean): void => {
+                this.isRecordingCancelZone = isCancel
+              },
               autoFocus: this.autoFocusInput,
               isEditing: this.isEditingMessage,
               isAttachmentPanelOpen: this.showAttachmentPicker,
@@ -2544,10 +2559,6 @@ export struct ChatPage {
               },
               onStop: (): void => {
                 this.handleStop()
-              },
-              onModelIconClick: (): void => {
-                this.isModelSelectorVisible = true
-                this.modelSheetActivePanel = 'selector'
               },
               onAttachmentClick: (): void => {
                 this.toggleAttachmentPanel()
@@ -2740,6 +2751,11 @@ export struct ChatPage {
             this.handleMultiSelectToolbarHeightChange(newArea)
           })
           .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
+        }
+
+        // 录音全屏遮罩
+        if (this.isRecording) {
+          this.RecordingOverlay()
         }
       }
       .width('100%')
@@ -3819,6 +3835,54 @@ export struct ChatPage {
     })
   }
 
+  @Builder
+  private RecordingOverlay() {
+    Column() {
+      Row() {
+        Text(this.isRecordingCancelZone ? $r('app.string.voice_release_cancel') : $r('app.string.voice_release_to_send'))
+          .fontSize(18)
+          .fontColor(Color.White)
+          .textAlign(TextAlign.Center)
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+      .padding({ top: 80 })
+
+      Blank()
+
+      // 声波动画指示器
+      Row() {
+        ForEach(Array.from({ length: 5 }, (_: undefined, i: number) => i), (index: number) => {
+          Column()
+            .width(4)
+            .height(16 + (index % 2 === 0 ? 12 : -4))
+            .borderRadius(2)
+            .backgroundColor(this.isRecordingCancelZone ? '#FF4444' : Color.White)
+            .margin({ left: 3, right: 3 })
+        })
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+      .padding({ bottom: 12 })
+
+      Row() {
+        Text($r('app.string.voice_slide_up_cancel'))
+          .fontSize(14)
+          .fontColor(this.isRecordingCancelZone ? '#FF4444' : '#CCCCCC')
+          .textAlign(TextAlign.Center)
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+      .padding({ bottom: 60 })
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(this.isRecordingCancelZone ? 'rgba(0,0,0,0.85)' : 'rgba(0,0,0,0.7)')
+    .onClick(() => {
+      // 点击遮罩不做任何事，录音由 VoiceRecordButton 的 touch 事件控制
+    })
+  }
+
   private canShowStandardScrollButton(): boolean {
     return !this.isEditingMessage && !this.hasDraftContent() && !this.showImagePreview &&
       !this.isMultiSelectMode && !this.isLoading && this.getTotalListItemCount() > 2
@@ -4059,6 +4123,105 @@ export struct ChatPage {
   // 处理停止生成
   handleStop(): void {
     this.getStopFlow().stopCurrentTask()
+  }
+
+  // 语音模式切换
+  handleVoiceModeToggle(): void {
+    if (this.isSending || this.isRecording || this.isEditingMessage) {
+      return
+    }
+    if (!this.isVoiceMode) {
+      // 切换到语音模式前检查麦克风权限
+      const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+      ServiceRegistry.speechRecognition().checkPermission(context).then((granted: boolean) => {
+        if (granted) {
+          this.isVoiceMode = !this.isVoiceMode
+        } else {
+          this.showChatSnack($r('app.string.voice_permission_denied'), 2000, SnackBarTone.WARNING)
+        }
+      })
+    } else {
+      this.isVoiceMode = false
+    }
+  }
+
+  // 开始录音
+  handleVoiceRecordStart(): void {
+    if (this.isRecording) {
+      return
+    }
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+    ServiceRegistry.speechRecognition().checkPermission(context).then((granted: boolean) => {
+      if (!granted) {
+        this.showChatSnack($r('app.string.voice_permission_denied'), 2000, SnackBarTone.WARNING)
+        return
+      }
+      ServiceRegistry.speechRecognition().init().then(() => {
+        this.isRecording = true
+        this.isRecordingCancelZone = false
+        this.startWaveformAnimation()
+        ServiceRegistry.speechRecognition().startListening({
+          onStart: () => {
+            console.info('ChatPage', 'Voice recording started')
+          },
+          onResult: (_text: string, _isFinal: boolean) => {
+            // 中间结果不处理，等待 onComplete
+          },
+          onComplete: (finalText: string) => {
+            this.stopWaveformAnimation()
+            this.isRecording = false
+            this.isRecordingCancelZone = false
+            this.handleRecordingComplete(finalText)
+          },
+          onCancel: () => {
+            this.stopWaveformAnimation()
+            this.isRecording = false
+            this.isRecordingCancelZone = false
+          },
+          onError: (code: number, message: string) => {
+            this.stopWaveformAnimation()
+            this.isRecording = false
+            this.isRecordingCancelZone = false
+            console.error('ChatPage', `Voice recognition error: ${code} ${message}`)
+            this.showChatSnack($r('app.string.voice_network_error'), 2000, SnackBarTone.ERROR)
+          }
+        })
+      }).catch((err: Error) => {
+        console.error('ChatPage', `Failed to init speech recognition: ${err.message}`)
+        this.showChatSnack($r('app.string.voice_network_error'), 2000, SnackBarTone.ERROR)
+      })
+    })
+  }
+
+  // 取消录音（上滑取消）
+  handleVoiceRecordCancel(): void {
+    ServiceRegistry.speechRecognition().cancelListening()
+  }
+
+  // 结束录音（松开发送）
+  handleVoiceRecordFinish(): void {
+    ServiceRegistry.speechRecognition().finishListening()
+  }
+
+  // 录音完成，发送消息
+  private handleRecordingComplete(text: string): void {
+    if (text.trim() === '') {
+      this.showChatSnack($r('app.string.voice_empty_result'), 2000, SnackBarTone.WARNING)
+      return
+    }
+    this.inputText = text
+    if (!this.isSending && this.inputText.trim() !== '') {
+      this.handleSend()
+    }
+  }
+
+  // 声波动画
+  private startWaveformAnimation(): void {
+    this.waveformTimerId = 0
+  }
+
+  private stopWaveformAnimation(): void {
+    this.waveformTimerId = -1
   }
 
   // 处理模型选择

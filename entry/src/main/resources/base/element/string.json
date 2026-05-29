@@ -3023,6 +3023,46 @@
     {
       "name": "default_model_select_image_model",
       "value": "选择图像生成模型"
+    },
+    {
+      "name": "voice_hold_to_speak",
+      "value": "Hold to Speak"
+    },
+    {
+      "name": "voice_release_to_send",
+      "value": "Release to Send"
+    },
+    {
+      "name": "voice_slide_up_cancel",
+      "value": "Slide Up to Cancel"
+    },
+    {
+      "name": "voice_release_cancel",
+      "value": "Release to Cancel"
+    },
+    {
+      "name": "voice_permission_denied",
+      "value": "Microphone permission is required for voice input"
+    },
+    {
+      "name": "voice_too_short",
+      "value": "Recording too short"
+    },
+    {
+      "name": "voice_empty_result",
+      "value": "No speech detected"
+    },
+    {
+      "name": "voice_network_error",
+      "value": "Voice recognition failed, please check your network"
+    },
+    {
+      "name": "voice_recognizing",
+      "value": "Recognizing..."
+    },
+    {
+      "name": "microphone_permission_reason",
+      "value": "Used for voice input to convert your speech to text."
     }
   ]
 }

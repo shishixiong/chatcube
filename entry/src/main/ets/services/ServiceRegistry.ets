@@ -20,6 +20,7 @@ import { getWebDAVService, WebDAVService } from './WebDAVService'
 import { getWebDAVSyncService, WebDAVSyncService } from './WebDAVSyncService'
 import { getSettingsManager, SettingsManager } from '../viewmodels/SettingsManager'
 import { getAppStateManager, AppStateManager } from '../viewmodels/AppStateManager'
+import { getSpeechRecognitionService, SpeechRecognitionService } from './SpeechRecognitionService'
 import { getProviderViewModel, ProviderViewModel } from '../viewmodels/ProviderViewModel'
 import { createChatViewModel, ChatViewModel } from '../viewmodels/ChatViewModel'
 
@@ -115,6 +116,10 @@ export class ServiceRegistry {
 
   static webdavSync(): WebDAVSyncService {
     return getWebDAVSyncService()
+  }
+
+  static speechRecognition(): SpeechRecognitionService {
+    return getSpeechRecognitionService()
   }
 
   static chat(): ChatViewModel {

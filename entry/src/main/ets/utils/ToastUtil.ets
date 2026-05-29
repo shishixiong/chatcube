@@ -13,10 +13,12 @@ import {
   getCurrentMaterialBlurStyle
 } from './HdsVisualEffectUtil'
 
+
 export enum SnackBarTone {
   DEFAULT = 0,
   SUCCESS = 1,
-  ERROR = 2
+  ERROR = 2,
+  WARNING
 }
 
 export class SnackBarDisplayOptions {
