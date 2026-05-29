@@ -3,6 +3,7 @@ export const SEARCH_WEB_TOOL_ID: string = 'search_web'
 export const SCRAPE_WEB_TOOL_ID: string = 'scrape_web'
 export const ASK_USER_TOOL_ID: string = 'ask_user'
 export const GET_TIME_INFO_TOOL_ID: string = 'get_time_info'
+export const IMAGE_GENERATION_TOOL_ID: string = 'image_generation'
 
 export function normalizeToolFunctionName(raw: string): string {
   const value = raw as string | null | undefined
@@ -42,6 +43,13 @@ export function isAskUserFunctionName(functionName: string): boolean {
   return normalized === ASK_USER_TOOL_ID ||
     normalized === 'user_input' ||
     normalized === 'ask'
+}
+
+export function isImageGenerationFunctionName(functionName: string): boolean {
+  const normalized = normalizeToolFunctionName(functionName)
+  return normalized === IMAGE_GENERATION_TOOL_ID ||
+    normalized === 'generate_image' ||
+    normalized === 'text_to_image'
 }
 
 export function getSearchToolIds(): string[] {

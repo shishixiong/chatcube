@@ -19,6 +19,7 @@ import { TypingDots } from './TypingDots'
 import { CubeSpinnerBubble, CubeSpinnerLight } from './loading/CubeSpinner'
 import { AssistantAvatarView } from './AssistantAvatar'
 import { AdaptiveImageThumbnail } from './AdaptiveImageThumbnail'
+import { ImageGenerationToolResult } from './chat/ImageGenerationToolResult'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { SymbolGlyphModifier } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
@@ -30,7 +31,7 @@ import {
   getMarkdownTitleSizes
 } from '../utils/MarkdownTypographyUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName } from '../utils/SearchToolIdentityUtils'
+import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName } from '../utils/SearchToolIdentityUtils'
 import { MessagePart, MessagePartKind, ToolPartStatus } from '../models/MessageParts'
 import {
   ensureMessageParts,
@@ -2422,6 +2423,9 @@ export struct MessageBubble {
     if (isAskUserFunctionName(part.toolName)) {
       return false
     }
+    if (isImageGenerationFunctionName(part.toolName)) {
+      return this.isSuccessfulToolStep(part)
+    }
     if (isScrapeWebFunctionName(part.toolName)) {
       // 抓取类只要能取到 url 就可点
       return this.extractToolStepUrl(part) !== '' || this.firstRefUrl(part) !== ''
@@ -2821,6 +2825,11 @@ export struct MessageBubble {
   }
 
   private handleToolStepClick(part: MessagePart): void {
+    // 图片生成: 展开/折叠查看生成结果
+    if (isImageGenerationFunctionName(part.toolName)) {
+      this.toggleToolStep(part)
+      return
+    }
     // 抓取类: 直接打开 URL
     if (isScrapeWebFunctionName(part.toolName)) {
       const url = this.extractToolStepUrl(part) !== '' ? this.extractToolStepUrl(part) : this.firstRefUrl(part)
@@ -3238,6 +3247,43 @@ export struct MessageBubble {
   ToolStepContent(step: MessagePart) {
     if (isAskUserFunctionName(step.toolName)) {
       this.AskUserStepContent(step)
+    } else if (isImageGenerationFunctionName(step.toolName) && this.isToolStepClickable(step)) {
+      // 图片生成: 折叠/展开, 在下方直接展示生成结果缩略图
+      Column() {
+        Row({ space: 6 }) {
+          this.ToolStepStatusIndicator(step)
+
+          Text(this.buildToolStepTitle(step))
+            .fontSize(13)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.text_primary'))
+            .layoutWeight(1)
+
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(12)
+            .fontColor([$r('app.color.text_tertiary')])
+            .rotate({ angle: this.isToolStepExpanded(step) ? 0 : -90 })
+            .animation({ duration: 200, curve: Curve.EaseOut })
+        }
+        .width('100%')
+        .onClick(() => {
+          this.toggleToolStep(step)
+        })
+
+        if (this.isToolStepExpanded(step) && step.toolResult !== '') {
+          ImageGenerationToolResult({
+            toolResult: step.toolResult,
+            onImageClick: (images: Array<string>, index: number): void => {
+              this.onImageClick(images, index, [])
+            }
+          })
+            .width('100%')
+            .margin({ top: 8 })
+            .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
+        }
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
     } else if (isSearchWebFunctionName(step.toolName) && this.isToolStepClickable(step)) {
       // 搜索类: 深度思考同款折叠/展开, 在下方直接展示搜索结果
       Column() {

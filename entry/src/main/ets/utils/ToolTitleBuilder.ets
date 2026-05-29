@@ -1,5 +1,6 @@
 import { ToolCall } from '../models/ChatModels'
 import {
+  isImageGenerationFunctionName,
   isScrapeWebFunctionName,
   isSearchWebFunctionName,
   normalizeToolFunctionName
@@ -19,6 +20,7 @@ interface ToolArgumentDict {
   path?: string
   question?: string
   questions?: Object[] | string
+  prompt?: string
 }
 
 const MAX_SNIPPET = 24
@@ -163,6 +165,10 @@ export function buildToolTitle(toolCall: ToolCall): string {
   if (fn === 'tts' || fn === 'text_to_speech' || fn === 'speak' || fn === 'speech_generate') {
     const text = firstNonEmpty([coerceString(args.text), coerceString(args.message), coerceString(args.content)])
     return text !== '' ? `朗读："${truncate(text)}"` : '朗读'
+  }
+  if (isImageGenerationFunctionName(fn)) {
+    const prompt = coerceString(args.prompt)
+    return prompt !== '' ? `生成图片："${truncate(prompt)}"` : '生成图片'
   }
   if (fn === 'ask_user' || fn === 'user_input' || fn === 'ask') {
     const count = arrayLengthOf(args.questions as string[] | string | undefined)

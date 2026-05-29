@@ -1,4 +1,5 @@
 import {
+  isImageGenerationFunctionName,
   isScrapeWebFunctionName,
   isSearchWebFunctionName,
   normalizeToolFunctionName
@@ -52,6 +53,9 @@ export function resolveToolSymbol(functionName: string): Resource {
   }
   if (isScrapeWebFunctionName(name)) {
     return $r('sys.symbol.globe_badge_message')
+  }
+  if (isImageGenerationFunctionName(name)) {
+    return $r('sys.symbol.wand_and_stars')
   }
   if (matchesAny(name, MEMORY_KEYWORDS)) {
     return $r('sys.symbol.square_and_pencil')

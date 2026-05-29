@@ -1,9 +1,14 @@
 import {
-  ToolDefinition,
+  AttachmentType,
+  MessageAttachment,
+  ModelInfo,
+  ModelProvider,
+  OutputMode,
   ToolConfig,
-  ToolParameters,
+  ToolDefinition,
   ToolFunction,
   ToolParameterProperty,
+  ToolParameters,
   ToolPermissionLevel,
   ToolSourceType
 } from '../models/ChatModels'
@@ -12,11 +17,25 @@ import { getWebSearchService, SearchResult, WebSearchResult } from '../services/
 import {
   ASK_USER_TOOL_ID,
   GET_TIME_INFO_TOOL_ID,
+  IMAGE_GENERATION_TOOL_ID,
   LEGACY_WEB_SEARCH_TOOL_ID,
   SCRAPE_WEB_TOOL_ID,
   SEARCH_WEB_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { i18n } from '@kit.LocalizationKit'
+import {
+  GeneratedMedia,
+  GeneratedMediaType,
+  ImageAspectRatio,
+  ImageGenerationItem,
+  ImageGenerationQuality,
+  ImageGenerationRequest
+} from '../models/ImageGenerationModels'
+import { getImageGenerationService } from '../services/ImageGenerationService'
+import { getAttachmentStorageService } from '../services/AttachmentStorageService'
+import { getGeneratedMediaRepository } from '../services/GeneratedMediaRepository'
+import { getAppSettingsState } from '../state/AppSettingsState'
+import { getEffectiveOutputMode } from '../utils/ModelCapabilityDeriver'
 
 // search_web 工具参数接口
 interface SearchWebArgs {
@@ -454,6 +473,251 @@ function createGetTimeInfoToolConfig(): ToolConfig {
   )
 }
 
+// ===== image_generation 工具 =====
+// 让 AI 对话模型调用图片生成能力, 使用用户已配置的图片生成模型(默认 MiniMax)。
+// 执行器调用现有的 ImageGenerationService, 生成结果保存到本地文件并在聊天中显示缩略图。
+
+interface ImageGenerationArgs {
+  prompt: string
+  aspect_ratio?: string
+  number_of_images?: number
+  quality?: string
+  style?: string
+}
+
+class ImageGenerationOutputItem {
+  filePath: string = ''
+  mimeType: string = ''
+  prompt: string = ''
+  revisedPrompt: string = ''
+
+  constructor(filePath: string, mimeType: string, prompt: string, revisedPrompt: string) {
+    this.filePath = filePath
+    this.mimeType = mimeType
+    this.prompt = prompt
+    this.revisedPrompt = revisedPrompt
+  }
+}
+
+class ImageGenerationOutput {
+  images: ImageGenerationOutputItem[] = []
+
+  constructor(images: ImageGenerationOutputItem[]) {
+    this.images = images
+  }
+}
+
+class ImageGenErrorOutput {
+  error: string = ''
+
+  constructor(error: string) {
+    this.error = error
+  }
+}
+
+function resolveExtension(mimeType: string): string {
+  if (mimeType === 'image/jpeg') {
+    return '.jpg'
+  }
+  if (mimeType === 'image/webp') {
+    return '.webp'
+  }
+  return '.png'
+}
+
+class ImageGenerationExecutor implements ToolExecutor {
+  async execute(args: string): Promise<string> {
+    try {
+      const params = JSON.parse(args) as ImageGenerationArgs
+      if (params.prompt === undefined || params.prompt.trim() === '') {
+        return JSON.stringify(new ImageGenErrorOutput('图片描述不能为空'))
+      }
+
+      const prompt = params.prompt.trim()
+      const numberOfImages = Math.min(Math.max(params.number_of_images !== undefined ? params.number_of_images : 1, 1), 4)
+
+      // 解析宽高比
+      let aspectRatio = ImageAspectRatio.SQUARE
+      const ratioStr = (params.aspect_ratio !== undefined ? params.aspect_ratio : '1:1').trim()
+      if (ratioStr === '16:9') {
+        aspectRatio = ImageAspectRatio.LANDSCAPE
+      } else if (ratioStr === '9:16') {
+        aspectRatio = ImageAspectRatio.PORTRAIT
+      }
+
+      // 解析图片生成 provider/model
+      const state = getAppSettingsState()
+      const defaultImage = state.defaultImageModel
+      let provider: ModelProvider | null = null
+      let model: ModelInfo | null = null
+
+      // 从默认图片模型配置中查找
+      if (defaultImage.providerId !== '' && defaultImage.modelId !== '') {
+        for (let i = 0; i < state.providers.length; i++) {
+          const p = state.providers[i]
+          if (p.id === defaultImage.providerId) {
+            for (let j = 0; j < p.models.length; j++) {
+              const m = p.models[j]
+              if (m.id === defaultImage.modelId && getEffectiveOutputMode(m) === OutputMode.IMAGE) {
+                provider = p
+                model = m
+                break
+              }
+            }
+            break
+          }
+        }
+      }
+
+      // 回退: 扫描所有 provider 找到第一个可用的图片模型
+      if (provider === null || model === null) {
+        for (let i = 0; i < state.providers.length; i++) {
+          const p = state.providers[i]
+          for (let j = 0; j < p.models.length; j++) {
+            const m = p.models[j]
+            if (m.isEnabled && getEffectiveOutputMode(m) === OutputMode.IMAGE) {
+              provider = p
+              model = m
+              break
+            }
+          }
+          if (provider !== null) {
+            break
+          }
+        }
+      }
+
+      if (provider === null || model === null) {
+        return JSON.stringify(new ImageGenErrorOutput('未找到可用的图片生成模型, 请先在设置中配置图片生成服务商'))
+      }
+
+      console.info('ImageGenerationExecutor',
+        `Generating: prompt="${prompt}", provider=${provider.id}, model=${model.id}, n=${numberOfImages}, ratio=${aspectRatio}`)
+
+      // 构建请求 & 调用服务
+      const request = new ImageGenerationRequest()
+      request.providerId = provider.id
+      request.modelId = model.id
+      request.prompt = prompt
+      request.numberOfImages = numberOfImages
+      request.aspectRatio = aspectRatio
+      if (params.quality !== undefined && params.quality.trim() !== '') {
+        request.quality = params.quality.trim() as ImageGenerationQuality
+      }
+      if (params.style !== undefined && params.style.trim() !== '') {
+        request.styleType = params.style.trim()
+      }
+
+      const result = await getImageGenerationService().generateImage(provider, model, request)
+      const outputItems: ImageGenerationOutputItem[] = []
+      const attachmentService = getAttachmentStorageService()
+      const repository = getGeneratedMediaRepository()
+      const itemPrompt = request.prompt
+
+      for (let i = 0; i < result.items.length; i++) {
+        const item: ImageGenerationItem = result.items[i]
+        const id = `gen_${Date.now()}_${i}_${Math.floor(Math.random() * 100000)}`
+        const attachment = new MessageAttachment(
+          id,
+          AttachmentType.IMAGE,
+          `${id}${resolveExtension(item.mimeType)}`,
+          '',
+          item.mimeType,
+          0
+        )
+        attachment.base64Data = item.base64Data
+        const filePath = await attachmentService.saveAttachment(attachment)
+        attachment.base64Data = ''
+        if (filePath === '') {
+          console.error('ImageGenerationExecutor', `Failed to save image ${i}`)
+          continue
+        }
+
+        // 持久化到图库
+        const media = new GeneratedMedia()
+        media.id = id
+        media.type = GeneratedMediaType.IMAGE_GENERATION
+        media.prompt = itemPrompt
+        media.providerId = provider!.id
+        media.providerName = provider!.name
+        media.modelId = model!.id
+        media.modelName = model!.name !== '' ? model!.name : model!.id
+        media.filePath = filePath
+        media.mimeType = item.mimeType
+        media.aspectRatio = aspectRatio
+        media.revisedPrompt = item.revisedPrompt
+        media.createdAt = Date.now()
+        await repository.insert(media)
+
+        outputItems.push(new ImageGenerationOutputItem(
+          filePath,
+          item.mimeType,
+          itemPrompt,
+          item.revisedPrompt
+        ))
+      }
+
+      if (outputItems.length === 0) {
+        return JSON.stringify(new ImageGenErrorOutput('图片生成失败, 所有图片保存出错'))
+      }
+
+      return JSON.stringify(new ImageGenerationOutput(outputItems))
+    } catch (error) {
+      console.error('ImageGenerationExecutor', `Image generation error: ${JSON.stringify(error)}`)
+      return JSON.stringify(new ImageGenErrorOutput(`图片生成失败: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createImageGenerationToolDefinition(): ToolDefinition {
+  const parameters = new ToolParameters()
+  parameters.addProperty('prompt', new ToolParameterProperty(
+    'string',
+    'Detailed description of the image to generate, in the user\'s language. Include style, subject, composition, colors, and mood. ~20-200 characters.'
+  ))
+  parameters.addProperty('aspect_ratio', new ToolParameterProperty(
+    'string',
+    'Image aspect ratio. "1:1" for square, "16:9" for widescreen landscape, "9:16" for portrait/vertical.'
+  ))
+  parameters.addProperty('number_of_images', new ToolParameterProperty(
+    'integer',
+    'Number of images to generate, between 1 and 4. Default 1.'
+  ))
+  parameters.addProperty('quality', new ToolParameterProperty(
+    'string',
+    'Image quality: "auto", "low", "medium", or "high". Leave as default "auto" unless the user specifically requests a quality level.'
+  ))
+  parameters.addProperty('style', new ToolParameterProperty(
+    'string',
+    'Optional style description for the image, e.g. "photorealistic", "oil painting", "anime", "watercolor".'
+  ))
+  parameters.addRequired('prompt')
+
+  const func = new ToolFunction(
+    IMAGE_GENERATION_TOOL_ID,
+    'Generate images from text descriptions. Use this when the user asks you to draw, create, or generate an image, picture, illustration, or artwork. The generated images will be displayed directly in the chat. Describe the desired image in detail including subject, style, composition, colors, and mood.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createImageGenerationToolConfig(): ToolConfig {
+  return new ToolConfig(
+    IMAGE_GENERATION_TOOL_ID,
+    '生成图片',
+    '根据文本描述生成图片, 结果直接展示在对话中。使用已配置的图片生成服务商(如 MiniMax)。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    IMAGE_GENERATION_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
 // 注册所有内置工具
 export function registerBuiltinTools(): void {
   const registry = getToolRegistry()
@@ -514,6 +778,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(IMAGE_GENERATION_TOOL_ID)) {
+    const imageGenTool = new RegisteredTool(
+      IMAGE_GENERATION_TOOL_ID,
+      createImageGenerationToolConfig(),
+      createImageGenerationToolDefinition(),
+      new ImageGenerationExecutor()
+    )
+    registry.registerTool(imageGenTool)
+    registeredNow += 1
+  }
+
   console.info(
     'BuiltinTools',
     `Builtin tools ready: total=${registry.getToolCount()}, newlyRegistered=${registeredNow}`
@@ -522,5 +797,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID]
 }
