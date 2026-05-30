@@ -1,6 +1,7 @@
 import { Assistant, DEFAULT_ASSISTANT_ID } from '../models/AssistantModels'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
+import { isPresetAssistant } from '../config/PresetAssistants'
 import { getAppUiState, setAppUiStateValue } from '../state/AppUiState'
 import { getAppSettingsStore, AppSettingsStore } from '../state/AppSettingsStore'
 import { getDatabaseService, DatabaseService } from './DatabaseService'
@@ -232,7 +233,7 @@ export class AssistantService {
   }
 
   async deleteAssistant(assistantId: string): Promise<boolean> {
-    if (assistantId === DEFAULT_ASSISTANT_ID) {
+    if (assistantId === DEFAULT_ASSISTANT_ID || isPresetAssistant(assistantId)) {
       return false
     }
     await this.store.ensureAssistantsInitialized()

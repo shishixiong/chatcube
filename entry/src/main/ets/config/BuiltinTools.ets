@@ -20,7 +20,10 @@ import {
   IMAGE_GENERATION_TOOL_ID,
   LEGACY_WEB_SEARCH_TOOL_ID,
   SCRAPE_WEB_TOOL_ID,
-  SEARCH_WEB_TOOL_ID
+  SEARCH_WEB_TOOL_ID,
+  CHILD_PROFILE_TOOL_ID,
+  MATH_VERIFY_TOOL_ID,
+  MATH_QUIZ_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { i18n } from '@kit.LocalizationKit'
 import {
@@ -36,6 +39,8 @@ import { getAttachmentStorageService } from '../services/AttachmentStorageServic
 import { getGeneratedMediaRepository } from '../services/GeneratedMediaRepository'
 import { getAppSettingsState } from '../state/AppSettingsState'
 import { getEffectiveOutputMode } from '../utils/ModelCapabilityDeriver'
+import { getChildProfileService, ChildProfileService, ChildKnowledgeProfile } from '../services/ChildProfileService'
+import { evaluateMathExpression } from '../utils/MathExpressionParser'
 
 // search_web 工具参数接口
 interface SearchWebArgs {
@@ -718,6 +723,438 @@ function createImageGenerationToolConfig(): ToolConfig {
   )
 }
 
+// ===== child_profile 工具 =====
+// 儿童学习画像工具：让小星老师等教育类助手可以读取和更新小朋友的知识画像，实现因材施教。
+// 画像通过 ChildProfileService 持久化到 PreferencesService JSON，跨会话保留。
+
+class ChildProfileSkillSummary {
+  key: string = ''
+  label: string = ''
+  level: number = 0
+  lastAssessed: number = 0
+  notes: string = ''
+
+  constructor(key: string, label: string, level: number, lastAssessed: number, notes: string) {
+    this.key = key
+    this.label = label
+    this.level = level
+    this.lastAssessed = lastAssessed
+    this.notes = notes
+  }
+}
+
+class ChildProfileSummary {
+  childName: string = ''
+  ageYears: number = 0
+  overallNote: string = ''
+  sessionCount: number = 0
+  lastInteraction: number = 0
+  strengths: string[] = []
+  weakAreas: string[] = []
+  skills: ChildProfileSkillSummary[] = []
+
+  constructor(
+    childName: string, ageYears: number, overallNote: string,
+    sessionCount: number, lastInteraction: number,
+    strengths: string[], weakAreas: string[],
+    skills: ChildProfileSkillSummary[]
+  ) {
+    this.childName = childName
+    this.ageYears = ageYears
+    this.overallNote = overallNote
+    this.sessionCount = sessionCount
+    this.lastInteraction = lastInteraction
+    this.strengths = strengths
+    this.weakAreas = weakAreas
+    this.skills = skills
+  }
+}
+
+interface ChildProfileArgs {
+  action: string
+  child_name?: string
+  age_years?: number
+  skill_updates?: Object[]
+  overall_note?: string
+  strengths?: string[]
+  weak_areas?: string[]
+}
+
+interface SkillUpdateItem {
+  key: string
+  level: number
+  notes?: string
+}
+
+class ChildProfileExecutor implements ToolExecutor {
+  async execute(args: string): Promise<string> {
+    try {
+      const params = JSON.parse(args) as ChildProfileArgs
+      const action = (params.action ?? '').trim()
+      const service = getChildProfileService()
+
+      if (action === 'read') {
+        const profile = await service.getProfile()
+        return JSON.stringify(this.formatProfileForAI(profile))
+      } else if (action === 'update') {
+        return await this.handleUpdate(params, service)
+      } else {
+        return JSON.stringify(new ErrorOutput(`Unknown action: '${action}'. Use 'read' or 'update'.`))
+      }
+    } catch (error) {
+      console.error('ChildProfileExecutor', `Error: ${JSON.stringify(error)}`)
+      return JSON.stringify(new ErrorOutput(`child_profile error: ${JSON.stringify(error)}`))
+    }
+  }
+
+  private async handleUpdate(params: ChildProfileArgs, service: ChildProfileService): Promise<string> {
+    const profile = await service.getProfile()
+
+    if (params.child_name !== undefined && params.child_name.trim() !== '') {
+      profile.childName = params.child_name.trim()
+    }
+    if (params.age_years !== undefined && params.age_years > 0) {
+      profile.ageYears = params.age_years
+    }
+    if (params.overall_note !== undefined) {
+      profile.overallNote = params.overall_note
+    }
+
+    // 更新技能维度
+    if (params.skill_updates !== undefined && Array.isArray(params.skill_updates)) {
+      const now = Date.now()
+      for (let i = 0; i < params.skill_updates.length; i++) {
+        const item = params.skill_updates[i] as Record<string, Object>
+        const key = (item['key'] as string) ?? ''
+        if (key === '' || profile.skills[key] === undefined) {
+          continue
+        }
+        const level = (item['level'] as number) ?? profile.skills[key].level
+        const notes = (item['notes'] as string) ?? ''
+        const clampedLevel = Math.max(0, Math.min(5, level))
+        profile.skills[key].level = clampedLevel
+        profile.skills[key].lastAssessed = now
+        if (notes !== '') {
+          profile.skills[key].notes = notes
+        }
+      }
+    }
+
+    if (params.strengths !== undefined && Array.isArray(params.strengths)) {
+      profile.strengths = []
+      for (let i = 0; i < params.strengths.length; i++) {
+        if (typeof params.strengths[i] === 'string') {
+          profile.strengths.push(params.strengths[i] as string)
+        }
+      }
+    }
+    if (params.weak_areas !== undefined && Array.isArray(params.weak_areas)) {
+      profile.weakAreas = []
+      for (let i = 0; i < params.weak_areas.length; i++) {
+        if (typeof params.weak_areas[i] === 'string') {
+          profile.weakAreas.push(params.weak_areas[i] as string)
+        }
+      }
+    }
+
+    profile.lastInteraction = Date.now()
+    await service.saveProfile(profile)
+    return JSON.stringify(this.formatProfileForAI(profile))
+  }
+
+  private formatProfileForAI(profile: ChildKnowledgeProfile): Object {
+    const skillsArray: ChildProfileSkillSummary[] = []
+    const keys = Object.keys(profile.skills)
+    for (let i = 0; i < keys.length; i++) {
+      const dim = profile.skills[keys[i]]
+      skillsArray.push(new ChildProfileSkillSummary(
+        dim.key, dim.label, dim.level, dim.lastAssessed, dim.notes
+      ))
+    }
+    return new ChildProfileSummary(
+      profile.childName, profile.ageYears, profile.overallNote,
+      profile.sessionCount, profile.lastInteraction,
+      profile.strengths, profile.weakAreas, skillsArray
+    )
+  }
+}
+
+function createChildProfileToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["read", "update"],
+        "description": "Action to perform. 'read' to get the child's current learning profile. 'update' to save new assessment data."
+      },
+      "child_name": {
+        "type": "string",
+        "description": "Child's name. Only include when updating."
+      },
+      "age_years": {
+        "type": "number",
+        "description": "Child's age in years. Only include when updating."
+      },
+      "skill_updates": {
+        "type": "array",
+        "description": "Array of skill assessments to update. Each item: {key, level (0-5), notes}. Only include for skills where you observed the child's actual performance.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "description": "Skill dimension key: math_counting, math_addition, math_subtraction, math_multiply, math_divide, math_shapes, math_comparison, math_time, english_alphabet, english_vocab, english_sentence, english_phonics, general_nature, general_social, general_life"
+            },
+            "level": {
+              "type": "number",
+              "description": "Assessed level 0-5. 0=unassessed, 1=beginner, 2=basic, 3=intermediate, 4=good, 5=mastery. Base on actual demonstrated ability."
+            },
+            "notes": {
+              "type": "string",
+              "description": "Brief observation note, e.g. 'Correctly solved 3+5 and 7+2 without counting on fingers'"
+            }
+          },
+          "required": ["key", "level"]
+        }
+      },
+      "overall_note": {
+        "type": "string",
+        "description": "Overall observation or summary note about the child."
+      },
+      "strengths": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Tags for the child's strengths, e.g. ['quick learner', 'good memory']."
+      },
+      "weak_areas": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Tags for areas that need more practice, e.g. ['subtraction', 'English sentences']."
+      }
+    },
+    "required": ["action"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    CHILD_PROFILE_TOOL_ID,
+    'Read or update the child\'s learning profile. Call \'read\' at the START of each conversation to understand the child\'s current level across math, English, and general knowledge dimensions. Call \'update\' after observing the child\'s actual performance on a topic to track their progress. Levels are 0-5 (0=unassessed, 5=mastery). Always update based on demonstrated ability, not guesses. Available skill keys: math_counting, math_addition, math_subtraction, math_multiply, math_divide, math_shapes, math_comparison, math_time, english_alphabet, english_vocab, english_sentence, english_phonics, general_nature, general_social, general_life.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createChildProfileToolConfig(): ToolConfig {
+  return new ToolConfig(
+    CHILD_PROFILE_TOOL_ID,
+    '学习画像',
+    '读取或更新小朋友的学习画像(知识水平评估), 用于教育类助手因材施教。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    CHILD_PROFILE_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+// ===== math_verify 工具 =====
+// 数学验证工具：让小星老师在出完数学题后，通过程序化计算验证小朋友的答案是否正确。
+
+interface MathVerifyArgs {
+  expression: string
+  child_answer: number
+}
+
+class MathVerifyResult {
+  correct: boolean = false
+  correct_answer: number = 0
+  expression: string = ''
+  child_answer: number = 0
+
+  constructor(correct: boolean, correctAnswer: number, expression: string, childAnswer: number) {
+    this.correct = correct
+    this.correct_answer = correctAnswer
+    this.expression = expression
+    this.child_answer = childAnswer
+  }
+}
+
+class MathVerifyExecutor implements ToolExecutor {
+  async execute(args: string): Promise<string> {
+    try {
+      const params = JSON.parse(args) as MathVerifyArgs
+      const expression = (params.expression ?? '').trim()
+      const childAnswer = params.child_answer ?? 0
+
+      if (expression === '') {
+        return JSON.stringify(new ErrorOutput('expression is required'))
+      }
+
+      const correctAnswer = evaluateMathExpression(expression)
+      const isCorrect = Math.abs(correctAnswer - childAnswer) < 0.001
+
+      return JSON.stringify(new MathVerifyResult(isCorrect, correctAnswer, expression, childAnswer))
+    } catch (error) {
+      console.error('MathVerifyExecutor', `Error: ${JSON.stringify(error)}`)
+      return JSON.stringify(new ErrorOutput(`math_verify error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createMathVerifyToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "expression": {
+        "type": "string",
+        "description": "The arithmetic expression to evaluate, e.g. '3 + 5', '12 / 4', '(8 - 3) * 2'. Only numbers, +, -, *, /, parentheses, and decimals."
+      },
+      "child_answer": {
+        "type": "number",
+        "description": "The answer the child gave."
+      }
+    },
+    "required": ["expression", "child_answer"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    MATH_VERIFY_TOOL_ID,
+    'Verify the child\'s answer to a math problem. Submit the arithmetic expression and the child\'s answer. Returns whether the answer is correct and the correct answer. Use this AFTER the child answers a math_quiz question or a verbal math question.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createMathVerifyToolConfig(): ToolConfig {
+  return new ToolConfig(
+    MATH_VERIFY_TOOL_ID,
+    '数学验证',
+    '验证小朋友的数学答案是否正确, 通过程序计算算术表达式。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    MATH_VERIFY_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+// ===== math_quiz 工具 =====
+// 数学游戏工具：让小星老师以互动卡片形式出数学题, 小朋友在屏幕上点选答案。
+
+interface MathQuizArgs {
+  question: string
+  expression: string
+  correct_answer: number
+  options: number[]
+  skill_key?: string
+}
+
+class MathQuizResult {
+  answered: boolean = false
+  child_answer: number = 0
+  child_answer_valid: boolean = false
+  correct: boolean = false
+  correct_answer: number = 0
+  expression: string = ''
+
+  constructor(answered: boolean, childAnswer: number, childAnswerValid: boolean,
+    correct: boolean, correctAnswer: number, expression: string) {
+    this.answered = answered
+    this.child_answer = childAnswer
+    this.child_answer_valid = childAnswerValid
+    this.correct = correct
+    this.correct_answer = correctAnswer
+    this.expression = expression
+  }
+}
+
+class MathQuizExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // math_quiz 工具的执行由前端 MathQuizCard 组件处理交互。
+    // 后端只需要返回参数解析成功即可, 实际答案由前端 onAnswer 回调提交。
+    // 如果工具被直接调用(没有前端交互), 返回提示信息。
+    try {
+      const params = JSON.parse(_args) as MathQuizArgs
+      return JSON.stringify(new MathQuizResult(
+        false, 0, false, false, params.correct_answer ?? 0, params.expression ?? ''
+      ))
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`math_quiz error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createMathQuizToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "question": {
+        "type": "string",
+        "description": "The quiz question in natural spoken language, e.g. '桌上有 3 个苹果, 再放 2 个, 一共几个呀'."
+      },
+      "expression": {
+        "type": "string",
+        "description": "The arithmetic expression, e.g. '3 + 2'. Will be displayed as '3 + 2 = ?'."
+      },
+      "correct_answer": {
+        "type": "number",
+        "description": "The correct answer to the expression."
+      },
+      "options": {
+        "type": "array",
+        "items": { "type": "number" },
+        "description": "3-4 answer options as numbers. Must include the correct answer. Shuffle the order."
+      },
+      "skill_key": {
+        "type": "string",
+        "description": "Optional. The child profile skill dimension key this quiz targets, e.g. 'math_addition'. Used for updating the child's profile after answering."
+      }
+    },
+    "required": ["question", "expression", "correct_answer", "options"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    MATH_QUIZ_TOOL_ID,
+    'Present a math quiz to the child as an interactive game card on screen. Use this INSTEAD of writing math problems in plain text. The child will see the question, the expression, and clickable number buttons to select their answer. Provide 3-4 options including the correct answer.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createMathQuizToolConfig(): ToolConfig {
+  return new ToolConfig(
+    MATH_QUIZ_TOOL_ID,
+    '数学游戏',
+    '以互动卡片形式给小朋友出数学题, 小朋友可以在屏幕上点选答案。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    MATH_QUIZ_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
 // 注册所有内置工具
 export function registerBuiltinTools(): void {
   const registry = getToolRegistry()
@@ -789,6 +1226,39 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(CHILD_PROFILE_TOOL_ID)) {
+    const childProfileTool = new RegisteredTool(
+      CHILD_PROFILE_TOOL_ID,
+      createChildProfileToolConfig(),
+      createChildProfileToolDefinition(),
+      new ChildProfileExecutor()
+    )
+    registry.registerTool(childProfileTool)
+    registeredNow += 1
+  }
+
+  if (!registry.isToolRegistered(MATH_VERIFY_TOOL_ID)) {
+    const mathVerifyTool = new RegisteredTool(
+      MATH_VERIFY_TOOL_ID,
+      createMathVerifyToolConfig(),
+      createMathVerifyToolDefinition(),
+      new MathVerifyExecutor()
+    )
+    registry.registerTool(mathVerifyTool)
+    registeredNow += 1
+  }
+
+  if (!registry.isToolRegistered(MATH_QUIZ_TOOL_ID)) {
+    const mathQuizTool = new RegisteredTool(
+      MATH_QUIZ_TOOL_ID,
+      createMathQuizToolConfig(),
+      createMathQuizToolDefinition(),
+      new MathQuizExecutor()
+    )
+    registry.registerTool(mathQuizTool)
+    registeredNow += 1
+  }
+
   console.info(
     'BuiltinTools',
     `Builtin tools ready: total=${registry.getToolCount()}, newlyRegistered=${registeredNow}`
@@ -797,5 +1267,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID]
 }

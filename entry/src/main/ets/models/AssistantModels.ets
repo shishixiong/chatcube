@@ -31,6 +31,7 @@ export class Assistant {
   // 非空 = 仅允许列出的 toolId。搜索工具不在此白名单内(走独立 webSearch 通道)。
   @Trace enabledToolIds: string[] = []
   @Trace isDefault: boolean = false
+  @Trace isPreset: boolean = false
   @Trace createdAt: number = 0
   @Trace updatedAt: number = 0
   @Trace sortOrder: number = 0

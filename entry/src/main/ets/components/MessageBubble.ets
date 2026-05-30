@@ -13,6 +13,7 @@ import { showToast } from '../utils/ToastUtil'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 import { shouldShowAssistantMessageToolbar } from '../utils/MessageBubbleDisplayUtils'
 import { AskUserCard } from './AskUserCard'
+import { MathQuizCard } from './MathQuizCard'
 import { HtmlPreviewCard } from './HtmlPreviewCard'
 import { MermaidPreviewCard } from './MermaidPreviewCard'
 import { TypingDots } from './TypingDots'
@@ -31,7 +32,7 @@ import {
   getMarkdownTitleSizes
 } from '../utils/MarkdownTypographyUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName } from '../utils/SearchToolIdentityUtils'
+import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName } from '../utils/SearchToolIdentityUtils'
 import { MessagePart, MessagePartKind, ToolPartStatus } from '../models/MessageParts'
 import {
   ensureMessageParts,
@@ -2013,6 +2014,22 @@ export struct MessageBubble {
                   }
                 }, (toolCall: ToolCall, index: number) => 'ask_' + toolCall.id + '_' + index.toString())
               }
+              // math_quiz 待答时保留独立互动卡片;提交后收缩到 timeline step 内。
+              if (this.message.hasToolCalls()) {
+                ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
+                  if (this.shouldRenderMathQuizInteractionCard(toolCall, index)) {
+                    MathQuizCard({
+                      toolCall: toolCall,
+                      isAnswered: false,
+                      answeredPayload: toolCall.approvalReason,
+                      onAnswer: (toolCallId: string, answerJson: string): void => {
+                        this.onAskUserAnswer(toolCallId, answerJson)
+                      }
+                    })
+                      .margin({ bottom: 6 })
+                  }
+                }, (toolCall: ToolCall, index: number) => 'quiz_' + toolCall.id + '_' + index.toString())
+              }
             }
 
             // ========== 附件区域（AI 生成的图片） ==========
@@ -2505,6 +2522,13 @@ export struct MessageBubble {
 
   private shouldRenderAskUserInteractionCard(toolCall: ToolCall, index: number): boolean {
     if (!isAskUserFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
+      return false
+    }
+    return !this.isAskUserToolCallAnswered(toolCall, index)
+  }
+
+  private shouldRenderMathQuizInteractionCard(toolCall: ToolCall, index: number): boolean {
+    if (!isMathQuizFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
       return false
     }
     return !this.isAskUserToolCallAnswered(toolCall, index)
@@ -3247,6 +3271,8 @@ export struct MessageBubble {
   ToolStepContent(step: MessagePart) {
     if (isAskUserFunctionName(step.toolName)) {
       this.AskUserStepContent(step)
+    } else if (isMathQuizFunctionName(step.toolName)) {
+      this.MathQuizStepContent(step)
     } else if (isImageGenerationFunctionName(step.toolName) && this.isToolStepClickable(step)) {
       // 图片生成: 折叠/展开, 在下方直接展示生成结果缩略图
       Column() {
@@ -3453,6 +3479,38 @@ export struct MessageBubble {
         .padding({ left: 4, right: 4, top: 8, bottom: 2 })
         .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
       }
+    }
+    .width('100%')
+  }
+
+  // math_quiz 工具步骤: 已完成的数学游戏, 在 timeline 中显示简化的答题结果
+  @Builder
+  MathQuizStepContent(step: MessagePart) {
+    Column() {
+      Row({ space: 6 }) {
+        if (step.toolStatus === 'succeeded') {
+          SymbolGlyph($r('sys.symbol.checkmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_success')])
+        } else if (step.toolStatus === 'failed' || step.toolStatus === 'denied') {
+          SymbolGlyph($r('sys.symbol.xmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_error')])
+        } else {
+          Column()
+            .width(8)
+            .height(8)
+            .borderRadius(4)
+            .backgroundColor(this.themePrimary)
+        }
+
+        Text(this.buildToolStepTitle(step))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+      }
+      .width('100%')
     }
     .width('100%')
   }

@@ -29,6 +29,10 @@ import {
   PresetProviderDef,
   getEffectiveApiKey
 } from '../config/PresetProviders'
+import {
+  getAutoInstallPresetAssistants,
+  PresetAssistantDef
+} from '../config/PresetAssistants'
 import { AppSettingsState, getAppSettingsState } from './AppSettingsState'
 import { MigrationContext } from './migrations/MigrationContext'
 import { runProviderMigrations } from './migrations/ProviderMigrations'
@@ -699,11 +703,46 @@ export class AppSettingsStore {
   }
 
   private async doInitializeAssistants(): Promise<void> {
+    await this.applyPresetAssistantsOnMissing()
     await this.loadAllAssistants()
     const storedId = await this.preferences.getCurrentAssistantId()
     const trimmed = storedId.trim() !== '' ? storedId.trim() : DEFAULT_ASSISTANT_ID
     this.setCurrentAssistantIdInMemory(trimmed)
     getAppSettingsState().assistantsInitialized = true
+  }
+
+  private async applyPresetAssistantsOnMissing(): Promise<void> {
+    const existing = await this.db.getAllAssistants()
+    const existingIds = new Set<string>()
+    for (let i = 0; i < existing.length; i++) {
+      existingIds.add(existing[i].id)
+    }
+    const presets = getAutoInstallPresetAssistants()
+    for (let i = 0; i < presets.length; i++) {
+      if (existingIds.has(presets[i].id)) {
+        continue
+      }
+      const assistant = this.createAssistantFromPreset(presets[i])
+      await this.db.createAssistant(assistant)
+    }
+  }
+
+  private createAssistantFromPreset(preset: PresetAssistantDef): Assistant {
+    const assistant = new Assistant(preset.id, preset.name)
+    assistant.avatarSymbol = preset.avatarSymbol
+    assistant.color = preset.color
+    assistant.systemPrompt = preset.systemPrompt
+    assistant.isPreset = true
+    if (preset.enabledToolIds !== undefined) {
+      assistant.enabledToolIds = preset.enabledToolIds.slice()
+    }
+    if (preset.contextMessageCount !== undefined) {
+      assistant.contextMessageCount = preset.contextMessageCount
+    }
+    if (preset.maxOutputTokens !== undefined) {
+      assistant.maxOutputTokens = preset.maxOutputTokens
+    }
+    return assistant
   }
 
   // ============================================================================

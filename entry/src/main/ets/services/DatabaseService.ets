@@ -213,6 +213,7 @@ export class DatabaseService {
 	        reasoning_level_preference TEXT DEFAULT '',
 	        enabled_tool_ids_json TEXT DEFAULT '',
 	        is_default INTEGER DEFAULT 0,
+	        is_preset INTEGER DEFAULT 0,
 	        created_at INTEGER,
 	        updated_at INTEGER,
 	        sort_order INTEGER DEFAULT 0
@@ -359,6 +360,8 @@ export class DatabaseService {
       await this.addMessageModelIdColumnIfNeeded()
       // 尝试添加助手采样参数列(top_p / presence_penalty / frequency_penalty)
       await this.addAssistantSamplingColumnsIfNeeded()
+      // 尝试添加助手预设标记列
+      await this.addAssistantPresetColumnIfNeeded()
 	      // 迁移现有供应商数据
 	      await this.migrateExistingProviders()
 	      await this.ensureDefaultAssistant()
@@ -773,6 +776,7 @@ export class DatabaseService {
 	      context_message_count: assistant.contextMessageCount || 0,
 	      max_output_tokens: assistant.maxOutputTokens || 0,
 	      is_default: assistant.isDefault ? 1 : 0,
+	      is_preset: assistant.isPreset ? 1 : 0,
 	      created_at: assistant.createdAt,
 	      updated_at: assistant.updatedAt,
 	      sort_order: assistant.sortOrder
@@ -859,6 +863,11 @@ export class DatabaseService {
 	      assistant.isDefault = resultSet.getLong(resultSet.getColumnIndex('is_default')) === 1
 	    } catch (error) {
 	      assistant.isDefault = assistant.id === DEFAULT_ASSISTANT_ID
+	    }
+	    try {
+	      assistant.isPreset = resultSet.getLong(resultSet.getColumnIndex('is_preset')) === 1
+	    } catch (error) {
+	      assistant.isPreset = false
 	    }
 	    try {
 	      assistant.createdAt = resultSet.getLong(resultSet.getColumnIndex('created_at'))
@@ -969,6 +978,17 @@ export class DatabaseService {
       } catch (error) {
         // 列已存在会抛错,忽略
       }
+    }
+  }
+
+  private async addAssistantPresetColumnIfNeeded(): Promise<void> {
+    if (this.rdbStore === null) {
+      return
+    }
+    try {
+      await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.ASSISTANTS} ADD COLUMN is_preset INTEGER DEFAULT 0`)
+    } catch (error) {
+      console.info('DatabaseService', 'is_preset column may already exist')
     }
   }
 

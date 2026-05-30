@@ -4,6 +4,9 @@ export const SCRAPE_WEB_TOOL_ID: string = 'scrape_web'
 export const ASK_USER_TOOL_ID: string = 'ask_user'
 export const GET_TIME_INFO_TOOL_ID: string = 'get_time_info'
 export const IMAGE_GENERATION_TOOL_ID: string = 'image_generation'
+export const CHILD_PROFILE_TOOL_ID: string = 'child_profile'
+export const MATH_VERIFY_TOOL_ID: string = 'math_verify'
+export const MATH_QUIZ_TOOL_ID: string = 'math_quiz'
 
 export function normalizeToolFunctionName(raw: string): string {
   const value = raw as string | null | undefined
@@ -50,6 +53,19 @@ export function isImageGenerationFunctionName(functionName: string): boolean {
   return normalized === IMAGE_GENERATION_TOOL_ID ||
     normalized === 'generate_image' ||
     normalized === 'text_to_image'
+}
+
+export function isChildProfileFunctionName(functionName: string): boolean {
+  const normalized = normalizeToolFunctionName(functionName)
+  return normalized === CHILD_PROFILE_TOOL_ID
+}
+
+export function isMathVerifyFunctionName(functionName: string): boolean {
+  return normalizeToolFunctionName(functionName) === MATH_VERIFY_TOOL_ID
+}
+
+export function isMathQuizFunctionName(functionName: string): boolean {
+  return normalizeToolFunctionName(functionName) === MATH_QUIZ_TOOL_ID
 }
 
 export function getSearchToolIds(): string[] {

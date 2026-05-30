@@ -2874,7 +2874,7 @@ struct Index {
   }
 
   private async deleteAssistantFromTab(assistant: Assistant): Promise<void> {
-    if (assistant.id === DEFAULT_ASSISTANT_ID || assistant.isDefault) {
+    if (assistant.id === DEFAULT_ASSISTANT_ID || assistant.isDefault || assistant.isPreset) {
       return
     }
     if (this.getAssistantSessionCount(assistant.id) <= 0) {
@@ -3088,7 +3088,7 @@ struct Index {
 
   @Builder
   private AssistantEndSwipePanel(assistant: Assistant) {
-    if (assistant.id !== DEFAULT_ASSISTANT_ID && !assistant.isDefault) {
+    if (assistant.id !== DEFAULT_ASSISTANT_ID && !assistant.isDefault && !assistant.isPreset) {
       Row() {
         this.AssistantSwipeButton($r('sys.symbol.trash'), $r('app.string.delete'), $r('app.color.status_error'),
           72, (): void => {
@@ -3440,7 +3440,7 @@ struct Index {
           this.openAssistantEditor(assistant)
         })
 
-      if (assistant.id !== DEFAULT_ASSISTANT_ID && !assistant.isDefault) {
+      if (assistant.id !== DEFAULT_ASSISTANT_ID && !assistant.isDefault && !assistant.isPreset) {
         MenuItem({
           startIcon: $r('sys.symbol.trash'),
           content: $r('app.string.delete')

@@ -44,6 +44,9 @@ export class PreferenceKeys {
   static readonly CUSTOM_SYSTEM_PROMPT: string = 'custom_system_prompt'
   static readonly SYSTEM_PROMPT_ENABLED: string = 'system_prompt_enabled'
 
+  // 儿童学习画像
+  static readonly CHILD_PROFILE_JSON: string = 'child_profile_json'
+
   // 搜索服务配置
   static readonly SEARCH_SERVICE_ENABLED: string = 'search_service_enabled'
   static readonly SEARCH_CONVERSATION_ENABLED: string = 'search_conversation_enabled'

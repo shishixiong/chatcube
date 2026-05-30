@@ -11,7 +11,9 @@ import {
   LEGACY_WEB_SEARCH_TOOL_ID,
   SCRAPE_WEB_TOOL_ID,
   SEARCH_WEB_TOOL_ID,
+  MATH_QUIZ_TOOL_ID,
   isAskUserFunctionName,
+  isMathQuizFunctionName,
   isScrapeWebFunctionName,
   isSearchWebFunctionName
 } from '../utils/SearchToolIdentityUtils'
@@ -505,6 +507,75 @@ export class ToolExecutionService {
     )
   }
 
+  // math_quiz 特殊路径: 与 ask_user 类似, 挂起等待 UI 层 (MathQuizCard) 的回答。
+  private async handleMathQuiz(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = MATH_QUIZ_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '数学游戏'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    toolCall.approvalState = 'pending'
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = MATH_QUIZ_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `math_quiz answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `math_quiz 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'math_quiz cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未回答该题目' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `math_quiz answered: ${toolCall.id}`)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
   // 执行单个工具调用
   async executeToolCall(
     toolCall: ToolCall,
@@ -524,6 +595,12 @@ export class ToolExecutionService {
     // 人机交互工具, 不走通用 executor 和 write 审批 sheet, 由 AskUserCard 直接收集答案。
     if (isAskUserFunctionName(normalizedFunctionName)) {
       return await this.handleAskUser(toolCall, context)
+    }
+
+    // === math_quiz 特殊路径 ===
+    // 数学游戏互动工具, 由 MathQuizCard 收集小朋友的答案。
+    if (isMathQuizFunctionName(normalizedFunctionName)) {
+      return await this.handleMathQuiz(toolCall, context)
     }
 
     // 通过函数名获取工具 ID
