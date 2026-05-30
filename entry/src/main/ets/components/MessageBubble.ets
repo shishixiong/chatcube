@@ -2440,6 +2440,10 @@ export struct MessageBubble {
     if (isAskUserFunctionName(part.toolName)) {
       return false
     }
+    if (isMathQuizFunctionName(part.toolName)) {
+      // 数学游戏: 已完成的可以展开查看答题详情
+      return this.isSuccessfulToolStep(part)
+    }
     if (isImageGenerationFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
@@ -2478,22 +2482,56 @@ export struct MessageBubble {
   }
 
   private isToolStepExpanded(part: MessagePart): boolean {
-    return this.expandedToolStepKeys.includes(this.getToolStepKey(part))
+    const key = this.getToolStepKey(part)
+    // 用户手动折叠过 → 强制折叠
+    if (this.expandedToolStepKeys.includes(`!${key}`)) {
+      return false
+    }
+    // 用户手动展开过 → 强制展开
+    if (this.expandedToolStepKeys.includes(key)) {
+      return true
+    }
+    // 默认行为: 图片生成/数学游戏 成功后默认展开查看结果
+    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName)) {
+      return this.isSuccessfulToolStep(part)
+    }
+    return false
   }
 
   private toggleToolStep(part: MessagePart): void {
     const key = this.getToolStepKey(part)
+    // 默认展开的工具类型: 图片生成、数学游戏
+    const isDefaultExpanded = this.isSuccessfulToolStep(part) &&
+      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName))
     const next: string[] = []
     let found = false
+    let foundCollapsed = false
     for (let i = 0; i < this.expandedToolStepKeys.length; i++) {
       if (this.expandedToolStepKeys[i] === key) {
         found = true
         continue
       }
+      if (this.expandedToolStepKeys[i] === `!${key}`) {
+        foundCollapsed = true
+        continue
+      }
       next.push(this.expandedToolStepKeys[i])
     }
-    if (!found) {
-      next.push(key)
+    if (found) {
+      // 用户之前手动展开过 → 移除后回到默认状态
+      // 对于默认展开的工具, 需要添加 !key 来显式折叠
+      if (isDefaultExpanded) {
+        next.push(`!${key}`)
+      }
+    } else if (foundCollapsed) {
+      // 用户之前手动折叠过 → 移除折叠标记, 回到默认(默认展开=展开)
+    } else {
+      // 默认状态: 默认展开的工具 → 加 !key 来折叠; 其他工具 → 加 key 来展开
+      if (isDefaultExpanded) {
+        next.push(`!${key}`)
+      } else {
+        next.push(key)
+      }
     }
     this.notifyInteractiveContentResize()
     this.getUIContext().animateTo({ duration: 200, curve: Curve.EaseInOut }, () => {
@@ -2851,6 +2889,11 @@ export struct MessageBubble {
   private handleToolStepClick(part: MessagePart): void {
     // 图片生成: 展开/折叠查看生成结果
     if (isImageGenerationFunctionName(part.toolName)) {
+      this.toggleToolStep(part)
+      return
+    }
+    // 数学游戏: 展开/折叠查看答题详情
+    if (isMathQuizFunctionName(part.toolName)) {
       this.toggleToolStep(part)
       return
     }
@@ -3483,7 +3526,7 @@ export struct MessageBubble {
     .width('100%')
   }
 
-  // math_quiz 工具步骤: 已完成的数学游戏, 在 timeline 中显示简化的答题结果
+  // math_quiz 工具步骤: 已完成的数学游戏, 在 timeline 中显示简化的答题结果, 可展开查看详情
   @Builder
   MathQuizStepContent(step: MessagePart) {
     Column() {
@@ -3509,10 +3552,44 @@ export struct MessageBubble {
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.text_primary'))
           .layoutWeight(1)
+
+        if (this.isToolStepClickable(step)) {
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(12)
+            .fontColor([$r('app.color.text_tertiary')])
+            .rotate({ angle: this.isToolStepExpanded(step) ? 0 : -90 })
+            .animation({ duration: 200, curve: Curve.EaseOut })
+        }
       }
       .width('100%')
+      .onClick(() => {
+        if (this.isToolStepClickable(step)) {
+          this.handleToolStepClick(step)
+        }
+      })
+
+      // 展开时显示完整的答题卡片
+      if (this.isToolStepExpanded(step) && step.toolResult !== '') {
+        MathQuizCard({
+          toolCall: this.buildToolCallFromStep(step),
+          isAnswered: true,
+          answeredPayload: step.toolResult,
+          onAnswer: (_toolCallId: string, _answerJson: string): void => {}
+        })
+        .margin({ top: 8 })
+      }
     }
     .width('100%')
+  }
+
+  // 从 MessagePart 构造 ToolCall 用于 MathQuizCard 渲染
+  private buildToolCallFromStep(step: MessagePart): ToolCall {
+    const toolCall = new ToolCall()
+    toolCall.id = step.toolCallId
+    toolCall.functionName = step.toolName
+    toolCall.displayName = step.toolDisplayName
+    toolCall.arguments = step.toolArguments
+    return toolCall
   }
 
   @Builder

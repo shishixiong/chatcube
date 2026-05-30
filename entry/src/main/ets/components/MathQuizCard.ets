@@ -58,6 +58,19 @@ export struct MathQuizCard {
     return getAppUiState().isDarkMode
   }
 
+  aboutToAppear(): void {
+    // 如果是已回答状态, 从 answeredPayload 中恢复选中项和结果
+    if (this.isAnswered) {
+      const prev = this.parsePreviousAnswer()
+      if (prev !== null) {
+        this.selectedOption = prev.child_answer
+        this.showResult = true
+        this.isCorrect = prev.correct
+        this.correctAnswerValue = prev.correct_answer
+      }
+    }
+  }
+
   private parseQuiz(): MathQuizQuestion {
     const result: MathQuizQuestion = {
       question: '',
