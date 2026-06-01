@@ -31,6 +31,9 @@ const MATH_KEYWORDS: string[] = [
 const PROFILE_KEYWORDS: string[] = [
   'child_profile', 'profile', 'learning_profile'
 ]
+const ENGLISH_KEYWORDS: string[] = [
+  'english_quiz', 'english_progress', 'english_vocab', 'english'
+]
 
 function matchesAny(name: string, keywords: string[]): boolean {
   for (let i = 0; i < keywords.length; i++) {
@@ -86,6 +89,9 @@ export function resolveToolSymbol(functionName: string): Resource {
   }
   if (matchesAny(name, PROFILE_KEYWORDS)) {
     return $r('sys.symbol.doc')
+  }
+  if (matchesAny(name, ENGLISH_KEYWORDS)) {
+    return $r('sys.symbol.square_and_pencil')
   }
   return $r('sys.symbol.wrench_and_screwdriver')
 }

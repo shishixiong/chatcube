@@ -7,6 +7,8 @@ export const IMAGE_GENERATION_TOOL_ID: string = 'image_generation'
 export const CHILD_PROFILE_TOOL_ID: string = 'child_profile'
 export const MATH_VERIFY_TOOL_ID: string = 'math_verify'
 export const MATH_QUIZ_TOOL_ID: string = 'math_quiz'
+export const ENGLISH_QUIZ_TOOL_ID: string = 'english_quiz'
+export const ENGLISH_PROGRESS_TOOL_ID: string = 'english_progress'
 
 export function normalizeToolFunctionName(raw: string): string {
   const value = raw as string | null | undefined
@@ -66,6 +68,14 @@ export function isMathVerifyFunctionName(functionName: string): boolean {
 
 export function isMathQuizFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === MATH_QUIZ_TOOL_ID
+}
+
+export function isEnglishQuizFunctionName(functionName: string): boolean {
+  return normalizeToolFunctionName(functionName) === ENGLISH_QUIZ_TOOL_ID
+}
+
+export function isEnglishProgressFunctionName(functionName: string): boolean {
+  return normalizeToolFunctionName(functionName) === ENGLISH_PROGRESS_TOOL_ID
 }
 
 export function getSearchToolIds(): string[] {

@@ -21,6 +21,8 @@ interface ToolArgumentDict {
   question?: string
   questions?: Object[] | string
   prompt?: string
+  word?: string
+  sentence?: string
 }
 
 const MAX_SNIPPET = 24
@@ -188,6 +190,20 @@ export function buildToolTitle(toolCall: ToolCall): string {
       return `技能：${truncate(name, 32)}`
     }
     return '执行技能'
+  }
+  if (fn === 'english_quiz') {
+    const word = coerceString(args.word)
+    const sentence = coerceString(args.sentence)
+    if (word !== '') {
+      return `英语看图: ${truncate(word)}`
+    }
+    if (sentence !== '') {
+      return `英语看图: ${truncate(sentence)}`
+    }
+    return '英语看图说话'
+  }
+  if (fn === 'english_progress') {
+    return '英语学习进度报告'
   }
 
   return fallback

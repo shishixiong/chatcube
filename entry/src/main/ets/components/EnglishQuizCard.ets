@@ -1,0 +1,650 @@
+/**
+ * EnglishQuizCard - 英语看图说话互动卡片
+ *
+ * 解析 toolCall.arguments 中的英语题目参数, 以游戏化方式展示:
+ * - 图片（本地生成的图片, 由组件内部通过 EnglishQuizImageIndex 异步加载）
+ * - 提示文字（"看图说出英语单词" / "看图说出英语句子"）
+ * - 语音输入按钮 + 文字输入框
+ * - 提交后即时反馈对错
+ *
+ * 参考 MathQuizCard 模式: @ComponentV2 + @Event onAnswer 回调
+ */
+
+import { ToolCall } from '../models/ChatModels'
+import { getAppUiState } from '../state/AppUiState'
+import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { SpeechRecognitionCallback } from '../services/SpeechRecognitionService'
+import { ServiceRegistry } from '../services/ServiceRegistry'
+import { getEnglishQuizImageIndex } from '../services/EnglishQuizImageIndex'
+import { common } from '@kit.AbilityKit'
+
+interface EnglishQuizQuestion {
+  word: string
+  sentence: string
+  imagePath: string
+  imagePrompt: string
+  correctAnswer: string
+  questionType: string
+  difficulty: number
+  skillKey: string
+}
+
+interface EnglishQuizAnswerPayload {
+  answered: boolean
+  child_answer: string
+  correct: boolean
+  correct_answer: string
+  word: string
+  sentence: string
+  question_type: string
+  skill_key: string
+}
+
+@ComponentV2
+export struct EnglishQuizCard {
+  @Param toolCall: ToolCall = new ToolCall()
+  @Param isAnswered: boolean = false
+  @Param answeredPayload: string = ''
+  @Event onAnswer: (toolCallId: string, answerJson: string) => void = () => {}
+
+  @Local inputText: string = ''
+  @Local showResult: boolean = false
+  @Local isCorrect: boolean = false
+  @Local correctAnswerText: string = ''
+  @Local isRecording: boolean = false
+  @Local recognitionPreview: string = ''
+  // 组件内部异步解析的图片路径, 不再依赖 handleEnglishQuiz 注入 image_path
+  @Local resolvedImagePath: string = ''
+  @Local isImageLoading: boolean = false
+  @Local imageLoadFailed: boolean = false
+  private imageLoadTimer: number = -1
+
+  private get themePrimary(): string {
+    return getAppUiState().themePrimary
+  }
+
+  private get themeAiBubble(): string {
+    return getAppUiState().themeAiBubble
+  }
+
+  private get isDarkMode(): boolean {
+    return getAppUiState().isDarkMode
+  }
+
+  aboutToAppear(): void {
+    // 如果是已回答状态, 从 answeredPayload 中恢复结果
+    if (this.isAnswered) {
+      const prev = this.parsePreviousAnswer()
+      if (prev !== null) {
+        this.inputText = prev.child_answer
+        this.showResult = true
+        this.isCorrect = prev.correct
+        this.correctAnswerText = prev.correct_answer
+      }
+    }
+
+    // 异步解析图片: 优先从 arguments 中已有的 image_path 读取,
+    // 没有则通过 EnglishQuizImageIndex 查缓存/生成
+    this.resolveImage()
+  }
+
+  aboutToDisappear(): void {
+    if (this.imageLoadTimer >= 0) {
+      clearTimeout(this.imageLoadTimer)
+      this.imageLoadTimer = -1
+    }
+  }
+
+  /**
+   * 将沙箱绝对路径转为 file:// URL, 供 Image 组件加载本地文件
+   */
+  private toFileUrl(path: string): string {
+    if (path === '') {
+      return ''
+    }
+    if (path.startsWith('file://') || path.startsWith('data:') ||
+        path.startsWith('http://') || path.startsWith('https://')) {
+      return path
+    }
+    return 'file://' + path
+  }
+
+  /**
+   * 异步解析图片路径:
+   * 1. 先从 toolCall.arguments 的 image_path 读取 (handleEnglishQuiz 可能已注入)
+   * 2. 没有则通过 EnglishQuizImageIndex 查缓存
+   * 3. 缓存未命中则延迟 3s 后自行调用 generate (给 handleEnglishQuiz 优先权)
+   * 4. 30s 超时兜底
+   */
+  private resolveImage(): void {
+    const quiz = this.parseQuiz()
+
+    // 已有 image_path (由 handleEnglishQuiz 注入或缓存命中)
+    if (quiz.imagePath !== '') {
+      this.resolvedImagePath = quiz.imagePath
+      console.info('EnglishQuizCard', `Image already resolved in arguments: ${quiz.imagePath}`)
+      return
+    }
+
+    // 无需加载图片的场景 (没有 word/sentence 也没 imagePrompt)
+    if (quiz.word === '' && quiz.sentence === '' && quiz.imagePrompt === '') {
+      console.warn('EnglishQuizCard', 'No word, sentence, or imagePrompt in quiz data')
+      return
+    }
+
+    // 开始异步加载: 先查缓存
+    this.isImageLoading = true
+    const word = quiz.word
+    const sentence = quiz.sentence
+    const imagePrompt = quiz.imagePrompt
+
+    console.info('EnglishQuizCard',
+      `Starting cache lookup: word="${word}", sentence="${sentence}", imagePrompt="${imagePrompt.substring(0, 60)}..."`)
+
+    getEnglishQuizImageIndex().lookup(word, sentence).then((cached) => {
+      if (cached !== null && cached.filePath !== '') {
+        this.resolvedImagePath = cached.filePath
+        this.isImageLoading = false
+        console.info('EnglishQuizCard', `Cache HIT: ${cached.filePath}`)
+        return
+      }
+      // 缓存未命中: 等待 3s 给 handleEnglishQuiz 优先权, 然后自行生成
+      console.info('EnglishQuizCard', 'Cache miss, will try generation in 3s as fallback')
+      setTimeout(() => {
+        // 检查 handleEnglishQuiz 是否已经解决了图片
+        const currentQuiz = this.parseQuiz()
+        if (currentQuiz.imagePath !== '') {
+          this.resolvedImagePath = currentQuiz.imagePath
+          this.isImageLoading = false
+          console.info('EnglishQuizCard', `Image already injected by handleEnglishQuiz: ${currentQuiz.imagePath}`)
+          return
+        }
+        if (this.resolvedImagePath !== '') {
+          // 已经通过其他方式解决了
+          this.isImageLoading = false
+          return
+        }
+        // 自行生成
+        if (imagePrompt !== '') {
+          console.info('EnglishQuizCard', 'Starting fallback generation...')
+          getEnglishQuizImageIndex().generate(word, sentence, imagePrompt).then((generated) => {
+            if (generated !== null && generated.filePath !== '') {
+              this.resolvedImagePath = generated.filePath
+              this.isImageLoading = false
+              console.info('EnglishQuizCard', `Fallback generation SUCCESS: ${generated.filePath}`)
+            } else {
+              console.error('EnglishQuizCard', 'Fallback generation FAILED: generate() returned null')
+              // 不立即设置 error, 给 handleEnglishQuiz 更多时间 (由 30s 超时处理)
+            }
+          }).catch((err: Error) => {
+            console.error('EnglishQuizCard', `Fallback generation exception: ${err.message}`)
+          })
+        } else {
+          console.warn('EnglishQuizCard', 'No imagePrompt available for generation')
+        }
+      }, 3000)
+
+      // 启动 30s 超时定时器
+      this.imageLoadTimer = setTimeout(() => {
+        if (this.isImageLoading && this.resolvedImagePath === '') {
+          const finalQuiz = this.parseQuiz()
+          if (finalQuiz.imagePath === '') {
+            console.error('EnglishQuizCard', 'Image load timed out after 30s - showing error state')
+            this.isImageLoading = false
+            this.imageLoadFailed = true
+          } else {
+            // handleEnglishQuiz 最终注入了路径
+            this.resolvedImagePath = finalQuiz.imagePath
+            this.isImageLoading = false
+            console.info('EnglishQuizCard', `Image resolved at timeout check: ${finalQuiz.imagePath}`)
+          }
+        }
+      }, 120000)
+    }).catch((error: Error) => {
+      console.error('EnglishQuizCard', `Cache lookup exception: ${error.message}`)
+      // 不清除 isImageLoading, 给 handleEnglishQuiz 和 fallback generation 机会
+    })
+  }
+
+  private parseQuiz(): EnglishQuizQuestion {
+    const result: EnglishQuizQuestion = {
+      word: '',
+      sentence: '',
+      imagePath: '',
+      imagePrompt: '',
+      correctAnswer: '',
+      questionType: 'word',
+      difficulty: 1,
+      skillKey: 'english_vocab'
+    }
+    try {
+      const parsed = JSON.parse(this.toolCall.arguments) as Record<string, Object>
+      result.word = (parsed['word'] as string) ?? ''
+      result.sentence = (parsed['sentence'] as string) ?? ''
+      result.imagePath = (parsed['image_path'] as string) ?? ''
+      result.imagePrompt = (parsed['image_prompt'] as string) ?? ''
+      result.correctAnswer = (parsed['correct_answer'] as string) ?? ''
+      result.questionType = (parsed['question_type'] as string) ?? 'word'
+      result.difficulty = (parsed['difficulty'] as number) ?? 1
+      result.skillKey = (parsed['skill_key'] as string) ?? 'english_vocab'
+    } catch (_e) {}
+    return result
+  }
+
+  private parsePreviousAnswer(): EnglishQuizAnswerPayload | null {
+    if (this.answeredPayload === '') {
+      return null
+    }
+    try {
+      return JSON.parse(this.answeredPayload) as EnglishQuizAnswerPayload
+    } catch (_e) {
+      return null
+    }
+  }
+
+  /**
+   * 判断答案是否正确
+   * - 单词模式：忽略大小写和前后空格
+   * - 句子模式：忽略大小写 + 多余空格，核心词匹配
+   */
+  private checkAnswer(childAnswer: string, correctAnswer: string, questionType: string): boolean {
+    const child = childAnswer.trim().toLowerCase()
+    const correct = correctAnswer.trim().toLowerCase()
+
+    if (child === '' || correct === '') {
+      return false
+    }
+
+    if (questionType === 'word') {
+      return child === correct
+    }
+
+    // 句子模式：分词后计算匹配度
+    const childWords = child.split(/\s+/).filter((w: string): boolean => w.length > 0)
+    const correctWords = correct.split(/\s+/).filter((w: string): boolean => w.length > 0)
+
+    if (correctWords.length === 0) {
+      return false
+    }
+
+    let matchCount = 0
+    const usedIndices: Set<number> = new Set()
+    for (let i = 0; i < childWords.length; i++) {
+      for (let j = 0; j < correctWords.length; j++) {
+        if (!usedIndices.has(j) && childWords[i] === correctWords[j]) {
+          matchCount++
+          usedIndices.add(j)
+          break
+        }
+      }
+    }
+
+    const accuracy = matchCount / correctWords.length
+    return accuracy >= 0.8
+  }
+
+  private handleSubmit(): void {
+    if (this.inputText.trim() === '' || this.isAnswered) {
+      return
+    }
+
+    const quiz = this.parseQuiz()
+    const correct = this.checkAnswer(this.inputText, quiz.correctAnswer, quiz.questionType)
+
+    // 先显示即时反馈
+    this.showResult = true
+    this.isCorrect = correct
+    this.correctAnswerText = quiz.correctAnswer
+
+    // 构建 payload 回传
+    const payload: EnglishQuizAnswerPayload = {
+      answered: true,
+      child_answer: this.inputText.trim(),
+      correct: correct,
+      correct_answer: quiz.correctAnswer,
+      word: quiz.word,
+      sentence: quiz.sentence,
+      question_type: quiz.questionType,
+      skill_key: quiz.skillKey
+    }
+
+    this.onAnswer(this.toolCall.id, JSON.stringify(payload))
+  }
+
+  private handleVoiceRecordStart(): void {
+    if (this.isRecording || this.isAnswered || this.showResult) {
+      return
+    }
+
+    const speechService = ServiceRegistry.speechRecognition()
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+
+    speechService.checkPermission(context).then((granted: boolean) => {
+      if (!granted) {
+        return
+      }
+      speechService.init().then(() => {
+        this.isRecording = true
+        this.recognitionPreview = ''
+        const callback: SpeechRecognitionCallback = {
+          onStart: () => {
+            console.info('EnglishQuizCard', 'Voice recording started')
+          },
+          onResult: (text: string, isFinal: boolean) => {
+            if (isFinal) {
+              this.recognitionPreview = text
+            }
+          },
+          onComplete: (finalText: string) => {
+            this.isRecording = false
+            if (finalText.trim() !== '') {
+              this.inputText = finalText.trim()
+            }
+          },
+          onCancel: () => {
+            this.isRecording = false
+          },
+          onError: (code: number, message: string) => {
+            this.isRecording = false
+            console.error('EnglishQuizCard', `Voice recognition error: ${code} ${message}`)
+          }
+        }
+        speechService.startListening(callback)
+      }).catch((err: Error) => {
+        console.error('EnglishQuizCard', `Failed to init speech: ${err.message}`)
+      })
+    })
+  }
+
+  private handleVoiceRecordFinish(): void {
+    ServiceRegistry.speechRecognition().finishListening()
+  }
+
+  private handleVoiceRecordCancel(): void {
+    ServiceRegistry.speechRecognition().cancelListening()
+    this.isRecording = false
+  }
+
+  private getCardBackgroundColor(): string {
+    return this.isDarkMode ? withColorAlpha(this.themePrimary, '18') : withColorAlpha(this.themePrimary, '12')
+  }
+
+  build() {
+    Column({ space: 10 }) {
+      // 标题行
+      Row() {
+        SymbolGlyph($r('sys.symbol.square_and_pencil'))
+          .fontSize(14)
+          .fontColor([this.themePrimary])
+        Text('英语小游戏')
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .margin({ left: 6 })
+        Blank()
+        if (this.isAnswered) {
+          Text('已回答')
+            .fontSize(10)
+            .fontColor(Color.White)
+            .backgroundColor($r('app.color.status_success'))
+            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+            .borderRadius(6)
+        }
+      }
+      .width('100%')
+
+      // 题目内容
+      this.QuizContent()
+
+      // 输入区域（未回答时）
+      if (!this.isAnswered && !this.showResult) {
+        this.InputArea()
+      }
+
+      // 结果反馈
+      if (this.showResult || this.isAnswered) {
+        this.ResultFeedback()
+      }
+    }
+    .width('100%')
+    .padding(12)
+    .backgroundColor(this.themeAiBubble)
+    .borderRadius(12)
+    .border({ width: 1, color: $r('app.color.divider') })
+  }
+
+  @Builder
+  QuizContent() {
+    Column({ space: 10 }) {
+      ForEach([this.parseQuiz()], (quiz: EnglishQuizQuestion) => {
+        // 图片区域: 优先使用组件内部异步解析的路径, 再回退到 arguments 中的 image_path
+        if (this.resolvedImagePath !== '') {
+          Image(this.toFileUrl(this.resolvedImagePath))
+            .width('100%')
+            .height(180)
+            .objectFit(ImageFit.Contain)
+            .borderRadius(10)
+            .backgroundColor($r('app.color.surface'))
+        } else if (quiz.imagePath !== '') {
+          // handleEnglishQuiz 已注入的 image_path (同步路径)
+          Image(this.toFileUrl(quiz.imagePath))
+            .width('100%')
+            .height(180)
+            .objectFit(ImageFit.Contain)
+            .borderRadius(10)
+            .backgroundColor($r('app.color.surface'))
+        } else if (this.isImageLoading) {
+          // 正在异步加载图片中
+          Column() {
+            SymbolGlyph($r('sys.symbol.doc_plaintext'))
+              .fontSize(32)
+              .fontColor([$r('app.color.text_tertiary')])
+            Text('图片加载中...')
+              .fontSize(12)
+              .fontColor($r('app.color.text_tertiary'))
+              .margin({ top: 4 })
+          }
+          .width('100%')
+          .height(120)
+          .justifyContent(FlexAlign.Center)
+          .backgroundColor($r('app.color.surface'))
+          .borderRadius(10)
+        } else if (this.imageLoadFailed) {
+          // 图片生成失败
+          Column() {
+            SymbolGlyph($r('sys.symbol.doc_plaintext'))
+              .fontSize(32)
+              .fontColor([$r('app.color.text_tertiary')])
+            Text('图片加载失败')
+              .fontSize(12)
+              .fontColor($r('app.color.text_tertiary'))
+              .margin({ top: 4 })
+          }
+          .width('100%')
+          .height(120)
+          .justifyContent(FlexAlign.Center)
+          .backgroundColor($r('app.color.surface'))
+          .borderRadius(10)
+        } else {
+          // 初始状态: 尚未开始加载
+          Column() {
+            SymbolGlyph($r('sys.symbol.doc_plaintext'))
+              .fontSize(32)
+              .fontColor([$r('app.color.text_tertiary')])
+            Text('准备中...')
+              .fontSize(12)
+              .fontColor($r('app.color.text_tertiary'))
+              .margin({ top: 4 })
+          }
+          .width('100%')
+          .height(120)
+          .justifyContent(FlexAlign.Center)
+          .backgroundColor($r('app.color.surface'))
+          .borderRadius(10)
+        }
+
+        // 提示文字
+        Text(quiz.questionType === 'sentence' ? '看图说出英语句子' : '看图说出英语单词')
+          .fontSize(14)
+          .fontColor($r('app.color.text_secondary'))
+          .width('100%')
+          .textAlign(TextAlign.Center)
+      }, (_: EnglishQuizQuestion) => 'quiz')
+    }
+    .width('100%')
+    .padding(12)
+    .backgroundColor(this.getCardBackgroundColor())
+    .borderRadius(10)
+  }
+
+  @Builder
+  InputArea() {
+    Column({ space: 8 }) {
+      // 语音输入按钮
+      Row() {
+        Button() {
+          Row({ space: 6 }) {
+            SymbolGlyph($r('sys.symbol.mic'))
+              .fontSize(16)
+              .fontColor([Color.White])
+            Text(this.isRecording ? '松开结束' : '按住说话')
+              .fontSize(14)
+              .fontColor(Color.White)
+          }
+        }
+        .type(ButtonType.Normal)
+        .height(40)
+        .layoutWeight(1)
+        .backgroundColor(this.isRecording ? '#FF6B6B' : this.themePrimary)
+        .borderRadius(20)
+        .onTouch((event: TouchEvent) => {
+          if (this.isAnswered || this.showResult) {
+            return
+          }
+          if (event.type === TouchType.Down) {
+            this.handleVoiceRecordStart()
+          } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+            if (this.isRecording) {
+              if (event.type === TouchType.Cancel) {
+                this.handleVoiceRecordCancel()
+              } else {
+                this.handleVoiceRecordFinish()
+              }
+            }
+          }
+        })
+      }
+      .width('100%')
+
+      // 语音识别预览
+      if (this.isRecording && this.recognitionPreview !== '') {
+        Text(`识别中: ${this.recognitionPreview}`)
+          .fontSize(12)
+          .fontColor($r('app.color.text_tertiary'))
+          .width('100%')
+      }
+
+      // 文字输入框
+      Row({ space: 8 }) {
+        TextInput({ text: this.inputText, placeholder: '输入英语答案...' })
+          .layoutWeight(1)
+          .height(40)
+          .fontSize(15)
+          .backgroundColor($r('app.color.surface'))
+          .borderRadius(10)
+          .onChange((value: string) => {
+            this.inputText = value
+          })
+          .onSubmit(() => {
+            this.handleSubmit()
+          })
+
+        Button('提交')
+          .height(40)
+          .padding({ left: 16, right: 16 })
+          .fontSize(14)
+          .fontColor(Color.White)
+          .backgroundColor(this.inputText.trim() !== '' ? this.themePrimary : $r('app.color.text_tertiary'))
+          .enabled(this.inputText.trim() !== '')
+          .borderRadius(10)
+          .onClick(() => {
+            this.handleSubmit()
+          })
+      }
+      .width('100%')
+    }
+    .width('100%')
+  }
+
+  @Builder
+  ResultFeedback() {
+    Column({ space: 6 }) {
+      if (this.showResult) {
+        if (this.isCorrect) {
+          Row({ space: 6 }) {
+            SymbolGlyph($r('sys.symbol.checkmark_circle'))
+              .fontSize(16)
+              .fontColor(['#4CAF50'])
+            Text('Great job! 答对了!')
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#4CAF50')
+          }
+          .width('100%')
+        } else {
+          Row({ space: 6 }) {
+            SymbolGlyph($r('sys.symbol.xmark_circle'))
+              .fontSize(16)
+              .fontColor(['#FF9F43'])
+            Text(`正确答案是: ${this.correctAnswerText}`)
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#FF9F43')
+          }
+          .width('100%')
+        }
+      } else if (this.isAnswered) {
+        // 从 answeredPayload 中解析结果
+        ForEach([this.parsePreviousAnswer()], (prev: EnglishQuizAnswerPayload | null) => {
+          if (prev !== null) {
+            if (prev.correct) {
+              Row({ space: 6 }) {
+                SymbolGlyph($r('sys.symbol.checkmark_circle'))
+                  .fontSize(16)
+                  .fontColor(['#4CAF50'])
+                Text('Great job! 答对了!')
+                  .fontSize(14)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor('#4CAF50')
+              }
+              .width('100%')
+            } else {
+              Column({ space: 4 }) {
+                Row({ space: 6 }) {
+                  SymbolGlyph($r('sys.symbol.xmark_circle'))
+                    .fontSize(16)
+                    .fontColor(['#FF9F43'])
+                  Text(`你的回答: ${prev.child_answer}`)
+                    .fontSize(13)
+                    .fontColor('#FF9F43')
+                }
+                .width('100%')
+                Row({ space: 6 }) {
+                  SymbolGlyph($r('sys.symbol.checkmark_circle'))
+                    .fontSize(16)
+                    .fontColor(['#4CAF50'])
+                  Text(`正确答案: ${prev.correct_answer}`)
+                    .fontSize(13)
+                    .fontColor('#4CAF50')
+                }
+                .width('100%')
+              }
+              .width('100%')
+            }
+          }
+        }, (_: EnglishQuizAnswerPayload | null) => 'result')
+      }
+    }
+    .width('100%')
+  }
+}

@@ -47,7 +47,6 @@ import { AITaskService } from '../services/AITaskService'
 import { WebSearchService } from '../services/WebSearchService'
 import { DefaultModelService } from '../services/DefaultModelService'
 import { PreferenceKeys, PreferencesService } from '../services/PreferencesService'
-import { TTSService } from '../services/TTSService'
 import { McpService } from '../services/McpService'
 import { ToolRegistry } from '../services/ToolRegistry'
 import {
@@ -368,7 +367,6 @@ export struct ChatPage {
   private toolRegistry: ToolRegistry = ServiceRegistry.toolRegistry()
   private mcpService: McpService = ServiceRegistry.mcp()
   private chatTaskOrchestrator = ServiceRegistry.chatTaskOrchestrator()
-  private ttsService: TTSService = new TTSService()
   // 当前服务商配置
   private currentProvider: ModelProvider | null = null
   private sessionId: string = ''
@@ -558,7 +556,7 @@ export struct ChatPage {
     this.closeActiveChatImagePreview(false)
     this.resetDocumentParseQueue()
     // 释放TTS资源
-    this.ttsService.destroy()
+    ServiceRegistry.tts().destroy()
     // 释放语音识别资源
     this.stopWaveformAnimation()
     ServiceRegistry.speechRecognition().shutdown()
@@ -585,7 +583,7 @@ export struct ChatPage {
   private async initTTSService(): Promise<void> {
     try {
       const context = this.getUIContext().getHostContext() as common.UIAbilityContext
-      await this.ttsService.init(context)
+      await ServiceRegistry.tts().init(context)
     } catch (error) {
       console.error('ChatPage', 'TTS初始化失败: ' + error)
     }
@@ -4510,12 +4508,12 @@ export struct ChatPage {
   private handleTTS(messageId: string, content: string): void {
     // 如果正在朗读其他消息，先停止
     if (this.speakingMessageId !== '') {
-      this.ttsService.stop()
+      ServiceRegistry.tts().stop()
     }
 
     this.setSpeakingMessageId(messageId)
 
-    this.ttsService.speak(content, {
+    ServiceRegistry.tts().speak(content, {
       onStart: () => {
         // 朗读开始
       },
@@ -4532,7 +4530,7 @@ export struct ChatPage {
 
   // 处理停止TTS朗读
   private handleTTSStop(): void {
-    this.ttsService.stop()
+    ServiceRegistry.tts().stop()
     this.setSpeakingMessageId('')
   }
 

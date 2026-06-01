@@ -47,6 +47,9 @@ export class PreferenceKeys {
   // 儿童学习画像
   static readonly CHILD_PROFILE_JSON: string = 'child_profile_json'
 
+  // 英语出题工具图片缓存索引
+  static readonly ENGLISH_QUIZ_IMAGE_INDEX_JSON: string = 'english_quiz_image_index_json'
+
   // 搜索服务配置
   static readonly SEARCH_SERVICE_ENABLED: string = 'search_service_enabled'
   static readonly SEARCH_CONVERSATION_ENABLED: string = 'search_conversation_enabled'
