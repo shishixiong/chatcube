@@ -413,83 +413,90 @@ export struct EnglishQuizCard {
     .border({ width: 1, color: $r('app.color.divider') })
   }
 
+  /**
+   * 计算当前有效的图片路径: resolvedImagePath 优先 (来自组件异步解析),
+   * 其次使用 toolCall.arguments 中的 image_path (来自 handleEnglishQuiz 注入).
+   * 不使用 ForEach 包裹, 确保 @Trace arguments 变化时 Image 组件能直接重建。
+   */
+  private getEffectiveImagePath(): string {
+    if (this.resolvedImagePath !== '') {
+      return this.resolvedImagePath
+    }
+    try {
+      const parsed = JSON.parse(this.toolCall.arguments) as Record<string, Object>
+      return (parsed['image_path'] as string) ?? ''
+    } catch (_e) {
+      return ''
+    }
+  }
+
   @Builder
   QuizContent() {
     Column({ space: 10 }) {
-      ForEach([this.parseQuiz()], (quiz: EnglishQuizQuestion) => {
-        // 图片区域: 优先使用组件内部异步解析的路径, 再回退到 arguments 中的 image_path
-        if (this.resolvedImagePath !== '') {
-          Image(this.toFileUrl(this.resolvedImagePath))
-            .width('100%')
-            .height(180)
-            .objectFit(ImageFit.Contain)
-            .borderRadius(10)
-            .backgroundColor($r('app.color.surface'))
-        } else if (quiz.imagePath !== '') {
-          // handleEnglishQuiz 已注入的 image_path (同步路径)
-          Image(this.toFileUrl(quiz.imagePath))
-            .width('100%')
-            .height(180)
-            .objectFit(ImageFit.Contain)
-            .borderRadius(10)
-            .backgroundColor($r('app.color.surface'))
-        } else if (this.isImageLoading) {
-          // 正在异步加载图片中
-          Column() {
-            SymbolGlyph($r('sys.symbol.doc_plaintext'))
-              .fontSize(32)
-              .fontColor([$r('app.color.text_tertiary')])
-            Text('图片加载中...')
-              .fontSize(12)
-              .fontColor($r('app.color.text_tertiary'))
-              .margin({ top: 4 })
-          }
+      // 图片区域: 直接从 toolCall.arguments 读取 image_path, 绕过 ForEach 缓存
+      if (this.getEffectiveImagePath() !== '') {
+        Image(this.toFileUrl(this.getEffectiveImagePath()))
           .width('100%')
-          .height(120)
-          .justifyContent(FlexAlign.Center)
-          .backgroundColor($r('app.color.surface'))
+          .height(180)
+          .objectFit(ImageFit.Contain)
           .borderRadius(10)
-        } else if (this.imageLoadFailed) {
-          // 图片生成失败
-          Column() {
-            SymbolGlyph($r('sys.symbol.doc_plaintext'))
-              .fontSize(32)
-              .fontColor([$r('app.color.text_tertiary')])
-            Text('图片加载失败')
-              .fontSize(12)
-              .fontColor($r('app.color.text_tertiary'))
-              .margin({ top: 4 })
-          }
-          .width('100%')
-          .height(120)
-          .justifyContent(FlexAlign.Center)
           .backgroundColor($r('app.color.surface'))
-          .borderRadius(10)
-        } else {
-          // 初始状态: 尚未开始加载
-          Column() {
-            SymbolGlyph($r('sys.symbol.doc_plaintext'))
-              .fontSize(32)
-              .fontColor([$r('app.color.text_tertiary')])
-            Text('准备中...')
-              .fontSize(12)
-              .fontColor($r('app.color.text_tertiary'))
-              .margin({ top: 4 })
-          }
-          .width('100%')
-          .height(120)
-          .justifyContent(FlexAlign.Center)
-          .backgroundColor($r('app.color.surface'))
-          .borderRadius(10)
+      } else if (this.isImageLoading) {
+        // 正在异步加载图片中
+        Column() {
+          SymbolGlyph($r('sys.symbol.doc_plaintext'))
+            .fontSize(32)
+            .fontColor([$r('app.color.text_tertiary')])
+          Text('图片加载中...')
+            .fontSize(12)
+            .fontColor($r('app.color.text_tertiary'))
+            .margin({ top: 4 })
         }
+        .width('100%')
+        .height(120)
+        .justifyContent(FlexAlign.Center)
+        .backgroundColor($r('app.color.surface'))
+        .borderRadius(10)
+      } else if (this.imageLoadFailed) {
+        // 图片生成失败
+        Column() {
+          SymbolGlyph($r('sys.symbol.doc_plaintext'))
+            .fontSize(32)
+            .fontColor([$r('app.color.text_tertiary')])
+          Text('图片加载失败')
+            .fontSize(12)
+            .fontColor($r('app.color.text_tertiary'))
+            .margin({ top: 4 })
+        }
+        .width('100%')
+        .height(120)
+        .justifyContent(FlexAlign.Center)
+        .backgroundColor($r('app.color.surface'))
+        .borderRadius(10)
+      } else {
+        // 初始状态: 尚未开始加载
+        Column() {
+          SymbolGlyph($r('sys.symbol.doc_plaintext'))
+            .fontSize(32)
+            .fontColor([$r('app.color.text_tertiary')])
+          Text('准备中...')
+            .fontSize(12)
+            .fontColor($r('app.color.text_tertiary'))
+            .margin({ top: 4 })
+        }
+        .width('100%')
+        .height(120)
+        .justifyContent(FlexAlign.Center)
+        .backgroundColor($r('app.color.surface'))
+        .borderRadius(10)
+      }
 
-        // 提示文字
-        Text(quiz.questionType === 'sentence' ? '看图说出英语句子' : '看图说出英语单词')
-          .fontSize(14)
-          .fontColor($r('app.color.text_secondary'))
-          .width('100%')
-          .textAlign(TextAlign.Center)
-      }, (_: EnglishQuizQuestion) => 'quiz')
+      // 提示文字
+      Text(this.parseQuiz().questionType === 'sentence' ? '看图说出英语句子' : '看图说出英语单词')
+        .fontSize(14)
+        .fontColor($r('app.color.text_secondary'))
+        .width('100%')
+        .textAlign(TextAlign.Center)
     }
     .width('100%')
     .padding(12)

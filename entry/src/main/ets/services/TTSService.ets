@@ -18,8 +18,7 @@ export class TTSService {
     await this.systemEngine.init(context)
 
     // 初始化 MiMo 引擎（尝试从现有 MiniMax provider 读取 API key）
-    const apiKey = this.resolveMiniMaxApiKey()
-    await this.mimoEngine.init(context, apiKey)
+    await this.mimoEngine.init(context)
 
     this.currentEngine = this.resolveEngine()
     console.info('TTSService', `引擎选择: ${TTS_ENGINE}`)
@@ -72,24 +71,6 @@ export class TTSService {
 
   getCurrentEngineType(): TtsEngineType {
     return TTS_ENGINE
-  }
-
-  // 从已配置的 MiniMax provider 中获取 API key
-  private resolveMiniMaxApiKey(): string {
-    try {
-      const providers = getAppSettingsState().providers
-      const minimax = providers.find((p: ModelProvider): boolean => {
-        const baseUrl = (p.baseUrl ?? '').toLowerCase()
-        return baseUrl.includes('minimax') || baseUrl.includes('minimaxi') ||
-          (p.name ?? '').toLowerCase().includes('minimax')
-      })
-      if (minimax !== undefined && minimax.apiKey !== '') {
-        return minimax.apiKey
-      }
-    } catch (error) {
-      console.warn('TTSService', `无法解析 MiniMax API key: ${JSON.stringify(error)}`)
-    }
-    return ''
   }
 
   private resolveEngine(): ITtsEngine {
