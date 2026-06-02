@@ -22,7 +22,7 @@ import {
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
 import { getEnglishQuizImageIndex, EnglishQuizImageIndex } from './EnglishQuizImageIndex'
-import { getEnglishQuizSessionTracker } from './EnglishQuizSessionTracker'
+
 
 // 取消检查回调类型
 type CancelCheckCallback = () => boolean
@@ -678,33 +678,6 @@ export class ToolExecutionService {
         toolCall.displayName,
         toolCall.sourceLabel
       )
-    }
-
-    // 记录答题结果到会话追踪器
-    try {
-      const answerParsed = JSON.parse(answerJson) as Record<string, Object>
-      const isCorrect = (answerParsed['correct'] as boolean) ?? false
-      const skillKey = (answerParsed['skill_key'] as string) ?? ''
-      const tracker = getEnglishQuizSessionTracker()
-      tracker.recordAnswer(context.sessionId, isCorrect, skillKey)
-
-      // 如果达到 10 题, 在结果中追加提示
-      if (tracker.shouldSummarize(context.sessionId)) {
-        const stats = tracker.getSessionStats(context.sessionId)
-        const enhancedAnswer = answerJson.slice(0, -1) +
-          `,"quiz_count_in_session":${stats.total},"should_summarize":true,"summary_hint":"已完成 ${stats.total} 题, 请调用 english_progress 生成阶段总结"}`
-        toolCall.approvalState = 'answered'
-        toolCall.approvalReason = enhancedAnswer
-        return new ToolResult(
-          toolCall.id,
-          enhancedAnswer,
-          false,
-          toolCall.displayName,
-          toolCall.sourceLabel
-        )
-      }
-    } catch (error) {
-      console.error('ToolExecutionService', `english_quiz tracking failed: ${JSON.stringify(error)}`)
     }
 
     toolCall.approvalState = 'answered'

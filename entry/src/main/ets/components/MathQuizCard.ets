@@ -125,6 +125,8 @@ export struct MathQuizCard {
       return
     }
     this.selectedOption = option
+    // 选择后直接提交答案
+    this.handleSubmit()
   }
 
   private handleSubmit(): void {
@@ -235,24 +237,6 @@ export struct MathQuizCard {
 
       // 题目区域
       this.QuizContent()
-
-      // 操作按钮
-      if (!this.isAnswered && !this.showResult) {
-        Row({ space: 8 }) {
-          Button('提交答案')
-            .height(36)
-            .padding({ left: 20, right: 20 })
-            .fontSize(13)
-            .fontColor(Color.White)
-            .backgroundColor(this.selectedOption >= 0 ? this.themePrimary : $r('app.color.text_tertiary'))
-            .enabled(this.selectedOption >= 0)
-            .onClick(() => {
-              this.handleSubmit()
-            })
-        }
-        .width('100%')
-        .justifyContent(FlexAlign.End)
-      }
 
       // 结果反馈
       if (this.showResult || this.isAnswered) {

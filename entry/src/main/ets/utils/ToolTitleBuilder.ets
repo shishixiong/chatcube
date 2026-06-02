@@ -202,9 +202,5 @@ export function buildToolTitle(toolCall: ToolCall): string {
     }
     return '英语看图说话'
   }
-  if (fn === 'english_progress') {
-    return '英语学习进度报告'
-  }
-
   return fallback
 }

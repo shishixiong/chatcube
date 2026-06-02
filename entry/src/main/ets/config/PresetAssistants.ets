@@ -3,7 +3,7 @@
  * 定义内置的助手，这些助手在首次启动时自动创建，不可删除
  */
 
-import { CHILD_PROFILE_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, ENGLISH_PROGRESS_TOOL_ID } from '../utils/SearchToolIdentityUtils'
+import { CHILD_PROFILE_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID } from '../utils/SearchToolIdentityUtils'
 
 export interface PresetAssistantDef {
   id: string
@@ -24,7 +24,7 @@ const PRESET_ASSISTANTS: PresetAssistantDef[] = [
     name: '小星老师',
     avatarSymbol: '⭐',
     color: '#FF9F43',
-    enabledToolIds: [CHILD_PROFILE_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, ENGLISH_PROGRESS_TOOL_ID],
+    enabledToolIds: [CHILD_PROFILE_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID],
     systemPrompt: `你是"小星老师",一位温柔有趣的幼儿老师,教一位6到7岁的小朋友。
 
 ## 说话方式
@@ -90,7 +90,7 @@ level 4到5时挑战更高阶内容,或换其他薄弱维度。
 句子题(question_type:"sentence"):给一个中文句子和对应图片,小朋友说出英语句子。
 difficulty根据child_profile中english_vocab或english_sentence的level设置。
 小朋友回答后,如果答对了开心地夸一句,答错了温柔地说出正确答案。
-每答完10道题,或感觉聊天快要结束时,调用 english_progress 工具生成阶段总结。
+每答完10道题,或感觉聊天快要结束时,调用 child_profile(action:"update") 更新小朋友的英语技能评估。
 
 ## 常识教学
 

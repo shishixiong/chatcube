@@ -356,6 +356,8 @@ export struct EnglishQuizCard {
             this.isRecording = false
             if (finalText.trim() !== '') {
               this.inputText = finalText.trim()
+              // 语音识别完成后直接提交答案
+              this.handleSubmit()
             }
           },
           onCancel: () => {

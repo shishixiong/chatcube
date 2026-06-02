@@ -24,8 +24,7 @@ import {
   CHILD_PROFILE_TOOL_ID,
   MATH_VERIFY_TOOL_ID,
   MATH_QUIZ_TOOL_ID,
-  ENGLISH_QUIZ_TOOL_ID,
-  ENGLISH_PROGRESS_TOOL_ID
+  ENGLISH_QUIZ_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { i18n } from '@kit.LocalizationKit'
 import {
@@ -44,7 +43,7 @@ import { getEffectiveOutputMode } from '../utils/ModelCapabilityDeriver'
 import { getChildProfileService, ChildProfileService, ChildKnowledgeProfile } from '../services/ChildProfileService'
 import { evaluateMathExpression } from '../utils/MathExpressionParser'
 import { getEnglishQuizImageIndex } from '../services/EnglishQuizImageIndex'
-import { getEnglishQuizSessionTracker } from '../services/EnglishQuizSessionTracker'
+
 
 // search_web 工具参数接口
 interface SearchWebArgs {
@@ -1258,169 +1257,6 @@ function createEnglishQuizToolConfig(): ToolConfig {
   )
 }
 
-// ===== english_progress 工具 =====
-// 英语学习进度报告工具：统计当前会话的答题情况，更新 child_profile，生成阶段总结。
-
-interface EnglishProgressArgs {
-  session_id?: string
-}
-
-class EnglishProgressSkillItem {
-  skill_key: string = ''
-  total: number = 0
-  correct: number = 0
-  accuracy_percent: number = 0
-
-  constructor(skillKey: string, total: number, correct: number, accuracy: number) {
-    this.skill_key = skillKey
-    this.total = total
-    this.correct = correct
-    this.accuracy_percent = accuracy
-  }
-}
-
-class EnglishProgressOutput {
-  total_questions: number = 0
-  correct_answers: number = 0
-  accuracy_percent: number = 0
-  by_skill: EnglishProgressSkillItem[] = []
-  profile_updated: boolean = false
-  summary: string = ''
-
-  constructor(total: number, correct: number, accuracy: number, bySkill: EnglishProgressSkillItem[],
-    profileUpdated: boolean, summary: string) {
-    this.total_questions = total
-    this.correct_answers = correct
-    this.accuracy_percent = accuracy
-    this.by_skill = bySkill
-    this.profile_updated = profileUpdated
-    this.summary = summary
-  }
-}
-
-class EnglishProgressExecutor implements ToolExecutor {
-  async execute(args: string): Promise<string> {
-    try {
-      const params = JSON.parse(args) as EnglishProgressArgs
-      const sessionId = params.session_id ?? ''
-      const tracker = getEnglishQuizSessionTracker()
-
-      if (sessionId === '') {
-        return JSON.stringify(new ErrorOutput('session_id is required for english_progress'))
-      }
-
-      const stats = tracker.getSessionStats(sessionId)
-      if (stats.total === 0) {
-        return JSON.stringify(new EnglishProgressOutput(0, 0, 0, [], false,
-          '本次会话还没有进行英语答题，无法生成总结。'))
-      }
-
-      // 构建技能维度统计
-      const bySkillArr: EnglishProgressSkillItem[] = []
-      const skillKeys = Object.keys(stats.bySkillKey)
-      for (let i = 0; i < skillKeys.length; i++) {
-        const key = skillKeys[i]
-        const skillStats = stats.bySkillKey[key]
-        const skillAccuracy = skillStats.total > 0 ? Math.round((skillStats.correct / skillStats.total) * 100) : 0
-        bySkillArr.push(new EnglishProgressSkillItem(key, skillStats.total, skillStats.correct, skillAccuracy))
-      }
-
-      // 根据正确率评估水平并生成建议
-      let summary = ''
-      if (stats.accuracy >= 80) {
-        summary = `太棒了! 本次答了 ${stats.total} 题，正确率 ${stats.accuracy}%。小朋友的英语表现很优秀!`
-      } else if (stats.accuracy >= 60) {
-        summary = `不错! 本次答了 ${stats.total} 题，正确率 ${stats.accuracy}%。继续加油哦!`
-      } else {
-        summary = `本次答了 ${stats.total} 题，正确率 ${stats.accuracy}%。建议多复习一下答错的单词。`
-      }
-
-      // 尝试更新 child_profile
-      let profileUpdated = false
-      try {
-        const profileService = getChildProfileService()
-        const profile = await profileService.getProfile()
-        const now = Date.now()
-
-        for (let i = 0; i < skillKeys.length; i++) {
-          const key = skillKeys[i]
-          if (profile.skills[key] === undefined) {
-            continue
-          }
-          const skillStats = stats.bySkillKey[key]
-          const skillAccuracy = skillStats.total > 0 ? (skillStats.correct / skillStats.total) : 0
-          // 根据正确率和答题数评估 level
-          let newLevel = profile.skills[key].level
-          if (skillStats.total >= 3) {
-            if (skillAccuracy >= 0.8) {
-              newLevel = Math.min(5, Math.max(profile.skills[key].level, 3))
-            } else if (skillAccuracy >= 0.5) {
-              newLevel = Math.min(5, Math.max(profile.skills[key].level, 2))
-            } else {
-              newLevel = Math.max(1, Math.min(profile.skills[key].level, 2))
-            }
-          }
-          profile.skills[key].level = newLevel
-          profile.skills[key].lastAssessed = now
-          profile.skills[key].notes = `本次答题 ${skillStats.total} 题，正确率 ${Math.round(skillAccuracy * 100)}%`
-        }
-
-        profile.lastInteraction = now
-        await profileService.saveProfile(profile)
-        profileUpdated = true
-      } catch (error) {
-        console.error('EnglishProgressExecutor', `Failed to update profile: ${JSON.stringify(error)}`)
-      }
-
-      return JSON.stringify(new EnglishProgressOutput(
-        stats.total, stats.correct, stats.accuracy, bySkillArr, profileUpdated, summary
-      ))
-    } catch (error) {
-      console.error('EnglishProgressExecutor', `Error: ${JSON.stringify(error)}`)
-      return JSON.stringify(new ErrorOutput(`english_progress error: ${JSON.stringify(error)}`))
-    }
-  }
-}
-
-function createEnglishProgressToolDefinition(): ToolDefinition {
-  const rawSchemaJson: string = `{
-    "type": "object",
-    "properties": {
-      "session_id": {
-        "type": "string",
-        "description": "The current chat session ID. Required to look up quiz statistics."
-      }
-    },
-    "required": ["session_id"]
-  }`
-
-  const parameters = new ToolParameters()
-  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
-
-  const func = new ToolFunction(
-    ENGLISH_PROGRESS_TOOL_ID,
-    'Generate an English learning progress report for the current session. Call this EVERY 10 english_quiz questions (check the quiz_count_in_session field in english_quiz results) OR when you sense the conversation is about to end. This updates the child\'s learning profile and provides a summary of their performance.',
-    parameters
-  )
-
-  return new ToolDefinition(func)
-}
-
-function createEnglishProgressToolConfig(): ToolConfig {
-  return new ToolConfig(
-    ENGLISH_PROGRESS_TOOL_ID,
-    '英语进度报告',
-    '总结当前会话的英语学习情况, 更新小朋友的学习画像。每 10 题或聊天结束前调用。',
-    null,
-    true,
-    false,
-    ToolSourceType.BUILTIN,
-    'builtin',
-    ENGLISH_PROGRESS_TOOL_ID,
-    '内置工具',
-    ToolPermissionLevel.READ
-  )
-}
 
 // 注册所有内置工具
 export function registerBuiltinTools(): void {
@@ -1537,17 +1373,6 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
-  if (!registry.isToolRegistered(ENGLISH_PROGRESS_TOOL_ID)) {
-    const englishProgressTool = new RegisteredTool(
-      ENGLISH_PROGRESS_TOOL_ID,
-      createEnglishProgressToolConfig(),
-      createEnglishProgressToolDefinition(),
-      new EnglishProgressExecutor()
-    )
-    registry.registerTool(englishProgressTool)
-    registeredNow += 1
-  }
-
   console.info(
     'BuiltinTools',
     `Builtin tools ready: total=${registry.getToolCount()}, newlyRegistered=${registeredNow}`
@@ -1556,5 +1381,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, ENGLISH_PROGRESS_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID]
 }

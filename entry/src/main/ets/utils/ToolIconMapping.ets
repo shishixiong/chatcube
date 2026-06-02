@@ -32,7 +32,7 @@ const PROFILE_KEYWORDS: string[] = [
   'child_profile', 'profile', 'learning_profile'
 ]
 const ENGLISH_KEYWORDS: string[] = [
-  'english_quiz', 'english_progress', 'english_vocab', 'english'
+  'english_quiz', 'english_vocab', 'english'
 ]
 
 function matchesAny(name: string, keywords: string[]): boolean {
