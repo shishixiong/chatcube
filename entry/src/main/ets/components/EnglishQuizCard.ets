@@ -88,6 +88,23 @@ export struct EnglishQuizCard {
     this.resolveImage()
   }
 
+  // handleEnglishQuiz 在后台异步解析图片后注入 image_path 到 arguments,
+  // 此时 ForEach 可能跳过 dirty mark 导致卡片不重渲染, 需要主动检测。
+  @Monitor('toolCall.arguments')
+  onArgumentsChanged(): void {
+    if (this.resolvedImagePath !== '' || this.isAnswered) {
+      return
+    }
+    try {
+      const parsed = JSON.parse(this.toolCall.arguments) as Record<string, Object>
+      const imagePath = (parsed['image_path'] as string) ?? ''
+      if (imagePath !== '') {
+        this.resolvedImagePath = imagePath
+        this.isImageLoading = false
+      }
+    } catch (_e) {}
+  }
+
   aboutToDisappear(): void {
     if (this.imageLoadTimer >= 0) {
       clearTimeout(this.imageLoadTimer)

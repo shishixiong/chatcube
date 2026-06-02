@@ -109,7 +109,8 @@ import { applyModelDraft } from '../utils/ModelDraftUtils'
 import { ToolPreviewEntry, buildToolArgumentsPreview } from '../utils/ToolPayloadSummaryUtils'
 import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
-import { getSearchToolIds, isSearchToolId } from '../utils/SearchToolIdentityUtils'
+import { getSearchToolIds, isSearchToolId, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID } from '../utils/SearchToolIdentityUtils'
+import { MessagePartKind } from '../models/MessageParts'
 import { normalizeAssistantAvatarValue } from '../components/AssistantAvatar'
 import {
   preparePreviewImageForShare,
@@ -207,6 +208,12 @@ export struct ChatPage {
   private recordingSafetyTimerId: number = -1
   // 语音模式自动 TTS：追踪 isSending 变化以检测回复完成
   private previousIsSending: boolean = false
+  // 语音模式：quiz 工具自动 TTS 去重追踪（防止同一 quiz 重复朗读）
+  private lastAutoTtsQuizToolCallId: string = ''
+  // quiz TTS 朗读完成后记录当时消息 content 长度，用于 onSendingCompleted 仅朗读新增的验证内容
+  private lastAutoTtsQuizMessageContentLength: number = 0
+  // 记录 quiz TTS 对应的消息 ID，跨会话时防止误用旧长度值
+  private lastAutoTtsQuizMessageId: string = ''
   // 计算滚动偏移
   private lastScrollOffset: number = 0
   private readonly inputBarShowThreshold: number = 6
@@ -4302,11 +4309,26 @@ export struct ChatPage {
     }
     // AI 回复完成，在语音模式下自动朗读最后一条 assistant 消息
     if (!this.isVoiceMode || this.isRecording || this.isEditingMessage) {
+      this.lastAutoTtsQuizMessageContentLength = 0
+      this.lastAutoTtsQuizMessageId = ''
       return
     }
     const lastMsg = this.findLastAssistantMessage()
     if (lastMsg !== null && lastMsg.content.trim() !== '') {
-      this.handleTTS(lastMsg.id, lastMsg.content)
+      let content = lastMsg.content
+      // quiz 工具场景：仅朗读验证回复部分，跳过已读的题目文本
+      if (this.lastAutoTtsQuizMessageContentLength > 0 &&
+          this.lastAutoTtsQuizMessageId === lastMsg.id) {
+        const start = this.lastAutoTtsQuizMessageContentLength
+        this.lastAutoTtsQuizMessageContentLength = 0
+        this.lastAutoTtsQuizMessageId = ''
+        if (start < content.length) {
+          content = content.substring(start)
+        }
+      }
+      if (content.trim() !== '') {
+        this.handleTTS(lastMsg.id, content)
+      }
     }
   }
 
@@ -4471,6 +4493,7 @@ export struct ChatPage {
     if (interaction === null) {
       // service 里已经没有 pending 了, 一并清掉折叠态记录, 下次出现新 pending 再重新弹。
       this.dismissedPendingToolCallId = ''
+      this.lastAutoTtsQuizToolCallId = ''
       if (this.pendingToolExecutionApprovalToolCallId !== '') {
         this.showToolExecutionApprovalSheet = false
         this.resetToolExecutionApprovalState()
@@ -4483,6 +4506,8 @@ export struct ChatPage {
         this.showToolExecutionApprovalSheet = false
         this.resetToolExecutionApprovalState()
       }
+      // 语音模式：quiz 工具出现时自动 TTS 朗读题目
+      this.tryAutoTtsForQuizInteraction(interaction)
       return
     }
     if (this.dismissedPendingToolCallId === interaction.id) {
@@ -4495,6 +4520,84 @@ export struct ChatPage {
       return
     }
     this.applyPendingToolExecutionApproval(interaction)
+  }
+
+  // 语音模式：quiz 工具（math_quiz / english_quiz）出现 pending 交互时自动朗读题目
+  private tryAutoTtsForQuizInteraction(interaction: PendingToolInteractionSnapshot): void {
+    if (!this.isVoiceMode || this.isRecording) {
+      return
+    }
+    const isQuiz = interaction.toolId === MATH_QUIZ_TOOL_ID ||
+      interaction.toolId === ENGLISH_QUIZ_TOOL_ID
+    if (!isQuiz) {
+      return
+    }
+    // 避免 this.lastAutoTtsQuizToolCallId 与 interaction.id 重复触发
+    if (this.lastAutoTtsQuizToolCallId === interaction.id) {
+      return
+    }
+    this.lastAutoTtsQuizToolCallId = interaction.id
+
+    const ttsText = this.buildQuizTtsText(interaction)
+    if (ttsText === '') {
+      return
+    }
+
+    // 延迟 800ms 等待流式内容最终化
+    const capturedId = interaction.id
+    setTimeout(() => {
+      if (this.lastAutoTtsQuizToolCallId !== capturedId) {
+        return
+      }
+      const lastMsg = this.findLastAssistantMessage()
+      const msgId = lastMsg !== null ? lastMsg.id : ''
+      // 记录当前消息 content 长度及消息 ID，后续 onSendingCompleted 仅朗读新增的验证内容
+      if (lastMsg !== null) {
+        this.lastAutoTtsQuizMessageId = lastMsg.id
+        this.lastAutoTtsQuizMessageContentLength = lastMsg.content.length
+      }
+      this.handleTTS(msgId, ttsText)
+    }, 800)
+  }
+
+  // 构造 quiz 工具的 TTS 朗读文本：AI 消息正文 + 题目内容
+  private buildQuizTtsText(interaction: PendingToolInteractionSnapshot): string {
+    let aiText = ''
+    const lastMsg = this.findLastAssistantMessage()
+    if (lastMsg !== null) {
+      for (let i = 0; i < lastMsg.parts.length; i++) {
+        const part = lastMsg.parts[i]
+        if (part.kind === MessagePartKind.TEXT && part.text.trim() !== '') {
+          aiText += part.text.trim() + ' '
+        }
+      }
+      if (aiText === '' && lastMsg.content.trim() !== '') {
+        aiText = lastMsg.content.trim()
+      }
+    }
+
+    let quizText = ''
+    try {
+      const parsed = JSON.parse(interaction.argumentsJson) as Record<string, Object>
+      if (interaction.toolId === MATH_QUIZ_TOOL_ID) {
+        quizText = (parsed['question'] as string) ?? ''
+        const expression = (parsed['expression'] as string) ?? ''
+        if (expression !== '') {
+          quizText += ' ' + expression + ' 等于几？'
+        }
+      } else if (interaction.toolId === ENGLISH_QUIZ_TOOL_ID) {
+        const questionType = (parsed['question_type'] as string) ?? 'word'
+        const word = (parsed['word'] as string) ?? ''
+        const sentence = (parsed['sentence'] as string) ?? ''
+        if (questionType === 'sentence' && sentence !== '') {
+          quizText = '请说出英语句子: ' + sentence
+        } else if (word !== '') {
+          quizText = '请说出英语单词: ' + word
+        }
+      }
+    } catch (_e) {}
+
+    return (aiText.trim() + ' ' + quizText.trim()).trim()
   }
 
   // 提供给 SnackBar action 调用: 用户主动展开折叠的待确认工具调用。
