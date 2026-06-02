@@ -33,7 +33,10 @@ export struct ChatInputBar {
     (_images: Array<string>, _imageIndex: number, _sourceIds: Array<string>): void => {}
   @Param isSending: boolean = false
   @Param isVoiceMode: boolean = false
+  @Param isVoiceSpeaking: boolean = false
   @Event onVoiceModeToggle: () => void = () => {
+  }
+  @Event onVoiceSpeakingStop: () => void = () => {
   }
   @Event onVoiceRecordStart: () => void = () => {
   }
@@ -267,6 +270,7 @@ export struct ChatInputBar {
           themePrimary: this.themePrimary,
           themeUserBubble: this.themeUserBubble,
           disabled: this.isSending,
+          isSpeaking: this.isVoiceSpeaking,
           onRecordStart: (): void => {
             this.onVoiceRecordStart()
           },
@@ -278,6 +282,9 @@ export struct ChatInputBar {
           },
           onCancelZoneChange: (isCancel: boolean): void => {
             this.onVoiceCancelZoneChange(isCancel)
+          },
+          onSpeakingTap: (): void => {
+            this.onVoiceSpeakingStop()
           }
         })
       } else {

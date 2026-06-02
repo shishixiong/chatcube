@@ -203,6 +203,10 @@ export struct ChatPage {
   @Local isRecording: boolean = false
   @Local isRecordingCancelZone: boolean = false
   private waveformTimerId: number = -1
+  // 录音安全超时：超过 65 秒自动取消（引擎 maxAudioDuration=60s + 5s 余量）
+  private recordingSafetyTimerId: number = -1
+  // 语音模式自动 TTS：追踪 isSending 变化以检测回复完成
+  private previousIsSending: boolean = false
   // 计算滚动偏移
   private lastScrollOffset: number = 0
   private readonly inputBarShowThreshold: number = 6
@@ -559,6 +563,7 @@ export struct ChatPage {
     ServiceRegistry.tts().destroy()
     // 释放语音识别资源
     this.stopWaveformAnimation()
+    this.stopRecordingSafetyTimer()
     ServiceRegistry.speechRecognition().shutdown()
     // 解绑 UIContext 防止 ChatPage 销毁后 typewriter 仍持有过期引用
     this.chatViewModel.setStreamingUIContext(null)
@@ -2496,8 +2501,12 @@ export struct ChatPage {
               isSending: this.isSending,
               isAwaitingResponse: this.calcIsAwaitingAiOutput(),
               isVoiceMode: this.isVoiceMode,
+              isVoiceSpeaking: this.isVoiceMode && this.speakingMessageId !== '',
               onVoiceModeToggle: (): void => {
                 this.handleVoiceModeToggle()
+              },
+              onVoiceSpeakingStop: (): void => {
+                this.handleTTSStop()
               },
               onVoiceRecordStart: (): void => {
                 this.handleVoiceRecordStart()
@@ -3836,6 +3845,27 @@ export struct ChatPage {
   @Builder
   private RecordingOverlay() {
     Column() {
+      // 顶部取消按钮（安全出口：当语音识别异常时可手动取消）
+      Row() {
+        Button({ type: ButtonType.Circle }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(18)
+            .fontColor([Color.White])
+        }
+        .width(40)
+        .height(40)
+        .backgroundColor('rgba(255,255,255,0.2)')
+        .onClick(() => {
+          ServiceRegistry.speechRecognition().cancelListening()
+          this.stopWaveformAnimation()
+          this.isRecording = false
+          this.isRecordingCancelZone = false
+        })
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+      .padding({ top: 60 })
+
       Row() {
         Text(this.isRecordingCancelZone ? $r('app.string.voice_release_cancel') : $r('app.string.voice_release_to_send'))
           .fontSize(18)
@@ -3844,7 +3874,7 @@ export struct ChatPage {
       }
       .width('100%')
       .justifyContent(FlexAlign.Center)
-      .padding({ top: 80 })
+      .padding({ top: 20 })
 
       Blank()
 
@@ -4139,6 +4169,10 @@ export struct ChatPage {
         }
       })
     } else {
+      // 退出语音模式时停止朗读
+      if (this.speakingMessageId !== '') {
+        this.handleTTSStop()
+      }
       this.isVoiceMode = false
     }
   }
@@ -4147,6 +4181,10 @@ export struct ChatPage {
   handleVoiceRecordStart(): void {
     if (this.isRecording) {
       return
+    }
+    // 停止正在进行的自动朗读
+    if (this.speakingMessageId !== '') {
+      this.handleTTSStop()
     }
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext
     ServiceRegistry.speechRecognition().checkPermission(context).then((granted: boolean) => {
@@ -4220,6 +4258,65 @@ export struct ChatPage {
 
   private stopWaveformAnimation(): void {
     this.waveformTimerId = -1
+  }
+
+  // 录音安全超时管理：isRecording 变化时自动启停计时器
+  @Monitor('isRecording')
+  onRecordingStateChanged(): void {
+    if (this.isRecording) {
+      this.startRecordingSafetyTimer()
+    } else {
+      this.stopRecordingSafetyTimer()
+    }
+  }
+
+  private startRecordingSafetyTimer(): void {
+    this.stopRecordingSafetyTimer()
+    this.recordingSafetyTimerId = setTimeout(() => {
+      this.recordingSafetyTimerId = -1
+      if (this.isRecording) {
+        console.warn('ChatPage', 'Recording safety timeout: auto-cancelling after 65s')
+        ServiceRegistry.speechRecognition().cancelListening()
+        this.stopWaveformAnimation()
+        this.isRecording = false
+        this.isRecordingCancelZone = false
+        this.showChatSnack($r('app.string.voice_too_short'), 2000, SnackBarTone.WARNING)
+      }
+    }, 65000)
+  }
+
+  private stopRecordingSafetyTimer(): void {
+    if (this.recordingSafetyTimerId >= 0) {
+      clearTimeout(this.recordingSafetyTimerId)
+      this.recordingSafetyTimerId = -1
+    }
+  }
+
+  // 语音模式：AI 回复完成后自动触发 TTS 朗读
+  @Monitor('isSending')
+  onSendingCompleted(): void {
+    const wasSending = this.previousIsSending
+    this.previousIsSending = this.isSending
+    if (!wasSending || this.isSending) {
+      return // 不是 true→false 转换
+    }
+    // AI 回复完成，在语音模式下自动朗读最后一条 assistant 消息
+    if (!this.isVoiceMode || this.isRecording || this.isEditingMessage) {
+      return
+    }
+    const lastMsg = this.findLastAssistantMessage()
+    if (lastMsg !== null && lastMsg.content.trim() !== '') {
+      this.handleTTS(lastMsg.id, lastMsg.content)
+    }
+  }
+
+  private findLastAssistantMessage(): ChatMessage | null {
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      if (this.messages[i].role === MessageRole.ASSISTANT) {
+        return this.messages[i]
+      }
+    }
+    return null
   }
 
   // 处理模型选择

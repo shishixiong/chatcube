@@ -13,7 +13,10 @@ export struct ChatInputAreaSection {
   @Param isSending: boolean = false
   @Param isAwaitingResponse: boolean = false
   @Param isVoiceMode: boolean = false
+  @Param isVoiceSpeaking: boolean = false
   @Event onVoiceModeToggle: () => void = () => {
+  }
+  @Event onVoiceSpeakingStop: () => void = () => {
   }
   @Event onVoiceRecordStart: () => void = () => {
   }
@@ -126,8 +129,12 @@ export struct ChatInputAreaSection {
           sendButtonOnLeft: this.sendButtonOnLeft,
           isEditing: this.isEditing,
           isVoiceMode: this.isVoiceMode,
+          isVoiceSpeaking: this.isVoiceSpeaking,
           onVoiceModeToggle: (): void => {
             this.onVoiceModeToggle()
+          },
+          onVoiceSpeakingStop: (): void => {
+            this.onVoiceSpeakingStop()
           },
           onVoiceRecordStart: (): void => {
             this.onVoiceRecordStart()

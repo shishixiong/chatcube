@@ -90,9 +90,8 @@ export class SpeechRecognitionService {
       onComplete: (_sessionId: string, _eventMessage: string) => {
         this.isListening = false
         const text = this.finalText
-        if (text !== '') {
-          callback.onComplete(text)
-        }
+        // 始终回调，即使识别结果为空（ChatPage 需要重置 isRecording 状态）
+        callback.onComplete(text)
       },
       onError: (_sessionId: string, errorCode: number, errorMessage: string) => {
         this.isListening = false

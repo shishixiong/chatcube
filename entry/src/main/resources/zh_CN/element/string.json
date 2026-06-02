@@ -3085,6 +3085,10 @@
       "value": "正在识别..."
     },
     {
+      "name": "voice_speaking",
+      "value": "朗读中..."
+    },
+    {
       "name": "microphone_permission_reason",
       "value": "用于语音输入功能，将您的语音转换为文字发送。"
     }

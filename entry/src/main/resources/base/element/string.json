@@ -3085,6 +3085,10 @@
       "value": "Recognizing..."
     },
     {
+      "name": "voice_speaking",
+      "value": "Reading..."
+    },
+    {
       "name": "microphone_permission_reason",
       "value": "Used for voice input to convert your speech to text."
     }
