@@ -9,7 +9,7 @@ import {
   AttachmentType,
   SearchReference
 } from '../models/ChatModels'
-import { Assistant, DEFAULT_ASSISTANT_ID, createDefaultAssistant } from '../models/AssistantModels'
+import { Assistant, DEFAULT_ASSISTANT_ID, createDefaultAssistant, DEFAULT_ASSISTANT_SYSTEM_PROMPT, DEFAULT_ASSISTANT_LOCKED_TOOL_IDS } from '../models/AssistantModels'
 import { GeneratedMedia } from '../models/ImageGenerationModels'
 import { deserializeMessageParts, serializeMessageParts } from '../models/MessageParts'
 import { ensureMessageParts, buildMessagePartsFromLegacy } from '../utils/ChatMessagePartsHelper'
@@ -896,8 +896,31 @@ export class DatabaseService {
 	    }
 	    const existing = await this.queryAssistantByIdNoWait(DEFAULT_ASSISTANT_ID)
 	    if (existing !== null) {
+	      let needUpdate = false
 	      if (!existing.isDefault) {
 	        existing.isDefault = true
+	        needUpdate = true
+	      }
+	      // 迁移旧名称：将"默认助手"更新为"小星老师"
+	      if (existing.name === '默认助手') {
+	        existing.name = '小星老师'
+	        existing.avatarSymbol = '⭐'
+	        existing.color = '#FF9F43'
+	        needUpdate = true
+	      }
+	      // 迁移系统提示词：为空或旧版内容的默认助手统一更新为锁定版本
+	      if (existing.systemPrompt !== DEFAULT_ASSISTANT_SYSTEM_PROMPT) {
+	        existing.systemPrompt = DEFAULT_ASSISTANT_SYSTEM_PROMPT
+	        needUpdate = true
+	      }
+	      // 迁移工具白名单：为空或旧版内容的默认助手统一更新为锁定版本
+	      const existingToolIdsSorted = [...existing.enabledToolIds].sort()
+	      const lockedToolIdsSorted = [...DEFAULT_ASSISTANT_LOCKED_TOOL_IDS].sort()
+	      if (JSON.stringify(existingToolIdsSorted) !== JSON.stringify(lockedToolIdsSorted)) {
+	        existing.enabledToolIds = [...DEFAULT_ASSISTANT_LOCKED_TOOL_IDS]
+	        needUpdate = true
+	      }
+	      if (needUpdate) {
 	        const predicates = new relationalStore.RdbPredicates(TableNames.ASSISTANTS)
 	        predicates.equalTo('id', DEFAULT_ASSISTANT_ID)
 	        try {

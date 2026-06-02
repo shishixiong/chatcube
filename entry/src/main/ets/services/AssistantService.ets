@@ -1,4 +1,4 @@
-import { Assistant, DEFAULT_ASSISTANT_ID } from '../models/AssistantModels'
+import { Assistant, DEFAULT_ASSISTANT_ID, DEFAULT_ASSISTANT_SYSTEM_PROMPT, DEFAULT_ASSISTANT_LOCKED_TOOL_IDS } from '../models/AssistantModels'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
 import { isPresetAssistant } from '../config/PresetAssistants'
@@ -71,6 +71,9 @@ export class AssistantService {
     assistant.color = assistant.color.trim() !== '' ? assistant.color.trim() : DEFAULT_PRIMARY_COLOR
     if (assistant.id === DEFAULT_ASSISTANT_ID) {
       assistant.isDefault = true
+      // 锁定系统提示词和工具白名单：默认助手（小星老师）的值不可被覆盖
+      assistant.systemPrompt = DEFAULT_ASSISTANT_SYSTEM_PROMPT
+      assistant.enabledToolIds = [...DEFAULT_ASSISTANT_LOCKED_TOOL_IDS]
     }
     if (assistant.temperature < 0) {
       assistant.temperature = 0
@@ -137,7 +140,7 @@ export class AssistantService {
       return fallback
     }
     const all = this.store.getAssistants()
-    return all.length > 0 ? all[0] : new Assistant(DEFAULT_ASSISTANT_ID, '默认助手')
+    return all.length > 0 ? all[0] : new Assistant(DEFAULT_ASSISTANT_ID, '小星老师')
   }
 
   /**
@@ -161,7 +164,7 @@ export class AssistantService {
       await this.store.setCurrentAssistantIdPersisted(all[0].id)
       return all[0]
     }
-    return new Assistant(DEFAULT_ASSISTANT_ID, '默认助手')
+    return new Assistant(DEFAULT_ASSISTANT_ID, '小星老师')
   }
 
   async ensureValidCurrentAssistant(): Promise<Assistant> {
@@ -177,7 +180,7 @@ export class AssistantService {
       return fallback
     }
     const all = this.store.getAssistants()
-    return all.length > 0 ? all[0] : new Assistant(DEFAULT_ASSISTANT_ID, '默认助手')
+    return all.length > 0 ? all[0] : new Assistant(DEFAULT_ASSISTANT_ID, '小星老师')
   }
 
   /**

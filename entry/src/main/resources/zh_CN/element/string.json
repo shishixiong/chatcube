@@ -2217,6 +2217,10 @@
       "value": "只对这个助手生效的指令"
     },
     {
+      "name": "assistant_prompt_locked",
+      "value": "（系统锁定）"
+    },
+    {
       "name": "assistant_default_model",
       "value": "默认模型"
     },

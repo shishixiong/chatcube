@@ -2217,6 +2217,10 @@
       "value": "Instructions only for this assistant"
     },
     {
+      "name": "assistant_prompt_locked",
+      "value": "(System Locked)"
+    },
+    {
       "name": "assistant_default_model",
       "value": "Default Model"
     },

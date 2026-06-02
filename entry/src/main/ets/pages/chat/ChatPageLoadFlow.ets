@@ -132,7 +132,7 @@ export class ChatPageLoadFlow {
     if (fallback !== null) {
       return fallback
     }
-    return new Assistant(DEFAULT_ASSISTANT_ID, '默认助手')
+    return new Assistant(DEFAULT_ASSISTANT_ID, '小星老师')
   }
 
   private applyAssistantSnapshot(result: ChatPageLoadResult, assistant: Assistant): void {
