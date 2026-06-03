@@ -13,12 +13,15 @@ import {
   SEARCH_WEB_TOOL_ID,
   MATH_QUIZ_TOOL_ID,
   ENGLISH_QUIZ_TOOL_ID,
+  NUMBER_PUZZLE_TOOL_ID,
   isAskUserFunctionName,
   isMathQuizFunctionName,
   isEnglishQuizFunctionName,
+  isNumberPuzzleFunctionName,
   isScrapeWebFunctionName,
   isSearchWebFunctionName
 } from '../utils/SearchToolIdentityUtils'
+import { getDatabaseService } from './DatabaseService'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
 import { getEnglishQuizImageIndex, EnglishQuizImageIndex } from './EnglishQuizImageIndex'
@@ -700,6 +703,94 @@ export class ToolExecutionService {
     )
   }
 
+  // number_puzzle 特殊路径: 与 math_quiz 类似, 挂起等待 NumberPuzzleCard 回答。
+  // 孩子完成拼图后结果写入 puzzle_records 表, 再返回给 AI 用于学习画像更新。
+  private async handleNumberPuzzle(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = NUMBER_PUZZLE_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '数字华容道'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    toolCall.approvalState = 'pending'
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = NUMBER_PUZZLE_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `number_puzzle answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `number_puzzle 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'number_puzzle cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未完成该华容道游戏' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    // 将游戏记录持久化到 puzzle_records 表
+    try {
+      const result = JSON.parse(answerJson) as Record<string, Object>
+      const difficulty = (result['difficulty'] as number) ?? 3
+      const timeSeconds = (result['time_seconds'] as number) ?? 0
+      const moveCount = (result['move_count'] as number) ?? 0
+      const completed = (result['completed'] as boolean) ?? true
+      await getDatabaseService().insertPuzzleRecord(
+        context.sessionId,
+        difficulty,
+        timeSeconds,
+        moveCount,
+        completed
+      )
+    } catch (error) {
+      console.error('ToolExecutionService', `Failed to persist puzzle record: ${JSON.stringify(error)}`)
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `number_puzzle answered: ${toolCall.id}`)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
   // 执行单个工具调用
   async executeToolCall(
     toolCall: ToolCall,
@@ -731,6 +822,12 @@ export class ToolExecutionService {
     // 英语看图说话互动工具, 由 EnglishQuizCard 收集小朋友的答案。
     if (isEnglishQuizFunctionName(normalizedFunctionName)) {
       return await this.handleEnglishQuiz(toolCall, context)
+    }
+
+    // === number_puzzle 特殊路径 ===
+    // 数字华容道互动工具, 由 NumberPuzzleCard 收集小朋友的游戏结果。
+    if (isNumberPuzzleFunctionName(normalizedFunctionName)) {
+      return await this.handleNumberPuzzle(toolCall, context)
     }
 
     // 通过函数名获取工具 ID
