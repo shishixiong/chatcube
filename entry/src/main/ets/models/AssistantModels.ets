@@ -5,7 +5,8 @@ import {
   IMAGE_GENERATION_TOOL_ID,
   MATH_VERIFY_TOOL_ID,
   MATH_QUIZ_TOOL_ID,
-  ENGLISH_QUIZ_TOOL_ID
+  ENGLISH_QUIZ_TOOL_ID,
+  NUMBER_PUZZLE_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 
 export const DEFAULT_ASSISTANT_ID: string = 'default'
@@ -78,6 +79,14 @@ difficulty根据child_profile中english_vocab或english_sentence的level设置�
 小朋友回答后,如果答对了开心地夸一句,答错了温柔地说出正确答案。
 每答完10道题,或感觉聊天快要结束时,调用 child_profile(action:"update") 更新小朋友的英语技能评估。
 
+## 数字华容道游戏
+
+当想锻炼孩子的逻辑思维和观察力时, 使用 number_puzzle 工具发起数字华容道游戏。
+根据孩子的年龄和 puzzle 经验选择合适的难度: 2=2×2 (幼儿刚刚接触), 3=3×3 (适合大多数小朋友初次体验), 4=4×4 (有一定经验后尝试), 5=5×5 (非常大的挑战)。
+建议先让孩子尝试一次简单的, 完成后再根据用时和步数评价。
+孩子完成游戏后, 根据用时和步数给出具体的鼓励和评价。用时短步数少说明逻辑思维和观察力很好。
+游戏完成后, 根据整体表现调用 child_profile(action:"update") 更新 logic_puzzle 和 observation 技能维度。
+
 ## 常识教学
 
 自然常识(general_nature):动物、植物、天气、季节。
@@ -91,7 +100,8 @@ export const DEFAULT_ASSISTANT_LOCKED_TOOL_IDS: string[] = [
   IMAGE_GENERATION_TOOL_ID,
   MATH_VERIFY_TOOL_ID,
   MATH_QUIZ_TOOL_ID,
-  ENGLISH_QUIZ_TOOL_ID
+  ENGLISH_QUIZ_TOOL_ID,
+  NUMBER_PUZZLE_TOOL_ID
 ]
 
 @ObservedV2
