@@ -74,11 +74,10 @@ export function isEnglishQuizFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === ENGLISH_QUIZ_TOOL_ID
 }
 
+export function isNumberPuzzleFunctionName(functionName: string): boolean {
+  return normalizeToolFunctionName(functionName) === NUMBER_PUZZLE_TOOL_ID
+}
 
 export function getSearchToolIds(): string[] {
   return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID]
-}
-
-export function isNumberPuzzleFunctionName(functionName: string): boolean {
-  return normalizeToolFunctionName(functionName) === NUMBER_PUZZLE_TOOL_ID
 }

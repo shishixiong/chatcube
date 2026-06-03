@@ -139,6 +139,8 @@ export struct NumberPuzzleCard {
       this.gridSize = result.difficulty
       this.isCompleted = true
       this.gameBoard = this.solvedBoard
+      this.moveCount = result.move_count
+      this.elapsedSeconds = Math.floor(result.time_seconds)
     } catch (_e) {
       // ignore parse failure
     }
@@ -205,6 +207,16 @@ export struct NumberPuzzleCard {
       const newIdx = this.getMoveTargetIndex(blankIdx, direction)
       const temp = board[newIdx]
       board[newIdx] = board[blankIdx]
+      board[blankIdx] = temp
+    }
+
+    // Ensure the board is not already solved after shuffle
+    if (board.join(',') === this.solvedBoard.join(',')) {
+      // Swap two adjacent tiles to break the solved state
+      const blankIdx = board.indexOf(0)
+      const swapIdx = blankIdx === 0 ? 1 : blankIdx - 1
+      const temp = board[swapIdx]
+      board[swapIdx] = board[blankIdx]
       board[blankIdx] = temp
     }
 
@@ -296,17 +308,6 @@ export struct NumberPuzzleCard {
       }
     }
     return undefined
-  }
-
-  private moveOnSwipe(direction: string): void {
-    if (this.isCompleted) {
-      return
-    }
-    const blankIndex = this.gameBoard.indexOf(0)
-    const newIndex = this.getMoveTargetIndex(blankIndex, direction)
-    if (this.isValidIndex(newIndex)) {
-      this.moveTile(newIndex)
-    }
   }
 
   private isValidIndex(index: number): boolean {
@@ -410,6 +411,9 @@ export struct NumberPuzzleCard {
       .gesture(
         SwipeGesture({ direction: SwipeDirection.All })
           .onAction((_event: GestureEvent) => {
+            if (this.isAnswered || this.isCompleted) {
+              return
+            }
             const direction = this.getSwipeDirection()
             const blankIndex = this.gameBoard.indexOf(0)
             let targetIdx = blankIndex
