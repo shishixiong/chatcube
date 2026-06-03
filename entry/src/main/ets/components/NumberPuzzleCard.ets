@@ -33,10 +33,6 @@ export struct NumberPuzzleCard {
   @Local elapsedSeconds: number = 0
   @Local isCompleted: boolean = false
   @Local shouldAnimate: boolean = true
-  @Local screenStartX: number = 0
-  @Local screenStartY: number = 0
-  @Local lastScreenX: number = 0
-  @Local lastScreenY: number = 0
   private timerId: number = -1
 
   private get themePrimary(): string {
@@ -319,16 +315,6 @@ export struct NumberPuzzleCard {
     return index >= 0 && index < this.gameBoard.length
   }
 
-  private getSwipeDirection(): string {
-    const swipeX = this.lastScreenX - this.screenStartX
-    const swipeY = this.lastScreenY - this.screenStartY
-    if (Math.abs(swipeX) > Math.abs(swipeY)) {
-      return swipeX > 0 ? 'right' : 'left'
-    } else {
-      return swipeY > 0 ? 'down' : 'up'
-    }
-  }
-
   private getTileBackgroundColor(value: number): ResourceColor {
     if (value === 0) {
       return Color.Transparent
@@ -405,39 +391,26 @@ export struct NumberPuzzleCard {
       .backgroundColor(this.getCardBackgroundColor())
       .borderRadius(10)
       .onTouch((e: TouchEvent) => {
-        if (e.type === TouchType.Down && e.touches.length > 0) {
-          this.screenStartX = e.touches[0].x
-          this.screenStartY = e.touches[0].y
-        } else if (e.type === TouchType.Up && e.changedTouches.length > 0) {
-          this.lastScreenX = e.changedTouches[0].x
-          this.lastScreenY = e.changedTouches[0].y
-        }
+        e.stopPropagation()
       })
       .priorityGesture(
-        SwipeGesture({ direction: SwipeDirection.All })
-          .onAction((_event: GestureEvent) => {
+        PanGesture({ direction: PanDirection.All, distance: 10 })
+          .onActionEnd((event: GestureEvent) => {
             if (this.isAnswered || this.isCompleted) {
               return
             }
-            const direction = this.getSwipeDirection()
+            const offsetX = event.offsetX as number
+            const offsetY = event.offsetY as number
+            if (Math.abs(offsetX) < 10 && Math.abs(offsetY) < 10) {
+              return
+            }
             const blankIndex = this.gameBoard.indexOf(0)
             let targetIdx = blankIndex
-            switch (direction) {
-              case 'up':
-                targetIdx = blankIndex + this.gridSize
-                break
-              case 'down':
-                targetIdx = blankIndex - this.gridSize
-                break
-              case 'left':
-                targetIdx = blankIndex + 1
-                break
-              case 'right':
-                targetIdx = blankIndex - 1
-                break
+            if (Math.abs(offsetX) > Math.abs(offsetY)) {
+              targetIdx = offsetX > 0 ? blankIndex - 1 : blankIndex + 1
+            } else {
+              targetIdx = offsetY > 0 ? blankIndex - this.gridSize : blankIndex + this.gridSize
             }
-            this.screenStartX = 0
-            this.screenStartY = 0
             if (this.isValidIndex(targetIdx)) {
               this.moveTile(targetIdx)
             }
