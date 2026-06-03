@@ -15,6 +15,7 @@ import { shouldShowAssistantMessageToolbar } from '../utils/MessageBubbleDisplay
 import { AskUserCard } from './AskUserCard'
 import { MathQuizCard } from './MathQuizCard'
 import { EnglishQuizCard } from './EnglishQuizCard'
+import { NumberPuzzleCard } from './NumberPuzzleCard'
 import { HtmlPreviewCard } from './HtmlPreviewCard'
 import { MermaidPreviewCard } from './MermaidPreviewCard'
 import { TypingDots } from './TypingDots'
@@ -33,7 +34,7 @@ import {
   getMarkdownTitleSizes
 } from '../utils/MarkdownTypographyUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isEnglishQuizFunctionName } from '../utils/SearchToolIdentityUtils'
+import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isEnglishQuizFunctionName, isNumberPuzzleFunctionName } from '../utils/SearchToolIdentityUtils'
 import { MessagePart, MessagePartKind, ToolPartStatus } from '../models/MessageParts'
 import {
   ensureMessageParts,
@@ -2047,6 +2048,22 @@ export struct MessageBubble {
                   }
                 }, (toolCall: ToolCall, index: number) => 'english_quiz_' + toolCall.id + '_' + index.toString())
               }
+              // number_puzzle 待答时保留独立互动卡片; 提交后收缩到 timeline step 内。
+              if (this.message.hasToolCalls()) {
+                ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
+                  if (this.shouldRenderNumberPuzzleInteractionCard(toolCall, index)) {
+                    NumberPuzzleCard({
+                      toolCall: toolCall,
+                      isAnswered: false,
+                      answeredPayload: toolCall.approvalReason,
+                      onAnswer: (toolCallId: string, answerJson: string): void => {
+                        this.onAskUserAnswer(toolCallId, answerJson)
+                      }
+                    })
+                      .margin({ bottom: 6 })
+                  }
+                }, (toolCall: ToolCall, index: number) => 'number_puzzle_' + toolCall.id + '_' + index.toString())
+              }
             }
 
             // ========== 附件区域（AI 生成的图片） ==========
@@ -2465,6 +2482,10 @@ export struct MessageBubble {
       // 英语看图说话: 已完成的可以展开查看答题详情
       return this.isSuccessfulToolStep(part)
     }
+    if (isNumberPuzzleFunctionName(part.toolName)) {
+      // 华容道游戏: 已完成的可以展开查看游戏结果
+      return this.isSuccessfulToolStep(part)
+    }
     if (isImageGenerationFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
@@ -2512,8 +2533,8 @@ export struct MessageBubble {
     if (this.expandedToolStepKeys.includes(key)) {
       return true
     }
-    // 默认行为: 图片生成/数学游戏/英语看图说话 成功后默认展开查看结果
-    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName)) {
+    // 默认行为: 图片生成/数学游戏/英语看图说话/华容道 成功后默认展开查看结果
+    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
     return false
@@ -2521,9 +2542,9 @@ export struct MessageBubble {
 
   private toggleToolStep(part: MessagePart): void {
     const key = this.getToolStepKey(part)
-    // 默认展开的工具类型: 图片生成、数学游戏、英语看图说话
+    // 默认展开的工具类型: 图片生成、数学游戏、英语看图说话、华容道
     const isDefaultExpanded = this.isSuccessfulToolStep(part) &&
-      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName))
+      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName))
     const next: string[] = []
     let found = false
     let foundCollapsed = false
@@ -2595,6 +2616,13 @@ export struct MessageBubble {
 
   private shouldRenderEnglishQuizInteractionCard(toolCall: ToolCall, index: number): boolean {
     if (!isEnglishQuizFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
+      return false
+    }
+    return !this.isAskUserToolCallAnswered(toolCall, index)
+  }
+
+  private shouldRenderNumberPuzzleInteractionCard(toolCall: ToolCall, index: number): boolean {
+    if (!isNumberPuzzleFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
       return false
     }
     return !this.isAskUserToolCallAnswered(toolCall, index)
@@ -2927,6 +2955,11 @@ export struct MessageBubble {
     }
     // 英语看图说话: 展开/折叠查看答题详情
     if (isEnglishQuizFunctionName(part.toolName)) {
+      this.toggleToolStep(part)
+      return
+    }
+    // 华容道游戏: 展开/折叠查看游戏结果
+    if (isNumberPuzzleFunctionName(part.toolName)) {
       this.toggleToolStep(part)
       return
     }
@@ -3351,6 +3384,8 @@ export struct MessageBubble {
       this.MathQuizStepContent(step)
     } else if (isEnglishQuizFunctionName(step.toolName)) {
       this.EnglishQuizStepContent(step)
+    } else if (isNumberPuzzleFunctionName(step.toolName)) {
+      this.NumberPuzzleStepContent(step)
     } else if (isImageGenerationFunctionName(step.toolName) && this.isToolStepClickable(step)) {
       // 图片生成: 折叠/展开, 在下方直接展示生成结果缩略图
       Column() {
@@ -3662,6 +3697,62 @@ export struct MessageBubble {
       // 展开时显示完整的答题卡片
       if (this.isToolStepExpanded(step) && step.toolResult !== '') {
         EnglishQuizCard({
+          toolCall: this.buildToolCallFromStep(step),
+          isAnswered: true,
+          answeredPayload: step.toolResult,
+          onAnswer: (_toolCallId: string, _answerJson: string): void => {}
+        })
+        .margin({ top: 8 })
+      }
+    }
+    .width('100%')
+  }
+
+  // number_puzzle 工具步骤: 已完成的华容道游戏, 在 timeline 中显示简化结果, 可展开查看详情
+  @Builder
+  NumberPuzzleStepContent(step: MessagePart) {
+    Column() {
+      Row({ space: 6 }) {
+        if (step.toolStatus === 'succeeded') {
+          SymbolGlyph($r('sys.symbol.checkmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_success')])
+        } else if (step.toolStatus === 'failed' || step.toolStatus === 'denied') {
+          SymbolGlyph($r('sys.symbol.xmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_error')])
+        } else {
+          Column()
+            .width(8)
+            .height(8)
+            .borderRadius(4)
+            .backgroundColor(this.themePrimary)
+        }
+
+        Text(this.buildToolStepTitle(step))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+
+        if (this.isToolStepClickable(step)) {
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(12)
+            .fontColor([$r('app.color.text_tertiary')])
+            .rotate({ angle: this.isToolStepExpanded(step) ? 0 : -90 })
+            .animation({ duration: 200, curve: Curve.EaseOut })
+        }
+      }
+      .width('100%')
+      .onClick(() => {
+        if (this.isToolStepClickable(step)) {
+          this.handleToolStepClick(step)
+        }
+      })
+
+      // 展开时显示游戏结果摘要
+      if (this.isToolStepExpanded(step) && step.toolResult !== '') {
+        NumberPuzzleCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
           answeredPayload: step.toolResult,
