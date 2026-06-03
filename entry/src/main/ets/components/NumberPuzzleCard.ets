@@ -169,10 +169,15 @@ export struct NumberPuzzleCard {
 
     let board = [...this.solvedBoard]
 
-    const minMovesMap: Record<number, number> = { '2': 10, '3': 30, '4': 60, '5': 100 }
-    const min = minMovesMap[this.gridSize.toString()] ?? 30
-    const extra = Math.floor(Math.random() * min)
-    const totalMoves = min + extra
+    let minMoves = 30
+    switch (this.gridSize) {
+      case 2: minMoves = 10; break
+      case 3: minMoves = 30; break
+      case 4: minMoves = 60; break
+      case 5: minMoves = 100; break
+    }
+    const extra = Math.floor(Math.random() * minMoves)
+    const totalMoves = minMoves + extra
 
     const findBlank = (): number => board.indexOf(0)
 
@@ -351,7 +356,7 @@ export struct NumberPuzzleCard {
     Column({ space: 8 }) {
       // Title row
       Row() {
-        SymbolGlyph($r('sys.symbol.puzzlepiece'))
+        SymbolGlyph($r('sys.symbol.lightbulb'))
           .fontSize(14)
           .fontColor([this.themePrimary])
         Text(`数字华容道 · ${this.difficultyLabel}`)
@@ -449,7 +454,7 @@ export struct NumberPuzzleCard {
           .fontColor($r('app.color.text_secondary'))
           .margin({ left: 4 })
         Blank()
-        SymbolGlyph($r('sys.symbol.hand_point_up'))
+        SymbolGlyph($r('sys.symbol.cursorarrow'))
           .fontSize(12)
           .fontColor([$r('app.color.text_tertiary')])
         Text(`步数: ${this.moveCount}`)
