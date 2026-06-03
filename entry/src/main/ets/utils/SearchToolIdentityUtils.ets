@@ -3,6 +3,7 @@ export const SEARCH_WEB_TOOL_ID: string = 'search_web'
 export const SCRAPE_WEB_TOOL_ID: string = 'scrape_web'
 export const ASK_USER_TOOL_ID: string = 'ask_user'
 export const GET_TIME_INFO_TOOL_ID: string = 'get_time_info'
+export const NUMBER_PUZZLE_TOOL_ID: string = 'number_puzzle'
 
 export function normalizeToolFunctionName(raw: string): string {
   const value = raw as string | null | undefined
@@ -46,4 +47,8 @@ export function isAskUserFunctionName(functionName: string): boolean {
 
 export function getSearchToolIds(): string[] {
   return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID]
+}
+
+export function isNumberPuzzleFunctionName(functionName: string): boolean {
+  return normalizeToolFunctionName(functionName) === NUMBER_PUZZLE_TOOL_ID
 }
