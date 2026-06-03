@@ -413,7 +413,7 @@ export struct NumberPuzzleCard {
           this.lastScreenY = e.changedTouches[0].y
         }
       })
-      .gesture(
+      .priorityGesture(
         SwipeGesture({ direction: SwipeDirection.All })
           .onAction((_event: GestureEvent) => {
             if (this.isAnswered || this.isCompleted) {
@@ -461,9 +461,9 @@ export struct NumberPuzzleCard {
       }
       .width('100%')
 
-      // Restart button (only shown when not completed)
+      // Cancel button (only shown when not completed)
       if (!this.isCompleted && !this.isAnswered) {
-        Button('重新开始')
+        Button('取消')
           .width('50%')
           .height(32)
           .fontSize(12)
@@ -472,7 +472,16 @@ export struct NumberPuzzleCard {
           .borderRadius(8)
           .border({ width: 1, color: $r('app.color.divider') })
           .onClick(() => {
-            this.shuffleGameBoard()
+            this.stopTimer()
+            this.isCompleted = true
+            const result: NumberPuzzleResult = {
+              difficulty: this.gridSize,
+              grid_size: `${this.gridSize}×${this.gridSize}`,
+              time_seconds: 0,
+              move_count: this.moveCount,
+              completed: false
+            }
+            this.onAnswer(this.toolCall.id, JSON.stringify(result))
           })
       }
     }
