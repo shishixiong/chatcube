@@ -35,7 +35,19 @@ export class TableNames {
 	  static readonly TOOL_EVENTS: string = 'tool_events'
 	  static readonly ASSISTANTS: string = 'assistants'
   static readonly GENERATED_MEDIA: string = 'generated_media'
+  static readonly PUZZLE_RECORDS: string = 'puzzle_records'
 	}
+
+// 拼图记录数据接口
+export interface PuzzleRecord {
+  id: number
+  sessionId: string
+  difficulty: number
+  timeSeconds: number
+  moveCount: number
+  completed: number
+  createdAt: number
+}
 
 // 模型数据接口（用于 JSON 序列化，兼容扩展格式）
 interface ModelJsonData {
@@ -318,6 +330,18 @@ export class DatabaseService {
       )
     `
 
+    const createPuzzleRecordsTable = `
+      CREATE TABLE IF NOT EXISTS ${TableNames.PUZZLE_RECORDS} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        difficulty INTEGER NOT NULL,
+        time_seconds REAL NOT NULL,
+        move_count INTEGER NOT NULL,
+        completed INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL
+      )
+    `
+
     try {
       await this.rdbStore.executeSql(createSessionsTable)
 	      await this.rdbStore.executeSql(createMessagesTable)
@@ -326,6 +350,7 @@ export class DatabaseService {
       await this.rdbStore.executeSql(createAttachmentsTable)
       await this.rdbStore.executeSql(createToolEventsTable)
       await this.rdbStore.executeSql(createGeneratedMediaTable)
+      await this.rdbStore.executeSql(createPuzzleRecordsTable)
       await this.rdbStore.executeSql(
         `CREATE INDEX IF NOT EXISTS idx_generated_media_created_at ON ${TableNames.GENERATED_MEDIA}(created_at DESC)`
       )
@@ -2634,6 +2659,98 @@ export class DatabaseService {
     } catch (error) {
       console.error('DatabaseService', `Failed to update providers order: ${JSON.stringify(error)}`)
     }
+  }
+
+  // ============ 拼图记录操作 ============
+
+  // 插入拼图记录
+  async insertPuzzleRecord(
+    sessionId: string,
+    difficulty: number,
+    timeSeconds: number,
+    moveCount: number,
+    completed: boolean
+  ): Promise<number> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return -1
+    }
+    const now = Date.now()
+    const valueBucket: relationalStore.ValuesBucket = {
+      session_id: sessionId,
+      difficulty: difficulty,
+      time_seconds: timeSeconds,
+      move_count: moveCount,
+      completed: completed ? 1 : 0,
+      created_at: now
+    }
+    try {
+      const rowId = await this.rdbStore.insert(TableNames.PUZZLE_RECORDS, valueBucket)
+      console.info('DatabaseService', `Puzzle record saved: rowId=${rowId}`)
+      return rowId
+    } catch (error) {
+      console.error('DatabaseService', `Failed to insert puzzle record: ${JSON.stringify(error)}`)
+      return -1
+    }
+  }
+
+  // 获取会话的拼图记录
+  async getPuzzleRecordsBySession(sessionId: string): Promise<PuzzleRecord[]> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return []
+    }
+    const records: PuzzleRecord[] = []
+    const predicates = new relationalStore.RdbPredicates(TableNames.PUZZLE_RECORDS)
+    predicates.equalTo('session_id', sessionId)
+    predicates.orderByDesc('created_at')
+    try {
+      const resultSet = await this.rdbStore.query(predicates)
+      while (resultSet.goToNextRow()) {
+        records.push({
+          id: resultSet.getLong(resultSet.getColumnIndex('id')),
+          sessionId: resultSet.getString(resultSet.getColumnIndex('session_id')),
+          difficulty: resultSet.getLong(resultSet.getColumnIndex('difficulty')),
+          timeSeconds: resultSet.getDouble(resultSet.getColumnIndex('time_seconds')),
+          moveCount: resultSet.getLong(resultSet.getColumnIndex('move_count')),
+          completed: resultSet.getLong(resultSet.getColumnIndex('completed')),
+          createdAt: resultSet.getLong(resultSet.getColumnIndex('created_at'))
+        })
+      }
+      resultSet.close()
+    } catch (error) {
+      console.error('DatabaseService', `Failed to query puzzle records: ${JSON.stringify(error)}`)
+    }
+    return records
+  }
+
+  // 获取所有拼图记录
+  async getAllPuzzleRecords(): Promise<PuzzleRecord[]> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return []
+    }
+    const records: PuzzleRecord[] = []
+    const predicates = new relationalStore.RdbPredicates(TableNames.PUZZLE_RECORDS)
+    predicates.orderByDesc('created_at')
+    try {
+      const resultSet = await this.rdbStore.query(predicates)
+      while (resultSet.goToNextRow()) {
+        records.push({
+          id: resultSet.getLong(resultSet.getColumnIndex('id')),
+          sessionId: resultSet.getString(resultSet.getColumnIndex('session_id')),
+          difficulty: resultSet.getLong(resultSet.getColumnIndex('difficulty')),
+          timeSeconds: resultSet.getDouble(resultSet.getColumnIndex('time_seconds')),
+          moveCount: resultSet.getLong(resultSet.getColumnIndex('move_count')),
+          completed: resultSet.getLong(resultSet.getColumnIndex('completed')),
+          createdAt: resultSet.getLong(resultSet.getColumnIndex('created_at'))
+        })
+      }
+      resultSet.close()
+    } catch (error) {
+      console.error('DatabaseService', `Failed to query all puzzle records: ${JSON.stringify(error)}`)
+    }
+    return records
   }
 
   // ============ 工具事件操作 ============
