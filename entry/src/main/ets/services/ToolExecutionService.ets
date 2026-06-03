@@ -600,12 +600,20 @@ export class ToolExecutionService {
     // 2. 后台解析图片: 缓存查询 + API 生成, 完成后注入 image_path
     try {
       const parsed = JSON.parse(toolCall.arguments) as Record<string, Object>
-      const word = (parsed['word'] as string) ?? ''
-      const sentence = (parsed['sentence'] as string) ?? ''
+      const questionType = (parsed['question_type'] as string) ?? 'word'
+      const question = (parsed['question'] as string) ?? ''
+      const answer = (parsed['correct_answer'] as string) ?? ''
+      let word = ''
+      let sentence = ''
+      if (questionType === 'sentence') {
+        sentence = answer
+      } else {
+        word = answer
+      }
       const imagePrompt = (parsed['image_prompt'] as string) ?? ''
 
       console.info('ToolExecutionService',
-        `english_quiz image resolution start: word="${word}", sentence="${sentence}", imagePrompt="${imagePrompt.substring(0, 80)}..."`)
+        `english_quiz image resolution start: question="${question}", questionType="${questionType}", answer="${answer}", imagePrompt="${imagePrompt.substring(0, 80)}..."`)
 
       const imageIndex = getEnglishQuizImageIndex()
       let imagePath = ''

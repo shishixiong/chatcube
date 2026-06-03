@@ -1164,8 +1164,7 @@ function createMathQuizToolConfig(): ToolConfig {
 // 交互由前端 EnglishQuizCard 组件处理，与 math_quiz 模式类似。
 
 interface EnglishQuizArgs {
-  word: string
-  sentence: string
+  question: string
   image_prompt: string
   correct_answer: string
   question_type: string
@@ -1180,11 +1179,20 @@ class EnglishQuizExecutor implements ToolExecutor {
     // 如果工具被直接调用（没有前端交互），返回提示信息。
     try {
       const params = JSON.parse(_args) as EnglishQuizArgs
+      const questionType = (params.question_type ?? 'word').trim()
+      const answer = params.correct_answer ?? ''
+      let word = ''
+      let sentence = ''
+      if (questionType === 'sentence') {
+        sentence = answer
+      } else {
+        word = answer
+      }
       return JSON.stringify({
         answered: false,
         correct_answer: params.correct_answer ?? '',
-        word: params.word ?? '',
-        sentence: params.sentence ?? ''
+        word: word,
+        sentence: sentence
       })
     } catch (error) {
       return JSON.stringify(new ErrorOutput(`english_quiz error: ${JSON.stringify(error)}`))
@@ -1196,13 +1204,9 @@ function createEnglishQuizToolDefinition(): ToolDefinition {
   const rawSchemaJson: string = `{
     "type": "object",
     "properties": {
-      "word": {
+      "question": {
         "type": "string",
-        "description": "The Chinese word/concept to show as an image. Used for word-level quiz. e.g. '苹果', '小狗', '太阳'"
-      },
-      "sentence": {
-        "type": "string",
-        "description": "The Chinese sentence to translate. Used for sentence-level quiz. e.g. '我喜欢吃苹果'"
+        "description": "The Chinese word or sentence the child needs to say in English. For word quizzes: the Chinese word (e.g. '苹果', '小狗'). For sentence quizzes: the Chinese sentence (e.g. '我喜欢吃苹果')."
       },
       "image_prompt": {
         "type": "string",
@@ -1226,7 +1230,7 @@ function createEnglishQuizToolDefinition(): ToolDefinition {
         "description": "The child profile skill dimension this quiz targets: 'english_vocab' for words, 'english_sentence' for sentences, 'english_phonics' for phonics-related."
       }
     },
-    "required": ["correct_answer", "question_type", "image_prompt"]
+    "required": ["correct_answer", "question_type", "image_prompt", "question"]
   }`
 
   const parameters = new ToolParameters()

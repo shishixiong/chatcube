@@ -55,6 +55,8 @@ export struct EnglishQuizCard {
   @Local recognitionPreview: string = ''
   // 组件内部异步解析的图片路径, 不再依赖 handleEnglishQuiz 注入 image_path
   @Local resolvedImagePath: string = ''
+  // 供 @Builder 直接读取的展示路径, 避免方法调用导致 V2 响应式追踪失效
+  @Local displayImagePath: string = ''
   @Local isImageLoading: boolean = false
   @Local imageLoadFailed: boolean = false
   private imageLoadTimer: number = -1
@@ -90,16 +92,20 @@ export struct EnglishQuizCard {
 
   // handleEnglishQuiz 在后台异步解析图片后注入 image_path 到 arguments,
   // 此时 ForEach 可能跳过 dirty mark 导致卡片不重渲染, 需要主动检测。
+  // 注意: 不能简单用 resolvedImagePath !== '' 做 guard,
+  // 因为 resolveImage 可能拿到的是过期的缓存路径 (文件已被系统清理),
+  // 此时 handleEnglishQuiz 重新生成的新 image_path 会被错误跳过。
   @Monitor('toolCall.arguments')
   onArgumentsChanged(): void {
-    if (this.resolvedImagePath !== '' || this.isAnswered) {
+    if (this.isAnswered) {
       return
     }
     try {
       const parsed = JSON.parse(this.toolCall.arguments) as Record<string, Object>
       const imagePath = (parsed['image_path'] as string) ?? ''
-      if (imagePath !== '') {
+      if (imagePath !== '' && imagePath !== this.displayImagePath) {
         this.resolvedImagePath = imagePath
+        this.displayImagePath = imagePath
         this.isImageLoading = false
       }
     } catch (_e) {}
@@ -139,6 +145,7 @@ export struct EnglishQuizCard {
     // 已有 image_path (由 handleEnglishQuiz 注入或缓存命中)
     if (quiz.imagePath !== '') {
       this.resolvedImagePath = quiz.imagePath
+      this.displayImagePath = quiz.imagePath
       console.info('EnglishQuizCard', `Image already resolved in arguments: ${quiz.imagePath}`)
       return
     }
@@ -161,6 +168,7 @@ export struct EnglishQuizCard {
     getEnglishQuizImageIndex().lookup(word, sentence).then((cached) => {
       if (cached !== null && cached.filePath !== '') {
         this.resolvedImagePath = cached.filePath
+        this.displayImagePath = cached.filePath
         this.isImageLoading = false
         console.info('EnglishQuizCard', `Cache HIT: ${cached.filePath}`)
         return
@@ -172,6 +180,7 @@ export struct EnglishQuizCard {
         const currentQuiz = this.parseQuiz()
         if (currentQuiz.imagePath !== '') {
           this.resolvedImagePath = currentQuiz.imagePath
+          this.displayImagePath = currentQuiz.imagePath
           this.isImageLoading = false
           console.info('EnglishQuizCard', `Image already injected by handleEnglishQuiz: ${currentQuiz.imagePath}`)
           return
@@ -187,6 +196,7 @@ export struct EnglishQuizCard {
           getEnglishQuizImageIndex().generate(word, sentence, imagePrompt).then((generated) => {
             if (generated !== null && generated.filePath !== '') {
               this.resolvedImagePath = generated.filePath
+              this.displayImagePath = generated.filePath
               this.isImageLoading = false
               console.info('EnglishQuizCard', `Fallback generation SUCCESS: ${generated.filePath}`)
             } else {
@@ -212,6 +222,7 @@ export struct EnglishQuizCard {
           } else {
             // handleEnglishQuiz 最终注入了路径
             this.resolvedImagePath = finalQuiz.imagePath
+            this.displayImagePath = finalQuiz.imagePath
             this.isImageLoading = false
             console.info('EnglishQuizCard', `Image resolved at timeout check: ${finalQuiz.imagePath}`)
           }
@@ -236,8 +247,19 @@ export struct EnglishQuizCard {
     }
     try {
       const parsed = JSON.parse(this.toolCall.arguments) as Record<string, Object>
-      result.word = (parsed['word'] as string) ?? ''
-      result.sentence = (parsed['sentence'] as string) ?? ''
+      const questionType = (parsed['question_type'] as string) ?? 'word'
+      const answer = (parsed['correct_answer'] as string) ?? ''
+      if (answer !== '') {
+        if (questionType === 'sentence') {
+          result.sentence = answer
+        } else {
+          result.word = answer
+        }
+      } else {
+        // 兼容旧格式: correct_answer 为空时回退读 word/sentence
+        result.word = (parsed['word'] as string) ?? ''
+        result.sentence = (parsed['sentence'] as string) ?? ''
+      }
       result.imagePath = (parsed['image_path'] as string) ?? ''
       result.imagePrompt = (parsed['image_prompt'] as string) ?? ''
       result.correctAnswer = (parsed['correct_answer'] as string) ?? ''
@@ -432,29 +454,12 @@ export struct EnglishQuizCard {
     .border({ width: 1, color: $r('app.color.divider') })
   }
 
-  /**
-   * 计算当前有效的图片路径: resolvedImagePath 优先 (来自组件异步解析),
-   * 其次使用 toolCall.arguments 中的 image_path (来自 handleEnglishQuiz 注入).
-   * 不使用 ForEach 包裹, 确保 @Trace arguments 变化时 Image 组件能直接重建。
-   */
-  private getEffectiveImagePath(): string {
-    if (this.resolvedImagePath !== '') {
-      return this.resolvedImagePath
-    }
-    try {
-      const parsed = JSON.parse(this.toolCall.arguments) as Record<string, Object>
-      return (parsed['image_path'] as string) ?? ''
-    } catch (_e) {
-      return ''
-    }
-  }
-
   @Builder
   QuizContent() {
     Column({ space: 10 }) {
-      // 图片区域: 直接从 toolCall.arguments 读取 image_path, 绕过 ForEach 缓存
-      if (this.getEffectiveImagePath() !== '') {
-        Image(this.toFileUrl(this.getEffectiveImagePath()))
+      // 图片区域: 直接读取 @Local displayImagePath, 确保 V2 响应式追踪生效
+      if (this.displayImagePath !== '') {
+        Image(this.toFileUrl(this.displayImagePath))
           .width('100%')
           .height(180)
           .objectFit(ImageFit.Contain)

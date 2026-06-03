@@ -4587,12 +4587,17 @@ export struct ChatPage {
         }
       } else if (interaction.toolId === ENGLISH_QUIZ_TOOL_ID) {
         const questionType = (parsed['question_type'] as string) ?? 'word'
-        const word = (parsed['word'] as string) ?? ''
-        const sentence = (parsed['sentence'] as string) ?? ''
-        if (questionType === 'sentence' && sentence !== '') {
-          quizText = '请说出英语句子: ' + sentence
-        } else if (word !== '') {
-          quizText = '请说出英语单词: ' + word
+        let question = (parsed['question'] as string) ?? ''
+        if (question === '') {
+          // 兼容旧格式
+          if (questionType === 'sentence') {
+            question = (parsed['sentence'] as string) ?? ''
+          } else {
+            question = (parsed['word'] as string) ?? ''
+          }
+        }
+        if (question !== '') {
+          quizText = questionType === 'sentence' ? ('请说出英语句子: ' + question) : ('请说出英语单词: ' + question)
         }
       }
     } catch (_e) {}

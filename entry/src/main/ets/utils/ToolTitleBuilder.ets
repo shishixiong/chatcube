@@ -23,6 +23,7 @@ interface ToolArgumentDict {
   prompt?: string
   word?: string
   sentence?: string
+  question_type?: string
 }
 
 const MAX_SNIPPET = 24
@@ -192,8 +193,12 @@ export function buildToolTitle(toolCall: ToolCall): string {
     return '执行技能'
   }
   if (fn === 'english_quiz') {
+    const question = coerceString(args.question)
     const word = coerceString(args.word)
     const sentence = coerceString(args.sentence)
+    if (question !== '') {
+      return `英语看图: ${truncate(question)}`
+    }
     if (word !== '') {
       return `英语看图: ${truncate(word)}`
     }
