@@ -1,103 +1,36 @@
-import { TextReader } from '@kit.SpeechKit'
-import { BusinessError } from '@kit.BasicServicesKit'
 import { common } from '@kit.AbilityKit'
+import { ITtsEngine, TTSCallback } from './tts/ITtsEngine'
+import { SystemTtsEngine } from './tts/SystemTtsEngine'
+import { MiMoTtsEngine } from './tts/MiMoTtsEngine'
+import { TTS_ENGINE, TtsEngineType } from '../config/TtsConfig'
+import { getAppSettingsState } from '../state/AppSettingsState'
+import { ModelProvider } from '../models/ChatModels'
 
-// TTS事件回调接口
-export interface TTSCallback {
-  onStart: () => void
-  onComplete: () => void
-  onError: (error: string) => void
-}
+export { TTSCallback } from './tts/ITtsEngine'
 
 export class TTSService {
-  private isInitialized: boolean = false
-  private isReading: boolean = false
-  private currentCallback: TTSCallback | null = null
-  private currentReadId: string = ''
+  private systemEngine: SystemTtsEngine = new SystemTtsEngine()
+  private mimoEngine: MiMoTtsEngine = new MiMoTtsEngine()
+  private currentEngine: ITtsEngine | null = null
 
-  // 初始化小艺朗读引擎
   async init(context: common.Context): Promise<void> {
-    if (this.isInitialized) {
-      return
-    }
+    // 初始化系统引擎
+    await this.systemEngine.init(context)
 
-    const readerParams: TextReader.ReaderParam = {
-      isVoiceBrandVisible: true, // 显示品牌信息
-      businessBrandInfo: {
-        panelName: 'AI 助手朗读'
-      },
-      // 关键配置：启用在线音色支持
-      person: {
-        tone: 0,
-        style: 'interaction-broadcast'
-      }
-    }
+    // 初始化 MiMo 引擎（尝试从现有 MiniMax provider 读取 API key）
+    await this.mimoEngine.init(context)
 
-    try {
-      await TextReader.init(context, readerParams)
-
-      // 监听朗读状态变化
-      TextReader.on('stateChange', (state: ESObject) => {
-        console.info('TTSService', `Read state: ${JSON.stringify(state)}`)
-
-        const stateCode = state['state'] as number
-
-        // 状态码：0=READY, 1=PLAYING, 2=PAUSED, 3=STOPPED
-        if (stateCode === 1) {  // PLAYING
-          this.isReading = true
-          if (this.currentCallback) {
-            this.currentCallback.onStart()
-          }
-        } else if (stateCode === 2) {  // PAUSED — 系统面板暂停也视为停止，防止用户暂停后直接关闭面板
-          this.isReading = false
-          const cb = this.currentCallback
-          this.currentCallback = null
-          if (cb) {
-            cb.onComplete()
-          }
-        } else if (stateCode === 3) {  // STOPPED（包括用户关闭面板、朗读完成、主动stop）
-          this.isReading = false
-          const cb = this.currentCallback
-          this.currentCallback = null
-          if (cb) {
-            cb.onComplete()
-          }
-        }
-      })
-
-      // 兜底：监听 stop 事件，确保系统面板关闭时能恢复图标状态
-      TextReader.on('stop', () => {
-        console.info('TTSService', 'TextReader stop event received')
-        this.isReading = false
-        const cb = this.currentCallback
-        this.currentCallback = null
-        if (cb) {
-          cb.onComplete()
-        }
-      })
-
-      this.isInitialized = true
-      console.info('TTSService', 'TextReader initialized successfully')
-    } catch (error) {
-      const err = error as BusinessError
-      console.error('TTSService', `TextReader init failed: ${err.code}, ${err.message}`)
-      throw new Error(`朗读服务初始化失败: ${err.message}`)
-    }
+    this.currentEngine = this.resolveEngine()
+    console.info('TTSService', `引擎选择: ${TTS_ENGINE}`)
   }
 
-  // 朗读文本
   async speak(text: string, callback: TTSCallback): Promise<void> {
-    if (!this.isInitialized) {
+    if (this.currentEngine === null) {
       callback.onError('朗读服务未初始化')
       return
     }
 
-    // 如果正在朗读，先停止
-    if (this.isReading) {
-      this.stop()
-    }
-
-    // 预处理文本（移除代码块、清理Markdown符号等）
+    // 预处理文本（移除 Markdown 符号、代码块等）
     const processedText = this.preprocessTextForTTS(text)
 
     if (processedText === '') {
@@ -105,62 +38,43 @@ export class TTSService {
       return
     }
 
-    // 保存当前回调
-    this.currentCallback = callback
-    this.currentReadId = Date.now().toString()
-
-    // 构造朗读内容
-    const readInfoList: TextReader.ReadInfo[] = [{
-      id: this.currentReadId,
-      title: { text: 'AI 回复', isClickable: false },
-      bodyInfo: processedText
-    }]
-
-    console.info('TTSService', `Starting read, id: ${this.currentReadId}, text length: ${processedText.length}`)
-
-    try {
-      // 启动朗读（第二个参数传 undefined，从头开始播放）
-      // 注意：不调用 showPanel() 可保持悬浮窗模式，系统会自动显示小悬浮窗
-      await TextReader.start(readInfoList, undefined)
-
-      console.info('TTSService', 'TextReader start called successfully')
-    } catch (error) {
-      const err = error as BusinessError
-      console.error('TTSService', `TextReader start failed: ${err.code}, ${err.message}`)
-      this.isReading = false
-      callback.onError(`朗读失败: ${err.message}`)
-    }
+    await this.currentEngine.speak(processedText, callback)
   }
 
-  // 停止朗读
   stop(): void {
-    try {
-      TextReader.stop()
-      this.isReading = false
-      console.info('TTSService', 'TextReader stopped')
-    } catch (error) {
-      console.error('TTSService', `TextReader stop failed: ${error}`)
-      this.isReading = false
+    if (this.currentEngine !== null) {
+      this.currentEngine.stop()
     }
   }
 
-  // 检查是否正在朗读
-  getReadingStatus(): boolean {
-    return this.isReading
+  isSpeaking(): boolean {
+    if (this.currentEngine !== null) {
+      return this.currentEngine.isSpeaking()
+    }
+    return false
   }
 
-  // 释放资源
   destroy(): void {
-    try {
-      TextReader.off('stateChange')
-      TextReader.off('stop')
-      TextReader.release()
-      this.isInitialized = false
-      this.isReading = false
-      console.info('TTSService', 'TextReader released')
-    } catch (error) {
-      console.error('TTSService', `TextReader release failed: ${error}`)
+    this.systemEngine.destroy()
+    this.mimoEngine.destroy()
+    this.currentEngine = null
+  }
+
+  // 运行时切换引擎（后续设置页会用到）
+  switchEngine(engineType: TtsEngineType): void {
+    if (this.currentEngine !== null && this.currentEngine.isSpeaking()) {
+      this.currentEngine.stop()
     }
+    this.currentEngine = engineType === 'mimo' ? this.mimoEngine : this.systemEngine
+    console.info('TTSService', `引擎切换为: ${engineType}`)
+  }
+
+  getCurrentEngineType(): TtsEngineType {
+    return TTS_ENGINE
+  }
+
+  private resolveEngine(): ITtsEngine {
+    return TTS_ENGINE === 'mimo' ? this.mimoEngine : this.systemEngine
   }
 
   // 文本预处理：移除代码块、清理Markdown符号等
@@ -214,11 +128,21 @@ export class TTSService {
     // 清理多余空行
     text = text.replace(/\n{3,}/g, '\n\n')
 
-    // 限制长度（TextReader 支持长文本，但建议合理分段）
+    // 限制长度
     if (text.length > 50000) {
       text = text.substring(0, 50000) + '...'
     }
 
     return text.trim()
   }
+}
+
+// 单例
+let instance: TTSService | null = null
+
+export function getTTSService(): TTSService {
+  if (instance === null) {
+    instance = new TTSService()
+  }
+  return instance
 }

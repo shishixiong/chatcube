@@ -9,7 +9,7 @@ import {
   AttachmentType,
   SearchReference
 } from '../models/ChatModels'
-import { Assistant, DEFAULT_ASSISTANT_ID, createDefaultAssistant } from '../models/AssistantModels'
+import { Assistant, DEFAULT_ASSISTANT_ID, createDefaultAssistant, DEFAULT_ASSISTANT_SYSTEM_PROMPT, DEFAULT_ASSISTANT_LOCKED_TOOL_IDS } from '../models/AssistantModels'
 import { GeneratedMedia } from '../models/ImageGenerationModels'
 import { deserializeMessageParts, serializeMessageParts } from '../models/MessageParts'
 import { ensureMessageParts, buildMessagePartsFromLegacy } from '../utils/ChatMessagePartsHelper'
@@ -213,6 +213,7 @@ export class DatabaseService {
 	        reasoning_level_preference TEXT DEFAULT '',
 	        enabled_tool_ids_json TEXT DEFAULT '',
 	        is_default INTEGER DEFAULT 0,
+	        is_preset INTEGER DEFAULT 0,
 	        created_at INTEGER,
 	        updated_at INTEGER,
 	        sort_order INTEGER DEFAULT 0
@@ -359,6 +360,8 @@ export class DatabaseService {
       await this.addMessageModelIdColumnIfNeeded()
       // 尝试添加助手采样参数列(top_p / presence_penalty / frequency_penalty)
       await this.addAssistantSamplingColumnsIfNeeded()
+      // 尝试添加助手预设标记列
+      await this.addAssistantPresetColumnIfNeeded()
 	      // 迁移现有供应商数据
 	      await this.migrateExistingProviders()
 	      await this.ensureDefaultAssistant()
@@ -773,6 +776,7 @@ export class DatabaseService {
 	      context_message_count: assistant.contextMessageCount || 0,
 	      max_output_tokens: assistant.maxOutputTokens || 0,
 	      is_default: assistant.isDefault ? 1 : 0,
+	      is_preset: assistant.isPreset ? 1 : 0,
 	      created_at: assistant.createdAt,
 	      updated_at: assistant.updatedAt,
 	      sort_order: assistant.sortOrder
@@ -861,6 +865,11 @@ export class DatabaseService {
 	      assistant.isDefault = assistant.id === DEFAULT_ASSISTANT_ID
 	    }
 	    try {
+	      assistant.isPreset = resultSet.getLong(resultSet.getColumnIndex('is_preset')) === 1
+	    } catch (error) {
+	      assistant.isPreset = false
+	    }
+	    try {
 	      assistant.createdAt = resultSet.getLong(resultSet.getColumnIndex('created_at'))
 	    } catch (error) {
 	      assistant.createdAt = Date.now()
@@ -887,8 +896,31 @@ export class DatabaseService {
 	    }
 	    const existing = await this.queryAssistantByIdNoWait(DEFAULT_ASSISTANT_ID)
 	    if (existing !== null) {
+	      let needUpdate = false
 	      if (!existing.isDefault) {
 	        existing.isDefault = true
+	        needUpdate = true
+	      }
+	      // 迁移旧名称：将"默认助手"更新为"小星老师"
+	      if (existing.name === '默认助手') {
+	        existing.name = '小星老师'
+	        existing.avatarSymbol = '⭐'
+	        existing.color = '#FF9F43'
+	        needUpdate = true
+	      }
+	      // 迁移系统提示词：为空或旧版内容的默认助手统一更新为锁定版本
+	      if (existing.systemPrompt !== DEFAULT_ASSISTANT_SYSTEM_PROMPT) {
+	        existing.systemPrompt = DEFAULT_ASSISTANT_SYSTEM_PROMPT
+	        needUpdate = true
+	      }
+	      // 迁移工具白名单：为空或旧版内容的默认助手统一更新为锁定版本
+	      const existingToolIdsSorted = [...existing.enabledToolIds].sort()
+	      const lockedToolIdsSorted = [...DEFAULT_ASSISTANT_LOCKED_TOOL_IDS].sort()
+	      if (JSON.stringify(existingToolIdsSorted) !== JSON.stringify(lockedToolIdsSorted)) {
+	        existing.enabledToolIds = [...DEFAULT_ASSISTANT_LOCKED_TOOL_IDS]
+	        needUpdate = true
+	      }
+	      if (needUpdate) {
 	        const predicates = new relationalStore.RdbPredicates(TableNames.ASSISTANTS)
 	        predicates.equalTo('id', DEFAULT_ASSISTANT_ID)
 	        try {
@@ -969,6 +1001,17 @@ export class DatabaseService {
       } catch (error) {
         // 列已存在会抛错,忽略
       }
+    }
+  }
+
+  private async addAssistantPresetColumnIfNeeded(): Promise<void> {
+    if (this.rdbStore === null) {
+      return
+    }
+    try {
+      await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.ASSISTANTS} ADD COLUMN is_preset INTEGER DEFAULT 0`)
+    } catch (error) {
+      console.info('DatabaseService', 'is_preset column may already exist')
     }
   }
 

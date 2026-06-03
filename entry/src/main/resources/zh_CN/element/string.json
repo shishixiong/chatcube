@@ -2217,6 +2217,10 @@
       "value": "只对这个助手生效的指令"
     },
     {
+      "name": "assistant_prompt_locked",
+      "value": "（系统锁定）"
+    },
+    {
       "name": "assistant_default_model",
       "value": "默认模型"
     },
@@ -2529,82 +2533,6 @@
       "value": "取消"
     },
     {
-      "name": "hw_login_welcome_title",
-      "value": "登录 Cube Chat"
-    },
-    {
-      "name": "hw_login_welcome_subtitle",
-      "value": "请使用华为账号登录以继续使用"
-    },
-    {
-      "name": "hw_login_welcome_phone_prefix",
-      "value": "欢迎，"
-    },
-    {
-      "name": "hw_login_privacy_prefix",
-      "value": "登录即同意"
-    },
-    {
-      "name": "hw_login_privacy_policy",
-      "value": "《隐私政策》"
-    },
-    {
-      "name": "hw_login_privacy_conj",
-      "value": "和"
-    },
-    {
-      "name": "hw_login_privacy_huawei",
-      "value": "《华为账号用户认证协议》"
-    },
-    {
-      "name": "hw_login_privacy_suffix",
-      "value": "。"
-    },
-    {
-      "name": "hw_login_agreement_dialog_title",
-      "value": "请阅读并同意以下协议"
-    },
-    {
-      "name": "hw_login_agreement_dialog_desc",
-      "value": "使用华为账号登录，需要同意《隐私政策》和《华为账号用户认证协议》。"
-    },
-    {
-      "name": "hw_login_agreement_agree",
-      "value": "同意并继续"
-    },
-    {
-      "name": "hw_login_agreement_cancel",
-      "value": "暂不同意"
-    },
-    {
-      "name": "hw_login_error_network",
-      "value": "网络未连接，请检查后重试"
-    },
-    {
-      "name": "hw_login_error_not_logged_in",
-      "value": "当前设备未登录华为账号"
-    },
-    {
-      "name": "hw_login_error_generic",
-      "value": "登录失败，请稍后重试"
-    },
-    {
-      "name": "hw_logout_confirm_title",
-      "value": "退出登录"
-    },
-    {
-      "name": "hw_logout_confirm_message",
-      "value": "确认退出当前华为账号？随时可以重新登录。"
-    },
-    {
-      "name": "hw_logout_confirm_ok",
-      "value": "退出登录"
-    },
-    {
-      "name": "hw_logout_confirm_cancel",
-      "value": "取消"
-    },
-    {
       "name": "onboarding_step1_title",
       "value": "选择主题"
     },
@@ -2877,6 +2805,30 @@
       "value": "自动"
     },
     {
+      "name": "image_generation_prompt_optimizer",
+      "value": "自动优化提示词"
+    },
+    {
+      "name": "image_generation_seed",
+      "value": "随机种子"
+    },
+    {
+      "name": "image_generation_seed_placeholder",
+      "value": "留空使用随机种子"
+    },
+    {
+      "name": "image_generation_style",
+      "value": "风格控制"
+    },
+    {
+      "name": "image_generation_style_placeholder",
+      "value": "描述你想要的风格..."
+    },
+    {
+      "name": "image_generation_style_weight",
+      "value": "风格权重"
+    },
+    {
       "name": "image_generation_add_reference",
       "value": "添加参考图"
     },
@@ -3099,6 +3051,50 @@
     {
       "name": "default_model_select_image_model",
       "value": "选择图像生成模型"
+    },
+    {
+      "name": "voice_hold_to_speak",
+      "value": "按住说话"
+    },
+    {
+      "name": "voice_release_to_send",
+      "value": "松开发送"
+    },
+    {
+      "name": "voice_slide_up_cancel",
+      "value": "上滑取消"
+    },
+    {
+      "name": "voice_release_cancel",
+      "value": "松开取消"
+    },
+    {
+      "name": "voice_permission_denied",
+      "value": "需要麦克风权限才能使用语音输入"
+    },
+    {
+      "name": "voice_too_short",
+      "value": "说话时间太短"
+    },
+    {
+      "name": "voice_empty_result",
+      "value": "未识别到语音内容"
+    },
+    {
+      "name": "voice_network_error",
+      "value": "语音识别失败，请检查网络"
+    },
+    {
+      "name": "voice_recognizing",
+      "value": "正在识别..."
+    },
+    {
+      "name": "voice_speaking",
+      "value": "朗读中..."
+    },
+    {
+      "name": "microphone_permission_reason",
+      "value": "用于语音输入功能，将您的语音转换为文字发送。"
     }
   ]
 }

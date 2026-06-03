@@ -1,4 +1,5 @@
 import {
+  isImageGenerationFunctionName,
   isScrapeWebFunctionName,
   isSearchWebFunctionName,
   normalizeToolFunctionName
@@ -23,6 +24,15 @@ const ASK_USER_KEYWORDS: string[] = [
 ]
 const SKILL_KEYWORDS: string[] = [
   'use_skill', 'skill', 'invoke_skill'
+]
+const MATH_KEYWORDS: string[] = [
+  'math_verify', 'math_quiz', 'calculator', 'calculate', 'math'
+]
+const PROFILE_KEYWORDS: string[] = [
+  'child_profile', 'profile', 'learning_profile'
+]
+const ENGLISH_KEYWORDS: string[] = [
+  'english_quiz', 'english_vocab', 'english'
 ]
 
 function matchesAny(name: string, keywords: string[]): boolean {
@@ -53,6 +63,9 @@ export function resolveToolSymbol(functionName: string): Resource {
   if (isScrapeWebFunctionName(name)) {
     return $r('sys.symbol.globe_badge_message')
   }
+  if (isImageGenerationFunctionName(name)) {
+    return $r('sys.symbol.wand_and_stars')
+  }
   if (matchesAny(name, MEMORY_KEYWORDS)) {
     return $r('sys.symbol.square_and_pencil')
   }
@@ -70,6 +83,15 @@ export function resolveToolSymbol(functionName: string): Resource {
   }
   if (matchesAny(name, SKILL_KEYWORDS)) {
     return $r('sys.symbol.wand_and_stars')
+  }
+  if (matchesAny(name, MATH_KEYWORDS)) {
+    return $r('sys.symbol.plus')
+  }
+  if (matchesAny(name, PROFILE_KEYWORDS)) {
+    return $r('sys.symbol.doc')
+  }
+  if (matchesAny(name, ENGLISH_KEYWORDS)) {
+    return $r('sys.symbol.square_and_pencil')
   }
   return $r('sys.symbol.wrench_and_screwdriver')
 }

@@ -18,9 +18,10 @@ import { getInAppAlertService, InAppAlertService } from './InAppAlertService'
 import { getAssistantService, AssistantService } from './AssistantService'
 import { getWebDAVService, WebDAVService } from './WebDAVService'
 import { getWebDAVSyncService, WebDAVSyncService } from './WebDAVSyncService'
-import { getAccountService, AccountService } from './AccountService'
 import { getSettingsManager, SettingsManager } from '../viewmodels/SettingsManager'
 import { getAppStateManager, AppStateManager } from '../viewmodels/AppStateManager'
+import { getSpeechRecognitionService, SpeechRecognitionService } from './SpeechRecognitionService'
+import { getTTSService, TTSService } from './TTSService'
 import { getProviderViewModel, ProviderViewModel } from '../viewmodels/ProviderViewModel'
 import { createChatViewModel, ChatViewModel } from '../viewmodels/ChatViewModel'
 
@@ -118,8 +119,12 @@ export class ServiceRegistry {
     return getWebDAVSyncService()
   }
 
-  static account(): AccountService {
-    return getAccountService()
+  static speechRecognition(): SpeechRecognitionService {
+    return getSpeechRecognitionService()
+  }
+
+  static tts(): TTSService {
+    return getTTSService()
   }
 
   static chat(): ChatViewModel {

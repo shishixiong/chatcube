@@ -12,12 +12,6 @@
     "installationFree": false,
     "pages": "$profile:main_pages",
     "routerMap": "$profile:router_map",
-    "metadata": [
-      {
-        "name": "client_id",
-        "value": "6917598595665051339"
-      }
-    ],
     "requestPermissions": [
       {
         "name": "ohos.permission.INTERNET",
@@ -49,6 +43,14 @@
         "usedScene": {
           "abilities": ["EntryAbility"],
           "when": "always"
+        }
+      },
+      {
+        "name": "ohos.permission.MICROPHONE",
+        "reason": "$string:microphone_permission_reason",
+        "usedScene": {
+          "abilities": ["EntryAbility"],
+          "when": "inuse"
         }
       }
     ],

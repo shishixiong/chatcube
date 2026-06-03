@@ -12,15 +12,20 @@ export struct ChatInputAreaSection {
   @Event onAttachmentsChange: (value: MessageAttachment[]) => void = (_value: MessageAttachment[]): void => {}
   @Param isSending: boolean = false
   @Param isAwaitingResponse: boolean = false
-  @Param currentModelId: string = ''
-  @Param currentProviderId: string = ''
-  @Param currentModelName: string = ''
-  @Param currentProviderIconType: string = ''
-  @Param currentProviderIconPath: string = ''
-  @Param currentProviderTextIcon: string = ''
-  @Param currentProviderTextIconBgColor: string = ''
-  @Param currentProviderCustomImagePath: string = ''
-  @Param currentProviderBrandColor: ResourceColor = ''
+  @Param isVoiceMode: boolean = false
+  @Param isVoiceSpeaking: boolean = false
+  @Event onVoiceModeToggle: () => void = () => {
+  }
+  @Event onVoiceSpeakingStop: () => void = () => {
+  }
+  @Event onVoiceRecordStart: () => void = () => {
+  }
+  @Event onVoiceRecordCancel: () => void = () => {
+  }
+  @Event onVoiceRecordFinish: () => void = () => {
+  }
+  @Event onVoiceCancelZoneChange: (isCancel: boolean) => void = (_isCancel: boolean): void => {
+  }
   @Param autoFocus: boolean = false
   @Param isEditing: boolean = false
   @Param webSearchAvailable: boolean = false
@@ -48,7 +53,6 @@ export struct ChatInputAreaSection {
   @Event onCancelEdit: () => void = () => {}
   @Event onSend: () => void = () => {}
   @Event onStop: () => void = () => {}
-  @Event onModelIconClick: () => void = () => {}
   @Param isAttachmentPanelOpen: boolean = false
   @Event onAttachmentClick: () => void = () => {}
   @Event onInputFocus: () => void = () => {}
@@ -121,18 +125,29 @@ export struct ChatInputAreaSection {
           },
           isSending: this.isSending,
           isAwaitingResponse: this.isAwaitingResponse,
-          currentModelId: this.currentModelId,
-          currentProviderId: this.currentProviderId,
-          currentModelName: this.currentModelName,
-          currentProviderIconType: this.currentProviderIconType,
-          currentProviderIconPath: this.currentProviderIconPath,
-          currentProviderTextIcon: this.currentProviderTextIcon,
-          currentProviderTextIconBgColor: this.currentProviderTextIconBgColor,
-          currentProviderCustomImagePath: this.currentProviderCustomImagePath,
-          currentProviderBrandColor: this.currentProviderBrandColor,
           autoFocus: this.autoFocus,
           sendButtonOnLeft: this.sendButtonOnLeft,
           isEditing: this.isEditing,
+          isVoiceMode: this.isVoiceMode,
+          isVoiceSpeaking: this.isVoiceSpeaking,
+          onVoiceModeToggle: (): void => {
+            this.onVoiceModeToggle()
+          },
+          onVoiceSpeakingStop: (): void => {
+            this.onVoiceSpeakingStop()
+          },
+          onVoiceRecordStart: (): void => {
+            this.onVoiceRecordStart()
+          },
+          onVoiceRecordCancel: (): void => {
+            this.onVoiceRecordCancel()
+          },
+          onVoiceRecordFinish: (): void => {
+            this.onVoiceRecordFinish()
+          },
+          onVoiceCancelZoneChange: (isCancel: boolean): void => {
+            this.onVoiceCancelZoneChange(isCancel)
+          },
           onCancelEdit: (): void => {
             this.onCancelEdit()
           },
@@ -141,9 +156,6 @@ export struct ChatInputAreaSection {
           },
           onStop: (): void => {
             this.onStop()
-          },
-          onModelIconClick: (): void => {
-            this.onModelIconClick()
           },
           onAttachmentClick: (): void => {
             this.onAttachmentClick()

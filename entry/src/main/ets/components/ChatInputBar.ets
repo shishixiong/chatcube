@@ -1,4 +1,3 @@
-import { getModelIconPath, buildIconResourcePath, isNetworkIconPath, isSandboxIconPath } from '../utils/ProviderIconUtils'
 import { AttachmentProcessState, MessageAttachment, AttachmentType } from '../models/ChatModels'
 import {
   BaseItemInfo,
@@ -10,6 +9,7 @@ import {
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { AdaptiveImageThumbnail } from './AdaptiveImageThumbnail'
+import { VoiceRecordButton } from './chat/VoiceRecordButton'
 
 @ComponentV2
 export struct ChatInputBar {
@@ -32,17 +32,23 @@ export struct ChatInputBar {
   @Event onImageClick: (images: Array<string>, imageIndex: number, sourceIds: Array<string>) => void =
     (_images: Array<string>, _imageIndex: number, _sourceIds: Array<string>): void => {}
   @Param isSending: boolean = false
+  @Param isVoiceMode: boolean = false
+  @Param isVoiceSpeaking: boolean = false
+  @Event onVoiceModeToggle: () => void = () => {
+  }
+  @Event onVoiceSpeakingStop: () => void = () => {
+  }
+  @Event onVoiceRecordStart: () => void = () => {
+  }
+  @Event onVoiceRecordCancel: () => void = () => {
+  }
+  @Event onVoiceRecordFinish: () => void = () => {
+  }
+  @Event onVoiceCancelZoneChange: (isCancel: boolean) => void = (_isCancel: boolean): void => {
+  }
   // isSending 为 true 时，pause 在整个发送期都保留轻微呼吸感
   @Param isAwaitingResponse: boolean = false
-  @Param currentModelId: string = ''
-  @Param currentProviderId: string = ''
-  @Param currentModelName: string = ''
-  @Param currentProviderIconType: string = 'svg'
-  @Param currentProviderIconPath: string = ''
-  @Param currentProviderTextIcon: string = ''
-  @Param currentProviderTextIconBgColor: string = ''
-  @Param currentProviderCustomImagePath: string = ''
-  @Param currentProviderBrandColor: ResourceColor = ''
+  // voice mode params
   // 是否自动聚焦输入框
   @Param autoFocus: boolean = false
   @Param sendButtonOnLeft: boolean = false
@@ -76,8 +82,6 @@ export struct ChatInputBar {
   }
   @Event onStop: () => void = () => {
   }
-  @Event onModelIconClick: () => void = () => {
-  }
   @Param isAttachmentPanelOpen: boolean = false
   @Event onAttachmentClick: () => void = () => {
   }
@@ -94,33 +98,6 @@ export struct ChatInputBar {
   private breatheTimerId: number = -1
   private controlsSwapTimerId: number = -1
   // 焦点控制器
-
-  private getCurrentModelIconPath(): string {
-    if (this.currentModelId === '' || this.currentProviderId === '') {
-      return ''
-    }
-    return getModelIconPath(this.currentModelId, this.currentProviderId, '')
-  }
-
-  private getCurrentModelIconResourcePath(): string {
-    const iconPath = this.getCurrentModelIconPath()
-    if (iconPath === '') {
-      return ''
-    }
-    return buildIconResourcePath(iconPath)
-  }
-
-  private hasCurrentModelIcon(): boolean {
-    return this.getCurrentModelIconResourcePath() !== ''
-  }
-
-  // rawfile 相对路径(如 'icons/xiaomi.svg')需要 $rawfile() 包装,
-  // 而 https URL / 沙箱绝对路径可直接传给 Image。
-  // 沿用 ChatNavigationTitleContent 同名 helper 的分支判定, 保持各处显示一致。
-  private isRawfileCurrentModelIcon(): boolean {
-    const resourcePath = this.getCurrentModelIconResourcePath()
-    return resourcePath !== '' && !isNetworkIconPath(resourcePath) && !isSandboxIconPath(resourcePath)
-  }
 
   aboutToAppear(): void {
     this.lastHasContent = this.computeHasContent()
@@ -145,50 +122,16 @@ export struct ChatInputBar {
   }
 
   @Builder
-  private ModelButton() {
+  private VoiceToggleButton() {
     Button({ type: ButtonType.Circle }) {
-      if (this.currentModelId !== '') {
-        if (this.hasCurrentModelIcon()) {
-          Column() {
-            if (this.isRawfileCurrentModelIcon()) {
-              Image($rawfile(this.getCurrentModelIconResourcePath()))
-                .width(18)
-                .height(18)
-                .objectFit(ImageFit.Contain)
-            } else {
-              Image(this.getCurrentModelIconResourcePath())
-                .width(18)
-                .height(18)
-                .objectFit(ImageFit.Contain)
-            }
-          }
-          .width(28)
-          .height(28)
-          .borderRadius(7)
-          .backgroundColor($r('app.color.model_icon_bg'))
-          .justifyContent(FlexAlign.Center)
-          .alignItems(HorizontalAlign.Center)
-        } else {
-          Column() {
-            SymbolGlyph($r('sys.symbol.ai_edit'))
-              .fontSize(14)
-              .fontColor([$r('app.color.text_tertiary')])
-          }
-          .width(28)
-          .height(28)
-          .borderRadius(7)
-          .backgroundColor($r('app.color.model_icon_bg'))
-          .justifyContent(FlexAlign.Center)
-          .alignItems(HorizontalAlign.Center)
-        }
-      } else {
-        SymbolGlyph($r('sys.symbol.ai_edit'))
-          .fontSize(22)
-          .fontColor([$r('app.color.text_secondary')])
-      }
+      SymbolGlyph(this.isVoiceMode ? $r('sys.symbol.keyboard') : $r('sys.symbol.mic'))
+        .fontSize(20)
+        .fontColor([this.isVoiceMode ? this.themePrimary : $r('app.color.text_secondary')])
     }
     .width(40)
     .height(40)
+    .enabled(!this.isEditing)
+    .opacity(this.isEditing ? 0.4 : 1)
     .backgroundColor(this.modelBtnPressed ? this.themeDivider : this.themeAiBubble)
     .scale({ x: this.modelBtnPressed ? 0.95 : 1, y: this.modelBtnPressed ? 0.95 : 1 })
     .animation({ duration: 150, curve: Curve.EaseOut })
@@ -200,7 +143,9 @@ export struct ChatInputBar {
       }
     })
     .onClick(() => {
-      this.onModelIconClick()
+      if (!this.isSending) {
+        this.onVoiceModeToggle()
+      }
     })
   }
 
@@ -316,14 +261,38 @@ export struct ChatInputBar {
         this.SendButton()
         this.AttachmentButton()
       } else {
-        this.ModelButton()
+        this.VoiceToggleButton()
       }
       // 中间输入区: 固定位置, 不在 if/else 内, 切换握姿时 TextArea 实例保留,
       // 焦点和 input method 会话跨切换不丢失, 键盘不会闪烁收起再弹起
-      this.InputTextArea()
+      if (this.isVoiceMode) {
+        VoiceRecordButton({
+          themePrimary: this.themePrimary,
+          themeUserBubble: this.themeUserBubble,
+          disabled: this.isSending,
+          isSpeaking: this.isVoiceSpeaking,
+          onRecordStart: (): void => {
+            this.onVoiceRecordStart()
+          },
+          onRecordCancel: (): void => {
+            this.onVoiceRecordCancel()
+          },
+          onRecordFinish: (): void => {
+            this.onVoiceRecordFinish()
+          },
+          onCancelZoneChange: (isCancel: boolean): void => {
+            this.onVoiceCancelZoneChange(isCancel)
+          },
+          onSpeakingTap: (): void => {
+            this.onVoiceSpeakingStop()
+          }
+        })
+      } else {
+        this.InputTextArea()
+      }
       // 右侧按钮区: 随握姿翻转
       if (this.sendButtonOnLeft) {
-        this.ModelButton()
+        this.VoiceToggleButton()
       } else {
         this.AttachmentButton()
         this.SendButton()

@@ -44,6 +44,12 @@ export class PreferenceKeys {
   static readonly CUSTOM_SYSTEM_PROMPT: string = 'custom_system_prompt'
   static readonly SYSTEM_PROMPT_ENABLED: string = 'system_prompt_enabled'
 
+  // 儿童学习画像
+  static readonly CHILD_PROFILE_JSON: string = 'child_profile_json'
+
+  // 英语出题工具图片缓存索引
+  static readonly ENGLISH_QUIZ_IMAGE_INDEX_JSON: string = 'english_quiz_image_index_json'
+
   // 搜索服务配置
   static readonly SEARCH_SERVICE_ENABLED: string = 'search_service_enabled'
   static readonly SEARCH_CONVERSATION_ENABLED: string = 'search_conversation_enabled'
@@ -105,13 +111,6 @@ export class PreferenceKeys {
   static readonly WEBDAV_REMOTE_FILE_NAME: string = 'webdav_remote_file_name'
   static readonly WEBDAV_LAST_SYNC_TIME: string = 'webdav_last_sync_time'
   static readonly WEBDAV_LAST_BACKUP_SIZE: string = 'webdav_last_backup_size'
-
-  // 华为账号登录态持久化 key（以 Preferences 为准）
-  static readonly HW_ACCOUNT_LOGGED_IN: string = 'hw_account_logged_in'
-  static readonly HW_ACCOUNT_OPEN_ID: string = 'hw_account_open_id'
-  static readonly HW_ACCOUNT_UNION_ID: string = 'hw_account_union_id'
-  static readonly HW_ACCOUNT_NICK_NAME: string = 'hw_account_nick_name'
-  static readonly HW_ACCOUNT_AVATAR_URI: string = 'hw_account_avatar_uri'
 
   // 首次启动引导
   static readonly ONBOARDING_COMPLETED: string = 'onboarding_completed'

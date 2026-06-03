@@ -2217,6 +2217,10 @@
       "value": "Instructions only for this assistant"
     },
     {
+      "name": "assistant_prompt_locked",
+      "value": "(System Locked)"
+    },
+    {
       "name": "assistant_default_model",
       "value": "Default Model"
     },
@@ -2529,82 +2533,6 @@
       "value": "Cancel"
     },
     {
-      "name": "hw_login_welcome_title",
-      "value": "Sign in to Cube Chat"
-    },
-    {
-      "name": "hw_login_welcome_subtitle",
-      "value": "Please sign in with your Huawei ID to continue."
-    },
-    {
-      "name": "hw_login_welcome_phone_prefix",
-      "value": "Welcome back, "
-    },
-    {
-      "name": "hw_login_privacy_prefix",
-      "value": "By signing in, you agree to our "
-    },
-    {
-      "name": "hw_login_privacy_policy",
-      "value": "Privacy Policy"
-    },
-    {
-      "name": "hw_login_privacy_conj",
-      "value": " and "
-    },
-    {
-      "name": "hw_login_privacy_huawei",
-      "value": "Huawei Account Authentication Agreement"
-    },
-    {
-      "name": "hw_login_privacy_suffix",
-      "value": "."
-    },
-    {
-      "name": "hw_login_agreement_dialog_title",
-      "value": "Please review and agree"
-    },
-    {
-      "name": "hw_login_agreement_dialog_desc",
-      "value": "To sign in with Huawei ID, please read and agree to the Privacy Policy and Huawei Account Authentication Agreement."
-    },
-    {
-      "name": "hw_login_agreement_agree",
-      "value": "Agree and continue"
-    },
-    {
-      "name": "hw_login_agreement_cancel",
-      "value": "Not now"
-    },
-    {
-      "name": "hw_login_error_network",
-      "value": "Network unavailable. Please check and retry."
-    },
-    {
-      "name": "hw_login_error_not_logged_in",
-      "value": "Huawei ID is not signed in on this device."
-    },
-    {
-      "name": "hw_login_error_generic",
-      "value": "Sign-in failed. Please try again later."
-    },
-    {
-      "name": "hw_logout_confirm_title",
-      "value": "Sign out"
-    },
-    {
-      "name": "hw_logout_confirm_message",
-      "value": "Sign out of this Huawei ID? You can sign back in at any time."
-    },
-    {
-      "name": "hw_logout_confirm_ok",
-      "value": "Sign out"
-    },
-    {
-      "name": "hw_logout_confirm_cancel",
-      "value": "Cancel"
-    },
-    {
       "name": "onboarding_step1_title",
       "value": "Choose your theme"
     },
@@ -2877,6 +2805,30 @@
       "value": "自动"
     },
     {
+      "name": "image_generation_prompt_optimizer",
+      "value": "自动优化提示词"
+    },
+    {
+      "name": "image_generation_seed",
+      "value": "随机种子"
+    },
+    {
+      "name": "image_generation_seed_placeholder",
+      "value": "留空使用随机种子"
+    },
+    {
+      "name": "image_generation_style",
+      "value": "风格控制"
+    },
+    {
+      "name": "image_generation_style_placeholder",
+      "value": "描述你想要的风格..."
+    },
+    {
+      "name": "image_generation_style_weight",
+      "value": "风格权重"
+    },
+    {
       "name": "image_generation_add_reference",
       "value": "添加参考图"
     },
@@ -3099,6 +3051,50 @@
     {
       "name": "default_model_select_image_model",
       "value": "选择图像生成模型"
+    },
+    {
+      "name": "voice_hold_to_speak",
+      "value": "Hold to Speak"
+    },
+    {
+      "name": "voice_release_to_send",
+      "value": "Release to Send"
+    },
+    {
+      "name": "voice_slide_up_cancel",
+      "value": "Slide Up to Cancel"
+    },
+    {
+      "name": "voice_release_cancel",
+      "value": "Release to Cancel"
+    },
+    {
+      "name": "voice_permission_denied",
+      "value": "Microphone permission is required for voice input"
+    },
+    {
+      "name": "voice_too_short",
+      "value": "Recording too short"
+    },
+    {
+      "name": "voice_empty_result",
+      "value": "No speech detected"
+    },
+    {
+      "name": "voice_network_error",
+      "value": "Voice recognition failed, please check your network"
+    },
+    {
+      "name": "voice_recognizing",
+      "value": "Recognizing..."
+    },
+    {
+      "name": "voice_speaking",
+      "value": "Reading..."
+    },
+    {
+      "name": "microphone_permission_reason",
+      "value": "Used for voice input to convert your speech to text."
     }
   ]
 }
