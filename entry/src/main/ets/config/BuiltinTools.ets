@@ -24,7 +24,8 @@ import {
   CHILD_PROFILE_TOOL_ID,
   MATH_VERIFY_TOOL_ID,
   MATH_QUIZ_TOOL_ID,
-  ENGLISH_QUIZ_TOOL_ID
+  ENGLISH_QUIZ_TOOL_ID,
+  NUMBER_PUZZLE_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { i18n } from '@kit.LocalizationKit'
 import {
@@ -1262,6 +1263,71 @@ function createEnglishQuizToolConfig(): ToolConfig {
 }
 
 
+// ===== number_puzzle 工具 =====
+// 数字华容道游戏：让小星老师发起数字华容道挑战，孩子在屏幕上滑动或点击完成拼图。
+
+interface NumberPuzzleArgs {
+  difficulty: number
+}
+
+class NumberPuzzleExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    try {
+      const params = JSON.parse(_args) as NumberPuzzleArgs
+      return JSON.stringify({
+        difficulty: params.difficulty ?? 3,
+        grid_size: `${params.difficulty ?? 3}×${params.difficulty ?? 3}`,
+        time_seconds: 0,
+        move_count: 0,
+        completed: false
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`number_puzzle error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createNumberPuzzleToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "difficulty": {
+        "type": "integer",
+        "description": "Difficulty level: 2=2×2 toddler (3 tiles + blank), 3=3×3 easy (8 tiles + blank), 4=4×4 medium (15 tiles + blank), 5=5×5 hard (24 tiles + blank). Choose based on the child's age and puzzle experience. Start with 3 for first-timers.",
+        "enum": [2, 3, 4, 5]
+      }
+    },
+    "required": ["difficulty"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    NUMBER_PUZZLE_TOOL_ID,
+    'Launch a number sliding puzzle game for the child. The child rearranges scrambled numbers back to order by sliding tiles into the empty space. This trains logical thinking and observation skills. Choose difficulty based on child profile: 2 for very young (2×2), 3 for beginners (3×3), 4 for intermediate (4×4), 5 for advanced (5×5).',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createNumberPuzzleToolConfig(): ToolConfig {
+  return new ToolConfig(
+    NUMBER_PUZZLE_TOOL_ID,
+    '数字华容道',
+    '数字华容道益智游戏, 通过滑动或点击将打乱的数字按顺序还原, 锻炼逻辑思维和观察力。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    NUMBER_PUZZLE_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
 // 注册所有内置工具
 export function registerBuiltinTools(): void {
   const registry = getToolRegistry()
@@ -1377,6 +1443,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(NUMBER_PUZZLE_TOOL_ID)) {
+    const numberPuzzleTool = new RegisteredTool(
+      NUMBER_PUZZLE_TOOL_ID,
+      createNumberPuzzleToolConfig(),
+      createNumberPuzzleToolDefinition(),
+      new NumberPuzzleExecutor()
+    )
+    registry.registerTool(numberPuzzleTool)
+    registeredNow += 1
+  }
+
   console.info(
     'BuiltinTools',
     `Builtin tools ready: total=${registry.getToolCount()}, newlyRegistered=${registeredNow}`
@@ -1385,5 +1462,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID]
 }
