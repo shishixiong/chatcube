@@ -25,7 +25,8 @@ import {
   MATH_VERIFY_TOOL_ID,
   MATH_QUIZ_TOOL_ID,
   ENGLISH_QUIZ_TOOL_ID,
-  NUMBER_PUZZLE_TOOL_ID
+  NUMBER_PUZZLE_TOOL_ID,
+  HANDWRITING_PRACTICE_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { i18n } from '@kit.LocalizationKit'
 import {
@@ -1328,6 +1329,98 @@ function createNumberPuzzleToolConfig(): ToolConfig {
   )
 }
 
+// ===== handwriting_practice 工具 =====
+// 学写字互动工具：教小朋友写英文字母、数字、基础汉字，通过 Canvas 自由书写，AI 评价。
+
+interface HandwritingPracticeArgs {
+  character: string
+  type: string
+  strokes?: HandwritingStroke[]
+}
+
+interface HandwritingStroke {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  label: string
+}
+
+class HandwritingPracticeExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    try {
+      const params = JSON.parse(_args) as HandwritingPracticeArgs
+      return JSON.stringify({
+        character: params.character ?? 'A',
+        type: params.type ?? 'letter',
+        completed: false,
+        stroke_count: 0
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`handwriting_practice error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createHandwritingPracticeToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "character": {
+        "type": "string",
+        "description": "The character to practice. For letters use 'A', 'a' etc. For numbers use '5'. For Chinese characters use the single character like '人', '大'."
+      },
+      "type": {
+        "type": "string",
+        "description": "The type of character: 'letter' for English letters, 'number' for digits, 'chinese' for Chinese characters.",
+        "enum": ["letter", "number", "chinese"]
+      },
+      "strokes": {
+        "type": "array",
+        "description": "Optional. Stroke order data as array of objects with x1,y1,x2,y2 (relative 0-1 coordinates) and label. If omitted, the built-in stroke library will be used for common characters.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "x1": { "type": "number" },
+            "y1": { "type": "number" },
+            "x2": { "type": "number" },
+            "y2": { "type": "number" },
+            "label": { "type": "string" }
+          }
+        }
+      }
+    },
+    "required": ["character", "type"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    HANDWRITING_PRACTICE_TOOL_ID,
+    "Launch a handwriting practice activity for the child. The child watches a stroke order demonstration of a character (letter, number, or simple Chinese character), then practices writing it on a blank canvas. After submission, AI vision evaluates the handwriting and gives encouraging feedback. Choose characters appropriate to the child's age and skill level. Start with simple letters (A, B, C) or numbers (1, 2, 3) for beginners.",
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createHandwritingPracticeToolConfig(): ToolConfig {
+  return new ToolConfig(
+    HANDWRITING_PRACTICE_TOOL_ID,
+    '学写字',
+    '学写字互动工具, 观看笔顺示范后在 Canvas 上自由书写, AI 识别评价书写成果。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    HANDWRITING_PRACTICE_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
 // 注册所有内置工具
 export function registerBuiltinTools(): void {
   const registry = getToolRegistry()
@@ -1454,6 +1547,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(HANDWRITING_PRACTICE_TOOL_ID)) {
+    const handwritingTool = new RegisteredTool(
+      HANDWRITING_PRACTICE_TOOL_ID,
+      createHandwritingPracticeToolConfig(),
+      createHandwritingPracticeToolDefinition(),
+      new HandwritingPracticeExecutor()
+    )
+    registry.registerTool(handwritingTool)
+    registeredNow += 1
+  }
+
   console.info(
     'BuiltinTools',
     `Builtin tools ready: total=${registry.getToolCount()}, newlyRegistered=${registeredNow}`
@@ -1462,5 +1566,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID]
 }
