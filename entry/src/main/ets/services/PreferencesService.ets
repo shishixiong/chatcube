@@ -50,6 +50,10 @@ export class PreferenceKeys {
   // 英语出题工具图片缓存索引
   static readonly ENGLISH_QUIZ_IMAGE_INDEX_JSON: string = 'english_quiz_image_index_json'
 
+  // 数字华容道最佳成绩 (按难度区分: number_puzzle_best_time_2/3/4/5, number_puzzle_best_moves_2/3/4/5)
+  static readonly NUMBER_PUZZLE_BEST_TIME_PREFIX: string = 'number_puzzle_best_time_'
+  static readonly NUMBER_PUZZLE_BEST_MOVES_PREFIX: string = 'number_puzzle_best_moves_'
+
   // 搜索服务配置
   static readonly SEARCH_SERVICE_ENABLED: string = 'search_service_enabled'
   static readonly SEARCH_CONVERSATION_ENABLED: string = 'search_conversation_enabled'

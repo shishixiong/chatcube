@@ -245,6 +245,7 @@ export struct MessageBubble {
   @Event onEnterMultiSelect: (messageId: string) => void = () => {}
   // ask_user 答复回调: 用户在 AskUserCard 点击提交后, 经此链路回到 ChatPage.handleAskUserAnswer
   @Event onAskUserAnswer: (toolCallId: string, answerJson: string) => void = () => {}
+  @Event onOpenNumberPuzzleSheet: (toolCall: ToolCall) => void = (_toolCall: ToolCall): void => {}
 
   // 支持的翻译语言列表
   private translateLanguages: TranslateLanguage[] = [
@@ -2048,19 +2049,39 @@ export struct MessageBubble {
                   }
                 }, (toolCall: ToolCall, index: number) => 'english_quiz_' + toolCall.id + '_' + index.toString())
               }
-              // number_puzzle 待答时保留独立互动卡片; 提交后收缩到 timeline step 内。
+              // number_puzzle 待答时显示紧凑横幅，点击打开全屏 sheet
               if (this.message.hasToolCalls()) {
                 ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
                   if (this.shouldRenderNumberPuzzleInteractionCard(toolCall, index)) {
-                    NumberPuzzleCard({
-                      toolCall: toolCall,
-                      isAnswered: false,
-                      answeredPayload: toolCall.approvalReason,
-                      onAnswer: (toolCallId: string, answerJson: string): void => {
-                        this.onAskUserAnswer(toolCallId, answerJson)
+                    Row() {
+                      SymbolGlyph($r('sys.symbol.lightbulb'))
+                        .fontSize(18)
+                        .fontColor([this.themePrimary])
+                      Column({ space: 2 }) {
+                        Text('数字华容道')
+                          .fontSize(13)
+                          .fontWeight(FontWeight.Medium)
+                          .fontColor($r('app.color.text_primary'))
+                        Text('点击展开游戏')
+                          .fontSize(11)
+                          .fontColor($r('app.color.text_tertiary'))
                       }
+                      .alignItems(HorizontalAlign.Start)
+                      .margin({ left: 8 })
+                      .layoutWeight(1)
+                      Text('>')
+                        .fontSize(14)
+                        .fontColor($r('app.color.text_tertiary'))
+                    }
+                    .width('100%')
+                    .padding(12)
+                    .backgroundColor(this.themeAiBubble)
+                    .borderRadius(12)
+                    .border({ width: 1, color: $r('app.color.divider') })
+                    .margin({ bottom: 6 })
+                    .onClick(() => {
+                      this.onOpenNumberPuzzleSheet(toolCall)
                     })
-                      .margin({ bottom: 6 })
                   }
                 }, (toolCall: ToolCall, index: number) => 'number_puzzle_' + toolCall.id + '_' + index.toString())
               }
