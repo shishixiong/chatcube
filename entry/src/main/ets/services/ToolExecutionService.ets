@@ -1,5 +1,7 @@
 import {
   AttachmentType,
+  MessageAttachment,
+  ModelProvider,
   ToolApprovalPolicy,
   ToolCall,
   ToolPermissionLevel,
@@ -31,9 +33,10 @@ import { getEnglishQuizImageIndex, EnglishQuizImageIndex } from './EnglishQuizIm
 import { getStarRewardService } from './StarRewardService'
 import { StarActivityType } from '../models/StarEventModels'
 import { ServiceRegistry } from './ServiceRegistry'
-import { getAppSettingsState } from '../state/AppSettingsState'
 import { modelSupportsVision } from './registry/ModelAbilityRegistry'
-import { RequestMessage, MessageAttachment } from './AIApiService'
+import { RequestMessage, AIApiConfig } from './AIApiService'
+import { getProviderViewModel } from '../viewmodels/ProviderViewModel'
+import { getEffectiveApiKey } from '../config/PresetProviders'
 
 
 // 取消检查回调类型
@@ -917,29 +920,60 @@ export class ToolExecutionService {
     charType: string
   ): Promise<string> {
     try {
-      const appSettings = getAppSettingsState()
-      const modelId = appSettings.defaultTextModelId
+      // 遍历所有启用的 provider，找到第一个支持 vision 的模型
+      const providerViewModel = getProviderViewModel()
+      const providers: ModelProvider[] = await providerViewModel.loadProviders()
 
-      // 检查模型是否支持 vision
-      if (!modelSupportsVision(modelId)) {
+      let chosenProvider: ModelProvider | null = null
+      let chosenModelId: string = ''
+
+      for (let pi = 0; pi < providers.length; pi++) {
+        const provider = providers[pi]
+        if (provider === null) {
+          continue
+        }
+        const models = provider.models
+        for (let mi = 0; mi < models.length; mi++) {
+          const model = models[mi]
+          if (model === null) {
+            continue
+          }
+          if (!model.isEnabled) {
+            continue
+          }
+          if (!modelSupportsVision(model.id)) {
+            continue
+          }
+          chosenProvider = provider
+          chosenModelId = model.id
+          break
+        }
+        if (chosenProvider !== null) {
+          break
+        }
+      }
+
+      if (chosenProvider === null || chosenModelId === '') {
+        console.info('ToolExecutionService', "no provider find")
         return '写得真不错！继续练习会越来越好的！'
       }
 
-      // 获取 provider 配置
-      const provider = appSettings.getProviderForModel(modelId)
-      if (provider === null || provider === undefined) {
-        return '写得很认真哦，再来一次吧！'
-      }
-
-      // 构建 API 配置
-      const apiConfig = provider.buildApiConfig()
-      if (apiConfig === null || apiConfig.apiKey === '') {
+      const effectiveApiKey: string = getEffectiveApiKey(chosenProvider.id, chosenProvider.apiKey)
+      if (effectiveApiKey === '') {
         return '写得很好，下次一定会更棒！'
       }
 
+      // 构建 API 配置
+      const apiConfig: AIApiConfig = {
+        providerId: chosenProvider.id,
+        providerType: chosenProvider.type,
+        apiStyle: chosenProvider.apiStyle,
+        apiKey: effectiveApiKey,
+        baseUrl: chosenProvider.baseUrl
+      }
       // 构造评价请求消息
-      const typeLabel = charType === 'letter' ? '英文字母' : charType === 'number' ? '数字' : '汉字'
-      const prompt = `请用鼓励的语气评价小朋友写的"${character}"（${typeLabel}）。
+      const typeLabel: string = charType === 'letter' ? '英文字母' : charType === 'number' ? '数字' : '汉字'
+      const prompt: string = `请用鼓励的语气评价小朋友写的"${character}"（${typeLabel}）。
 
 注意观察：
 - 笔画方向是否正确
@@ -948,18 +982,24 @@ export class ToolExecutionService {
 
 请给出1-2句鼓励性反馈，语气要温暖，像幼儿园老师对小朋友说话。用中文回复。`
 
-      const attachment = new MessageAttachment()
-      attachment.type = AttachmentType.IMAGE
-      attachment.mimeType = 'image/jpeg'
+      const attachment: MessageAttachment = new MessageAttachment(
+        'handwriting_eval',
+        AttachmentType.IMAGE,
+        'handwriting.jpg',
+        '',
+        'image/jpeg',
+        0
+      )
       attachment.base64Data = base64Image
 
-      const msg = new RequestMessage('user', prompt)
+      const msg: RequestMessage = new RequestMessage('user', prompt)
+      console.info('ToolExecutionService', `prompt, ${prompt}`)
       msg.attachments = [attachment]
 
       const apiResult = await ServiceRegistry.aiApi().sendChatRequest(
         apiConfig,
         [msg],
-        modelId
+        chosenModelId
       )
 
       if (apiResult.success && apiResult.content.trim() !== '') {

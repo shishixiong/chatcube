@@ -2093,7 +2093,7 @@ export struct MessageBubble {
                   if (this.shouldRenderHandwritingInteractionCard(toolCall, index)) {
                     Row() {
                       Column() {
-                        SymbolGlyph($r('sys.symbol.pencil'))
+                        SymbolGlyph($r('sys.symbol.AI_pencil'))
                           .fontSize(15)
                           .fontColor([this.themePrimary])
                       }

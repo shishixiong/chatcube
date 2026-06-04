@@ -3064,8 +3064,7 @@ export class AIApiService {
               const imagePart: MultimodalContentPart = {
                 type: 'image_url',
                 image_url: {
-                  url: `data:${attachment.mimeType};base64,${attachment.base64Data}`,
-                  detail: 'auto'
+                  url: `data:${attachment.mimeType};base64,${attachment.base64Data}`
                 }
               }
               contentParts.push(imagePart)

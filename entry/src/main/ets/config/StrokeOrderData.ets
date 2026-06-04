@@ -23,7 +23,7 @@ export function hasStrokeOrder(character: string): boolean {
   return STROKE_ORDER_MAP.has(character)
 }
 
-const STROKE_ORDER_MAP: Map<string, HandwritingStroke[]> = new Map([
+const STROKE_ORDER_ENTRIES: [string, HandwritingStroke[]][] = [
   // === 大写字母 ===
   ['A', [
     { x1: 0.3, y1: 0.85, x2: 0.5, y2: 0.1, label: '/' },
@@ -699,4 +699,6 @@ const STROKE_ORDER_MAP: Map<string, HandwritingStroke[]> = new Map([
     { x1: 0.5, y1: 0.05, x2: 0.8, y2: 0.5, label: '\\' },
     { x1: 0.5, y1: 0.05, x2: 0.5, y2: 0.9, label: '|' }
   ]]
-])
+]
+
+const STROKE_ORDER_MAP: Map<string, HandwritingStroke[]> = new Map(STROKE_ORDER_ENTRIES)

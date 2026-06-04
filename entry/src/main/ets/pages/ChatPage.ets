@@ -2864,7 +2864,6 @@ export struct ChatPage {
             blurStyle: BlurStyle.Thick,
             backgroundColor: this.themeBackground,
             preferType: SheetType.BOTTOM,
-            disableSwipe: true,
             onDisappear: () => {
               if (this.showHandwritingSheet && !this.handwritingAnswered) {
                 const cancelResult: HandwritingResult = {

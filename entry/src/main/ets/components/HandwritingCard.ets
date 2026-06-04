@@ -129,13 +129,15 @@ export struct HandwritingCard {
         // 使用 AI 提供的笔顺
         const rawStrokes = args['strokes'] as Array<Record<string, Object>> | undefined
         if (rawStrokes !== undefined) {
-          this.strokes = rawStrokes.map((s: Record<string, Object>) => ({
-            x1: (s['x1'] as number) ?? 0,
-            y1: (s['y1'] as number) ?? 0,
-            x2: (s['x2'] as number) ?? 0,
-            y2: (s['y2'] as number) ?? 0,
-            label: (s['label'] as string) ?? ''
-          }))
+          this.strokes = rawStrokes.map((s: Record<string, Object>): HandwritingStroke => {
+            return {
+              x1: (s['x1'] as number) ?? 0,
+              y1: (s['y1'] as number) ?? 0,
+              x2: (s['x2'] as number) ?? 0,
+              y2: (s['y2'] as number) ?? 0,
+              label: (s['label'] as string) ?? ''
+            } as HandwritingStroke
+          })
         }
       }
     } catch (_e) {
@@ -271,10 +273,8 @@ export struct HandwritingCard {
         stroke_count: this.drawnStrokes.length
       }
 
-      const answerJson = JSON.stringify({
-        ...result,
-        handwriting_base64: handwritingBase64
-      })
+      result.handwriting_base64 = handwritingBase64
+      const answerJson = JSON.stringify(result)
 
       this.isCompleted = true
       this.onAnswer(this.toolCall.id, answerJson)
@@ -351,7 +351,7 @@ export struct HandwritingCard {
   AnsweredView() {
     Row() {
       Column() {
-        SymbolGlyph($r('sys.symbol.pencil'))
+        SymbolGlyph($r('sys.symbol.AI_pencil'))
           .fontSize(15)
           .fontColor([this.themePrimary])
       }
@@ -392,7 +392,7 @@ export struct HandwritingCard {
   InlineBanner() {
     Row() {
       Column() {
-        SymbolGlyph($r('sys.symbol.pencil'))
+        SymbolGlyph($r('sys.symbol.AI_pencil'))
           .fontSize(15)
           .fontColor([this.themePrimary])
       }
@@ -451,7 +451,7 @@ export struct HandwritingCard {
   HeaderRow() {
     Row({ space: 10 }) {
       Column() {
-        SymbolGlyph($r('sys.symbol.pencil'))
+        SymbolGlyph($r('sys.symbol.AI_pencil'))
           .fontSize(15)
           .fontColor([this.themePrimary])
       }

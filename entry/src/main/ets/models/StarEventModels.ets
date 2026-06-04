@@ -7,7 +7,7 @@
  * - 读取: TodayStarSummaryCard / TodayStarDetailSheet
  */
 
-export type StarActivityType = 'math_quiz' | 'english_quiz' | 'number_puzzle'
+export type StarActivityType = 'math_quiz' | 'english_quiz' | 'number_puzzle' | 'handwriting_practice'
 
 export interface StarEventInsert {
   createdAt: number
@@ -39,6 +39,7 @@ export interface TodayStarSummaryByType {
   math_quiz: StarTypeBucket
   english_quiz: StarTypeBucket
   number_puzzle: StarTypeBucket
+  handwriting_practice: StarTypeBucket
 }
 
 export interface TodayStarSummary {
@@ -64,7 +65,8 @@ export function createEmptyTodayStarSummary(): TodayStarSummary {
   const byType: TodayStarSummaryByType = {
     math_quiz: createEmptyBucket(),
     english_quiz: createEmptyBucket(),
-    number_puzzle: createEmptyBucket()
+    number_puzzle: createEmptyBucket(),
+    handwriting_practice: createEmptyBucket()
   }
   return { total: 0, byType: byType }
 }
@@ -81,6 +83,7 @@ export interface StarActivityMetaMap {
   math_quiz: StarActivityMeta
   english_quiz: StarActivityMeta
   number_puzzle: StarActivityMeta
+  handwriting_practice: StarActivityMeta
 }
 
 const META_MATH: StarActivityMeta = {
@@ -104,15 +107,23 @@ const META_PUZZLE: StarActivityMeta = {
   grantedHint: '数字华容道完成',
   unit: '局'
 }
+const META_HANDWRITING: StarActivityMeta = {
+  emoji: '✏️',
+  shortLabel: '写字',
+  longLabel: '学写字',
+  grantedHint: '学写字完成',
+  unit: '字'
+}
 
 const metaRecord: StarActivityMetaMap = {
   math_quiz: META_MATH,
   english_quiz: META_ENGLISH,
-  number_puzzle: META_PUZZLE
+  number_puzzle: META_PUZZLE,
+  handwriting_practice: META_HANDWRITING
 }
 export const STAR_ACTIVITY_META: StarActivityMetaMap = metaRecord
 
-const activityTypes: StarActivityType[] = ['math_quiz', 'english_quiz', 'number_puzzle']
+const activityTypes: StarActivityType[] = ['math_quiz', 'english_quiz', 'number_puzzle', 'handwriting_practice']
 export const STAR_ACTIVITY_TYPES: StarActivityType[] = activityTypes
 
 export function getBucketFromSummary(summary: TodayStarSummary, type: StarActivityType): StarTypeBucket {
@@ -123,6 +134,9 @@ export function getBucketFromSummary(summary: TodayStarSummary, type: StarActivi
   if (type === 'english_quiz') {
     return byType.english_quiz
   }
+  if (type === 'handwriting_practice') {
+    return byType.handwriting_practice
+  }
   return byType.number_puzzle
 }
 
@@ -132,6 +146,9 @@ export function getActivityMeta(type: StarActivityType): StarActivityMeta {
   }
   if (type === 'english_quiz') {
     return META_ENGLISH
+  }
+  if (type === 'handwriting_practice') {
+    return META_HANDWRITING
   }
   return META_PUZZLE
 }
@@ -146,6 +163,9 @@ export function getActivitySymbol(type: StarActivityType): Resource {
   }
   if (type === 'english_quiz') {
     return $r('sys.symbol.doc_plaintext')
+  }
+  if (type === 'handwriting_practice') {
+    return $r('sys.symbol.AI_pencil')
   }
   return $r('sys.symbol.lightbulb')
 }
