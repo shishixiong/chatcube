@@ -24,6 +24,7 @@ export interface HandwritingResult {
   type: string
   completed: boolean
   stroke_count: number
+  handwriting_base64?: string
 }
 
 const SUCCESS_GREEN: string = '#22C55E'
@@ -284,7 +285,8 @@ export struct HandwritingCard {
         character: this.character,
         type: this.charType,
         completed: true,
-        stroke_count: this.drawnStrokes.length
+        stroke_count: this.drawnStrokes.length,
+        handwriting_base64: ''
       }
       this.isCompleted = true
       this.onAnswer(this.toolCall.id, JSON.stringify(result))
