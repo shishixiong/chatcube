@@ -26,9 +26,7 @@ export interface HandwritingResult {
 }
 
 const SUCCESS_GREEN: string = '#22C55E'
-const PENCIL_COLOR: string = '#333333'
 const STROKE_WIDTH: number = 6
-const CANVAS_BG: string = '#FAFAF9'
 
 @ComponentV2
 export struct HandwritingCard {
@@ -68,6 +66,22 @@ export struct HandwritingCard {
   }
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
+  }
+
+  private get pencilColor(): string {
+    return this.isDarkMode ? '#CCCCCC' : '#333333'
+  }
+  private get canvasBg(): string {
+    return this.isDarkMode ? '#2A2A2A' : '#FAFAF9'
+  }
+  private get canvasBorderColor(): string {
+    return this.isDarkMode ? '#555555' : '#DDDDDD'
+  }
+  private get demoCharColor(): string {
+    return this.isDarkMode ? '#FCD34D' : '#92400E'
+  }
+  private get demoStrokeDescColor(): string {
+    return this.isDarkMode ? '#FBBF24' : '#b45309'
   }
 
   // 难度标签
@@ -478,13 +492,13 @@ export struct HandwritingCard {
         Text(this.character)
           .fontSize(72)
           .fontWeight(FontWeight.Bold)
-          .fontColor('#92400E')
+          .fontColor(this.demoCharColor)
 
         // 笔顺描述
         if (this.strokes.length > 0) {
           Text(`${this.strokes.length}笔 · ${this.strokeLabels}`)
             .fontSize(11)
-            .fontColor('#b45309')
+            .fontColor(this.demoStrokeDescColor)
             .margin({ top: 4 })
         }
 
@@ -527,11 +541,11 @@ export struct HandwritingCard {
       Canvas(this.canvasContext)
         .width('100%')
         .height(220)
-        .backgroundColor(CANVAS_BG)
+        .backgroundColor(this.canvasBg)
         .borderRadius(12)
-        .border({ width: 2, color: '#DDD', style: BorderStyle.Dashed })
+        .border({ width: 2, color: this.canvasBorderColor, style: BorderStyle.Dashed })
         .onReady(() => {
-          this.canvasContext.strokeStyle = PENCIL_COLOR
+          this.canvasContext.strokeStyle = this.pencilColor
           this.canvasContext.lineWidth = STROKE_WIDTH
           this.canvasContext.lineCap = 'round'
           this.canvasContext.lineJoin = 'round'
