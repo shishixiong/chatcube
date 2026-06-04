@@ -9,6 +9,7 @@ export const CHILD_PROFILE_TOOL_ID: string = 'child_profile'
 export const MATH_VERIFY_TOOL_ID: string = 'math_verify'
 export const MATH_QUIZ_TOOL_ID: string = 'math_quiz'
 export const ENGLISH_QUIZ_TOOL_ID: string = 'english_quiz'
+export const HANDWRITING_PRACTICE_TOOL_ID: string = 'handwriting_practice'
 
 export function normalizeToolFunctionName(raw: string): string {
   const value = raw as string | null | undefined
@@ -76,6 +77,14 @@ export function isEnglishQuizFunctionName(functionName: string): boolean {
 
 export function isNumberPuzzleFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === NUMBER_PUZZLE_TOOL_ID
+}
+
+export function isHandwritingPracticeFunctionName(functionName: string): boolean {
+  const normalized = normalizeToolFunctionName(functionName)
+  return normalized === HANDWRITING_PRACTICE_TOOL_ID ||
+    normalized === 'handwriting' ||
+    normalized === 'write_practice' ||
+    normalized === 'learn_to_write'
 }
 
 export function getSearchToolIds(): string[] {
