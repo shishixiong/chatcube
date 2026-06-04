@@ -22,6 +22,7 @@ import { getSettingsManager, SettingsManager } from '../viewmodels/SettingsManag
 import { getAppStateManager, AppStateManager } from '../viewmodels/AppStateManager'
 import { getSpeechRecognitionService, SpeechRecognitionService } from './SpeechRecognitionService'
 import { getTTSService, TTSService } from './TTSService'
+import { getStarRewardService, StarRewardService } from './StarRewardService'
 import { getProviderViewModel, ProviderViewModel } from '../viewmodels/ProviderViewModel'
 import { createChatViewModel, ChatViewModel } from '../viewmodels/ChatViewModel'
 
@@ -125,6 +126,10 @@ export class ServiceRegistry {
 
   static tts(): TTSService {
     return getTTSService()
+  }
+
+  static starReward(): StarRewardService {
+    return getStarRewardService()
   }
 
   static chat(): ChatViewModel {

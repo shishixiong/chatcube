@@ -11,6 +11,7 @@ import {
 } from '../models/ChatModels'
 import { Assistant, DEFAULT_ASSISTANT_ID, createDefaultAssistant, DEFAULT_ASSISTANT_SYSTEM_PROMPT, DEFAULT_ASSISTANT_LOCKED_TOOL_IDS } from '../models/AssistantModels'
 import { GeneratedMedia } from '../models/ImageGenerationModels'
+import { StarEventInsert, StarEventRow } from '../models/StarEventModels'
 import { deserializeMessageParts, serializeMessageParts } from '../models/MessageParts'
 import { ensureMessageParts, buildMessagePartsFromLegacy } from '../utils/ChatMessagePartsHelper'
 import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
@@ -36,6 +37,7 @@ export class TableNames {
 	  static readonly ASSISTANTS: string = 'assistants'
   static readonly GENERATED_MEDIA: string = 'generated_media'
   static readonly PUZZLE_RECORDS: string = 'puzzle_records'
+  static readonly STAR_EVENTS: string = 'star_events'
 	}
 
 // 拼图记录数据接口
@@ -342,6 +344,19 @@ export class DatabaseService {
       )
     `
 
+    const createStarEventsTable = `
+      CREATE TABLE IF NOT EXISTS ${TableNames.STAR_EVENTS} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at INTEGER NOT NULL,
+        activity_type TEXT NOT NULL,
+        stars INTEGER NOT NULL,
+        tool_call_id TEXT DEFAULT '',
+        session_id TEXT DEFAULT '',
+        skill_key TEXT DEFAULT '',
+        metadata_json TEXT DEFAULT ''
+      )
+    `
+
     try {
       await this.rdbStore.executeSql(createSessionsTable)
 	      await this.rdbStore.executeSql(createMessagesTable)
@@ -351,8 +366,12 @@ export class DatabaseService {
       await this.rdbStore.executeSql(createToolEventsTable)
       await this.rdbStore.executeSql(createGeneratedMediaTable)
       await this.rdbStore.executeSql(createPuzzleRecordsTable)
+      await this.rdbStore.executeSql(createStarEventsTable)
       await this.rdbStore.executeSql(
         `CREATE INDEX IF NOT EXISTS idx_generated_media_created_at ON ${TableNames.GENERATED_MEDIA}(created_at DESC)`
+      )
+      await this.rdbStore.executeSql(
+        `CREATE INDEX IF NOT EXISTS idx_star_events_created_at ON ${TableNames.STAR_EVENTS}(created_at)`
       )
       // 尝试添加 sort_order 字段（如果表已存在但没有该字段）
       await this.addSortOrderColumnIfNeeded()
@@ -2751,6 +2770,83 @@ export class DatabaseService {
       console.error('DatabaseService', `Failed to query all puzzle records: ${JSON.stringify(error)}`)
     }
     return records
+  }
+
+  // ============ 星星事件操作 ============
+
+  async insertStarEvent(event: StarEventInsert): Promise<number> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return -1
+    }
+    const valueBucket: relationalStore.ValuesBucket = {
+      created_at: event.createdAt,
+      activity_type: event.activityType,
+      stars: event.stars,
+      tool_call_id: event.toolCallId,
+      session_id: event.sessionId,
+      skill_key: event.skillKey,
+      metadata_json: event.metadataJson
+    }
+    try {
+      const rowId = await this.rdbStore.insert(TableNames.STAR_EVENTS, valueBucket)
+      console.info('DatabaseService', `Star event saved: rowId=${rowId}, type=${event.activityType}, stars=${event.stars}`)
+      return rowId
+    } catch (error) {
+      console.error('DatabaseService', `Failed to insert star event: ${JSON.stringify(error)}`)
+      return -1
+    }
+  }
+
+  async getStarEventsSince(startMs: number): Promise<StarEventRow[]> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return []
+    }
+    const events: StarEventRow[] = []
+    const predicates = new relationalStore.RdbPredicates(TableNames.STAR_EVENTS)
+    predicates.greaterThanOrEqualTo('created_at', startMs)
+    predicates.orderByAsc('created_at')
+    try {
+      const resultSet = await this.rdbStore.query(predicates)
+      while (resultSet.goToNextRow()) {
+        events.push(this.readStarEventRow(resultSet))
+      }
+      resultSet.close()
+    } catch (error) {
+      console.error('DatabaseService', `Failed to query star events since ${startMs}: ${JSON.stringify(error)}`)
+    }
+    return events
+  }
+
+  async deleteStarEventsOlderThan(cutoffMs: number): Promise<number> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return 0
+    }
+    const predicates = new relationalStore.RdbPredicates(TableNames.STAR_EVENTS)
+    predicates.lessThan('created_at', cutoffMs)
+    try {
+      const deleted = await this.rdbStore.delete(predicates)
+      console.info('DatabaseService', `Deleted ${deleted} star events older than ${cutoffMs}`)
+      return deleted
+    } catch (error) {
+      console.error('DatabaseService', `Failed to delete old star events: ${JSON.stringify(error)}`)
+      return 0
+    }
+  }
+
+  private readStarEventRow(resultSet: relationalStore.ResultSet): StarEventRow {
+    return {
+      id: resultSet.getLong(resultSet.getColumnIndex('id')),
+      createdAt: resultSet.getLong(resultSet.getColumnIndex('created_at')),
+      activityType: resultSet.getString(resultSet.getColumnIndex('activity_type')),
+      stars: resultSet.getLong(resultSet.getColumnIndex('stars')),
+      toolCallId: resultSet.getString(resultSet.getColumnIndex('tool_call_id')),
+      sessionId: resultSet.getString(resultSet.getColumnIndex('session_id')),
+      skillKey: resultSet.getString(resultSet.getColumnIndex('skill_key')),
+      metadataJson: resultSet.getString(resultSet.getColumnIndex('metadata_json'))
+    }
   }
 
   // ============ 工具事件操作 ============

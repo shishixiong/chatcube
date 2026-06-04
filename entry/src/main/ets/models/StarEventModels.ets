@@ -1,0 +1,137 @@
+/**
+ * 星星事件数据模型
+ *
+ * 用于星星奖励系统的核心数据契约。
+ * - 写入: StarRewardService.recordEvent
+ * - 存储: SQLite 表 star_events
+ * - 读取: TodayStarSummaryCard / TodayStarDetailSheet
+ */
+
+export type StarActivityType = 'math_quiz' | 'english_quiz' | 'number_puzzle'
+
+export interface StarEventInsert {
+  createdAt: number
+  activityType: StarActivityType
+  stars: number
+  toolCallId: string
+  sessionId: string
+  skillKey: string
+  metadataJson: string
+}
+
+export interface StarEventRow {
+  id: number
+  createdAt: number
+  activityType: string
+  stars: number
+  toolCallId: string
+  sessionId: string
+  skillKey: string
+  metadataJson: string
+}
+
+export interface StarTypeBucket {
+  count: number
+  stars: number
+}
+
+export interface TodayStarSummaryByType {
+  math_quiz: StarTypeBucket
+  english_quiz: StarTypeBucket
+  number_puzzle: StarTypeBucket
+}
+
+export interface TodayStarSummary {
+  total: number
+  byType: TodayStarSummaryByType
+}
+
+export interface LastStarGrant {
+  stars: number
+  activityType: StarActivityType
+  createdAt: number
+}
+
+export interface RecordStarEventResult {
+  stars: number
+}
+
+export function createEmptyBucket(): StarTypeBucket {
+  return { count: 0, stars: 0 }
+}
+
+export function createEmptyTodayStarSummary(): TodayStarSummary {
+  const byType: TodayStarSummaryByType = {
+    math_quiz: createEmptyBucket(),
+    english_quiz: createEmptyBucket(),
+    number_puzzle: createEmptyBucket()
+  }
+  return { total: 0, byType: byType }
+}
+
+export interface StarActivityMeta {
+  emoji: string
+  shortLabel: string
+  longLabel: string
+  grantedHint: string
+  unit: string
+}
+
+export interface StarActivityMetaMap {
+  math_quiz: StarActivityMeta
+  english_quiz: StarActivityMeta
+  number_puzzle: StarActivityMeta
+}
+
+const META_MATH: StarActivityMeta = {
+  emoji: '🧮',
+  shortLabel: '数学',
+  longLabel: '数学题',
+  grantedHint: '数学题答对',
+  unit: '题'
+}
+const META_ENGLISH: StarActivityMeta = {
+  emoji: '📚',
+  shortLabel: '英语',
+  longLabel: '英语题',
+  grantedHint: '英语题答对',
+  unit: '题'
+}
+const META_PUZZLE: StarActivityMeta = {
+  emoji: '🎮',
+  shortLabel: '华容道',
+  longLabel: '数字华容道',
+  grantedHint: '数字华容道完成',
+  unit: '局'
+}
+
+const metaRecord: StarActivityMetaMap = {
+  math_quiz: META_MATH,
+  english_quiz: META_ENGLISH,
+  number_puzzle: META_PUZZLE
+}
+export const STAR_ACTIVITY_META: StarActivityMetaMap = metaRecord
+
+const activityTypes: StarActivityType[] = ['math_quiz', 'english_quiz', 'number_puzzle']
+export const STAR_ACTIVITY_TYPES: StarActivityType[] = activityTypes
+
+export function getBucketFromSummary(summary: TodayStarSummary, type: StarActivityType): StarTypeBucket {
+  const byType: TodayStarSummaryByType = summary.byType
+  if (type === 'math_quiz') {
+    return byType.math_quiz
+  }
+  if (type === 'english_quiz') {
+    return byType.english_quiz
+  }
+  return byType.number_puzzle
+}
+
+export function getActivityMeta(type: StarActivityType): StarActivityMeta {
+  if (type === 'math_quiz') {
+    return META_MATH
+  }
+  if (type === 'english_quiz') {
+    return META_ENGLISH
+  }
+  return META_PUZZLE
+}

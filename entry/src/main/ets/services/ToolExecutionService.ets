@@ -25,6 +25,8 @@ import { getDatabaseService } from './DatabaseService'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
 import { getEnglishQuizImageIndex, EnglishQuizImageIndex } from './EnglishQuizImageIndex'
+import { getStarRewardService } from './StarRewardService'
+import { StarActivityType } from '../models/StarEventModels'
 
 
 // 取消检查回调类型
@@ -384,6 +386,20 @@ export class ToolExecutionService {
     return undefined
   }
 
+  private recordStarEvent(
+    activityType: StarActivityType,
+    toolCall: ToolCall,
+    context: ToolExecutionContext,
+    answerJson: string
+  ): void {
+    void getStarRewardService().recordEvent({
+      activityType: activityType,
+      payloadJson: answerJson,
+      toolCallId: toolCall.id,
+      sessionId: context.sessionId
+    })
+  }
+
   private buildCancelledResult(toolCall: ToolCall, displayName: string, sourceLabel: string): ToolResult {
     return new ToolResult(
       toolCall.id,
@@ -574,6 +590,7 @@ export class ToolExecutionService {
     toolCall.approvalState = 'answered'
     toolCall.approvalReason = answerJson
     console.info('ToolExecutionService', `math_quiz answered: ${toolCall.id}`)
+    this.recordStarEvent('math_quiz', toolCall, context, answerJson)
     return new ToolResult(
       toolCall.id,
       answerJson,
@@ -694,6 +711,7 @@ export class ToolExecutionService {
     toolCall.approvalState = 'answered'
     toolCall.approvalReason = answerJson
     console.info('ToolExecutionService', `english_quiz answered: ${toolCall.id}`)
+    this.recordStarEvent('english_quiz', toolCall, context, answerJson)
     return new ToolResult(
       toolCall.id,
       answerJson,
@@ -782,6 +800,7 @@ export class ToolExecutionService {
     toolCall.approvalState = 'answered'
     toolCall.approvalReason = answerJson
     console.info('ToolExecutionService', `number_puzzle answered: ${toolCall.id}`)
+    this.recordStarEvent('number_puzzle', toolCall, context, answerJson)
     return new ToolResult(
       toolCall.id,
       answerJson,

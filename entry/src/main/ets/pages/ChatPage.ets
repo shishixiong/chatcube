@@ -61,7 +61,7 @@ import { registerBuiltinTools } from '../config/BuiltinTools'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { inputMethod } from '@kit.IMEKit'
 import { webview } from '@kit.ArkWeb'
-import { dismissActiveSnackBarOnBack, showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
+import { dismissActiveSnackBarOnBack, showSnackBar, showToast, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
 import { getEffectiveCapabilities } from '../utils/ModelCapabilityDeriver'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { ChatModelSelectorSheetContent } from '../components/chat/ChatModelSelectorSheetContent'
@@ -70,6 +70,9 @@ import { ChatMultiSelectToolbar } from '../components/chat/ChatMultiSelectToolba
 import { ChatMessageListSection } from '../components/chat/ChatMessageListSection'
 import { ChatToolPickerSheetContent } from '../components/chat/ChatToolPickerSheetContent'
 import { ChatToolExecutionApprovalSheetContent } from '../components/chat/ChatToolExecutionApprovalSheetContent'
+import { TodayStarSummaryCard } from '../components/chat/TodayStarSummaryCard'
+import { TodayStarDetailSheet } from '../components/chat/TodayStarDetailSheet'
+import { StarActivityType, getActivityMeta } from '../models/StarEventModels'
 import { SearchEngineMenuOption } from '../components/ChatToolbar'
 import { getSearchEngineRegistry, registerAllSearchEngines, SearchEngineDescriptor } from '../services/search/Index'
 import { parseSearchEngineIdListJson } from '../utils/SearchEnginePreferenceUtils'
@@ -141,6 +144,8 @@ const HDS_NAV_TITLE_NATIVE_START_INSET: number = 56
 const HDS_NAV_TITLE_NATIVE_MENU_BUTTON_WIDTH: number = 56
 const HDS_NAV_TITLE_NATIVE_MENU_EDGE_INSET: number = 16
 const HDS_NAV_SPLIT_TITLE_BAR_MASK_EXTRA_HEIGHT: number = 20
+// 今日小明星小卡片高度 (padding 12*2 + 两行内容 18+6+13 = 73) + 8vp 顶部安全间距 ≈ 88vp
+const TODAY_STAR_SUMMARY_CARD_HEIGHT: number = 88
 
 @ComponentV2
 export struct ChatPage {
@@ -277,6 +282,7 @@ export struct ChatPage {
   @Local numberPuzzleAnswered: boolean = false
   @Local toolExecutionApprovalSourceLabel: string = ''
   @Local toolExecutionApprovalName: string = ''
+  @Local showStarSheet: boolean = false
   @Local toolExecutionApprovalSourceId: string = ''
   @Local toolExecutionApprovalArgumentSummary: string = ''
   @Local toolExecutionApprovalArgumentEntries: ToolPreviewEntry[] = []
@@ -806,10 +812,38 @@ export struct ChatPage {
         (): void => this.onPendingToolInteractionChanged()),
       observeAppUiState(AppStorageKeys.ASSISTANT_AVATAR_REFRESH_AT, (): void => this.onAssistantAvatarRefreshChanged()),
       observeAppUiState(AppStorageKeys.APP_IN_BACKGROUND, (): void => this.onAppBackgroundChanged()),
+      observeAppUiState(AppStorageKeys.STAR_EARNED_TICK, (): void => this.onStarEarnedTickChanged()),
       getToolExecutionService().addPendingInteractionChangeCallback((): void => {
         this.schedulePendingToolInteractionSync()
       })
     ]
+  }
+
+  private onStarEarnedTickChanged(): void {
+    const grantJson = getAppUiState().starLastGrant
+    if (grantJson === '') {
+      return
+    }
+    try {
+      const grant = JSON.parse(grantJson) as Record<string, Object>
+      const stars = (grant['stars'] as number) ?? 0
+      const type = (grant['activityType'] as string) ?? ''
+      if (stars <= 0) {
+        return
+      }
+      const tip = this.formatStarGrantTip(type, stars)
+      showToast(this.getUIContext(), tip, 1500)
+    } catch (error) {
+      console.error('ChatPage', `Failed to parse starLastGrant: ${JSON.stringify(error)}`)
+    }
+  }
+
+  private formatStarGrantTip(activityType: string, stars: number): string {
+    if (activityType !== 'math_quiz' && activityType !== 'english_quiz' && activityType !== 'number_puzzle') {
+      return `+${stars} ⭐`
+    }
+    const meta = getActivityMeta(activityType as StarActivityType)
+    return `+${stars} ⭐ ${meta.grantedHint}`
   }
 
   private onAssistantAvatarRefreshChanged(): void {
@@ -2130,8 +2164,9 @@ export struct ChatPage {
   private getMessageListTopSpacerHeight(): number {
     // titleBar 下沿模糊蒙版会向下渐变 maskExtraHeight，列表第一条消息需让出这一段，
     // 否则会落在半透明渐变带上、视觉被压暗。算法与 Index.ets 左栏 getChatListTopSpacerHeight 对齐。
+    // 额外加 TODAY_STAR_SUMMARY_CARD_HEIGHT 把今日小明星小卡 (position overlay) 的空间也保留出来。
     return HDS_NAV_DESTINATION_MINI_TITLE_BAR_HEIGHT + this.getPageTopAvoidHeight() +
-      this.getChatTitleBarMaskExtraHeight()
+      this.getChatTitleBarMaskExtraHeight() + TODAY_STAR_SUMMARY_CARD_HEIGHT
   }
 
   private getMessageMapJumpTopClearance(): number {
@@ -2339,6 +2374,21 @@ export struct ChatPage {
   build() {
     HdsNavDestination() {
       Stack() {
+        // 今日小明星小卡片 - 顶部悬浮, 不阻挡消息列表
+        TodayStarSummaryCard({
+          onOpenDetail: (): void => {
+            this.showStarSheet = true
+          }
+        })
+          .width('100%')
+          .padding({ left: 12, right: 12, top: 0, bottom: 0 })
+          .position({
+            x: 0,
+            y: HDS_NAV_DESTINATION_MINI_TITLE_BAR_HEIGHT + this.getPageTopAvoidHeight() + 8
+          })
+          .zIndex(1)
+          .hitTestBehavior(HitTestMode.Default)
+
         // 消息列表 - 占满全屏
         ChatMessageListSection({
           isLoading: this.isLoading,
@@ -2649,6 +2699,23 @@ export struct ChatPage {
         }
 
         // 分享预览 Sheet 宿主（bindContentCover 和 bindSheet 不能在同一组件上，否则会冲突）
+      Column()
+        .width(0)
+        .height(0)
+        .bindSheet($$this.showStarSheet, this.StarDetailSheetBuilder(), {
+          height: SheetSize.LARGE,
+          detents: [SheetSize.LARGE],
+          dragBar: true,
+          showClose: true,
+          backgroundColor: this.themeBackground,
+          blurStyle: BlurStyle.Thick,
+          preferType: SheetType.BOTTOM,
+          maskColor: '#66000000',
+          onDisappear: (): void => {
+            this.showStarSheet = false
+          }
+        })
+
       Column()
         .width(0)
         .height(0)
@@ -3145,6 +3212,11 @@ export struct ChatPage {
     .width('100%')
     .height('100%')
     .hitTestBehavior(HitTestMode.Transparent)
+  }
+
+  @Builder
+  StarDetailSheetBuilder() {
+    TodayStarDetailSheet()
   }
 
   @Builder

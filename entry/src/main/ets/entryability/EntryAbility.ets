@@ -134,6 +134,10 @@ export default class EntryAbility extends UIAbility {
       await ServiceRegistry.assistant().initialize();
       hilog.info(DOMAIN, 'testTag', 'AssistantService initialized successfully');
 
+      // 预热今日星星汇总到 AppUiState, 避免 ChatPage 首屏拿到默认 0
+      await ServiceRegistry.starReward().ensureLoaded();
+      hilog.info(DOMAIN, 'testTag', 'StarRewardService ensured');
+
       // 应用保存的主题设置
       // 在调用 setAppColorMode 之前先记录系统色彩模式：
       // 此时 context.config.colorMode 反映的是系统真实值（应用尚未注入覆盖），

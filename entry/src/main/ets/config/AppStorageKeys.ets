@@ -68,4 +68,10 @@ export class AppStorageKeys {
   static readonly MATERIAL_TYPE: string = 'material_type'
   static readonly MATERIAL_LEVEL: string = 'material_level'
   static readonly LIGHT_COLOR_MODE: string = 'light_color_mode'
+
+  // 星星奖励系统
+  static readonly STAR_EARNED_TICK: string = 'star_earned_tick'
+  static readonly STAR_LAST_GRANT: string = 'star_last_grant'
+  static readonly STAR_TODAY_SUMMARY: string = 'star_today_summary'
+  static readonly STAR_TODAY_LOADED: string = 'star_today_loaded'
 }
