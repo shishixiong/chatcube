@@ -1,4 +1,5 @@
 import { SymbolGlyphModifier } from '@kit.ArkUI'
+import { util } from '@kit.ArkTS'
 import { image } from '@kit.ImageKit'
 import { getAppUiState } from '../state/AppUiState'
 import { ToolCall } from '../models/ChatModels'
@@ -312,12 +313,8 @@ export struct HandwritingCard {
   }
 
   private arrayBufferToBase64(buffer: ArrayBuffer): string {
-    const uint8Array = new Uint8Array(buffer)
-    let binary = ''
-    for (let i = 0; i < uint8Array.length; i++) {
-      binary += String.fromCharCode(uint8Array[i])
-    }
-    return binary
+    const base64Helper = new util.Base64Helper()
+    return base64Helper.encodeToStringSync(new Uint8Array(buffer))
   }
 
   // ====== 放弃 ======
