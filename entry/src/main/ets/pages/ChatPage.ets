@@ -42,6 +42,7 @@ import { ScrollToBottomLoadingButton } from '../components/ScrollToBottomLoading
 import { SharePreviewSheet } from '../components/SharePreviewSheet'
 import { MessageMapSheet } from '../components/MessageMapSheet'
 import { NumberPuzzleCard, NumberPuzzleResult } from '../components/NumberPuzzleCard'
+import { HandwritingCard, HandwritingResult } from '../components/HandwritingCard'
 import { ChatViewModel, TitleGenerationCallbacks } from '../viewmodels/ChatViewModel'
 import { ProviderViewModel } from '../viewmodels/ProviderViewModel'
 import { AppStateManager } from '../viewmodels/AppStateManager'
@@ -280,6 +281,9 @@ export struct ChatPage {
   @Local showNumberPuzzleSheet: boolean = false
   @Local numberPuzzleSheetToolCall: ToolCall = new ToolCall()
   @Local numberPuzzleAnswered: boolean = false
+  @Local showHandwritingSheet: boolean = false
+  @Local handwritingSheetToolCall: ToolCall = new ToolCall()
+  @Local handwritingAnswered: boolean = false
   @Local toolExecutionApprovalSourceLabel: string = ''
   @Local toolExecutionApprovalName: string = ''
   @Local showStarSheet: boolean = false
@@ -2459,6 +2463,11 @@ export struct ChatPage {
             this.numberPuzzleAnswered = false
             this.showNumberPuzzleSheet = true
           },
+          onOpenHandwritingSheet: (toolCall: ToolCall): void => {
+            this.handwritingSheetToolCall = toolCall
+            this.handwritingAnswered = false
+            this.showHandwritingSheet = true
+          },
           onReachStart: (): void => {
             this.handleMessageListReachStart()
           },
@@ -2841,6 +2850,39 @@ export struct ChatPage {
                 this.handleAskUserAnswer(this.numberPuzzleSheetToolCall.id, JSON.stringify(cancelResult))
               }
               this.showNumberPuzzleSheet = false
+            }
+          })
+
+        // Handwriting sheet
+        Column()
+          .width(0)
+          .height(0)
+          .bindSheet($$this.showHandwritingSheet, this.HandwritingSheetBuilder(), {
+            height: SheetSize.LARGE,
+            dragBar: true,
+            showClose: true,
+            blurStyle: BlurStyle.Thick,
+            backgroundColor: this.themeBackground,
+            preferType: SheetType.BOTTOM,
+            disableSwipe: true,
+            onDisappear: () => {
+              if (this.showHandwritingSheet && !this.handwritingAnswered) {
+                const cancelResult: HandwritingResult = {
+                  character: '',
+                  type: 'letter',
+                  completed: false,
+                  stroke_count: 0
+                }
+                try {
+                  const parsed = JSON.parse(this.handwritingSheetToolCall.arguments) as Record<string, Object>
+                  cancelResult.character = (parsed['character'] as string) ?? ''
+                  cancelResult.type = (parsed['type'] as string) ?? 'letter'
+                } catch (_e) {
+                  // ignore
+                }
+                this.handleAskUserAnswer(this.handwritingSheetToolCall.id, JSON.stringify(cancelResult))
+              }
+              this.showHandwritingSheet = false
             }
           })
 
@@ -3338,6 +3380,21 @@ export struct ChatPage {
         this.numberPuzzleAnswered = true
         this.handleAskUserAnswer(toolCallId, answerJson)
         this.showNumberPuzzleSheet = false
+      }
+    })
+  }
+
+  @Builder
+  HandwritingSheetBuilder() {
+    HandwritingCard({
+      toolCall: this.handwritingSheetToolCall,
+      isAnswered: false,
+      answeredPayload: '',
+      largeSize: true,
+      onAnswer: (toolCallId: string, answerJson: string): void => {
+        this.handwritingAnswered = true
+        this.handleAskUserAnswer(toolCallId, answerJson)
+        this.showHandwritingSheet = false
       }
     })
   }
