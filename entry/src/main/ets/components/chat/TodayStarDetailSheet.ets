@@ -4,6 +4,13 @@
  * 位置: ChatPage 的 bindSheet 内容
  * 作用: 展示分类汇总(数学/英语/华容道)+ 今日明细(每条事件一行)
  *
+ * v2 视觉升级 (2026-06-04):
+ * - 顶部 hero block: 40×40 圆角 icon well (STAR_SUCCESS_GREEN bg) + 32vp Bold 总数
+ * - 三个分类块改用 UsageMetricCard 比例 (28×28 icon well + 22vp Bold 数字)
+ * - granted pill 用 STAR_SUCCESS_GREEN 背景 + 白字
+ * - empty state 用 48vp SymbolGlyph 插画 + 16vp 标题 + 13vp 描述
+ * - 容器加 visualEffect(buildPointLightBorderEffect()), 沿用 UsageStatsPage 灯光效果
+ *
  * 数据源:
  * - 分类汇总: AppUiState.starTodaySummary (顶层状态, 来自 recordEvent 同步)
  * - 明细列表: 直接调 service.getTodayEvents() 拉, 在 aboutToAppear 与 starEarnedTick 变化时刷新
@@ -12,6 +19,7 @@
 import { getAppUiState, observeAppUiState } from '../../state/AppUiState'
 import { AppStorageKeys } from '../../config/AppStorageKeys'
 import { withColorAlpha } from '../../utils/ColorAlphaUtils'
+import { buildPointLightBorderEffect } from '../../utils/HdsVisualEffectUtil'
 import {
   StarActivityType,
   StarEventRow,
@@ -19,13 +27,16 @@ import {
   TodayStarSummary,
   createEmptyTodayStarSummary,
   STAR_ACTIVITY_TYPES,
+  STAR_SUCCESS_GREEN,
   getActivityMeta,
-  getBucketFromSummary
+  getActivitySymbol,
+  getBucketFromSummary,
+  getTodayStarHeaderSymbol
 } from '../../models/StarEventModels'
 import { getStarRewardService, StarRewardService } from '../../services/StarRewardService'
 
 interface CategoryRow {
-  emoji: string
+  symbolResource: Resource
   label: string
   unit: string
   bucket: StarTypeBucket
@@ -49,6 +60,10 @@ export struct TodayStarDetailSheet {
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
+  }
+
+  private get themePrimaryLight(): string {
+    return getAppUiState().themePrimaryLight
   }
 
   private get themeBackground(): string {
@@ -164,7 +179,7 @@ export struct TodayStarDetailSheet {
       const meta = getActivityMeta(type)
       const bucket: StarTypeBucket = getBucketFromSummary(summary, type)
       rows.push({
-        emoji: meta.emoji,
+        symbolResource: getActivitySymbol(type),
         label: meta.longLabel,
         unit: meta.unit,
         bucket: bucket,
@@ -176,9 +191,19 @@ export struct TodayStarDetailSheet {
 
   @Builder
   private CategoryRow(row: CategoryRow) {
-    Row() {
-      Text(row.emoji)
-        .fontSize(18)
+    Row({ space: 12 }) {
+      Row() {
+        SymbolGlyph(row.symbolResource)
+          .fontSize(16)
+          .fontColor([this.themePrimary])
+      }
+      .width(28)
+      .height(28)
+      .borderRadius(9)
+      .backgroundColor(this.themePrimaryLight)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(VerticalAlign.Center)
+
       Column({ space: 2 }) {
         Text(row.label)
           .fontSize(14)
@@ -189,21 +214,21 @@ export struct TodayStarDetailSheet {
           .fontColor(this.themeTextTertiary)
       }
       .alignItems(HorizontalAlign.Start)
-      .margin({ left: 8 })
       .layoutWeight(1)
+
       Text(`${row.bucket.stars}`)
-        .fontSize(18)
+        .fontSize(22)
         .fontWeight(FontWeight.Bold)
-        .fontColor(this.themePrimary)
+        .fontColor(STAR_SUCCESS_GREEN)
       Text('颗')
-        .fontSize(11)
+        .fontSize(12)
         .fontColor(this.themeTextSecondary)
         .margin({ left: 2 })
     }
     .width('100%')
-    .padding({ left: 10, right: 10, top: 8, bottom: 8 })
+    .padding({ left: 14, right: 14, top: 12, bottom: 12 })
     .backgroundColor(this.chipBackgroundColor)
-    .borderRadius(10)
+    .borderRadius(12)
   }
 
   @Builder
@@ -218,13 +243,23 @@ export struct TodayStarDetailSheet {
         .fontColor(this.themeTextPrimary)
         .layoutWeight(1)
         .margin({ left: 8 })
-      Text(row.starsText)
-        .fontSize(11)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(row.isGranted ? this.themePrimary : this.themeTextTertiary)
-        .backgroundColor(row.isGranted ? this.chipBackgroundColor : 'transparent')
-        .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-        .borderRadius(6)
+      if (row.isGranted) {
+        Text(row.starsText)
+          .fontSize(10)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(Color.White)
+          .backgroundColor(STAR_SUCCESS_GREEN)
+          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+          .borderRadius(6)
+      } else {
+        Text(row.starsText)
+          .fontSize(10)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.themeTextTertiary)
+          .backgroundColor(withColorAlpha(this.themeTextTertiary, '14'))
+          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+          .borderRadius(6)
+      }
     }
     .width('100%')
     .padding({ top: 6, bottom: 6 })
@@ -232,22 +267,43 @@ export struct TodayStarDetailSheet {
 
   build() {
     Column() {
-      // 标题栏
+      // Hero block: 40×40 圆角 icon well + 32vp Bold 总数
       Row() {
-        Text('⭐')
-          .fontSize(20)
-        Text('今日小明星')
-          .fontSize(17)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.themeTextPrimary)
-          .margin({ left: 8 })
-        Blank()
-        Text(`共 ${this.todaySummary.total} 颗`)
-          .fontSize(13)
-          .fontColor(this.themeTextSecondary)
+        Row() {
+          SymbolGlyph(getTodayStarHeaderSymbol())
+            .fontSize(20)
+            .fontColor([Color.White])
+        }
+        .width(40)
+        .height(40)
+        .borderRadius(12)
+        .backgroundColor(STAR_SUCCESS_GREEN)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(VerticalAlign.Center)
+
+        Column({ space: 2 }) {
+          Row({ space: 4 }) {
+            Text(`${this.todaySummary.total}`)
+              .fontSize(32)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.themeTextPrimary)
+            Text('颗')
+              .fontSize(14)
+              .fontColor(this.themeTextSecondary)
+              .margin({ top: 12 })
+          }
+          .alignItems(VerticalAlign.Bottom)
+
+          Text('今日获得')
+            .fontSize(13)
+            .fontColor(this.themeTextSecondary)
+        }
+        .alignItems(HorizontalAlign.Start)
+        .margin({ left: 12 })
+        .layoutWeight(1)
       }
       .width('100%')
-      .padding({ left: 16, right: 16, top: 16, bottom: 12 })
+      .padding({ left: 20, right: 20, top: 24, bottom: 20 })
 
       // 分类汇总
       Column({ space: 8 }) {
@@ -288,13 +344,21 @@ export struct TodayStarDetailSheet {
         .width('100%')
         .padding({ left: 16, right: 16, top: 12, bottom: 12 })
       } else if (this.events.length === 0) {
-        Row() {
-          Text('今天还没有记录, 完成一道题开始吧 ⭐')
-            .fontSize(12)
+        Column({ space: 8 }) {
+          SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
+            .fontSize(48)
+            .fontColor([this.themeTextTertiary])
+          Text('今天还没有记录')
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.themeTextSecondary)
+          Text('完成一道题或华容道开始吧')
+            .fontSize(13)
             .fontColor(this.themeTextTertiary)
         }
         .width('100%')
-        .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+        .alignItems(HorizontalAlign.Center)
+        .padding({ left: 16, right: 16, top: 48, bottom: 48 })
       } else {
         Column() {
           ForEach(this.buildDetailRows(), (row: DetailRowData): void => {
@@ -311,5 +375,6 @@ export struct TodayStarDetailSheet {
     .height('60%')
     .backgroundColor(this.themeSurface)
     .borderRadius({ topLeft: 28, topRight: 28 })
+    .visualEffect(buildPointLightBorderEffect())
   }
 }

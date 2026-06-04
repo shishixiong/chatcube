@@ -135,3 +135,30 @@ export function getActivityMeta(type: StarActivityType): StarActivityMeta {
   }
   return META_PUZZLE
 }
+
+/**
+ * 取活动的 SymbolGlyph 资源, 用于 v2 视觉升级的 icon well
+ * 集中在此处让 TodayStarSummaryCard / TodayStarDetailSheet 复用
+ */
+export function getActivitySymbol(type: StarActivityType): Resource {
+  if (type === 'math_quiz') {
+    return $r('sys.symbol.plus')
+  }
+  if (type === 'english_quiz') {
+    return $r('sys.symbol.doc_plaintext')
+  }
+  return $r('sys.symbol.lightbulb')
+}
+
+/**
+ * 顶部"今日小明星"主题的 SymbolGlyph, 集中一处便于统一调整
+ */
+export function getTodayStarHeaderSymbol(): Resource {
+  return $r('sys.symbol.wand_and_stars')
+}
+
+// 星星奖励系统专用颜色 token
+// STAR_SUCCESS_GREEN: 与 NumberPuzzleCard 私有 SUCCESS_GREEN 同步, 用作"授予星星"的视觉锚点
+// STAR_CELEBRATION_GOLD: 与 NumberPuzzleCard 琥珀 tile 起点色一致, 用于首次授星的高光
+export const STAR_SUCCESS_GREEN: string = '#22C55E'
+export const STAR_CELEBRATION_GOLD: string = '#F59E0B'
