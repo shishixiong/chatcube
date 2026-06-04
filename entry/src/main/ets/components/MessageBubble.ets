@@ -16,6 +16,7 @@ import { AskUserCard } from './AskUserCard'
 import { MathQuizCard } from './MathQuizCard'
 import { EnglishQuizCard } from './EnglishQuizCard'
 import { NumberPuzzleCard } from './NumberPuzzleCard'
+import { HandwritingCard, HandwritingResult } from './HandwritingCard'
 import { HtmlPreviewCard } from './HtmlPreviewCard'
 import { MermaidPreviewCard } from './MermaidPreviewCard'
 import { TypingDots } from './TypingDots'
@@ -34,7 +35,7 @@ import {
   getMarkdownTitleSizes
 } from '../utils/MarkdownTypographyUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isEnglishQuizFunctionName, isNumberPuzzleFunctionName } from '../utils/SearchToolIdentityUtils'
+import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isEnglishQuizFunctionName, isNumberPuzzleFunctionName, isHandwritingPracticeFunctionName } from '../utils/SearchToolIdentityUtils'
 import { MessagePart, MessagePartKind, ToolPartStatus } from '../models/MessageParts'
 import {
   ensureMessageParts,
@@ -246,6 +247,7 @@ export struct MessageBubble {
   // ask_user 答复回调: 用户在 AskUserCard 点击提交后, 经此链路回到 ChatPage.handleAskUserAnswer
   @Event onAskUserAnswer: (toolCallId: string, answerJson: string) => void = () => {}
   @Event onOpenNumberPuzzleSheet: (toolCall: ToolCall) => void = (_toolCall: ToolCall): void => {}
+  @Event onOpenHandwritingSheet: (toolCall: ToolCall) => void = (_toolCall: ToolCall): void => {}
 
   // 支持的翻译语言列表
   private translateLanguages: TranslateLanguage[] = [
@@ -2085,6 +2087,52 @@ export struct MessageBubble {
                   }
                 }, (toolCall: ToolCall, index: number) => 'number_puzzle_' + toolCall.id + '_' + index.toString())
               }
+              // handwriting_practice 待答时显示紧凑横幅，点击打开全屏 sheet
+              if (this.message.hasToolCalls()) {
+                ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
+                  if (this.shouldRenderHandwritingInteractionCard(toolCall, index)) {
+                    Row() {
+                      Column() {
+                        SymbolGlyph($r('sys.symbol.pencil'))
+                          .fontSize(15)
+                          .fontColor([this.themePrimary])
+                      }
+                      .width(32)
+                      .height(32)
+                      .borderRadius(16)
+                      .backgroundColor(withColorAlpha(this.themePrimary, '18'))
+                      .alignItems(HorizontalAlign.Center)
+                      .justifyContent(FlexAlign.Center)
+
+                      Column({ space: 2 }) {
+                        Text(`学写字 · ${this.getHandwritingCharacter(toolCall)}`)
+                          .fontSize(13)
+                          .fontWeight(FontWeight.Medium)
+                          .fontColor($r('app.color.text_primary'))
+                        Text('点击开始写字')
+                          .fontSize(11)
+                          .fontColor($r('app.color.text_tertiary'))
+                      }
+                      .alignItems(HorizontalAlign.Start)
+                      .margin({ left: 8 })
+                      .layoutWeight(1)
+
+                      Text('>')
+                        .fontSize(14)
+                        .fontColor($r('app.color.text_tertiary'))
+                    }
+                    .width('100%')
+                    .padding(12)
+                    .backgroundColor(this.themeAiBubble)
+                    .borderRadius(12)
+                    .border({ width: 1, color: $r('app.color.divider') })
+                    .margin({ bottom: 6 })
+                    .onClick(() => {
+                      this.onOpenHandwritingSheet(toolCall)
+                    })
+                  }
+                }, (toolCall: ToolCall, index: number) => 'handwriting_' + toolCall.id + '_' + index.toString())
+              }
             }
 
             // ========== 附件区域（AI 生成的图片） ==========
@@ -2507,6 +2555,10 @@ export struct MessageBubble {
       // 华容道游戏: 已完成的可以展开查看游戏结果
       return this.isSuccessfulToolStep(part)
     }
+    if (isHandwritingPracticeFunctionName(part.toolName)) {
+      // 学写字: 已完成的可以展开查看书写结果
+      return this.isSuccessfulToolStep(part)
+    }
     if (isImageGenerationFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
@@ -2555,7 +2607,7 @@ export struct MessageBubble {
       return true
     }
     // 默认行为: 图片生成/数学游戏/英语看图说话/华容道 成功后默认展开查看结果
-    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName)) {
+    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
     return false
@@ -2563,9 +2615,9 @@ export struct MessageBubble {
 
   private toggleToolStep(part: MessagePart): void {
     const key = this.getToolStepKey(part)
-    // 默认展开的工具类型: 图片生成、数学游戏、英语看图说话、华容道
+    // 默认展开的工具类型: 图片生成、数学游戏、英语看图说话、华容道、学写字
     const isDefaultExpanded = this.isSuccessfulToolStep(part) &&
-      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName))
+      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName))
     const next: string[] = []
     let found = false
     let foundCollapsed = false
@@ -2647,6 +2699,22 @@ export struct MessageBubble {
       return false
     }
     return !this.isAskUserToolCallAnswered(toolCall, index)
+  }
+
+  private shouldRenderHandwritingInteractionCard(toolCall: ToolCall, index: number): boolean {
+    if (!isHandwritingPracticeFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
+      return false
+    }
+    return !this.isAskUserToolCallAnswered(toolCall, index)
+  }
+
+  private getHandwritingCharacter(toolCall: ToolCall): string {
+    try {
+      const args = JSON.parse(toolCall.arguments) as Record<string, Object>
+      return (args['character'] as string) ?? '字'
+    } catch (_e) {
+      return '字'
+    }
   }
 
   private parseAskUserQuestions(raw: string): AskUserTimelineQuestion[] {
@@ -2981,6 +3049,11 @@ export struct MessageBubble {
     }
     // 华容道游戏: 展开/折叠查看游戏结果
     if (isNumberPuzzleFunctionName(part.toolName)) {
+      this.toggleToolStep(part)
+      return
+    }
+    // 学写字: 展开/折叠查看结果
+    if (isHandwritingPracticeFunctionName(part.toolName)) {
       this.toggleToolStep(part)
       return
     }
@@ -3407,6 +3480,8 @@ export struct MessageBubble {
       this.EnglishQuizStepContent(step)
     } else if (isNumberPuzzleFunctionName(step.toolName)) {
       this.NumberPuzzleStepContent(step)
+    } else if (isHandwritingPracticeFunctionName(step.toolName)) {
+      this.HandwritingStepContent(step)
     } else if (isImageGenerationFunctionName(step.toolName) && this.isToolStepClickable(step)) {
       // 图片生成: 折叠/展开, 在下方直接展示生成结果缩略图
       Column() {
@@ -3774,6 +3849,61 @@ export struct MessageBubble {
       // 展开时显示游戏结果摘要
       if (this.isToolStepExpanded(step) && step.toolResult !== '') {
         NumberPuzzleCard({
+          toolCall: this.buildToolCallFromStep(step),
+          isAnswered: true,
+          answeredPayload: step.toolResult,
+          onAnswer: (_toolCallId: string, _answerJson: string): void => {}
+        })
+        .margin({ top: 8 })
+      }
+    }
+    .width('100%')
+  }
+
+  // handwriting_practice 工具步骤: 已完成的书写练习, 在 timeline 中显示简化结果, 可展开查看详情
+  @Builder
+  HandwritingStepContent(step: MessagePart) {
+    Column() {
+      Row({ space: 6 }) {
+        if (step.toolStatus === 'succeeded') {
+          SymbolGlyph($r('sys.symbol.checkmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_success')])
+        } else if (step.toolStatus === 'failed' || step.toolStatus === 'denied') {
+          SymbolGlyph($r('sys.symbol.xmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_error')])
+        } else {
+          Column()
+            .width(8)
+            .height(8)
+            .borderRadius(4)
+            .backgroundColor(this.themePrimary)
+        }
+
+        Text(this.buildToolStepTitle(step))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+
+        if (this.isToolStepClickable(step)) {
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(12)
+            .fontColor([$r('app.color.text_tertiary')])
+            .rotate({ angle: this.isToolStepExpanded(step) ? 0 : -90 })
+            .animation({ duration: 200, curve: Curve.EaseOut })
+        }
+      }
+      .width('100%')
+      .onClick(() => {
+        if (this.isToolStepClickable(step)) {
+          this.handleToolStepClick(step)
+        }
+      })
+
+      if (this.isToolStepExpanded(step) && step.toolResult !== '') {
+        HandwritingCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
           answeredPayload: step.toolResult,
