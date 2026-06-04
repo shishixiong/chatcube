@@ -46,9 +46,13 @@ export struct NumberPuzzleCard {
   @Local isNewBest: boolean = false
   @Local tilePressedIndex: number = -1
   @Local winPopIndex: number = -1
+  // 防止在 loadBestScores 完成前 saveBestScoresIfImproved 用 stale -1 覆盖已有最佳成绩
+  @Local bestScoresLoaded: boolean = false
 
   private timerId: number = -1
   private winPopTimerId: number = -1
+  // WinBanner / "新纪录" / best-stat 边框共用的成功绿 (Tailwind green-500, 与琥珀 tile 调色板协调)
+  private readonly SUCCESS_GREEN: string = '#22C55E'
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
@@ -172,13 +176,21 @@ export struct NumberPuzzleCard {
       const movesKey = `${PreferenceKeys.NUMBER_PUZZLE_BEST_MOVES_PREFIX}${difficulty}`
       this.bestTimeSeconds = await prefs.getNumber(timeKey, -1)
       this.bestMoves = await prefs.getNumber(movesKey, -1)
+      this.bestScoresLoaded = true
     } catch (_e) {
       this.bestTimeSeconds = -1
       this.bestMoves = -1
+      // 加载失败也要解除守卫, 否则 saveBestScoresIfImproved 永远不写
+      this.bestScoresLoaded = true
     }
   }
 
   private async saveBestScoresIfImproved(): Promise<void> {
+    // 防止 race: 在 loadBestScores 还未完成时, bestTimeSeconds/bestMoves 是 stale 的 -1,
+    // 会让任何一次完成都被当成"新纪录"覆盖已有最佳. 这种情况直接放弃本次保存.
+    if (!this.bestScoresLoaded) {
+      return
+    }
     try {
       const prefs = getPreferencesService()
       const timeKey = `${PreferenceKeys.NUMBER_PUZZLE_BEST_TIME_PREFIX}${this.gridSize}`
@@ -471,7 +483,7 @@ export struct NumberPuzzleCard {
 
   private getStatCardBorderColor(): ResourceColor {
     if (this.isNewBest) {
-      return withColorAlpha('#22C55E', '60')
+      return withColorAlpha(this.SUCCESS_GREEN, '60')
     }
     return withColorAlpha(this.themePrimary, this.isDarkMode ? '22' : '18')
   }
@@ -588,11 +600,11 @@ export struct NumberPuzzleCard {
     }
     .width('100%')
     .padding(12)
-    .backgroundColor(withColorAlpha('#22C55E', this.isDarkMode ? '18' : '0C'))
+    .backgroundColor(withColorAlpha(this.SUCCESS_GREEN, this.isDarkMode ? '18' : '0C'))
     .borderRadius(12)
     .border({
       width: 1,
-      color: withColorAlpha('#22C55E', this.isDarkMode ? '38' : '28'),
+      color: withColorAlpha(this.SUCCESS_GREEN, this.isDarkMode ? '38' : '28'),
       style: BorderStyle.Solid
     })
   }
@@ -669,6 +681,8 @@ export struct NumberPuzzleCard {
       color: this.getEmptySlotBorderColor()
     })
     .justifyContent(FlexAlign.Center)
+    // 旧位置的空槽淡出, 新位置的空槽淡入, 与 tile 的 translate 同步, 避免"啪"地一下出现
+    .transition(TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseInOut }))
   }
 
   @Builder
