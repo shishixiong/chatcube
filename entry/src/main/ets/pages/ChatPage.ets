@@ -72,7 +72,7 @@ import { ChatMessageListSection } from '../components/chat/ChatMessageListSectio
 import { ChatToolPickerSheetContent } from '../components/chat/ChatToolPickerSheetContent'
 import { ChatToolExecutionApprovalSheetContent } from '../components/chat/ChatToolExecutionApprovalSheetContent'
 import { TodayStarDetailSheet } from '../components/chat/TodayStarDetailSheet'
-import { StarActivityType, getActivityMeta } from '../models/StarEventModels'
+import { StarActivityType, STAR_ACTIVITY_TYPES, getActivityMeta } from '../models/StarEventModels'
 import { SearchEngineMenuOption } from '../components/ChatToolbar'
 import { getSearchEngineRegistry, registerAllSearchEngines, SearchEngineDescriptor } from '../services/search/Index'
 import { parseSearchEngineIdListJson } from '../utils/SearchEnginePreferenceUtils'
@@ -840,7 +840,7 @@ export struct ChatPage {
   }
 
   private formatStarGrantTip(activityType: string, stars: number): string {
-    if (activityType !== 'math_quiz' && activityType !== 'english_quiz' && activityType !== 'number_puzzle') {
+    if (STAR_ACTIVITY_TYPES.indexOf(activityType as StarActivityType) < 0) {
       return `+${stars} ⭐`
     }
     const meta = getActivityMeta(activityType as StarActivityType)

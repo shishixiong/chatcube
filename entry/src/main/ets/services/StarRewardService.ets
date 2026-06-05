@@ -20,7 +20,8 @@ import {
   StarTypeBucket,
   TodayStarSummary,
   createEmptyTodayStarSummary,
-  getBucketFromSummary
+  getBucketFromSummary,
+  STAR_ACTIVITY_TYPES
 } from '../models/StarEventModels'
 import { getAppUiState, setAppUiStateValue } from '../state/AppUiState'
 import { AppStorageKeys } from '../config/AppStorageKeys'
@@ -69,6 +70,7 @@ export class StarRewardService {
    * 纯计算: 根据 activityType 与 payload 计算应得星星数
    * - math_quiz / english_quiz: correct=true → 1, 否则 0
    * - number_puzzle: completed=false → 0; 否则按 difficulty 2→1, 3→2, 4→3, 5→5
+   * - handwriting_practice: completed=true → 1, 否则 0
    * - 任何解析失败 / 边界外值 → 0
    */
   computeStars(activityType: string, payload: Record<string, Object>): number {
@@ -83,6 +85,10 @@ export class StarRewardService {
       }
       const difficulty = (payload['difficulty'] as number) ?? 0
       return DIFFICULTY_STARS[difficulty] ?? 0
+    }
+    if (activityType === 'handwriting_practice') {
+      const completed = payload['completed']
+      return completed === true ? 1 : 0
     }
     return 0
   }
@@ -211,7 +217,8 @@ export class StarRewardService {
     for (let i = 0; i < events.length; i++) {
       const event = events[i]
       const type = event.activityType as StarActivityType
-      if (type !== 'math_quiz' && type !== 'english_quiz' && type !== 'number_puzzle') {
+      // 跳过非 StarActivityType 联合的未知类型（如旧版本数据库中的脏数据）
+      if (STAR_ACTIVITY_TYPES.indexOf(type) < 0) {
         continue
       }
       const bucket: StarTypeBucket = getBucketFromSummary(summary, type)

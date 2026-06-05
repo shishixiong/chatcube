@@ -336,14 +336,15 @@ export struct TodayStarDetailSheet {
 
   private describeEvent(event: StarEventRow): string {
     const type = event.activityType as StarActivityType
-    if (type !== 'math_quiz' && type !== 'english_quiz' && type !== 'number_puzzle') {
-      return '未知活动'
-    }
     const meta = getActivityMeta(type)
     if (event.stars > 0) {
       return meta.grantedHint
     }
-    return `${meta.longLabel}${type === 'number_puzzle' ? '放弃' : '答错'}`
+    // 0 颗星: 题目类 → 答错; 活动类 → 放弃
+    if (type === 'math_quiz' || type === 'english_quiz') {
+      return `${meta.longLabel}答错`
+    }
+    return `${meta.longLabel}放弃`
   }
 
   private buildDetailRows(): DetailRowData[] {
