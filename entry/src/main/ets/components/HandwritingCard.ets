@@ -30,6 +30,18 @@ export interface HandwritingResult {
 const SUCCESS_GREEN: string = '#22C55E'
 const STROKE_WIDTH: number = 6
 
+// 笔顺动画时序
+const ANIM_PER_STROKE_MS: number = 450
+const ANIM_FRAME_MS: number = 16
+const ANIM_INTER_STROKE_PAUSE_MS: number = 200
+const ANIM_FINAL_PAUSE_MS: number = 600
+const PEN_TIP_RADIUS_VP: number = 7
+const PEN_TIP_HIGHLIGHT_RADIUS_VP: number = 2.5
+const ANIM_STROKE_WIDTH: number = 6
+const ANIM_COMPLETED_STROKE_WIDTH: number = 4
+const ANIM_REFERENCE_LINE_WIDTH: number = 2
+const ANIM_REFERENCE_DASH: number[] = [3, 4]
+
 @ComponentV2
 export struct HandwritingCard {
   @Param toolCall: ToolCall = new ToolCall()
@@ -48,6 +60,10 @@ export struct HandwritingCard {
   @Local isSubmitting: boolean = false
   @Local showAnimation: boolean = false
   @Local currentAnimStroke: number = -1
+  @Local currentStrokeProgress: number = 0
+  @Local animActive: boolean = false
+  @Local hasAutoPlayed: boolean = false
+  @Local pendingAutoPlay: boolean = false
   @Local isCompleted: boolean = false
   @Local hasContent: boolean = false
 
@@ -55,9 +71,15 @@ export struct HandwritingCard {
   private canvasContext: CanvasRenderingContext2D = new CanvasRenderingContext2D(
     new RenderingContextSettings(true)
   )
+  private animCanvasContext: CanvasRenderingContext2D = new CanvasRenderingContext2D(
+    new RenderingContextSettings(true)
+  )
   private animTimerId: number = -1
+  private animFrameTimerId: number = -1
   private canvasWidth: number = 0
   private canvasHeight: number = 0
+  private animCanvasWidth: number = 0
+  private animCanvasHeight: number = 0
   private currentPoints: StrokePoint[] = []
 
   private get themePrimary(): string {
@@ -86,6 +108,17 @@ export struct HandwritingCard {
     return this.isDarkMode ? '#FBBF24' : '#b45309'
   }
 
+  // 笔顺动画三色
+  private get referenceStrokeColor(): string {
+    return withColorAlpha(this.themePrimary, this.isDarkMode ? '28' : '22')
+  }
+  private get completedStrokeColor(): string {
+    return withColorAlpha(this.themePrimary, this.isDarkMode ? '65' : '55')
+  }
+  private get penTipColor(): string {
+    return this.themePrimary
+  }
+
   // 难度标签
   private get typeLabel(): string {
     switch (this.charType) {
@@ -106,13 +139,16 @@ export struct HandwritingCard {
     if (this.isAnswered) {
       this.parsePreviousResult()
     }
+    // 全屏 sheet 进入时：标记首次自动播放
+    this.pendingAutoPlay = this.largeSize && !this.hasAutoPlayed && this.strokes.length > 0
   }
 
   aboutToDisappear(): void {
-    if (this.animTimerId !== -1) {
-      clearTimeout(this.animTimerId)
-      this.animTimerId = -1
-    }
+    this.clearAllAnimTimers()
+    this.showAnimation = false
+    this.currentAnimStroke = -1
+    this.currentStrokeProgress = 0
+    this.animActive = false
   }
 
   private parseArguments(): void {
@@ -155,36 +191,160 @@ export struct HandwritingCard {
     }
   }
 
-  // ====== 笔顺动画 ======
+  // ====== 笔顺动画（笔尖轨迹式）======
 
   private playStrokeAnimation(): void {
     if (this.strokes.length === 0) {
       return
     }
+    this.clearAllAnimTimers()
     this.showAnimation = true
     this.currentAnimStroke = -1
+    this.currentStrokeProgress = 0
+    this.animActive = true
     this.animateNextStroke()
   }
 
   private animateNextStroke(): void {
-    this.currentAnimStroke++
+    this.currentAnimStroke = this.currentAnimStroke + 1
+    this.currentStrokeProgress = 0
+
     if (this.currentAnimStroke >= this.strokes.length) {
-      this.showAnimation = false
-      this.currentAnimStroke = -1
+      // 全部笔完成：停留后回归静态
+      this.animTimerId = setTimeout(() => {
+        this.animTimerId = -1
+        this.showAnimation = false
+        this.currentAnimStroke = -1
+        this.currentStrokeProgress = 0
+        this.animActive = false
+        this.drawAnimationFrame()
+      }, ANIM_FINAL_PAUSE_MS)
       return
     }
-    this.animTimerId = setTimeout(() => {
-      this.animateNextStroke()
-    }, 600)
+
+    const totalFrames: number = Math.max(1, Math.round(ANIM_PER_STROKE_MS / ANIM_FRAME_MS))
+    let frameCount: number = 0
+
+    // 立即画一帧（progress = 0：笔尖在起点）
+    this.drawAnimationFrame()
+
+    this.animFrameTimerId = setInterval(() => {
+      frameCount = frameCount + 1
+      this.currentStrokeProgress = frameCount / totalFrames
+      if (this.currentStrokeProgress >= 1) {
+        this.currentStrokeProgress = 1
+        this.drawAnimationFrame()
+        if (this.animFrameTimerId !== -1) {
+          clearInterval(this.animFrameTimerId)
+          this.animFrameTimerId = -1
+        }
+        // 笔间停顿
+        this.animTimerId = setTimeout(() => {
+          this.animTimerId = -1
+          this.animateNextStroke()
+        }, ANIM_INTER_STROKE_PAUSE_MS)
+      } else {
+        this.drawAnimationFrame()
+      }
+    }, ANIM_FRAME_MS)
   }
 
   private resetAnimation(): void {
+    this.clearAllAnimTimers()
+    this.showAnimation = false
+    this.currentAnimStroke = -1
+    this.currentStrokeProgress = 0
+    this.animActive = false
+    this.drawAnimationFrame()
+  }
+
+  private clearAllAnimTimers(): void {
     if (this.animTimerId !== -1) {
       clearTimeout(this.animTimerId)
       this.animTimerId = -1
     }
-    this.showAnimation = false
-    this.currentAnimStroke = -1
+    if (this.animFrameTimerId !== -1) {
+      clearInterval(this.animFrameTimerId)
+      this.animFrameTimerId = -1
+    }
+  }
+
+  // 绘制当前帧（4 阶段：参考底图 → 已完成笔画 → 当前笔画插值 → 笔尖圆点）
+  private drawAnimationFrame(): void {
+    if (this.animCanvasWidth === 0 || this.animCanvasHeight === 0) {
+      return
+    }
+    const ctx: CanvasRenderingContext2D = this.animCanvasContext
+    const w: number = this.animCanvasWidth
+    const h: number = this.animCanvasHeight
+
+    // 1. 清屏
+    ctx.clearRect(0, 0, w, h)
+
+    // 2. 参考底图：所有笔画的虚线轮廓
+    ctx.strokeStyle = this.referenceStrokeColor
+    ctx.lineWidth = ANIM_REFERENCE_LINE_WIDTH
+    ctx.setLineDash(ANIM_REFERENCE_DASH)
+    ctx.lineCap = 'round'
+    for (let i: number = 0; i < this.strokes.length; i++) {
+      const s: HandwritingStroke = this.strokes[i]
+      ctx.beginPath()
+      ctx.moveTo(s.x1 * w, s.y1 * h)
+      ctx.lineTo(s.x2 * w, s.y2 * h)
+      ctx.stroke()
+    }
+    ctx.setLineDash([] as number[])
+
+    // 静态态（不播放）只显示参考底图
+    if (!this.showAnimation || this.currentAnimStroke < 0) {
+      return
+    }
+
+    // 3. 已完成笔画（实线，中等透明）
+    if (this.currentAnimStroke > 0) {
+      ctx.strokeStyle = this.completedStrokeColor
+      ctx.lineWidth = ANIM_COMPLETED_STROKE_WIDTH
+      ctx.lineCap = 'round'
+      for (let i: number = 0; i < this.currentAnimStroke; i++) {
+        const s: HandwritingStroke = this.strokes[i]
+        ctx.beginPath()
+        ctx.moveTo(s.x1 * w, s.y1 * h)
+        ctx.lineTo(s.x2 * w, s.y2 * h)
+        ctx.stroke()
+      }
+    }
+
+    // 4. 当前笔画（线性插值）+ 笔尖圆点
+    if (this.currentAnimStroke < this.strokes.length) {
+      const cur: HandwritingStroke = this.strokes[this.currentAnimStroke]
+      const startX: number = cur.x1 * w
+      const startY: number = cur.y1 * h
+      const endX: number = cur.x2 * w
+      const endY: number = cur.y2 * h
+      const t: number = this.currentStrokeProgress
+      const tipX: number = startX + (endX - startX) * t
+      const tipY: number = startY + (endY - startY) * t
+
+      // 4a. 当前笔画的已绘部分
+      ctx.strokeStyle = this.penTipColor
+      ctx.lineWidth = ANIM_STROKE_WIDTH
+      ctx.beginPath()
+      ctx.moveTo(startX, startY)
+      ctx.lineTo(tipX, tipY)
+      ctx.stroke()
+
+      // 4b. 笔尖圆点
+      ctx.fillStyle = this.penTipColor
+      ctx.beginPath()
+      ctx.arc(tipX, tipY, PEN_TIP_RADIUS_VP, 0, Math.PI * 2)
+      ctx.fill()
+
+      // 4c. 笔尖白色高光
+      ctx.fillStyle = '#FFFFFF'
+      ctx.beginPath()
+      ctx.arc(tipX - 1.5, tipY - 1.5, PEN_TIP_HIGHLIGHT_RADIUS_VP, 0, Math.PI * 2)
+      ctx.fill()
+    }
   }
 
   // ====== Canvas 绘图 ======
@@ -486,39 +646,67 @@ export struct HandwritingCard {
   @Builder
   DemoPanel() {
     Stack({ alignContent: Alignment.TopEnd }) {
-      Column() {
-        // 大字示范
-        Text(this.character)
-          .fontSize(72)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.demoCharColor)
+      if (this.strokes.length > 0) {
+        // 笔尖轨迹动画区
+        Stack() {
+          // L1: 动画 canvas
+          Canvas(this.animCanvasContext)
+            .width('100%')
+            .height(160)
+            .backgroundColor(Color.Transparent)
+            .hitTestBehavior(HitTestMode.Transparent)
+            .onReady(() => {
+              this.drawAnimationFrame()
+            })
+            .onAreaChange((_oldArea: Area, newArea: Area) => {
+              this.animCanvasWidth = newArea.width as number
+              this.animCanvasHeight = newArea.height as number
+              this.drawAnimationFrame()
+            })
 
-        // 笔顺描述
-        if (this.strokes.length > 0) {
-          Text(`${this.strokes.length}笔 · ${this.strokeLabels}`)
-            .fontSize(11)
-            .fontColor(this.demoStrokeDescColor)
-            .margin({ top: 4 })
+          // L2: 文字状态层（覆盖在 canvas 之上，浮于底部）
+          Column() {
+            if (this.showAnimation) {
+              Text(`播放第 ${this.currentAnimStroke + 1} / ${this.strokes.length} 笔`)
+                .fontSize(10)
+                .fontColor(SUCCESS_GREEN)
+            } else {
+              Text(`${this.strokes.length} 笔 · ${this.strokeLabels}`)
+                .fontSize(11)
+                .fontColor(this.demoStrokeDescColor)
+            }
+          }
+          .width('100%')
+          .height('100%')
+          .justifyContent(FlexAlign.End)
+          .alignItems(HorizontalAlign.Center)
+          .padding({ bottom: 8 })
         }
-
-        // 动画状态
-        if (this.showAnimation) {
-          Text(`播放第 ${this.currentAnimStroke + 1}/${this.strokes.length} 笔`)
-            .fontSize(10)
-            .fontColor('#22C55E')
-            .margin({ top: 2 })
+        .width('100%')
+        .height(160)
+      } else {
+        // 退化：无 strokes 数据时显示静态大字
+        Column() {
+          Text(this.character)
+            .fontSize(72)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.demoCharColor)
         }
+        .width('100%')
+        .height(160)
+        .alignItems(HorizontalAlign.Center)
+        .justifyContent(FlexAlign.Center)
       }
-      .width('100%')
-      .padding(16)
-      .alignItems(HorizontalAlign.Center)
 
+      // L3: 重播按钮（Stack 右上角，与 stroke 是否有无关）
       Button('▶ 重播')
         .fontSize(11)
         .fontColor($r('app.color.text_secondary'))
         .backgroundColor(withColorAlpha(this.themePrimary, '10'))
         .borderRadius(8)
         .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+        .enabled(this.strokes.length > 0)
+        .opacity(this.strokes.length > 0 ? 1 : 0.4)
         .onClick(() => {
           this.resetAnimation()
           this.playStrokeAnimation()
@@ -529,8 +717,18 @@ export struct HandwritingCard {
     .borderRadius(12)
     .border({ width: 1.5, color: withColorAlpha(this.themePrimary, '38'), style: BorderStyle.Dashed })
     .onClick(() => {
-      this.resetAnimation()
-      this.playStrokeAnimation()
+      if (this.strokes.length > 0) {
+        this.resetAnimation()
+        this.playStrokeAnimation()
+      }
+    })
+    .onAppear(() => {
+      // 首次进入 sheet 自动播放一次
+      if (this.pendingAutoPlay) {
+        this.pendingAutoPlay = false
+        this.hasAutoPlayed = true
+        this.playStrokeAnimation()
+      }
     })
   }
 
