@@ -73,6 +73,46 @@
       "value": "Today's Stars"
     },
     {
+      "name": "star_calendar_view_today",
+      "value": "Today"
+    },
+    {
+      "name": "star_calendar_view_calendar",
+      "value": "Calendar"
+    },
+    {
+      "name": "star_calendar_cumulative_label",
+      "value": "All-time total"
+    },
+    {
+      "name": "star_calendar_month_total_label",
+      "value": "This month"
+    },
+    {
+      "name": "star_calendar_prev_month",
+      "value": "Previous month"
+    },
+    {
+      "name": "star_calendar_next_month",
+      "value": "Next month"
+    },
+    {
+      "name": "star_calendar_today_marker",
+      "value": "Today"
+    },
+    {
+      "name": "star_calendar_empty_day",
+      "value": "No events this day"
+    },
+    {
+      "name": "star_calendar_day_detail_header",
+      "value": "%s · %d events"
+    },
+    {
+      "name": "star_calendar_close_day_detail",
+      "value": "Close"
+    },
+    {
       "name": "no_sessions",
       "value": "No conversations yet"
     },

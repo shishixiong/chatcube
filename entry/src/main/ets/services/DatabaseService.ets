@@ -2819,6 +2819,33 @@ export class DatabaseService {
     return events
   }
 
+  /**
+   * 取指定时间区间内的星事件 (含 startMs, 不含 endMs),按 created_at 升序
+   * - 用于日历视图按月分页, 避免 getStarEventsSince(0) 拉整表
+   * - 走 idx_star_events_created_at 索引
+   */
+  async getStarEventsInRange(startMs: number, endMs: number): Promise<StarEventRow[]> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return []
+    }
+    const events: StarEventRow[] = []
+    const predicates = new relationalStore.RdbPredicates(TableNames.STAR_EVENTS)
+    predicates.greaterThanOrEqualTo('created_at', startMs)
+    predicates.lessThan('created_at', endMs)
+    predicates.orderByAsc('created_at')
+    try {
+      const resultSet = await this.rdbStore.query(predicates)
+      while (resultSet.goToNextRow()) {
+        events.push(this.readStarEventRow(resultSet))
+      }
+      resultSet.close()
+    } catch (error) {
+      console.error('DatabaseService', `Failed to query star events in range [${startMs}, ${endMs}): ${JSON.stringify(error)}`)
+    }
+    return events
+  }
+
   async deleteStarEventsOlderThan(cutoffMs: number): Promise<number> {
     await this.waitForInitialization()
     if (this.rdbStore === null) {

@@ -24,6 +24,7 @@ import {
 } from '../models/StarEventModels'
 import { getAppUiState, setAppUiStateValue } from '../state/AppUiState'
 import { AppStorageKeys } from '../config/AppStorageKeys'
+import { getStartOfMonthMs } from '../utils/DateFormatUtils'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 
 const DOMAIN = 0x0000
@@ -181,6 +182,28 @@ export class StarRewardService {
   async getTodayEvents(): Promise<StarEventRow[]> {
     const startMs = getStartOfTodayMs()
     return await this.database.getStarEventsSince(startMs)
+  }
+
+  /**
+   * 取指定年月的所有星事件 (1≤month≤12, 含 startMs 不含 endMs)
+   * - 用于日历视图按月分页; month=13 自动回卷到次年 1 月
+   * - 走 idx_star_events_created_at 索引, 性能优于 getStarEventsSince(0) + 客户端过滤
+   */
+  async getMonthStarEvents(year: number, month: number): Promise<StarEventRow[]> {
+    const startMs = getStartOfMonthMs(year, month)
+    const endMs = getStartOfMonthMs(year, month + 1)
+    return await this.database.getStarEventsInRange(startMs, endMs)
+  }
+
+  /**
+   * 取全部历史星事件的累计星星总数
+   * - MVP 阶段走 client-side 聚合: getStarEventsSince(0) + aggregateEvents
+   * - 长生命周期用户后续可切 SQL SUM(stars) 单值查询
+   */
+  async getAllTimeStarTotal(): Promise<number> {
+    const events = await this.database.getStarEventsSince(0)
+    const summary = this.aggregateEvents(events)
+    return summary.total
   }
 
   private aggregateEvents(events: StarEventRow[]): TodayStarSummary {

@@ -73,6 +73,46 @@
       "value": "今日小明星"
     },
     {
+      "name": "star_calendar_view_today",
+      "value": "今日"
+    },
+    {
+      "name": "star_calendar_view_calendar",
+      "value": "日历"
+    },
+    {
+      "name": "star_calendar_cumulative_label",
+      "value": "累计获得"
+    },
+    {
+      "name": "star_calendar_month_total_label",
+      "value": "本月获得"
+    },
+    {
+      "name": "star_calendar_prev_month",
+      "value": "上一月"
+    },
+    {
+      "name": "star_calendar_next_month",
+      "value": "下一月"
+    },
+    {
+      "name": "star_calendar_today_marker",
+      "value": "今天"
+    },
+    {
+      "name": "star_calendar_empty_day",
+      "value": "这天没有记录"
+    },
+    {
+      "name": "star_calendar_day_detail_header",
+      "value": "%s · 共 %d 条"
+    },
+    {
+      "name": "star_calendar_close_day_detail",
+      "value": "收起"
+    },
+    {
       "name": "no_sessions",
       "value": "暂无对话记录"
     },
