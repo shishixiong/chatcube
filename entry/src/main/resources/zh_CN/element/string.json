@@ -69,6 +69,10 @@
       "value": "新建对话"
     },
     {
+      "name": "today_star_dashboard",
+      "value": "今日小明星"
+    },
+    {
       "name": "no_sessions",
       "value": "暂无对话记录"
     },

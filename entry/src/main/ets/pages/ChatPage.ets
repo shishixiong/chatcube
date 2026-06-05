@@ -71,7 +71,6 @@ import { ChatMultiSelectToolbar } from '../components/chat/ChatMultiSelectToolba
 import { ChatMessageListSection } from '../components/chat/ChatMessageListSection'
 import { ChatToolPickerSheetContent } from '../components/chat/ChatToolPickerSheetContent'
 import { ChatToolExecutionApprovalSheetContent } from '../components/chat/ChatToolExecutionApprovalSheetContent'
-import { TodayStarSummaryCard } from '../components/chat/TodayStarSummaryCard'
 import { TodayStarDetailSheet } from '../components/chat/TodayStarDetailSheet'
 import { StarActivityType, getActivityMeta } from '../models/StarEventModels'
 import { SearchEngineMenuOption } from '../components/ChatToolbar'
@@ -145,8 +144,6 @@ const HDS_NAV_TITLE_NATIVE_START_INSET: number = 56
 const HDS_NAV_TITLE_NATIVE_MENU_BUTTON_WIDTH: number = 56
 const HDS_NAV_TITLE_NATIVE_MENU_EDGE_INSET: number = 16
 const HDS_NAV_SPLIT_TITLE_BAR_MASK_EXTRA_HEIGHT: number = 20
-// 今日小明星小卡片高度 (padding 12*2 + 两行内容 18+6+13 = 73) + 8vp 顶部安全间距 ≈ 88vp
-const TODAY_STAR_SUMMARY_CARD_HEIGHT: number = 88
 
 @ComponentV2
 export struct ChatPage {
@@ -2168,9 +2165,8 @@ export struct ChatPage {
   private getMessageListTopSpacerHeight(): number {
     // titleBar 下沿模糊蒙版会向下渐变 maskExtraHeight，列表第一条消息需让出这一段，
     // 否则会落在半透明渐变带上、视觉被压暗。算法与 Index.ets 左栏 getChatListTopSpacerHeight 对齐。
-    // 额外加 TODAY_STAR_SUMMARY_CARD_HEIGHT 把今日小明星小卡 (position overlay) 的空间也保留出来。
     return HDS_NAV_DESTINATION_MINI_TITLE_BAR_HEIGHT + this.getPageTopAvoidHeight() +
-      this.getChatTitleBarMaskExtraHeight() + TODAY_STAR_SUMMARY_CARD_HEIGHT
+      this.getChatTitleBarMaskExtraHeight()
   }
 
   private getMessageMapJumpTopClearance(): number {
@@ -2185,16 +2181,6 @@ export struct ChatPage {
   private isExistingSessionSeeded(): boolean {
     const seededSessionId = this.routeParams?.sessionId ?? this.routeParamsSeed?.sessionId ?? ''
     return seededSessionId.trim() !== ''
-  }
-
-  private shouldShowTitleBarNewChatAction(): boolean {
-    if (!this.hasInitializedRoute) {
-      return this.isExistingSessionSeeded()
-    }
-    if (this.messages.length > 0) {
-      return true
-    }
-    return !this.isNewChatTransition && this.sessionId.trim() !== ''
   }
 
   private getTitleBarOptions(): HdsNavigationTitleBarOptions {
@@ -2261,11 +2247,11 @@ export struct ChatPage {
     if (this.isChatSplitLayout()) {
       return 1
     }
-    return this.shouldShowTitleBarNewChatAction() ? 2 : 1
+    return 2
   }
 
   private getTitleBarMenuItemCount(): number {
-    return this.shouldShowTitleBarNewChatAction() ? 5 : 4
+    return 5
   }
 
   private getTitleBarVisibleActionSlotCount(): number {
@@ -2279,18 +2265,17 @@ export struct ChatPage {
 
   private getTitleBarMenuItems(): Array<HdsNavigationMenuItemOptions> {
     const menus: Array<HdsNavigationMenuItemOptions> = []
-    if (this.shouldShowTitleBarNewChatAction()) {
-      menus.push({
-        content: {
-          label: $r('app.string.new_chat'),
-          icon: this.createTitleBarSymbolIcon($r('sys.symbol.message_badge_plus'), 20),
-          action: () => {
-            void this.handleNewChat()
-          }
+    // 今日小明星 - HDS 标题栏第一格 visible slot, 沿用原 new_chat 位置
+    // HdsNavigationMenuItemOptions 限制: 仅渲染 SymbolGlyph + label, 无自定义背景/角标/动画
+    menus.push({
+      content: {
+        label: $r('app.string.today_star_dashboard'),
+        icon: this.createTitleBarSymbolIcon($r('sys.symbol.wand_and_stars'), 20),
+        action: () => {
+          this.showStarSheet = true
         }
-      })
-    }
-
+      }
+    })
     menus.push({
       content: {
         label: $r('app.string.message_map_menu_entry'),
@@ -2378,21 +2363,6 @@ export struct ChatPage {
   build() {
     HdsNavDestination() {
       Stack() {
-        // 今日小明星小卡片 - 顶部悬浮, 不阻挡消息列表
-        TodayStarSummaryCard({
-          onOpenDetail: (): void => {
-            this.showStarSheet = true
-          }
-        })
-          .width('100%')
-          .padding({ left: 12, right: 12, top: 0, bottom: 0 })
-          .position({
-            x: 0,
-            y: HDS_NAV_DESTINATION_MINI_TITLE_BAR_HEIGHT + this.getPageTopAvoidHeight() + 8
-          })
-          .zIndex(1)
-          .hitTestBehavior(HitTestMode.Default)
-
         // 消息列表 - 占满全屏
         ChatMessageListSection({
           isLoading: this.isLoading,

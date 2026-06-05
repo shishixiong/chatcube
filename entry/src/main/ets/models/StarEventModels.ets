@@ -4,7 +4,7 @@
  * 用于星星奖励系统的核心数据契约。
  * - 写入: StarRewardService.recordEvent
  * - 存储: SQLite 表 star_events
- * - 读取: TodayStarSummaryCard / TodayStarDetailSheet
+ * - 读取: ChatPage 标题栏菜单项 / TodayStarDetailSheet
  */
 
 export type StarActivityType = 'math_quiz' | 'english_quiz' | 'number_puzzle' | 'handwriting_practice'
@@ -155,7 +155,7 @@ export function getActivityMeta(type: StarActivityType): StarActivityMeta {
 
 /**
  * 取活动的 SymbolGlyph 资源, 用于 v2 视觉升级的 icon well
- * 集中在此处让 TodayStarSummaryCard / TodayStarDetailSheet 复用
+ * 集中在此处让 TodayStarDetailSheet 复用
  */
 export function getActivitySymbol(type: StarActivityType): Resource {
   if (type === 'math_quiz') {

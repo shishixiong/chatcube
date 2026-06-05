@@ -69,6 +69,10 @@
       "value": "New Chat"
     },
     {
+      "name": "today_star_dashboard",
+      "value": "Today's Stars"
+    },
+    {
       "name": "no_sessions",
       "value": "No conversations yet"
     },
