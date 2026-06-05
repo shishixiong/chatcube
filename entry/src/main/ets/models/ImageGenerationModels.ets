@@ -91,5 +91,8 @@ export class GeneratedMedia {
   @Trace requestOptionsJson: string = ''
   @Trace actualOptionsJson: string = ''
   @Trace revisedPrompt: string = ''
+  // 预生成图关联（备课老师调度），命中 prepared_media 时填充
+  @Trace preparedMediaId: string = ''
+  @Trace topicKey: string = ''
   @Trace createdAt: number = 0
 }

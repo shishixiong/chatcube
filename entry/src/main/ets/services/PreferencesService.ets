@@ -118,6 +118,14 @@ export class PreferenceKeys {
 
   // 首次启动引导
   static readonly ONBOARDING_COMPLETED: string = 'onboarding_completed'
+
+  // 备课老师（每日动态教学）配置
+  // 总开关：关闭后 notifySessionEnd 是 no-op，WorkScheduler 取消注册
+  static readonly PLANNER_ENABLED: string = 'planner_enabled'
+  // 触发时间（HH:MM 24h 本地时区），默认 21:00
+  static readonly PLANNER_TRIGGER_TIME: string = 'planner_trigger_time'
+  // 备课老师失败计数前缀（按 YYYYMMDD 区分），用于同日重试上限 3 次
+  static readonly PLANNER_FAIL_COUNT_PREFIX: string = 'planner_fail_count_'
 }
 
 // models.dev 默认基址，PreferenceKeys.MODELS_DEV_BASE_URL 未配置时使用

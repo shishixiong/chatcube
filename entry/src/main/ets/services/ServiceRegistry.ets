@@ -25,6 +25,7 @@ import { getTTSService, TTSService } from './TTSService'
 import { getStarRewardService, StarRewardService } from './StarRewardService'
 import { getProviderViewModel, ProviderViewModel } from '../viewmodels/ProviderViewModel'
 import { createChatViewModel, ChatViewModel } from '../viewmodels/ChatViewModel'
+import { getLessonPlanningService, LessonPlanningService } from './LessonPlanningService'
 
 // 统一服务装配入口（过渡层），降低上层对具体单例实现的直接耦合
 export class ServiceRegistry {
@@ -134,5 +135,9 @@ export class ServiceRegistry {
 
   static chat(): ChatViewModel {
     return createChatViewModel()
+  }
+
+  static lessonPlanning(): LessonPlanningService {
+    return getLessonPlanningService()
   }
 }

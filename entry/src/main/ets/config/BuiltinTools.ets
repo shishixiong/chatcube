@@ -45,6 +45,8 @@ import { getEffectiveOutputMode } from '../utils/ModelCapabilityDeriver'
 import { getChildProfileService, ChildProfileService, ChildKnowledgeProfile } from '../services/ChildProfileService'
 import { evaluateMathExpression } from '../utils/MathExpressionParser'
 import { getEnglishQuizImageIndex } from '../services/EnglishQuizImageIndex'
+import { getLessonPlanningService } from '../services/LessonPlanningService'
+import { PreparedMediaRow } from '../models/LessonPlanModels'
 
 
 // search_web 工具参数接口
@@ -555,6 +557,15 @@ class ImageGenerationExecutor implements ToolExecutor {
         aspectRatio = ImageAspectRatio.PORTRAIT
       }
 
+      // 第一步：尝试命中备课老师预生成的图片（消除生图延迟）
+      // 仅当 numberOfImages===1 时复用预生成图（多张图未预生成）
+      if (numberOfImages === 1) {
+        const hit = await this.tryPreparedMedia(prompt, params.prompt)
+        if (hit !== null) {
+          return hit
+        }
+      }
+
       // 解析图片生成 provider/model
       const state = getAppSettingsState()
       const defaultImage = state.defaultImageModel
@@ -656,6 +667,8 @@ class ImageGenerationExecutor implements ToolExecutor {
         media.mimeType = item.mimeType
         media.aspectRatio = aspectRatio
         media.revisedPrompt = item.revisedPrompt
+        media.preparedMediaId = ''
+        media.topicKey = ''
         media.createdAt = Date.now()
         await repository.insert(media)
 
@@ -675,6 +688,66 @@ class ImageGenerationExecutor implements ToolExecutor {
     } catch (error) {
       console.error('ImageGenerationExecutor', `Image generation error: ${JSON.stringify(error)}`)
       return JSON.stringify(new ImageGenErrorOutput(`图片生成失败: ${JSON.stringify(error)}`))
+    }
+  }
+
+  /**
+   * 尝试命中备课老师预生成的图片。
+   * - 提取 prompt 中的 `<topic_key>...</topic_key>` 标记
+   * - 命中 → 直接返回 ToolResult JSON，标记 prepared_media consumed + 写 generated_media 关联
+   * - 未命中 → 返回 null（让调用方走实时生成）
+   */
+  private async tryPreparedMedia(trimmedPrompt: string, originalPrompt: string): Promise<string | null> {
+    try {
+      const planner = getLessonPlanningService()
+      const prepared: PreparedMediaRow | null = await planner.tryConsumePreparedMedia(trimmedPrompt)
+      if (prepared === null || prepared.status !== 'ready' || prepared.filePath === '') {
+        return null
+      }
+      // 命中：构造返回 + 记录命中统计 + 写 generated_media 关联
+      const outputItems: ImageGenerationOutputItem[] = []
+      outputItems.push(new ImageGenerationOutputItem(
+        prepared.filePath,
+        prepared.mimeType,
+        prepared.prompt,
+        prepared.revisedPrompt
+      ))
+      // 异步写命中统计与 generated_media 关联（不阻塞返回）
+      void this.recordPreparedMediaHit(prepared, originalPrompt)
+      console.info('ImageGenerationExecutor',
+        `Prepared media hit: topicKey=${prepared.topicKey}, file=${prepared.filePath}`)
+      return JSON.stringify(new ImageGenerationOutput(outputItems))
+    } catch (error) {
+      console.warn('ImageGenerationExecutor',
+        `tryPreparedMedia failed (fall through to live generation): ${JSON.stringify(error)}`)
+      return null
+    }
+  }
+
+  private async recordPreparedMediaHit(prepared: PreparedMediaRow, originalPrompt: string): Promise<void> {
+    try {
+      const planner = getLessonPlanningService()
+      await planner.markPreparedMediaConsumed(prepared.id)
+      // 在 generated_media 表中留一条关联记录（不影响主流程）
+      const media = new GeneratedMedia()
+      media.id = `gen_hit_${prepared.id}_${Date.now()}`
+      media.type = GeneratedMediaType.IMAGE_GENERATION
+      media.prompt = originalPrompt
+      media.providerId = prepared.providerId
+      media.providerName = prepared.providerName
+      media.modelId = prepared.modelId
+      media.modelName = prepared.modelName
+      media.filePath = prepared.filePath
+      media.mimeType = prepared.mimeType
+      media.aspectRatio = ImageAspectRatio.SQUARE
+      media.revisedPrompt = prepared.revisedPrompt
+      media.preparedMediaId = prepared.id
+      media.topicKey = prepared.topicKey
+      media.createdAt = Date.now()
+      await getGeneratedMediaRepository().insert(media)
+    } catch (error) {
+      console.warn('ImageGenerationExecutor',
+        `recordPreparedMediaHit failed (non-fatal): ${JSON.stringify(error)}`)
     }
   }
 }
@@ -705,7 +778,7 @@ function createImageGenerationToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     IMAGE_GENERATION_TOOL_ID,
-    'Generate images from text descriptions. Use this when the user asks you to draw, create, or generate an image, picture, illustration, or artwork. The generated images will be displayed directly in the chat. Describe the desired image in detail including subject, style, composition, colors, and mood.',
+    'Generate images from text descriptions. Use this when the user asks you to draw, create, or generate an image, picture, illustration, or artwork. The generated images will be displayed directly in the chat. Describe the desired image in detail including subject, style, composition, colors, and mood.\n\nTip: When today\'s system prompt includes a topicKey for an item you are about to visualize (e.g. "vocab.apple" / "math.shape.triangle"), append a marker `<topic_key>vocab.apple</topic_key>` to the end of your image prompt. The system will preferentially return a pre-generated image for that topic, avoiding generation latency. Example: "a cute red apple, cartoon style, <topic_key>vocab.apple</topic_key>"',
     parameters
   )
 

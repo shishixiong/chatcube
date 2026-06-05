@@ -8,6 +8,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 目标 SDK: HarmonyOS 6 (API 23)，stage 模型
 - 构建前需将 `build-profile.json5.example` 复制为 `build-profile.json5` 并填入签名配置
 - 调试/发布构建模式在 `build-profile.json5` 的 `buildModeSet` 中管理
+编译：
+`DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk 
+ /Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw assembleHap
+ --mode module -p product=default -p buildMode=debug`
 
 ## Architecture
 
