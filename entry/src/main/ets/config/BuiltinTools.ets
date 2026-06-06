@@ -26,7 +26,8 @@ import {
   MATH_QUIZ_TOOL_ID,
   ENGLISH_QUIZ_TOOL_ID,
   NUMBER_PUZZLE_TOOL_ID,
-  HANDWRITING_PRACTICE_TOOL_ID
+  HANDWRITING_PRACTICE_TOOL_ID,
+  CATEGORIZATION_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { i18n } from '@kit.LocalizationKit'
 import {
@@ -1494,6 +1495,112 @@ function createHandwritingPracticeToolConfig(): ToolConfig {
   )
 }
 
+// ===== categorization 工具 =====
+// 分类小管家工具：让小星老师发起分类归纳互动游戏，孩子把物品拖拽/点击到对应的分类桶里，训练分类归纳能力。
+// 交互由前端 CategorizationCard 组件处理，后端 ToolExecutionService.handleCategorization 拦截处理记录保存。
+
+interface CategorizationArgs {
+  theme: string
+  instruction?: string
+  difficulty?: number
+  bins: Object[]
+  items: Object[]
+}
+
+class CategorizationExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    try {
+      const params = JSON.parse(_args) as CategorizationArgs
+      return JSON.stringify({
+        theme: params.theme ?? '',
+        instruction: params.instruction ?? '',
+        difficulty: params.difficulty ?? 1,
+        bins: params.bins ?? [],
+        items: params.items ?? [],
+        completed: false,
+        correct_count: 0,
+        total_count: 0
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`categorization error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createCategorizationToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "theme": {
+        "type": "string",
+        "description": "主题名称，如"动物的家"、"水果与蔬菜"。2-12 字。"
+      },
+      "instruction": {
+        "type": "string",
+        "description": "可选，给孩子的开场白，如"帮小动物回家吧！""
+      },
+      "difficulty": {
+        "type": "integer",
+        "enum": [1, 2, 3],
+        "description": "难度：1=4件2桶，2=6件3桶，3=9件3桶"
+      },
+      "bins": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 3,
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "description": "桶名（中文）" },
+            "emoji": { "type": "string", "description": "桶标识 emoji，可选" }
+          },
+          "required": ["name"]
+        }
+      },
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "emoji": { "type": "string" },
+            "bin_index": { "type": "integer", "description": "所属桶的索引（从 0 开始）" }
+          },
+          "required": ["name", "bin_index"]
+        }
+      }
+    },
+    "required": ["theme", "bins", "items"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    CATEGORIZATION_TOOL_ID,
+    '让孩子把物品拖拽/点击到对应的分类桶里，训练分类归纳能力。',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createCategorizationToolConfig(): ToolConfig {
+  return new ToolConfig(
+    CATEGORIZATION_TOOL_ID,
+    '分类小管家',
+    '分类归纳互动游戏, 让孩子把物品拖拽或点击到对应的分类桶里, 训练分类与归纳能力。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    CATEGORIZATION_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
 // 注册所有内置工具
 export function registerBuiltinTools(): void {
   const registry = getToolRegistry()
@@ -1631,6 +1738,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(CATEGORIZATION_TOOL_ID)) {
+    const categorizationTool = new RegisteredTool(
+      CATEGORIZATION_TOOL_ID,
+      createCategorizationToolConfig(),
+      createCategorizationToolDefinition(),
+      new CategorizationExecutor()
+    )
+    registry.registerTool(categorizationTool)
+    registeredNow += 1
+  }
+
   console.info(
     'BuiltinTools',
     `Builtin tools ready: total=${registry.getToolCount()}, newlyRegistered=${registeredNow}`
@@ -1639,5 +1757,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID]
 }
