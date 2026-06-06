@@ -1,0 +1,791 @@
+/**
+ * CategorizationCard - 分类小管家互动卡片
+ *
+ * 设计语言对齐 NumberPuzzleCard / MathQuizCard 卡片族:
+ * - 圆形徽章标题, 主题色调暖色琥珀
+ * - 物品圆球 + 桶虚线轮廓, 拖拽或"先点物品再点桶"两种交互
+ * - 双卡片统计 (时间 / 进度)
+ * - 完成横幅 (绿色) / 放弃药丸 (橙色)
+ * - 严格的输入校验: 桶数 2-3、物品数 4/6/9、bin_index 合法、每桶 ≥2 物品
+ *
+ * 公共 API: toolCall / isAnswered / answeredPayload / largeSize / onAnswer
+ * 导出: CategorizationResult / CategorizationBin / CategorizationItem
+ */
+
+import { ToolCall } from '../models/ChatModels'
+import { getAppUiState } from '../state/AppUiState'
+import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { hilog } from '@kit.PerformanceAnalysisKit'
+
+const DOMAIN = 0x0002
+const TAG = 'CategorizationCard'
+const SUCCESS_GREEN: string = '#22C55E'
+const GIVEUP_ORANGE: string = '#FF9F43'
+const ERROR_RED: string = '#FF3B30'
+
+// ================ 公共接口 ================
+export interface CategorizationResult {
+  theme: string
+  difficulty: number
+  correct: number
+  total: number
+  time_seconds: number
+  wrong_attempts: number
+  completed: boolean
+}
+
+export interface CategorizationBin {
+  name: string
+  emoji: string
+}
+
+export interface CategorizationItem {
+  name: string
+  emoji: string
+  bin_index: number
+}
+
+interface NormalizedData {
+  ok: boolean
+  error: string
+  bins: CategorizationBin[]
+  items: CategorizationItem[]
+  difficulty: number
+  theme: string
+  instruction: string
+}
+
+// ================ 组件 ================
+@ComponentV2
+export struct CategorizationCard {
+  @Param toolCall: ToolCall = new ToolCall()
+  @Param isAnswered: boolean = false
+  @Param answeredPayload: string = ''
+  @Param largeSize: boolean = false
+  @Event onAnswer: (toolCallId: string, answerJson: string) => void = () => {}
+
+  // 题面态
+  @Local theme: string = ''
+  @Local instruction: string = ''
+  @Local bins: CategorizationBin[] = []
+  @Local items: CategorizationItem[] = []
+  @Local difficulty: number = 1
+  @Local validationError: string = ''
+
+  // 游戏态
+  @Local placedItems: number[] = []
+  @Local correctCount: number = 0
+  @Local wrongAttempts: number = 0
+  @Local elapsedSeconds: number = 0
+  @Local isCompleted: boolean = false
+  @Local hasWon: boolean = false
+  @Local selectedItemIndex: number = -1
+  @Local hoveredBinIndex: number = -1
+  @Local shakingItemIndex: number = -1
+  @Local itemPressedIndex: number = -1
+
+  // 非响应式
+  private timerId: number = -1
+  private shakeTimerId: number = -1
+  private startTime: number = 0
+
+  // ================ 主题派生 (NumberPuzzleCard 同款 getter) ================
+  private get themePrimary(): string {
+    return getAppUiState().themePrimary
+  }
+
+  private get themeAiBubble(): string {
+    return getAppUiState().themeAiBubble
+  }
+
+  private get isDarkMode(): boolean {
+    return getAppUiState().isDarkMode
+  }
+
+  // ================ 生命周期 ================
+  aboutToAppear(): void {
+    const v = this.validateAndNormalize()
+    if (!v.ok) {
+      this.validationError = v.error
+      hilog.warn(DOMAIN, TAG, `validation failed: ${v.error}`)
+      return
+    }
+    this.theme = v.theme
+    this.instruction = v.instruction
+    this.bins = v.bins
+    this.items = v.items
+    this.difficulty = v.difficulty
+    this.placedItems = this.createPlacedArray(this.items.length)
+    if (this.isAnswered) {
+      this.parseAnsweredPayload()
+    } else {
+      this.shuffleItems()
+      this.startTimer()
+    }
+  }
+
+  aboutToDisappear(): void {
+    this.stopTimer()
+    if (this.shakeTimerId >= 0) {
+      clearTimeout(this.shakeTimerId)
+      this.shakeTimerId = -1
+    }
+  }
+
+  private createPlacedArray(len: number): number[] {
+    const arr: number[] = []
+    for (let i = 0; i < len; i++) {
+      arr.push(-1)
+    }
+    return arr
+  }
+
+  // ================ 校验 / 解析 ================
+  private validateAndNormalize(): NormalizedData {
+    const fail = (msg: string): NormalizedData => {
+      return {
+        ok: false,
+        error: msg,
+        bins: [],
+        items: [],
+        difficulty: 1,
+        theme: '',
+        instruction: ''
+      }
+    }
+
+    let parsed: Record<string, Object>
+    try {
+      parsed = JSON.parse(this.toolCall.arguments) as Record<string, Object>
+    } catch (_e) {
+      return fail('题目格式错误，请提示小星老师再出一题吧')
+    }
+
+    const theme = ((parsed['theme'] as string) ?? '').trim()
+    if (theme === '') {
+      return fail('主题为空，请提示小星老师再出一题吧')
+    }
+    const instruction = ((parsed['instruction'] as string) ?? '').trim()
+
+    const binsRaw = parsed['bins'] as Array<Record<string, Object>> | undefined
+    if (!binsRaw || binsRaw.length < 2 || binsRaw.length > 3) {
+      return fail('分类桶数量不对（需要 2 或 3 个）')
+    }
+    const bins: CategorizationBin[] = []
+    for (let i = 0; i < binsRaw.length; i++) {
+      const raw = binsRaw[i]
+      const name = ((raw['name'] as string) ?? '').trim()
+      if (name === '') {
+        return fail(`第 ${i + 1} 个分类桶缺少名字`)
+      }
+      bins.push({
+        name: name,
+        emoji: (raw['emoji'] as string) ?? ''
+      })
+    }
+
+    const itemsRaw = parsed['items'] as Array<Record<string, Object>> | undefined
+    if (!itemsRaw || itemsRaw.length === 0) {
+      return fail('物品列表为空')
+    }
+
+    let difficulty = (parsed['difficulty'] as number) ?? 0
+    if (difficulty !== 1 && difficulty !== 2 && difficulty !== 3) {
+      if (itemsRaw.length === 4) {
+        difficulty = 1
+      } else if (itemsRaw.length === 6) {
+        difficulty = 2
+      } else if (itemsRaw.length === 9) {
+        difficulty = 3
+      } else {
+        return fail(`物品数量 ${itemsRaw.length} 与难度不匹配（应为 4/6/9）`)
+      }
+    }
+    const expectedCount = difficulty === 1 ? 4 : (difficulty === 2 ? 6 : 9)
+    if (itemsRaw.length !== expectedCount) {
+      return fail(`物品数量 ${itemsRaw.length} 与难度 ${difficulty}（期望 ${expectedCount}）不一致`)
+    }
+
+    const binCounts: number[] = []
+    for (let i = 0; i < bins.length; i++) {
+      binCounts.push(0)
+    }
+    const items: CategorizationItem[] = []
+    for (let i = 0; i < itemsRaw.length; i++) {
+      const raw = itemsRaw[i]
+      const name = ((raw['name'] as string) ?? '').trim()
+      const emoji = (raw['emoji'] as string) ?? ''
+      const binIndex = raw['bin_index'] as number
+      if (name === '') {
+        return fail(`第 ${i + 1} 个物品缺少名字`)
+      }
+      if (typeof binIndex !== 'number' || Math.floor(binIndex) !== binIndex
+        || binIndex < 0 || binIndex >= bins.length) {
+        return fail(`第 ${i + 1} 个物品的 bin_index 不合法`)
+      }
+      binCounts[binIndex] = binCounts[binIndex] + 1
+      items.push({ name: name, emoji: emoji, bin_index: binIndex })
+    }
+    for (let i = 0; i < binCounts.length; i++) {
+      if (binCounts[i] < 2) {
+        return fail(`第 ${i + 1} 个桶只有 ${binCounts[i]} 件物品（至少 2 件）`)
+      }
+    }
+
+    return {
+      ok: true,
+      error: '',
+      bins,
+      items,
+      difficulty,
+      theme,
+      instruction
+    }
+  }
+
+  private parseAnsweredPayload(): void {
+    if (this.answeredPayload === '') {
+      return
+    }
+    try {
+      const result = JSON.parse(this.answeredPayload) as CategorizationResult
+      this.correctCount = result.correct
+      this.wrongAttempts = result.wrong_attempts
+      this.elapsedSeconds = Math.floor(result.time_seconds)
+      this.hasWon = result.completed === true && result.correct === result.total
+      this.isCompleted = true
+      // 还原终局: 所有物品落到正确桶
+      const placed: number[] = []
+      for (let i = 0; i < this.items.length; i++) {
+        placed.push(this.items[i].bin_index)
+      }
+      this.placedItems = placed
+    } catch (_e) {
+      this.validationError = '已答数据格式错误'
+    }
+  }
+
+  // ================ 业务逻辑 ================
+  private shuffleItems(): void {
+    const shuffled: CategorizationItem[] = []
+    for (let i = 0; i < this.items.length; i++) {
+      shuffled.push(this.items[i])
+    }
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      const tmp = shuffled[i]
+      shuffled[i] = shuffled[j]
+      shuffled[j] = tmp
+    }
+    this.items = shuffled
+    this.placedItems = this.createPlacedArray(this.items.length)
+  }
+
+  private startTimer(): void {
+    this.stopTimer()
+    this.startTime = Date.now()
+    this.timerId = setInterval(() => {
+      if (!this.isCompleted && this.startTime > 0) {
+        this.elapsedSeconds = Math.floor((Date.now() - this.startTime) / 1000)
+      }
+    }, 500)
+  }
+
+  private stopTimer(): void {
+    if (this.timerId >= 0) {
+      clearInterval(this.timerId)
+      this.timerId = -1
+    }
+  }
+
+  private handleItemClick(itemIndex: number): void {
+    if (this.isCompleted || this.placedItems[itemIndex] >= 0) {
+      return
+    }
+    if (this.selectedItemIndex === itemIndex) {
+      this.selectedItemIndex = -1
+    } else {
+      this.selectedItemIndex = itemIndex
+    }
+  }
+
+  private handleBinClick(binIndex: number): void {
+    if (this.isCompleted || this.selectedItemIndex < 0) {
+      return
+    }
+    const targetIdx = this.selectedItemIndex
+    this.selectedItemIndex = -1
+    this.handleDrop(targetIdx, binIndex)
+  }
+
+  private handleDrop(itemIndex: number, binIndex: number): void {
+    if (this.isCompleted) {
+      return
+    }
+    if (binIndex < 0 || binIndex >= this.bins.length) {
+      return
+    }
+    if (itemIndex < 0 || itemIndex >= this.items.length) {
+      return
+    }
+    if (this.placedItems[itemIndex] >= 0) {
+      return
+    }
+    const item = this.items[itemIndex]
+    if (item.bin_index === binIndex) {
+      // 命中: 写入对应桶, 同步 correctCount
+      const placed: number[] = []
+      for (let i = 0; i < this.placedItems.length; i++) {
+        placed.push(i === itemIndex ? binIndex : this.placedItems[i])
+      }
+      this.placedItems = placed
+      this.correctCount = this.correctCount + 1
+      hilog.info(DOMAIN, TAG, `correct drop: item=${itemIndex} bin=${binIndex}, progress=${this.correctCount}/${this.items.length}`)
+      this.evaluateWin()
+    } else {
+      this.wrongAttempts = this.wrongAttempts + 1
+      this.shakeItem(itemIndex)
+      hilog.info(DOMAIN, TAG, `wrong drop: item=${itemIndex} expected=${item.bin_index} got=${binIndex}`)
+    }
+  }
+
+  private shakeItem(itemIndex: number): void {
+    this.shakingItemIndex = itemIndex
+    if (this.shakeTimerId >= 0) {
+      clearTimeout(this.shakeTimerId)
+    }
+    this.shakeTimerId = setTimeout(() => {
+      this.shakingItemIndex = -1
+      this.shakeTimerId = -1
+    }, 400)
+  }
+
+  private evaluateWin(): void {
+    let allPlaced = true
+    for (let i = 0; i < this.placedItems.length; i++) {
+      if (this.placedItems[i] < 0) {
+        allPlaced = false
+        break
+      }
+    }
+    if (!allPlaced) {
+      return
+    }
+    this.stopTimer()
+    this.isCompleted = true
+    this.hasWon = true
+    this.submitResult(true)
+  }
+
+  private handleGiveUp(): void {
+    if (this.isCompleted) {
+      return
+    }
+    this.stopTimer()
+    this.isCompleted = true
+    this.hasWon = false
+    this.submitResult(false)
+  }
+
+  private submitResult(completed: boolean): void {
+    // 通关: correctCount 即正确数; 放弃: 已落桶且 bin 对的为正确
+    let correct = 0
+    if (completed) {
+      correct = this.correctCount
+    } else {
+      for (let i = 0; i < this.placedItems.length; i++) {
+        if (this.placedItems[i] >= 0 && this.placedItems[i] === this.items[i].bin_index) {
+          correct = correct + 1
+        }
+      }
+    }
+    const seconds = this.elapsedSeconds
+    const result: CategorizationResult = {
+      theme: this.theme,
+      difficulty: this.difficulty,
+      correct,
+      total: this.items.length,
+      time_seconds: seconds,
+      wrong_attempts: this.wrongAttempts,
+      completed
+    }
+    hilog.info(DOMAIN, TAG, `submit: ${JSON.stringify(result)}`)
+    this.onAnswer(this.toolCall.id, JSON.stringify(result))
+  }
+
+  // ================ 辅助方法 ================
+  private getDifficultyLabel(): string {
+    if (this.difficulty === 1) {
+      return '入门'
+    }
+    if (this.difficulty === 2) {
+      return '简单'
+    }
+    return '进阶'
+  }
+
+  private formatTime(): string {
+    const m = Math.floor(this.elapsedSeconds / 60)
+    const s = this.elapsedSeconds % 60
+    const sStr = s < 10 ? `0${s}` : `${s}`
+    return `${m}:${sStr}`
+  }
+
+  private getBinFillAlpha(binIndex: number): string {
+    if (binIndex === 0) {
+      return '14'
+    }
+    if (binIndex === 1) {
+      return '20'
+    }
+    return '2C'
+  }
+
+  private getBinBorderAlpha(binIndex: number): string {
+    if (binIndex === 0) {
+      return '30'
+    }
+    if (binIndex === 1) {
+      return '40'
+    }
+    return '50'
+  }
+
+  private countPlacedInBin(binIndex: number): number {
+    let count = 0
+    for (let i = 0; i < this.placedItems.length; i++) {
+      if (this.placedItems[i] === binIndex) {
+        count++
+      }
+    }
+    return count
+  }
+
+  private hasUnplacedItem(): boolean {
+    for (let i = 0; i < this.placedItems.length; i++) {
+      if (this.placedItems[i] < 0) {
+        return true
+      }
+    }
+    return false
+  }
+
+  // ================ 主 build ================
+  build() {
+    Column({ space: this.largeSize ? 14 : 10 }) {
+      if (this.validationError !== '') {
+        this.ErrorPlaceholder()
+      } else {
+        this.HeaderRow()
+        if (this.hasWon) {
+          this.WinBanner()
+        }
+        if (this.instruction !== '') {
+          this.InstructionRow()
+        }
+        this.BinRow()
+        this.ItemsLayer()
+        this.StatsGrid()
+        if (!this.isCompleted) {
+          this.ActionRow()
+        }
+      }
+    }
+    .width('100%')
+    .padding(this.largeSize ? 20 : 14)
+    .backgroundColor(this.largeSize ? Color.Transparent : this.themeAiBubble)
+    .borderRadius(this.largeSize ? 0 : 14)
+    .border(this.largeSize
+      ? { width: 0, color: Color.Transparent, style: BorderStyle.Solid }
+      : { width: 1, color: $r('app.color.divider'), style: BorderStyle.Solid })
+    .alignItems(HorizontalAlign.Start)
+    .onTouch((e: TouchEvent) => e.stopPropagation())
+  }
+
+  // ================ 子区块 ================
+  @Builder
+  HeaderRow() {
+    Row() {
+      Column() {
+        SymbolGlyph($r('sys.symbol.lightbulb'))
+          .fontSize(15)
+          .fontColor([this.themePrimary])
+      }
+      .width(32)
+      .height(32)
+      .borderRadius(16)
+      .backgroundColor(withColorAlpha(this.themePrimary, '18'))
+      .justifyContent(FlexAlign.Center)
+
+      Column() {
+        Text('分类小管家')
+          .fontSize(15)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+        Text(`${this.theme} · ${this.getDifficultyLabel()} · ${this.items.length}件 ${this.bins.length}桶`)
+          .fontSize(11)
+          .fontColor($r('app.color.text_tertiary'))
+          .margin({ top: 2 })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .margin({ left: 10 })
+      .layoutWeight(1)
+
+      if (this.isCompleted) {
+        Text(this.hasWon ? '已完成' : '已放弃')
+          .fontSize(10)
+          .fontColor(Color.White)
+          .backgroundColor(this.hasWon ? $r('app.color.status_success') : GIVEUP_ORANGE)
+          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+          .borderRadius(6)
+      }
+    }
+    .width('100%')
+    .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
+  WinBanner() {
+    Row({ space: 10 }) {
+      Text('🎉')
+        .fontSize(24)
+      Column() {
+        Text('分类完成！')
+          .fontSize(15)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.status_success'))
+        Text(`${this.correctCount}/${this.items.length} · ${this.formatTime()} · 失败 ${this.wrongAttempts} 次`)
+          .fontSize(12)
+          .fontColor($r('app.color.text_secondary'))
+          .margin({ top: 2 })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+    }
+    .width('100%')
+    .padding(12)
+    .backgroundColor(withColorAlpha(SUCCESS_GREEN, this.isDarkMode ? '18' : '0C'))
+    .borderRadius(12)
+    .border({
+      width: 1,
+      color: withColorAlpha(SUCCESS_GREEN, this.isDarkMode ? '38' : '28'),
+      style: BorderStyle.Solid
+    })
+  }
+
+  @Builder
+  InstructionRow() {
+    Row() {
+      Text(this.instruction)
+        .fontSize(12)
+        .fontColor($r('app.color.text_secondary'))
+        .layoutWeight(1)
+    }
+    .width('100%')
+    .padding({ left: 4, right: 4 })
+  }
+
+  @Builder
+  BinRow() {
+    Row({ space: 10 }) {
+      ForEach(this.bins, (bin: CategorizationBin, index: number) => {
+        this.BinCell(bin, index)
+      }, (bin: CategorizationBin, index: number) => `bin_${index}_${bin.name}`)
+    }
+    .width('100%')
+  }
+
+  @Builder
+  BinCell(bin: CategorizationBin, index: number) {
+    Column({ space: 4 }) {
+      if (bin.emoji !== '') {
+        Text(bin.emoji)
+          .fontSize(26)
+      }
+      Text(bin.name)
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_primary'))
+      Text(`${this.countPlacedInBin(index)} 件`)
+        .fontSize(10)
+        .fontColor($r('app.color.text_tertiary'))
+    }
+    .layoutWeight(1)
+    .height(82)
+    .padding(6)
+    .borderRadius(12)
+    .backgroundColor(this.hoveredBinIndex === index
+      ? withColorAlpha(this.themePrimary, '28')
+      : withColorAlpha(this.themePrimary, this.getBinFillAlpha(index)))
+    .border({
+      width: 1.5,
+      style: BorderStyle.Dashed,
+      color: this.hoveredBinIndex === index
+        ? this.themePrimary
+        : withColorAlpha(this.themePrimary, this.getBinBorderAlpha(index))
+    })
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .scale(this.selectedItemIndex >= 0
+      ? { x: 1.03, y: 1.03 }
+      : { x: 1, y: 1 })
+    .animation({ duration: 120, curve: Curve.EaseOut })
+    .onClick(() => this.handleBinClick(index))
+  }
+
+  @Builder
+  ItemsLayer() {
+    Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Center, alignItems: ItemAlign.Center }) {
+      ForEach(this.items, (item: CategorizationItem, index: number) => {
+        if (this.placedItems[index] < 0) {
+          this.ItemCircle(item, index)
+        }
+      }, (item: CategorizationItem, index: number) => `item_${index}_${item.name}`)
+    }
+    .width('100%')
+    .padding(this.largeSize ? 12 : 8)
+    .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '08' : '05'))
+    .borderRadius(12)
+  }
+
+  @Builder
+  ItemCircle(item: CategorizationItem, index: number) {
+    Column() {
+      if (item.emoji !== '') {
+        Text(item.emoji)
+          .fontSize(this.largeSize ? 28 : 22)
+      } else {
+        Text(item.name)
+          .fontSize(this.largeSize ? 12 : 10)
+          .fontColor($r('app.color.text_primary'))
+          .textAlign(TextAlign.Center)
+          .maxLines(2)
+      }
+    }
+    .width(this.largeSize ? 64 : 56)
+    .height(this.largeSize ? 64 : 56)
+    .borderRadius(this.largeSize ? 32 : 28)
+    .backgroundColor(this.themeAiBubble)
+    .borderWidth(this.selectedItemIndex === index || this.shakingItemIndex === index ? 2.5 : 0.5)
+    .borderColor(this.shakingItemIndex === index
+      ? ERROR_RED
+      : (this.selectedItemIndex === index ? this.themePrimary : $r('app.color.divider')))
+    .scale(this.selectedItemIndex === index
+      ? { x: 1.12, y: 1.12 }
+      : (this.shakingItemIndex === index
+        ? { x: 1.05, y: 1.05 }
+        : (this.itemPressedIndex === index ? { x: 0.95, y: 0.95 } : { x: 1, y: 1 })))
+    .shadow(this.selectedItemIndex === index
+      ? { radius: 10, color: '#33000000', offsetY: 3 }
+      : { radius: 4, color: '#1F000000', offsetY: 1 })
+    .animation({ duration: 120, curve: Curve.EaseOut })
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .margin(6)
+    .onTouch((e: TouchEvent) => {
+      if (e.type === TouchType.Down) {
+        this.itemPressedIndex = index
+      } else if (e.type === TouchType.Up || e.type === TouchType.Cancel) {
+        this.itemPressedIndex = -1
+      }
+    })
+    .onClick(() => this.handleItemClick(index))
+  }
+
+  @Builder
+  StatsGrid() {
+    Row({ space: 8 }) {
+      this.StatCard($r('sys.symbol.clock'), '时间', this.formatTime())
+      this.StatCard($r('sys.symbol.checkmark'), '进度', `${this.correctCount}/${this.items.length}`)
+    }
+    .width('100%')
+  }
+
+  @Builder
+  StatCard(icon: Resource, label: string, value: string) {
+    Column({ space: 4 }) {
+      Row({ space: 4 }) {
+        SymbolGlyph(icon)
+          .fontSize(11)
+          .fontColor([$r('app.color.text_tertiary')])
+        Text(label)
+          .fontSize(11)
+          .fontColor($r('app.color.text_tertiary'))
+      }
+      .width('100%')
+
+      Text(value)
+        .fontSize(20)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.text_primary'))
+        .width('100%')
+        .textAlign(TextAlign.Start)
+        .margin({ top: 2 })
+
+      if (this.wrongAttempts > 0 && label === '进度') {
+        Text(`失败 ${this.wrongAttempts} 次`)
+          .fontSize(10)
+          .fontColor(GIVEUP_ORANGE)
+      } else {
+        Text(' ')
+          .fontSize(10)
+      }
+    }
+    .layoutWeight(1)
+    .padding(10)
+    .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '10' : '08'))
+    .borderRadius(10)
+    .border({
+      width: 1,
+      color: withColorAlpha(this.themePrimary, this.isDarkMode ? '22' : '18'),
+      style: BorderStyle.Solid
+    })
+  }
+
+  @Builder
+  ActionRow() {
+    Row() {
+      if (this.selectedItemIndex >= 0) {
+        Text('选好一个物品 → 点击对应分类桶')
+          .fontSize(11)
+          .fontColor(this.themePrimary)
+          .layoutWeight(1)
+      } else if (this.hasUnplacedItem()) {
+        Text('先点物品 → 再点桶')
+          .fontSize(11)
+          .fontColor($r('app.color.text_tertiary'))
+          .layoutWeight(1)
+      } else {
+        Blank().layoutWeight(1)
+      }
+      Text('放弃本局')
+        .fontSize(12)
+        .fontColor($r('app.color.text_tertiary'))
+        .padding(8)
+        .onClick(() => this.handleGiveUp())
+    }
+    .width('100%')
+    .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
+  ErrorPlaceholder() {
+    Row({ space: 8 }) {
+      Text('💡')
+        .fontSize(20)
+      Text(this.validationError)
+        .fontSize(12)
+        .fontColor($r('app.color.text_secondary'))
+        .layoutWeight(1)
+    }
+    .width('100%')
+    .padding(12)
+    .borderRadius(10)
+    .backgroundColor(withColorAlpha(GIVEUP_ORANGE, '10'))
+    .border({
+      width: 1,
+      color: withColorAlpha(GIVEUP_ORANGE, '30'),
+      style: BorderStyle.Solid
+    })
+  }
+}
