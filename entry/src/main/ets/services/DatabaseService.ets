@@ -12,7 +12,7 @@ import {
 import { Assistant, DEFAULT_ASSISTANT_ID, createDefaultAssistant, DEFAULT_ASSISTANT_SYSTEM_PROMPT, DEFAULT_ASSISTANT_LOCKED_TOOL_IDS } from '../models/AssistantModels'
 import { GeneratedMedia } from '../models/ImageGenerationModels'
 import { StarEventInsert, StarEventRow } from '../models/StarEventModels'
-import { DailyLessonPlanRow, PreparedMediaRow } from '../models/LessonPlanModels'
+import { DailyLessonPlanRow, PreparedMediaRow, PlannerStats } from '../models/LessonPlanModels'
 import { deserializeMessageParts, serializeMessageParts } from '../models/MessageParts'
 import { ensureMessageParts, buildMessagePartsFromLegacy } from '../utils/ChatMessagePartsHelper'
 import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
@@ -3654,6 +3654,29 @@ export class DatabaseService {
     }
   }
 
+  /** 列出已过期的预生成图（按 expires_at < nowMs），调用方可先删文件再调 deleteExpiredPreparedMedia 删行 */
+  async listExpiredPreparedMedia(nowMs: number): Promise<PreparedMediaRow[]> {
+    const result: PreparedMediaRow[] = []
+    if (this.rdbStore === null) {
+      return result
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.PREPARED_MEDIA)
+      predicates.lessThan('expires_at', nowMs)
+      const resultSet = await this.rdbStore.query(predicates)
+      try {
+        while (resultSet.goToNextRow()) {
+          result.push(this.buildPreparedMediaRowFromResultSet(resultSet))
+        }
+      } finally {
+        resultSet.close()
+      }
+    } catch (error) {
+      console.error('DatabaseService', `Failed to list expired prepared media: ${JSON.stringify(error)}`)
+    }
+    return result
+  }
+
   /** 删除已过期的预生成图（按 expires_at < nowMs） */
   async deleteExpiredPreparedMedia(nowMs: number): Promise<number> {
     if (this.rdbStore === null) {
@@ -3667,6 +3690,82 @@ export class DatabaseService {
       console.error('DatabaseService', `Failed to delete expired prepared media: ${JSON.stringify(error)}`)
       return 0
     }
+  }
+
+  /**
+   * 备课老师运行时统计：plan 总数、明日 plan 状态、预生成图数量/命中次数/命中率、最近成功时间。
+   * - preparedCount: status='ready' AND expires_at>nowMs
+   * - consumedCount: 上述范围内的 sum(consumed_count)
+   * - hitRate: consumedCount / max(preparedCount, 1)
+   *
+   * 单次调用 4 个独立查询（沿用 RdbPredicates，无聚合 SQL），全部 best-effort。
+   */
+  async getPlannerStats(nowMs: number, tomorrowYMD: string): Promise<PlannerStats> {
+    const stats = new PlannerStats()
+    if (this.rdbStore === null) {
+      return stats
+    }
+    try {
+      // 1) totalPlans: COUNT(*) from daily_lesson_plans
+      const allPlansPred = new relationalStore.RdbPredicates(TableNames.DAILY_LESSON_PLANS)
+      const allPlansRs = await this.rdbStore.query(allPlansPred, ['id'])
+      try {
+        let count = 0
+        while (allPlansRs.goToNextRow()) {
+          count += 1
+        }
+        stats.totalPlans = count
+      } finally {
+        allPlansRs.close()
+      }
+
+      // 2) todayPlanStatus: 明日 plan row
+      const todayRow = await this.getDailyLessonPlanByDate(tomorrowYMD)
+      stats.todayPlanStatus = todayRow === null ? 'none' : todayRow.status
+
+      // 3) preparedCount: status='ready' AND expires_at>nowMs
+      const readyPred = new relationalStore.RdbPredicates(TableNames.PREPARED_MEDIA)
+      readyPred.equalTo('status', 'ready')
+      readyPred.greaterThan('expires_at', nowMs)
+      const readyRs = await this.rdbStore.query(readyPred, ['consumed_count'])
+      let totalConsumed = 0
+      try {
+        let readyCount = 0
+        while (readyRs.goToNextRow()) {
+          readyCount += 1
+          totalConsumed += this.safeGetLong(readyRs, 'consumed_count', 0)
+        }
+        stats.preparedCount = readyCount
+        stats.consumedCount = totalConsumed
+      } finally {
+        readyRs.close()
+      }
+
+      // 4) lastPlanAt: MAX(completed_at) WHERE status='done'
+      const donePred = new relationalStore.RdbPredicates(TableNames.DAILY_LESSON_PLANS)
+      donePred.equalTo('status', 'done')
+      const doneRs = await this.rdbStore.query(donePred, ['completed_at'])
+      try {
+        let maxCompleted = 0
+        while (doneRs.goToNextRow()) {
+          const ts = this.safeGetLong(doneRs, 'completed_at', 0)
+          if (ts > maxCompleted) {
+            maxCompleted = ts
+          }
+        }
+        stats.lastPlanAt = maxCompleted
+      } finally {
+        doneRs.close()
+      }
+
+      // 5) hitRate
+      stats.hitRate = stats.preparedCount > 0
+        ? stats.consumedCount / stats.preparedCount
+        : 0
+    } catch (error) {
+      console.error('DatabaseService', `getPlannerStats failed: ${JSON.stringify(error)}`)
+    }
+    return stats
   }
 
   /** 列出某 plan 的全部预生成图（含 failed） */

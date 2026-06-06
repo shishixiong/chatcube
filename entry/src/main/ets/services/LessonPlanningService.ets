@@ -60,6 +60,7 @@ import {
   LessonPlan,
   LessonPlanItemBase,
   LessonPlanStatus,
+  PlannerStats,
   PreparedMediaRow,
   PreparedMediaStatus,
   formatLocalYMD,
@@ -166,6 +167,13 @@ class PrefetchResult {
   errorMessage: string = ''
 }
 
+/** 预生成批次汇总，供 pipeline 完成日志使用 */
+class PrefetchStats {
+  processed: number = 0
+  ready: number = 0
+  failed: number = 0
+}
+
 /** 图片模型解析结果 */
 class ImageModelResolution {
   found: boolean = false
@@ -227,10 +235,27 @@ export class LessonPlanningService {
 
   private async onInitialized(): Promise<void> {
     try {
-      // 清理过期 prepared_media
-      const deleted = await this.databaseService.deleteExpiredPreparedMedia(Date.now())
-      if (deleted > 0) {
-        console.info('LessonPlanningService', `Cleaned up ${deleted} expired prepared_media rows`)
+      // 清理过期 prepared_media：先列过期行 → 删沙箱文件 → 删行（避免孤儿文件）
+      const now = Date.now()
+      const expired = await this.databaseService.listExpiredPreparedMedia(now)
+      let fileDeleted = 0
+      for (let i = 0; i < expired.length; i++) {
+        const row = expired[i]
+        if (row.filePath === '') {
+          continue
+        }
+        try {
+          await this.attachmentStorageService.deleteAttachment(row.filePath)
+          fileDeleted += 1
+        } catch (error) {
+          console.warn('LessonPlanningService',
+            `Failed to delete expired file ${row.filePath}: ${JSON.stringify(error)}`)
+        }
+      }
+      const rowDeleted = await this.databaseService.deleteExpiredPreparedMedia(now)
+      if (rowDeleted > 0 || fileDeleted > 0) {
+        console.info('LessonPlanningService',
+          `Expired cleanup: files=${fileDeleted}, rows=${rowDeleted}`)
       }
       // 启动补跑：交给 WorkScheduler 也可，但用户首次启动可能未注册
       await this.triggerPlanningForToday(false, 'appStart')
@@ -382,6 +407,23 @@ export class LessonPlanningService {
       return
     }
     await this.databaseService.markPreparedMediaConsumed(id, Date.now())
+  }
+
+  // ============================================================
+  // 公共 API：统计（命中/总量/状态）
+  // ============================================================
+
+  /**
+   * 获取备课老师运行时统计摘要。
+   * - 包含 totalPlans / todayPlanStatus / preparedCount / consumedCount / hitRate / lastPlanAt
+   * - 调试用，调用方应捕获异常（返回全零 stats）
+   */
+  async getPlannerStats(): Promise<PlannerStats> {
+    const now = Date.now()
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const tomorrowYMD = formatLocalYMD(tomorrow)
+    return await this.databaseService.getPlannerStats(now, tomorrowYMD)
   }
 
   // ============================================================
@@ -550,11 +592,27 @@ export class LessonPlanningService {
         `general=${plan.generalKnowledge.length}, freeform=${Object.keys(plan.freeform).length}`)
 
       // 11. 预生成图片（best-effort，失败不影响 plan 状态）
+      const prefetchStats = new PrefetchStats()
       try {
-        await this.prefetchImages(plan, planId)
+        const result = await this.prefetchImages(plan, planId)
+        prefetchStats.processed = result.processed
+        prefetchStats.ready = result.ready
+        prefetchStats.failed = result.failed
       } catch (error) {
         console.error('LessonPlanningService',
           `prefetchImages failed (non-fatal): ${JSON.stringify(error)}`)
+      }
+
+      // 12. 统计摘要日志（命中率 + 计划完成时间）
+      try {
+        const stats = await this.getPlannerStats()
+        console.info('LessonPlanningService',
+          `Pipeline done: plan=${planDate}, prefetched=${prefetchStats.processed}, ` +
+          `ready=${prefetchStats.ready}, failed=${prefetchStats.failed}, ` +
+          `totalHitRate=${stats.hitRate.toFixed(2)}`)
+      } catch (error) {
+        console.warn('LessonPlanningService',
+          `Failed to collect planner stats (non-fatal): ${JSON.stringify(error)}`)
       }
     } catch (error) {
       console.error('LessonPlanningService', `runPlanningPipeline error: ${JSON.stringify(error)}`)
@@ -864,18 +922,20 @@ export class LessonPlanningService {
    * - 跳过已存在 prepared_media 行（幂等）
    * - 3 并发生成，单张失败不影响其他
    * - 全失败 best-effort：仅记录日志，不影响 plan 状态
+   * - 返回 PrefetchStats：processed=处理的请求数，ready=成功数，failed=失败数
    */
-  async prefetchImages(plan: LessonPlan, planId: string): Promise<void> {
+  async prefetchImages(plan: LessonPlan, planId: string): Promise<PrefetchStats> {
+    const stats = new PrefetchStats()
     const requests = this.extractPrefetchRequests(plan)
     if (requests.length === 0) {
       console.info('LessonPlanningService', 'prefetchImages: no requests extracted')
-      return
+      return stats
     }
     const resolution = this.resolveImageModelForPlanner()
     if (!resolution.found || resolution.provider === null || resolution.model === null) {
       console.warn('LessonPlanningService',
         `prefetchImages skipped: ${resolution.reason}. requests=${requests.length}`)
-      return
+      return stats
     }
     console.info('LessonPlanningService',
       `prefetchImages starting: ${requests.length} requests, ` +
@@ -891,7 +951,7 @@ export class LessonPlanningService {
     }
     if (filtered.length === 0) {
       console.info('LessonPlanningService', 'prefetchImages: all topic_keys already prepared')
-      return
+      return stats
     }
 
     // 3 并发生成
@@ -899,6 +959,7 @@ export class LessonPlanningService {
     const workers: Promise<void>[] = []
     for (let w = 0; w < PREFETCH_CONCURRENCY; w++) {
       workers.push(this.prefetchWorker(filtered, resolution.provider, resolution.model, planId,
+        stats,
         () => {
           const idx = cursor
           cursor += 1
@@ -907,17 +968,26 @@ export class LessonPlanningService {
     }
     await Promise.allSettled(workers)
     console.info('LessonPlanningService',
-      `prefetchImages completed: processed=${filtered.length}, total=${requests.length}`)
+      `prefetchImages completed: processed=${stats.processed}, ready=${stats.ready}, ` +
+      `failed=${stats.failed}, total=${requests.length}`)
+    return stats
   }
 
   private async prefetchWorker(requests: PrefetchRequest[], provider: ModelProvider,
-    model: ModelInfo, planId: string, next: () => PrefetchRequest | null): Promise<void> {
+    model: ModelInfo, planId: string, stats: PrefetchStats,
+    next: () => PrefetchRequest | null): Promise<void> {
     while (true) {
       const req = next()
       if (req === null) {
         return
       }
       const result = await this.prefetchOne(req, provider, model, planId)
+      stats.processed += 1
+      if (result.status === PreparedMediaStatus.READY) {
+        stats.ready += 1
+      } else {
+        stats.failed += 1
+      }
       console.info('LessonPlanningService',
         `prefetchOne: topicKey=${req.topicKey}, status=${result.status}, ` +
         `filePath=${result.filePath === '' ? '(empty)' : 'ok'}, ` +

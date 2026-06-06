@@ -289,6 +289,30 @@ export class PreparedMediaStatus {
   static readonly FAILED: string = 'failed'
 }
 
+// =================== 统计（命中/总量/状态） ===================
+
+/**
+ * 备课老师运行时统计摘要。
+ * - totalPlans: 历史生成的计划总数
+ * - todayPlanStatus: 今日（明日 plan_date）计划状态 'done'|'failed'|'pending'|'running'|'none'
+ * - preparedCount: 当前未过期且 status='ready' 的预生成图数
+ * - consumedCount: 当前未过期的预生成图被复用总次数（sum consumed_count）
+ * - hitRate: consumedCount / max(preparedCount, 1) — 仅参考，避免分母为零
+ * - lastPlanAt: 最近一次成功 done 的计划完成时间（毫秒），0 = 从未成功
+ *
+ * 主要用于：
+ * 1. runPlanningPipeline 完成后打日志（家长/调试判断备课老师是否被用上）
+ * 2. 后续设置页/调试面板扩展点（当前不在 UI 暴露）
+ */
+export class PlannerStats {
+  totalPlans: number = 0
+  todayPlanStatus: string = 'none'
+  preparedCount: number = 0
+  consumedCount: number = 0
+  hitRate: number = 0
+  lastPlanAt: number = 0
+}
+
 // =================== 工具函数 ===================
 
 /** 把本地 Date 转 'YYYY-MM-DD' 字符串（本地时区） */
