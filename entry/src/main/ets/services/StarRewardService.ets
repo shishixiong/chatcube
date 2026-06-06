@@ -90,6 +90,19 @@ export class StarRewardService {
       const completed = payload['completed']
       return completed === true ? 1 : 0
     }
+    if (activityType === 'categorization') {
+      const completed = payload['completed']
+      if (completed !== true) {
+        return 0
+      }
+      const correct = (payload['correct'] as number) ?? 0
+      const total = (payload['total'] as number) ?? 0
+      if (total <= 0 || correct < total) {
+        return 1
+      }
+      const difficulty = (payload['difficulty'] as number) ?? 0
+      return DIFFICULTY_STARS[difficulty] ?? 1
+    }
     return 0
   }
 
