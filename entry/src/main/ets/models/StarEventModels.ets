@@ -40,6 +40,7 @@ export interface TodayStarSummaryByType {
   english_quiz: StarTypeBucket
   number_puzzle: StarTypeBucket
   handwriting_practice: StarTypeBucket
+  categorization: StarTypeBucket
 }
 
 export interface TodayStarSummary {
@@ -66,7 +67,8 @@ export function createEmptyTodayStarSummary(): TodayStarSummary {
     math_quiz: createEmptyBucket(),
     english_quiz: createEmptyBucket(),
     number_puzzle: createEmptyBucket(),
-    handwriting_practice: createEmptyBucket()
+    handwriting_practice: createEmptyBucket(),
+    categorization: createEmptyBucket()
   }
   return { total: 0, byType: byType }
 }
@@ -84,6 +86,7 @@ export interface StarActivityMetaMap {
   english_quiz: StarActivityMeta
   number_puzzle: StarActivityMeta
   handwriting_practice: StarActivityMeta
+  categorization: StarActivityMeta
 }
 
 const META_MATH: StarActivityMeta = {
@@ -114,12 +117,20 @@ const META_HANDWRITING: StarActivityMeta = {
   grantedHint: '学写字完成',
   unit: '字'
 }
+const META_CATEGORIZATION: StarActivityMeta = {
+  emoji: '📦',
+  shortLabel: '分类',
+  longLabel: '分类小管家',
+  grantedHint: '分类小管家完成',
+  unit: '局'
+}
 
 const metaRecord: StarActivityMetaMap = {
   math_quiz: META_MATH,
   english_quiz: META_ENGLISH,
   number_puzzle: META_PUZZLE,
-  handwriting_practice: META_HANDWRITING
+  handwriting_practice: META_HANDWRITING,
+  categorization: META_CATEGORIZATION
 }
 export const STAR_ACTIVITY_META: StarActivityMetaMap = metaRecord
 
@@ -137,6 +148,9 @@ export function getBucketFromSummary(summary: TodayStarSummary, type: StarActivi
   if (type === 'handwriting_practice') {
     return byType.handwriting_practice
   }
+  if (type === 'categorization') {
+    return byType.categorization
+  }
   return byType.number_puzzle
 }
 
@@ -149,6 +163,9 @@ export function getActivityMeta(type: StarActivityType): StarActivityMeta {
   }
   if (type === 'handwriting_practice') {
     return META_HANDWRITING
+  }
+  if (type === 'categorization') {
+    return META_CATEGORIZATION
   }
   return META_PUZZLE
 }
@@ -166,6 +183,9 @@ export function getActivitySymbol(type: StarActivityType): Resource {
   }
   if (type === 'handwriting_practice') {
     return $r('sys.symbol.AI_pencil')
+  }
+  if (type === 'categorization') {
+    return $r('sys.symbol.folder')
   }
   return $r('sys.symbol.lightbulb')
 }
