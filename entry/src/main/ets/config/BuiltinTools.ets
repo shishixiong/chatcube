@@ -1533,11 +1533,11 @@ function createCategorizationToolDefinition(): ToolDefinition {
     "properties": {
       "theme": {
         "type": "string",
-        "description": "主题名称，如"动物的家"、"水果与蔬菜"。2-12 字。"
+        "description": "主题名称，如「动物的家」、「水果与蔬菜」。2-12 字。"
       },
       "instruction": {
         "type": "string",
-        "description": "可选，给孩子的开场白，如"帮小动物回家吧！""
+        "description": "可选，给孩子的开场白，如「帮小动物回家吧！」"
       },
       "difficulty": {
         "type": "integer",
