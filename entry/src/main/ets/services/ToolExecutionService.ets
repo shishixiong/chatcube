@@ -18,11 +18,13 @@ import {
   ENGLISH_QUIZ_TOOL_ID,
   NUMBER_PUZZLE_TOOL_ID,
   HANDWRITING_PRACTICE_TOOL_ID,
+  CATEGORIZATION_TOOL_ID,
   isAskUserFunctionName,
   isMathQuizFunctionName,
   isEnglishQuizFunctionName,
   isNumberPuzzleFunctionName,
   isHandwritingPracticeFunctionName,
+  isCategorizationFunctionName,
   isScrapeWebFunctionName,
   isSearchWebFunctionName
 } from '../utils/SearchToolIdentityUtils'
@@ -820,6 +822,76 @@ export class ToolExecutionService {
     )
   }
 
+  // categorization 特殊路径: 与 math_quiz 类似, 挂起等待 CategorizationCard 回答。
+  private async handleCategorization(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = CATEGORIZATION_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '分类小管家'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    toolCall.approvalState = 'pending'
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = CATEGORIZATION_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `categorization answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `categorization 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'categorization cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未完成分类' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `categorization answered: ${toolCall.id}`)
+    this.recordStarEvent('categorization', toolCall, context, answerJson)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
   // handwriting_practice 特殊路径: 与 number_puzzle 类似, 挂起等待 HandwritingCard 回答。
   // 孩子完成书写后调用 AI vision 评价, 将评价文字作为 ToolResult 返回。
   private async handleHandwriting(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
@@ -1049,6 +1121,12 @@ export class ToolExecutionService {
     // 数字华容道互动工具, 由 NumberPuzzleCard 收集小朋友的游戏结果。
     if (isNumberPuzzleFunctionName(normalizedFunctionName)) {
       return await this.handleNumberPuzzle(toolCall, context)
+    }
+
+    // === categorization 特殊路径 ===
+    // 分类小管家互动工具, 由 CategorizationCard 收集小朋友的分类结果。
+    if (isCategorizationFunctionName(normalizedFunctionName)) {
+      return await this.handleCategorization(toolCall, context)
     }
 
     // === handwriting_practice 特殊路径 ===
