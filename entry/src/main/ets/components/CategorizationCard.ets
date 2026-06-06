@@ -511,7 +511,7 @@ export struct CategorizationCard {
   HeaderRow() {
     Row() {
       Column() {
-        SymbolGlyph($r('sys.symbol.box'))
+        SymbolGlyph($r('sys.symbol.folder'))
           .fontSize(15)
           .fontColor([this.themePrimary])
       }
