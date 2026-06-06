@@ -283,8 +283,10 @@ export struct EnglishQuizCard {
 
   /**
    * 判断答案是否正确
-   * - 单词模式：忽略大小写和前后空格
-   * - 句子模式：忽略大小写 + 多余空格，核心词匹配
+   * - 单词模式：忽略大小写和前后空格；允许编辑距离 ≤ 1 的拼写错误（aple→apple）
+   * - 句子模式：忽略大小写 + 多余空格，每个词允许编辑距离 ≤ 1，匹配度 ≥ 50% 即正确
+   *
+   * 放宽理由：6-7 岁孩子拼写不稳定、容易漏掉虚词（a/an/the），80% 阈值过严。
    */
   private checkAnswer(childAnswer: string, correctAnswer: string, questionType: string): boolean {
     const child = childAnswer.trim().toLowerCase()
@@ -295,10 +297,14 @@ export struct EnglishQuizCard {
     }
 
     if (questionType === 'word') {
-      return child === correct
+      if (child === correct) {
+        return true
+      }
+      // 单字符拼写错误宽容
+      return this.levenshteinDistance(child, correct) <= 1
     }
 
-    // 句子模式：分词后计算匹配度
+    // 句子模式：分词后逐词匹配（允许编辑距离 ≤ 1）
     const childWords = child.split(/\s+/).filter((w: string): boolean => w.length > 0)
     const correctWords = correct.split(/\s+/).filter((w: string): boolean => w.length > 0)
 
@@ -310,7 +316,7 @@ export struct EnglishQuizCard {
     const usedIndices: Set<number> = new Set()
     for (let i = 0; i < childWords.length; i++) {
       for (let j = 0; j < correctWords.length; j++) {
-        if (!usedIndices.has(j) && childWords[i] === correctWords[j]) {
+        if (!usedIndices.has(j) && this.softWordEqual(childWords[i], correctWords[j])) {
           matchCount++
           usedIndices.add(j)
           break
@@ -319,7 +325,65 @@ export struct EnglishQuizCard {
     }
 
     const accuracy = matchCount / correctWords.length
-    return accuracy >= 0.8
+    return accuracy >= 0.5
+  }
+
+  /**
+   * 单词软匹配：完全相等 或 编辑距离 ≤ 1
+   * - 长度差 > 1 时不可能 ≤ 1 编辑距离，直接 false
+   */
+  private softWordEqual(a: string, b: string): boolean {
+    if (a === b) {
+      return true
+    }
+    return this.levenshteinDistance(a, b) <= 1
+  }
+
+  /**
+   * 编辑距离（Levenshtein）。长度差 > 1 时直接返回较大长度（剪枝）。
+   * 仅用于 6-12 字符以内的英文单词匹配，2 行 DP 足够。
+   */
+  private levenshteinDistance(a: string, b: string): number {
+    if (a === b) {
+      return 0
+    }
+    const la = a.length
+    const lb = b.length
+    if (la === 0) {
+      return lb
+    }
+    if (lb === 0) {
+      return la
+    }
+    if (Math.abs(la - lb) > 1) {
+      return Math.max(la, lb)
+    }
+    let prev: number[] = new Array(lb + 1)
+    let curr: number[] = new Array(lb + 1)
+    for (let j = 0; j <= lb; j++) {
+      prev[j] = j
+    }
+    for (let i = 1; i <= la; i++) {
+      curr[0] = i
+      for (let j = 1; j <= lb; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1
+        const del = prev[j] + 1
+        const ins = curr[j - 1] + 1
+        const sub = prev[j - 1] + cost
+        let min = del
+        if (ins < min) {
+          min = ins
+        }
+        if (sub < min) {
+          min = sub
+        }
+        curr[j] = min
+      }
+      const tmp = prev
+      prev = curr
+      curr = tmp
+    }
+    return prev[lb]
   }
 
   private handleSubmit(): void {
