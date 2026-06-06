@@ -16,12 +16,24 @@ import { ToolCall } from '../models/ChatModels'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { hilog } from '@kit.PerformanceAnalysisKit'
+import { curves } from '@kit.ArkUI'
 
 const DOMAIN = 0x0002
 const TAG = 'CategorizationCard'
 const SUCCESS_GREEN: string = '#22C55E'
 const GIVEUP_ORANGE: string = '#FF9F43'
 const ERROR_RED: string = '#FF3B30'
+
+// ================ 弹性动画预设 (温馨童趣视觉签名) ================
+// SPRING_QUICK: 选中/取消类瞬时反馈 (180ms, 略低 damping = 更"弹")
+// SPRING_GENTLE: 桶高亮/缩放 (360ms, 较高 damping = 优雅, 避免来回震荡)
+const SPRING_QUICK: AnimateParam = { duration: 180, curve: curves.springMotion(0.6, 0.7) }
+const SPRING_GENTLE: AnimateParam = { duration: 360, curve: curves.springMotion(0.4, 0.8) }
+
+// 桶主题暖色 (与 NumberPuzzleCard 琥珀协调, 避免撞色)
+const BIN_COLOR_WARM: string = '#FB923C'   // 暖橙
+const BIN_COLOR_HONEY: string = '#FBBF24'  // 蜂蜜黄
+const BIN_COLOR_MINT: string = '#34D399'   // 薄荷绿 (冷色平衡)
 
 // ================ 公共接口 ================
 export interface CategorizationResult {
@@ -435,24 +447,14 @@ export struct CategorizationCard {
     return `${m}:${sStr}`
   }
 
-  private getBinFillAlpha(binIndex: number): string {
+  private getBinAccentColor(binIndex: number): string {
     if (binIndex === 0) {
-      return '14'
+      return BIN_COLOR_WARM
     }
     if (binIndex === 1) {
-      return '20'
+      return BIN_COLOR_HONEY
     }
-    return '2C'
-  }
-
-  private getBinBorderAlpha(binIndex: number): string {
-    if (binIndex === 0) {
-      return '30'
-    }
-    if (binIndex === 1) {
-      return '40'
-    }
-    return '50'
+    return BIN_COLOR_MINT
   }
 
   private countPlacedInBin(binIndex: number): number {
@@ -601,39 +603,81 @@ export struct CategorizationCard {
 
   @Builder
   BinCell(bin: CategorizationBin, index: number) {
-    Column({ space: 4 }) {
-      if (bin.emoji !== '') {
-        Text(bin.emoji)
-          .fontSize(26)
+    Column() {
+      // 桶口高光带 (暗示容器开口)
+      Row()
+        .width('100%')
+        .height(8)
+        .linearGradient({
+          angle: 90,
+          colors: [
+            [Color.Transparent, 0.0],
+            [withColorAlpha(this.getBinAccentColor(index), '55'), 0.5],
+            [Color.Transparent, 1.0]
+          ]
+        })
+
+      // 内容
+      Column({ space: 3 }) {
+        if (bin.emoji !== '') {
+          Text(bin.emoji)
+            .fontSize(28)
+        }
+        Text(bin.name)
+          .fontSize(12)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+        Text(`${this.countPlacedInBin(index)} 件`)
+          .fontSize(10)
+          .fontColor($r('app.color.text_tertiary'))
       }
-      Text(bin.name)
-        .fontSize(12)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_primary'))
-      Text(`${this.countPlacedInBin(index)} 件`)
-        .fontSize(10)
-        .fontColor($r('app.color.text_tertiary'))
+      .layoutWeight(1)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+
+      // 桶底暗影 (暗示容器底部)
+      Row()
+        .width('100%')
+        .height(5)
+        .linearGradient({
+          angle: 90,
+          colors: [
+            [Color.Transparent, 0.0],
+            [withColorAlpha(this.getBinAccentColor(index), '32'), 0.5],
+            [Color.Transparent, 1.0]
+          ]
+        })
     }
     .layoutWeight(1)
-    .height(82)
-    .padding(6)
-    .borderRadius(12)
-    .backgroundColor(this.hoveredBinIndex === index
-      ? withColorAlpha(this.themePrimary, '28')
-      : withColorAlpha(this.themePrimary, this.getBinFillAlpha(index)))
+    .height(96)
+    .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+    .borderRadius(14)
+    .linearGradient(this.hoveredBinIndex === index
+      ? {
+        angle: 180,
+        colors: [
+          [withColorAlpha(this.themePrimary, '32'), 0.0],
+          [withColorAlpha(this.themePrimary, '18'), 1.0]
+        ]
+      }
+      : {
+        angle: 180,
+        colors: [
+          [withColorAlpha(this.getBinAccentColor(index), '22'), 0.0],
+          [withColorAlpha(this.getBinAccentColor(index), '10'), 1.0]
+        ]
+      })
     .border({
-      width: 1.5,
-      style: BorderStyle.Dashed,
+      width: 0.5,
+      style: BorderStyle.Solid,
       color: this.hoveredBinIndex === index
         ? this.themePrimary
-        : withColorAlpha(this.themePrimary, this.getBinBorderAlpha(index))
+        : withColorAlpha(this.getBinAccentColor(index), '38')
     })
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
     .scale(this.selectedItemIndex >= 0
-      ? { x: 1.03, y: 1.03 }
+      ? { x: 1.05, y: 1.05 }
       : { x: 1, y: 1 })
-    .animation({ duration: 120, curve: Curve.EaseOut })
+    .animation(SPRING_GENTLE)
     .onClick(() => this.handleBinClick(index))
   }
 
@@ -657,32 +701,46 @@ export struct CategorizationCard {
     Column() {
       if (item.emoji !== '') {
         Text(item.emoji)
-          .fontSize(this.largeSize ? 28 : 22)
+          .fontSize(this.largeSize ? 30 : 24)
       } else {
         Text(item.name)
-          .fontSize(this.largeSize ? 12 : 10)
+          .fontSize(this.largeSize ? 13 : 11)
           .fontColor($r('app.color.text_primary'))
           .textAlign(TextAlign.Center)
           .maxLines(2)
       }
     }
-    .width(this.largeSize ? 64 : 56)
-    .height(this.largeSize ? 64 : 56)
-    .borderRadius(this.largeSize ? 32 : 28)
-    .backgroundColor(this.themeAiBubble)
-    .borderWidth(this.selectedItemIndex === index || this.shakingItemIndex === index ? 2.5 : 0.5)
+    .width(this.largeSize ? 80 : 68)
+    .height(this.largeSize ? 80 : 68)
+    .borderRadius(this.largeSize ? 40 : 34)
+    .linearGradient(this.selectedItemIndex === index
+      ? {
+        angle: 180,
+        colors: [
+          [withColorAlpha(this.themePrimary, '32'), 0.0],
+          [withColorAlpha(this.themePrimary, '18'), 1.0]
+        ]
+      }
+      : {
+        angle: 180,
+        colors: [
+          [withColorAlpha(this.themePrimary, '14'), 0.0],
+          [withColorAlpha(this.themePrimary, '04'), 1.0]
+        ]
+      })
+    .borderWidth(this.selectedItemIndex === index || this.shakingItemIndex === index ? 3 : 1)
     .borderColor(this.shakingItemIndex === index
       ? ERROR_RED
-      : (this.selectedItemIndex === index ? this.themePrimary : $r('app.color.divider')))
+      : (this.selectedItemIndex === index ? this.themePrimary : withColorAlpha(this.themePrimary, '30')))
     .scale(this.selectedItemIndex === index
-      ? { x: 1.12, y: 1.12 }
+      ? { x: 1.15, y: 1.15 }
       : (this.shakingItemIndex === index
         ? { x: 1.05, y: 1.05 }
         : (this.itemPressedIndex === index ? { x: 0.95, y: 0.95 } : { x: 1, y: 1 })))
     .shadow(this.selectedItemIndex === index
       ? { radius: 10, color: '#33000000', offsetY: 3 }
       : { radius: 4, color: '#1F000000', offsetY: 1 })
-    .animation({ duration: 120, curve: Curve.EaseOut })
+    .animation(SPRING_QUICK)
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
     .margin(6)
