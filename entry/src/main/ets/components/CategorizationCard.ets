@@ -103,12 +103,14 @@ export struct CategorizationCard {
 
   // 引导状态: 首次玩时显示气泡 + 首物品 bobbing 动画
   @Local isFirstPlay: boolean = true
-  @Local tutorialBobPhase: number = 0
+
+  // 共享物品动画相位: 所有未选中物品的呼吸 scale 派生于此, 首物品在 tutorial 状态下额外叠加 translateY 浮动
+  @Local itemAnimPhase: number = 0
 
   // 非响应式
   private timerId: number = -1
   private shakeTimerId: number = -1
-  private tutorialBobTimerId: number = -1
+  private itemAnimTimerId: number = -1
   private startTime: number = 0
 
   // ================ 主题派生 (NumberPuzzleCard 同款 getter) ================
@@ -145,13 +147,14 @@ export struct CategorizationCard {
     } else {
       this.shuffleItems()
       this.startTimer()
+      this.startItemAnim()
       this.loadTutorialState()
     }
   }
 
   aboutToDisappear(): void {
     this.stopTimer()
-    this.stopTutorialBob()
+    this.stopItemAnim()
     if (this.shakeTimerId >= 0) {
       clearTimeout(this.shakeTimerId)
       this.shakeTimerId = -1
@@ -163,38 +166,33 @@ export struct CategorizationCard {
     try {
       const seen = await getPreferencesService().getCategorizationTutorialSeen()
       this.isFirstPlay = !seen
-      if (this.isFirstPlay) {
-        this.startTutorialBob()
-      }
     } catch (_e) {
       // 读取失败视为首次玩, 仍然显示引导 (更保守)
       this.isFirstPlay = true
-      this.startTutorialBob()
     }
   }
 
-  private startTutorialBob(): void {
-    this.stopTutorialBob()
-    // 6° / 50ms = 120°/s, |sin| 半周期 1.5s, 让首物品"邀请性"上下浮动
-    this.tutorialBobTimerId = setInterval(() => {
-      this.tutorialBobPhase = (this.tutorialBobPhase + 6) % 360
+  private startItemAnim(): void {
+    this.stopItemAnim()
+    // 6° / 50ms = 120°/s, |sin| 半周期 1.5s, 驱动首物品 bobbing + 所有物品呼吸 scale
+    this.itemAnimTimerId = setInterval(() => {
+      this.itemAnimPhase = (this.itemAnimPhase + 6) % 360
     }, 50)
   }
 
-  private stopTutorialBob(): void {
-    if (this.tutorialBobTimerId >= 0) {
-      clearInterval(this.tutorialBobTimerId)
-      this.tutorialBobTimerId = -1
+  private stopItemAnim(): void {
+    if (this.itemAnimTimerId >= 0) {
+      clearInterval(this.itemAnimTimerId)
+      this.itemAnimTimerId = -1
     }
   }
 
-  // 用户首次点击物品后, 关闭引导并持久化
+  // 用户首次点击物品后, 关闭引导并持久化 (item anim 继续跑, 只用于呼吸)
   private async dismissTutorial(): Promise<void> {
     if (!this.isFirstPlay) {
       return
     }
     this.isFirstPlay = false
-    this.stopTutorialBob()
     try {
       await getPreferencesService().setCategorizationTutorialSeen(true)
     } catch (_e) {
@@ -534,7 +532,7 @@ export struct CategorizationCard {
 
   // ================ 主 build ================
   build() {
-    Column({ space: this.largeSize ? 14 : 10 }) {
+    Column({ space: this.largeSize ? 20 : 10 }) {
       if (this.validationError !== '') {
         this.ErrorPlaceholder()
       } else {
@@ -554,7 +552,7 @@ export struct CategorizationCard {
       }
     }
     .width('100%')
-    .padding(this.largeSize ? 20 : 14)
+    .padding(this.largeSize ? 24 : 14)
     .backgroundColor(this.largeSize ? Color.Transparent : this.themeAiBubble)
     .borderRadius(this.largeSize ? 0 : 14)
     .border(this.largeSize
@@ -663,7 +661,7 @@ export struct CategorizationCard {
       // 桶口高光带 (暗示容器开口)
       Row()
         .width('100%')
-        .height(8)
+        .height(this.largeSize ? 10 : 8)
         .linearGradient({
           angle: 90,
           colors: [
@@ -674,17 +672,17 @@ export struct CategorizationCard {
         })
 
       // 内容
-      Column({ space: 3 }) {
+      Column({ space: this.largeSize ? 4 : 3 }) {
         if (bin.emoji !== '') {
           Text(bin.emoji)
-            .fontSize(28)
+            .fontSize(this.largeSize ? 32 : 28)
         }
         Text(bin.name)
-          .fontSize(12)
+          .fontSize(this.largeSize ? 13 : 12)
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.text_primary'))
         Text(`${this.countPlacedInBin(index)} 件`)
-          .fontSize(10)
+          .fontSize(this.largeSize ? 11 : 10)
           .fontColor($r('app.color.text_tertiary'))
       }
       .layoutWeight(1)
@@ -694,7 +692,7 @@ export struct CategorizationCard {
       // 桶底暗影 (暗示容器底部)
       Row()
         .width('100%')
-        .height(5)
+        .height(this.largeSize ? 6 : 5)
         .linearGradient({
           angle: 90,
           colors: [
@@ -705,9 +703,9 @@ export struct CategorizationCard {
         })
     }
     .layoutWeight(1)
-    .height(96)
+    .height(this.largeSize ? 120 : 96)
     .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-    .borderRadius(14)
+    .borderRadius(this.largeSize ? 16 : 14)
     .linearGradient(this.hoveredBinIndex === index
       ? {
         angle: 180,
@@ -792,7 +790,12 @@ export struct CategorizationCard {
       ? { x: 1.15, y: 1.15 }
       : (this.shakingItemIndex === index
         ? { x: 1.05, y: 1.05 }
-        : (this.itemPressedIndex === index ? { x: 0.95, y: 0.95 } : { x: 1, y: 1 })))
+        : (this.itemPressedIndex === index
+          ? { x: 0.95, y: 0.95 }
+          : {
+            x: 1 + Math.sin((this.itemAnimPhase + index * 30) % 360 * Math.PI / 180) * 0.03,
+            y: 1 + Math.sin((this.itemAnimPhase + index * 30) % 360 * Math.PI / 180) * 0.03
+          })))
     .shadow(this.selectedItemIndex === index
       ? { radius: 10, color: '#33000000', offsetY: 3 }
       : { radius: 4, color: '#1F000000', offsetY: 1 })
@@ -800,7 +803,7 @@ export struct CategorizationCard {
       && this.selectedItemIndex !== index
       && this.shakingItemIndex !== index
       && this.itemPressedIndex !== index
-      ? { x: 0, y: -Math.abs(Math.sin(this.tutorialBobPhase * Math.PI / 180)) * 1.5 }
+      ? { x: 0, y: -Math.abs(Math.sin(this.itemAnimPhase * Math.PI / 180)) * 1.5 }
       : { x: 0, y: 0 })
     .animation(SPRING_QUICK)
     .justifyContent(FlexAlign.Center)
