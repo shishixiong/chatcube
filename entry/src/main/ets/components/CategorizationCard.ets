@@ -15,6 +15,7 @@
 import { ToolCall } from '../models/ChatModels'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { getPreferencesService } from '../services/PreferencesService'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { curves } from '@kit.ArkUI'
 
@@ -100,9 +101,14 @@ export struct CategorizationCard {
   @Local shakingItemIndex: number = -1
   @Local itemPressedIndex: number = -1
 
+  // 引导状态: 首次玩时显示气泡 + 首物品 bobbing 动画
+  @Local isFirstPlay: boolean = true
+  @Local tutorialBobPhase: number = 0
+
   // 非响应式
   private timerId: number = -1
   private shakeTimerId: number = -1
+  private tutorialBobTimerId: number = -1
   private startTime: number = 0
 
   // ================ 主题派生 (NumberPuzzleCard 同款 getter) ================
@@ -134,17 +140,65 @@ export struct CategorizationCard {
     this.placedItems = this.createPlacedArray(this.items.length)
     if (this.isAnswered) {
       this.parseAnsweredPayload()
+      // 在线视图: 视为已看过引导 (不会显示气泡)
+      this.isFirstPlay = false
     } else {
       this.shuffleItems()
       this.startTimer()
+      this.loadTutorialState()
     }
   }
 
   aboutToDisappear(): void {
     this.stopTimer()
+    this.stopTutorialBob()
     if (this.shakeTimerId >= 0) {
       clearTimeout(this.shakeTimerId)
       this.shakeTimerId = -1
+    }
+  }
+
+  // 异步读 preferences, 决定是否首次玩 (显示引导气泡)
+  private async loadTutorialState(): Promise<void> {
+    try {
+      const seen = await getPreferencesService().getCategorizationTutorialSeen()
+      this.isFirstPlay = !seen
+      if (this.isFirstPlay) {
+        this.startTutorialBob()
+      }
+    } catch (_e) {
+      // 读取失败视为首次玩, 仍然显示引导 (更保守)
+      this.isFirstPlay = true
+      this.startTutorialBob()
+    }
+  }
+
+  private startTutorialBob(): void {
+    this.stopTutorialBob()
+    // 6° / 50ms = 120°/s, |sin| 半周期 1.5s, 让首物品"邀请性"上下浮动
+    this.tutorialBobTimerId = setInterval(() => {
+      this.tutorialBobPhase = (this.tutorialBobPhase + 6) % 360
+    }, 50)
+  }
+
+  private stopTutorialBob(): void {
+    if (this.tutorialBobTimerId >= 0) {
+      clearInterval(this.tutorialBobTimerId)
+      this.tutorialBobTimerId = -1
+    }
+  }
+
+  // 用户首次点击物品后, 关闭引导并持久化
+  private async dismissTutorial(): Promise<void> {
+    if (!this.isFirstPlay) {
+      return
+    }
+    this.isFirstPlay = false
+    this.stopTutorialBob()
+    try {
+      await getPreferencesService().setCategorizationTutorialSeen(true)
+    } catch (_e) {
+      hilog.warn(DOMAIN, TAG, 'failed to persist tutorial seen flag')
     }
   }
 
@@ -322,6 +376,8 @@ export struct CategorizationCard {
       this.selectedItemIndex = -1
     } else {
       this.selectedItemIndex = itemIndex
+      // 首次玩首次点选: 关闭引导气泡 (fire-and-forget 持久化)
+      this.dismissTutorial()
     }
   }
 
@@ -740,6 +796,12 @@ export struct CategorizationCard {
     .shadow(this.selectedItemIndex === index
       ? { radius: 10, color: '#33000000', offsetY: 3 }
       : { radius: 4, color: '#1F000000', offsetY: 1 })
+    .translate(this.isFirstPlay && index === 0
+      && this.selectedItemIndex !== index
+      && this.shakingItemIndex !== index
+      && this.itemPressedIndex !== index
+      ? { x: 0, y: -Math.abs(Math.sin(this.tutorialBobPhase * Math.PI / 180)) * 1.5 }
+      : { x: 0, y: 0 })
     .animation(SPRING_QUICK)
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
@@ -807,7 +869,9 @@ export struct CategorizationCard {
   @Builder
   ActionRow() {
     Row() {
-      if (this.selectedItemIndex >= 0) {
+      if (this.isFirstPlay && this.selectedItemIndex < 0 && this.hasUnplacedItem()) {
+        this.TutorialBubble()
+      } else if (this.selectedItemIndex >= 0) {
         Text('选好一个物品 → 点击对应分类桶')
           .fontSize(11)
           .fontColor(this.themePrimary)
@@ -828,6 +892,27 @@ export struct CategorizationCard {
     }
     .width('100%')
     .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
+  TutorialBubble() {
+    // 引导气泡: 圆角矩形主体, 👆 emoji 自身作为"指向"提示
+    Row({ space: 6 }) {
+      Text('👆')
+        .fontSize(14)
+      Text('先点物品 → 再点桶')
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(Color.White)
+    }
+    .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+    .backgroundColor(this.themePrimary)
+    .borderRadius(12)
+    .shadow({ radius: 6, color: '#33000000', offsetY: 2 })
+    .layoutWeight(1)
+    .transition(TransitionEffect.scale({ x: 0.8, y: 0.8 })
+      .combine(TransitionEffect.OPACITY)
+      .animation({ duration: 200, curve: Curve.EaseOut }))
   }
 
   @Builder

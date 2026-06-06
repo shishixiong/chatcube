@@ -54,6 +54,9 @@ export class PreferenceKeys {
   static readonly NUMBER_PUZZLE_BEST_TIME_PREFIX: string = 'number_puzzle_best_time_'
   static readonly NUMBER_PUZZLE_BEST_MOVES_PREFIX: string = 'number_puzzle_best_moves_'
 
+  // 分类小管家引导已观看标记 (true = 已看过, false 或无值 = 首次玩, 显示引导气泡)
+  static readonly CATEGORIZATION_TUTORIAL_SEEN: string = 'categorization_tutorial_seen'
+
   // 搜索服务配置
   static readonly SEARCH_SERVICE_ENABLED: string = 'search_service_enabled'
   static readonly SEARCH_CONVERSATION_ENABLED: string = 'search_conversation_enabled'
@@ -505,6 +508,16 @@ export class PreferencesService {
   // 设置首次启动引导完成态
   async setOnboardingCompleted(completed: boolean): Promise<void> {
     await this.setBoolean(PreferenceKeys.ONBOARDING_COMPLETED, completed)
+  }
+
+  // 获取分类小管家引导是否已观看
+  async getCategorizationTutorialSeen(): Promise<boolean> {
+    return await this.getBoolean(PreferenceKeys.CATEGORIZATION_TUTORIAL_SEEN, false)
+  }
+
+  // 设置分类小管家引导已观看
+  async setCategorizationTutorialSeen(seen: boolean): Promise<void> {
+    await this.setBoolean(PreferenceKeys.CATEGORIZATION_TUTORIAL_SEEN, seen)
   }
 }
 
