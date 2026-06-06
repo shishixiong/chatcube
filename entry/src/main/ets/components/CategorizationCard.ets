@@ -56,6 +56,10 @@ interface NormalizedData {
 }
 
 // ================ 组件 ================
+// TODO (v1.1): 当前仅实现点击交互 (点击物品选中 → 点击桶归位)。
+// 拖拽交互 (PanGesture + 命中检测) 计划在 v1.1 增量添加，
+// 参见 spec §7.1 和 docs/superpowers/plans/2026-06-06-categorization-helper.md。
+
 @ComponentV2
 export struct CategorizationCard {
   @Param toolCall: ToolCall = new ToolCall()
@@ -507,7 +511,7 @@ export struct CategorizationCard {
   HeaderRow() {
     Row() {
       Column() {
-        SymbolGlyph($r('sys.symbol.lightbulb'))
+        SymbolGlyph($r('sys.symbol.box'))
           .fontSize(15)
           .fontColor([this.themePrimary])
       }
