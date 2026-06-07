@@ -13,26 +13,18 @@
 import { ToolCall } from '../models/ChatModels'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { evaluateMathExpression } from '../utils/MathExpressionParser'
-
-interface MathQuizQuestion {
-  question: string
-  expression: string
-  correctAnswer: number
-  options: number[]
-  skillKey: string
-}
-
-interface MathQuizAnswerPayload {
-  answered: boolean
-  child_answer: number
-  child_answer_valid: boolean
-  correct: boolean
-  correct_answer: number
-  expression: string
-  question: string
-  skill_key: string
-}
+import {
+  MathQuizQuestion,
+  MathQuizAnswerPayload,
+  ExpressionToken,
+  parseMathQuiz,
+  parseMathQuizAnswer,
+  tokenizeExpression,
+  getOpDisplay,
+  isCorrectAnswer
+} from '../utils/MathQuizGame'
+import { ServiceRegistry } from '../services/ServiceRegistry'
+import { PreferenceKeys } from '../services/PreferencesService'
 
 @ComponentV2
 export struct MathQuizCard {
@@ -41,10 +33,16 @@ export struct MathQuizCard {
   @Param answeredPayload: string = ''
   @Event onAnswer: (toolCallId: string, answerJson: string) => void = () => {}
 
+  @Local quiz: MathQuizQuestion = { question: '', expression: '', correctAnswer: 0, options: [], skillKey: '' }
   @Local selectedOption: number = -1
   @Local showResult: boolean = false
   @Local isCorrect: boolean = false
   @Local correctAnswerValue: number = 0
+  // 连胜状态: 持久化在 PreferencesService, 按 skill_key 区分
+  @Local currentStreak: number = 0
+  @Local bestStreak: number = 0
+  @Local isNewBestStreak: boolean = false
+  @Local streakLoaded: boolean = false
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
@@ -59,9 +57,11 @@ export struct MathQuizCard {
   }
 
   aboutToAppear(): void {
+    // 解析一次题目数据, 后续渲染直接读取 this.quiz, 避免在 build 路径反复 JSON.parse
+    this.quiz = parseMathQuiz(this.toolCall.arguments)
     // 如果是已回答状态, 从 answeredPayload 中恢复选中项和结果
     if (this.isAnswered) {
-      const prev = this.parsePreviousAnswer()
+      const prev = parseMathQuizAnswer(this.answeredPayload)
       if (prev !== null) {
         this.selectedOption = prev.child_answer
         this.showResult = true
@@ -69,55 +69,8 @@ export struct MathQuizCard {
         this.correctAnswerValue = prev.correct_answer
       }
     }
-  }
-
-  private parseQuiz(): MathQuizQuestion {
-    const result: MathQuizQuestion = {
-      question: '',
-      expression: '',
-      correctAnswer: 0,
-      options: [],
-      skillKey: ''
-    }
-    try {
-      const parsed = JSON.parse(this.toolCall.arguments) as Record<string, Object>
-      result.question = (parsed['question'] as string) ?? ''
-      result.expression = (parsed['expression'] as string) ?? ''
-      result.correctAnswer = (parsed['correct_answer'] as number) ?? 0
-      result.skillKey = (parsed['skill_key'] as string) ?? ''
-
-      const rawOptions = parsed['options']
-      if (Array.isArray(rawOptions)) {
-        const arr = rawOptions as Object[]
-        for (let i = 0; i < arr.length; i++) {
-          const val = arr[i]
-          if (typeof val === 'number') {
-            result.options.push(val as number)
-          }
-        }
-      }
-
-      // 如果 AI 没传 correct_answer, 尝试计算
-      if (result.correctAnswer === 0 && result.expression !== '') {
-        try {
-          result.correctAnswer = evaluateMathExpression(result.expression)
-        } catch (_e) {
-          // 无法计算, 保持 0
-        }
-      }
-    } catch (_e) {}
-    return result
-  }
-
-  private parsePreviousAnswer(): MathQuizAnswerPayload | null {
-    if (this.answeredPayload === '') {
-      return null
-    }
-    try {
-      return JSON.parse(this.answeredPayload) as MathQuizAnswerPayload
-    } catch (_e) {
-      return null
-    }
+    // 异步加载连胜 (fire-and-forget, 由 streakLoaded 守卫竞态)
+    this.loadStreak(this.quiz.skillKey)
   }
 
   private handleSelectOption(option: number): void {
@@ -125,7 +78,13 @@ export struct MathQuizCard {
       return
     }
     this.selectedOption = option
-    // 选择后直接提交答案
+    // 选完后不再直接提交, 由"确认"按钮触发, 给小朋友留出反悔/检查的时间
+  }
+
+  private handleConfirm(): void {
+    if (this.selectedOption < 0 || this.isAnswered || this.showResult) {
+      return
+    }
     this.handleSubmit()
   }
 
@@ -134,8 +93,8 @@ export struct MathQuizCard {
       return
     }
 
-    const quiz = this.parseQuiz()
-    const isCorrect = Math.abs(this.selectedOption - quiz.correctAnswer) < 0.001
+    const quiz = this.quiz
+    const isCorrect = isCorrectAnswer(this.selectedOption, quiz.correctAnswer)
 
     // 先显示即时反馈
     this.showResult = true
@@ -155,60 +114,170 @@ export struct MathQuizCard {
     }
 
     this.onAnswer(this.toolCall.id, JSON.stringify(payload))
+
+    // 异步更新连胜 (fire-and-forget; @Local 同步变更会立刻触发重渲染, 写盘在后台完成)
+    this.updateStreak(quiz.skillKey, isCorrect)
   }
 
-  private getOptionBackgroundColor(option: number): ResourceColor {
-    if (!this.showResult && !this.isAnswered) {
-      return this.selectedOption === option ? this.themePrimary : $r('app.color.surface')
+  private handleRetry(): void {
+    // 只在"已提交但答错"时启用, 清除状态让小朋友换答案
+    if (!this.showResult || this.isCorrect || this.isAnswered) {
+      return
     }
-
-    const quiz = this.parseQuiz()
-    if (option === quiz.correctAnswer) {
-      return '#4CAF50'
-    }
-    if (option === this.selectedOption && !this.isCorrect) {
-      return '#FF9F43'
-    }
-    return $r('app.color.surface')
+    this.selectedOption = -1
+    this.showResult = false
+    this.isCorrect = false
+    this.correctAnswerValue = 0
   }
 
-  private getOptionTextColor(option: number): ResourceColor {
-    if (!this.showResult && !this.isAnswered) {
-      return this.selectedOption === option ? Color.White : $r('app.color.text_primary')
+  private async loadStreak(skillKey: string): Promise<void> {
+    if (skillKey === '') {
+      this.streakLoaded = true
+      return
     }
+    try {
+      this.currentStreak = await ServiceRegistry.preferences().getNumber(
+        PreferenceKeys.MATH_QUIZ_STREAK_CURRENT_PREFIX + skillKey,
+        0
+      )
+      this.bestStreak = await ServiceRegistry.preferences().getNumber(
+        PreferenceKeys.MATH_QUIZ_STREAK_BEST_PREFIX + skillKey,
+        0
+      )
+    } catch (_e) {
+      this.currentStreak = 0
+      this.bestStreak = 0
+    } finally {
+      this.streakLoaded = true
+    }
+  }
 
-    const quiz = this.parseQuiz()
-    if (option === quiz.correctAnswer) {
-      return Color.White
+  private async saveStreak(skillKey: string, current: number, best: number): Promise<void> {
+    if (skillKey === '') {
+      return
     }
-    if (option === this.selectedOption && !this.isCorrect) {
-      return Color.White
+    try {
+      await ServiceRegistry.preferences().setNumber(
+        PreferenceKeys.MATH_QUIZ_STREAK_CURRENT_PREFIX + skillKey,
+        current
+      )
+      await ServiceRegistry.preferences().setNumber(
+        PreferenceKeys.MATH_QUIZ_STREAK_BEST_PREFIX + skillKey,
+        best
+      )
+    } catch (_e) {
+      // 持久化失败不阻塞 UI
     }
-    return $r('app.color.text_secondary')
+  }
+
+  private async updateStreak(skillKey: string, correct: boolean): Promise<void> {
+    if (skillKey === '' || !this.streakLoaded) {
+      return
+    }
+    if (!correct) {
+      // 答错: 重置当前连胜, 最佳不变
+      this.currentStreak = 0
+      this.isNewBestStreak = false
+      await this.saveStreak(skillKey, 0, this.bestStreak)
+      return
+    }
+    const newCurrent = this.currentStreak + 1
+    const isNewBest = newCurrent > this.bestStreak
+    this.currentStreak = newCurrent
+    this.bestStreak = Math.max(this.bestStreak, newCurrent)
+    this.isNewBestStreak = isNewBest
+    await this.saveStreak(skillKey, newCurrent, this.bestStreak)
+  }
+
+  private getOptionState(opt: number): string {
+    if (!this.showResult && !this.isAnswered) {
+      return this.selectedOption === opt ? 'selected' : 'default'
+    }
+    if (opt === this.quiz.correctAnswer) {
+      return this.isCorrect ? 'correct' : 'revealed'
+    }
+    if (opt === this.selectedOption && !this.isCorrect) {
+      return 'wrong'
+    }
+    return 'default'
+  }
+
+  private getOptionGradient(opt: number, index: number): LinearGradient {
+    const state = this.getOptionState(opt)
+    if (state === 'correct' || state === 'revealed') {
+      return { angle: 180, colors: [['#22C55E', 0.0], [this.shadeHex('#22C55E', 0.7), 1.0]] }
+    }
+    if (state === 'wrong') {
+      return { angle: 180, colors: [['#FF9F43', 0.0], [this.shadeHex('#FF9F43', 0.7), 1.0]] }
+    }
+    if (this.isDarkMode) {
+      const top = this.themePrimary
+      return { angle: 180, colors: [[top, 0.0], [this.shadeHex(top, 0.78), 1.0]] }
+    }
+    const variant = index % 3
+    if (variant === 1) {
+      return { angle: 180, colors: [['#FCD34D', 0.0], ['#D97706', 1.0]] }
+    }
+    if (variant === 2) {
+      return { angle: 180, colors: [['#FBBF24', 0.0], ['#B45309', 1.0]] }
+    }
+    return { angle: 180, colors: [['#F59E0B', 0.0], ['#92400E', 1.0]] }
+  }
+
+  private getOptionBorderColor(opt: number, index: number): ResourceColor {
+    const state = this.getOptionState(opt)
+    if (state === 'correct' || state === 'revealed') {
+      return '#16A34A'
+    }
+    if (state === 'wrong') {
+      return '#E07A1F'
+    }
+    if (state === 'selected') {
+      return this.themePrimary
+    }
+    if (this.isDarkMode) {
+      return this.shadeHex(this.themePrimary, 0.5)
+    }
+    const variant = index % 3
+    if (variant === 1) return '#D97706'
+    if (variant === 2) return '#B45309'
+    return '#92400E'
+  }
+
+  private getOptionBorderWidth(opt: number): number {
+    const state = this.getOptionState(opt)
+    if (state === 'selected') return 2.5
+    if (state === 'correct' || state === 'revealed' || state === 'wrong') return 2
+    return 1.5
+  }
+
+  private getOptionShadow(opt: number): ShadowOptions {
+    const state = this.getOptionState(opt)
+    if (state === 'selected') {
+      return { radius: 12, color: '#1F000000', offsetY: 4 }
+    }
+    return { radius: 8, color: '#1F000000', offsetY: 2 }
+  }
+
+  private shadeHex(color: string, factor: number): string {
+    if (!color.startsWith('#') || color.length !== 7) {
+      return color
+    }
+    const r = parseInt(color.substring(1, 3), 16)
+    const g = parseInt(color.substring(3, 5), 16)
+    const b = parseInt(color.substring(5, 7), 16)
+    const newR = Math.max(0, Math.min(255, Math.floor(r * factor)))
+    const newG = Math.max(0, Math.min(255, Math.floor(g * factor)))
+    const newB = Math.max(0, Math.min(255, Math.floor(b * factor)))
+    const toHex = (n: number): string => {
+      const h = n.toString(16)
+      return h.length === 1 ? '0' + h : h
+    }
+    return `#${toHex(newR)}${toHex(newG)}${toHex(newB)}`
   }
 
   private getCardBackgroundColor(): string {
     return this.isDarkMode ? withColorAlpha(this.themePrimary, '18') : withColorAlpha(this.themePrimary, '12')
-  }
-
-  private getFirstRowOptions(options: number[]): number[] {
-    const result: number[] = []
-    const count = options.length <= 3 ? 2 : 2
-    for (let i = 0; i < Math.min(count, options.length); i++) {
-      result.push(options[i])
-    }
-    return result
-  }
-
-  private getSecondRowOptions(options: number[]): number[] {
-    if (options.length <= 2) {
-      return []
-    }
-    const result: number[] = []
-    for (let i = 2; i < options.length; i++) {
-      result.push(options[i])
-    }
-    return result
   }
 
   build() {
@@ -224,7 +293,16 @@ export struct MathQuizCard {
           .fontColor($r('app.color.text_primary'))
           .margin({ left: 6 })
         Blank()
-        if (this.isAnswered) {
+        this.StreakIndicator()
+        if (this.isNewBestStreak) {
+          Text('新纪录')
+            .fontSize(10)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(Color.White)
+            .backgroundColor('#FF6B35')
+            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+            .borderRadius(6)
+        } else if (this.isAnswered) {
           Text('已回答')
             .fontSize(10)
             .fontColor(Color.White)
@@ -251,22 +329,40 @@ export struct MathQuizCard {
   }
 
   @Builder
-  OptionButton(opt: number) {
-    Column() {
-      Text(`${opt}`)
-        .fontSize(20)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.getOptionTextColor(opt))
+  OptionButton(opt: number, index: number) {
+    Stack({ alignContent: Alignment.TopEnd }) {
+      Column() {
+        Text(`${opt}`)
+          .fontSize(28)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .shadow({ radius: 1, color: '#40000000', offsetY: 1 })
+      }
+      .width('100%')
+      .height(64)
+      .justifyContent(FlexAlign.Center)
+      .linearGradient(this.getOptionGradient(opt, index))
+      .borderRadius(14)
+      .border({
+        width: this.getOptionBorderWidth(opt),
+        color: this.getOptionBorderColor(opt, index)
+      })
+      .shadow(this.getOptionShadow(opt))
+
+      // 答对时, 在按钮右上角盖一颗星星印章
+      if (this.showResult && this.isCorrect && opt === this.quiz.correctAnswer) {
+        Text('🌟')
+          .fontSize(20)
+          .padding(6)
+          .transition(
+            TransitionEffect.scale({ x: 0, y: 0 })
+              .combine(TransitionEffect.OPACITY)
+              .animation({ duration: 250, curve: Curve.EaseOut })
+          )
+      }
     }
-    .layoutWeight(1)
-    .height(48)
-    .justifyContent(FlexAlign.Center)
-    .backgroundColor(this.getOptionBackgroundColor(opt))
-    .borderRadius(12)
-    .border({
-      width: this.selectedOption === opt && !this.showResult && !this.isAnswered ? 2 : 1,
-      color: this.selectedOption === opt && !this.showResult && !this.isAnswered ? this.themePrimary : $r('app.color.divider')
-    })
+    .width('100%')
+    .height(64)
     .onClick(() => {
       this.handleSelectOption(opt)
     })
@@ -274,9 +370,44 @@ export struct MathQuizCard {
   }
 
   @Builder
+  ConfirmButton() {
+    Row() {
+      Text('确认')
+        .fontSize(15)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(Color.White)
+    }
+    .width('100%')
+    .height(40)
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor(this.themePrimary)
+    .borderRadius(10)
+    .onClick(() => {
+      this.handleConfirm()
+    })
+    .animation({ duration: 150, curve: Curve.EaseOut })
+  }
+
+  @Builder
+  StreakIndicator() {
+    if (this.currentStreak > 0) {
+      Text(`🔥 ${this.currentStreak}`)
+        .fontSize(11)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.themePrimary)
+        .margin({ right: 6 })
+    } else if (this.bestStreak > 0) {
+      Text(`🏆 最佳 ${this.bestStreak}`)
+        .fontSize(11)
+        .fontColor($r('app.color.text_tertiary'))
+        .margin({ right: 6 })
+    }
+  }
+
+  @Builder
   QuizContent() {
     Column({ space: 10 }) {
-      ForEach([this.parseQuiz()], (quiz: MathQuizQuestion) => {
+      ForEach([this.quiz], (quiz: MathQuizQuestion) => {
         // 题目文字
         if (quiz.question !== '') {
           Text(quiz.question)
@@ -285,36 +416,55 @@ export struct MathQuizCard {
             .width('100%')
         }
 
-        // 算式
+        // 算式: 拆成 number/op token, 数字大、运算符小, 视觉上更像算式而不是字符串
         if (quiz.expression !== '') {
-          Text(`${quiz.expression} = ?`)
-            .fontSize(24)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(this.themePrimary)
-            .width('100%')
-            .textAlign(TextAlign.Center)
-            .margin({ top: 2, bottom: 2 })
+          Row({ space: 4 }) {
+            ForEach(tokenizeExpression(quiz.expression), (token: ExpressionToken) => {
+              if (token.type === 'op') {
+                Text(getOpDisplay(token.value))
+                  .fontSize(22)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(withColorAlpha(this.themePrimary, '90'))
+              } else {
+                Text(token.value)
+                  .fontSize(28)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(this.themePrimary)
+              }
+            }, (token: ExpressionToken, idx: number) => `tok_${idx}_${token.value}`)
+            Text('=')
+              .fontSize(22)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.text_secondary'))
+              .margin({ left: 4 })
+            Text('?')
+              .fontSize(28)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.themePrimary)
+          }
+          .width('100%')
+          .justifyContent(FlexAlign.Center)
+          .margin({ top: 2, bottom: 2 })
         }
 
-        // 选项按钮: 两行网格布局, 避免溢出屏幕
+        // 选项按钮: 2 列 Grid 自动换行, 任意选项数都能整齐排列
         if (quiz.options.length > 0) {
           Column({ space: 10 }) {
-            // 第一行: 前 2 个选项
-            Row({ space: 10 }) {
-              ForEach(this.getFirstRowOptions(quiz.options), (opt: number, idx: number) => {
-                this.OptionButton(opt)
-              }, (opt: number, idx: number) => `row1_${opt}_${idx}`)
+            Grid() {
+              ForEach(quiz.options, (opt: number, idx: number) => {
+                GridItem() {
+                  this.OptionButton(opt, idx)
+                }
+              }, (opt: number, idx: number) => `opt_${idx}_${opt}`)
             }
+            .columnsTemplate('1fr 1fr')
+            .columnsGap(10)
+            .rowsGap(10)
             .width('100%')
 
-            // 第二行: 剩余选项
-            if (this.getSecondRowOptions(quiz.options).length > 0) {
-              Row({ space: 10 }) {
-                ForEach(this.getSecondRowOptions(quiz.options), (opt: number, idx: number) => {
-                  this.OptionButton(opt)
-                }, (opt: number, idx: number) => `row2_${opt}_${idx}`)
-              }
-              .width('100%')
+            // 确认按钮: 选中后才出现
+            if (this.selectedOption >= 0 && !this.showResult && !this.isAnswered) {
+              this.ConfirmButton()
             }
           }
           .width('100%')
@@ -343,19 +493,29 @@ export struct MathQuizCard {
         .width('100%')
       } else {
         Row({ space: 6 }) {
-          SymbolGlyph($r('sys.symbol.xmark_circle'))
+          SymbolGlyph($r('sys.symbol.info_circle'))
             .fontSize(16)
             .fontColor(['#FF9F43'])
-          Text(`再想想哦, 正确答案是 ${this.correctAnswerValue}`)
+          Text(`答案是 ${this.correctAnswerValue}`)
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
             .fontColor('#FF9F43')
+          if (!this.isAnswered) {
+            Text('再试一次 ↻')
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.themePrimary)
+              .margin({ left: 4 })
+              .onClick(() => {
+                this.handleRetry()
+              })
+          }
         }
         .width('100%')
       }
     } else if (this.isAnswered) {
       // 从 answeredPayload 中解析结果
-      ForEach([this.parsePreviousAnswer()], (prev: MathQuizAnswerPayload | null) => {
+      ForEach([parseMathQuizAnswer(this.answeredPayload)], (prev: MathQuizAnswerPayload | null) => {
         if (prev !== null) {
           if (prev.correct) {
             Row({ space: 6 }) {
@@ -370,10 +530,10 @@ export struct MathQuizCard {
             .width('100%')
           } else {
             Row({ space: 6 }) {
-              SymbolGlyph($r('sys.symbol.xmark_circle'))
+              SymbolGlyph($r('sys.symbol.info_circle'))
                 .fontSize(16)
                 .fontColor(['#FF9F43'])
-              Text(`正确答案是 ${prev.correct_answer}`)
+              Text(`答案是 ${prev.correct_answer}`)
                 .fontSize(14)
                 .fontWeight(FontWeight.Medium)
                 .fontColor('#FF9F43')

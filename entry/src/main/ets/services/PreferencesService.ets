@@ -54,6 +54,10 @@ export class PreferenceKeys {
   static readonly NUMBER_PUZZLE_BEST_TIME_PREFIX: string = 'number_puzzle_best_time_'
   static readonly NUMBER_PUZZLE_BEST_MOVES_PREFIX: string = 'number_puzzle_best_moves_'
 
+  // 数学小游戏连胜 (按 skill_key 区分: math_quiz_streak_current_<skill_key>, math_quiz_streak_best_<skill_key>)
+  static readonly MATH_QUIZ_STREAK_CURRENT_PREFIX: string = 'math_quiz_streak_current_'
+  static readonly MATH_QUIZ_STREAK_BEST_PREFIX: string = 'math_quiz_streak_best_'
+
   // 分类小管家引导已观看标记 (true = 已看过, false 或无值 = 首次玩, 显示引导气泡)
   static readonly CATEGORIZATION_TUTORIAL_SEEN: string = 'categorization_tutorial_seen'
 

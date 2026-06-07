@@ -4470,13 +4470,21 @@ export struct ChatPage {
     }
     const lastMsg = this.findLastAssistantMessage()
     if (lastMsg !== null && lastMsg.content.trim() !== '') {
+      // 消息切换时,旧 messageId 上的偏移量已无意义,清空避免误用
+      if (this.lastAutoTtsQuizMessageId !== '' &&
+          this.lastAutoTtsQuizMessageId !== lastMsg.id) {
+        this.lastAutoTtsQuizMessageContentLength = 0
+        this.lastAutoTtsQuizMessageId = ''
+      }
       let content = lastMsg.content
       // quiz 工具场景：仅朗读验证回复部分，跳过已读的题目文本
+      // 关键:这里更新而非清空 lastAutoTtsQuizMessageContentLength,
+      // 下一轮 buildQuizTtsText 可借此判断"该消息的 AI 文本已被读过"
+      // 避免一轮多次调用 quiz 工具时,第二道题的 TTS 重复朗读 intro + 总结。
       if (this.lastAutoTtsQuizMessageContentLength > 0 &&
           this.lastAutoTtsQuizMessageId === lastMsg.id) {
         const start = this.lastAutoTtsQuizMessageContentLength
-        this.lastAutoTtsQuizMessageContentLength = 0
-        this.lastAutoTtsQuizMessageId = ''
+        this.lastAutoTtsQuizMessageContentLength = lastMsg.content.length
         if (start < content.length) {
           content = content.substring(start)
         }
@@ -4720,14 +4728,23 @@ export struct ChatPage {
     let aiText = ''
     const lastMsg = this.findLastAssistantMessage()
     if (lastMsg !== null) {
-      for (let i = 0; i < lastMsg.parts.length; i++) {
-        const part = lastMsg.parts[i]
-        if (part.kind === MessagePartKind.TEXT && part.text.trim() !== '') {
-          aiText += part.text.trim() + ' '
+      // 该消息已经做过 quiz TTS(可能是一轮多次调用 quiz 工具的上一道题,或
+      // onSendingCompleted 已经把整段 AI 文本读过了),AI 正文已读,跳过避免重复朗读。
+      // 新增的正文若超出 lastAutoTtsQuizMessageContentLength,会由
+      // 下一次 onSendingCompleted 单独朗读,不会丢失。
+      const alreadyReadForThisMessage =
+        this.lastAutoTtsQuizMessageContentLength > 0 &&
+        this.lastAutoTtsQuizMessageId === lastMsg.id
+      if (!alreadyReadForThisMessage) {
+        for (let i = 0; i < lastMsg.parts.length; i++) {
+          const part = lastMsg.parts[i]
+          if (part.kind === MessagePartKind.TEXT && part.text.trim() !== '') {
+            aiText += part.text.trim() + ' '
+          }
         }
-      }
-      if (aiText === '' && lastMsg.content.trim() !== '') {
-        aiText = lastMsg.content.trim()
+        if (aiText === '' && lastMsg.content.trim() !== '') {
+          aiText = lastMsg.content.trim()
+        }
       }
     }
 
