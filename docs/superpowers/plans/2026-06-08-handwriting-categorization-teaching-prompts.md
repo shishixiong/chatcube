@@ -773,6 +773,86 @@ git commit -m "feat(prompt): add 分类小管家教学目标 + 分类小管家�
 
 ---
 
+## Task 3.1: 修正 ## 分类小管家 原节中错误的 dimension 引用
+
+**Files:**
+- Modify: `entry/src/main/ets/models/AssistantModels.ets:138`（在原 `## 分类小管家` 节的最后一句）
+
+**背景：** Task 3 在原 `## 分类小管家` 节后追加了 `## 分类小管家教学目标`（line 142-143），新节明确说"调用 child_profile(action:'update') 更新 categorization 维度"。但原节最后一句（line 138）说的是"更新 observation 评估"——这是一处 pre-existing 复制粘贴 bug（原 分类小管家 节是从 huarongdao 节复制的，从未被纠正）。两个矛盾的指令会让 AI 不知道该更新哪个 dimension。
+
+修正：将 line 138 末尾的 `更新 observation 评估` 改为 `更新 categorization 评估`，使原节与新教学目标节一致。
+
+- [ ] **Step 1: 验证 line 138 仍引用错误的 dimension**
+
+运行：
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+grep -n "更新 observation 评估" entry/src/main/ets/models/AssistantModels.ets
+```
+
+预期输出：1 行匹配（line 138 附近），即原 `## 分类小管家` 节末尾的 `然后 child_profile(action:"update") 更新 observation 评估。`
+
+- [ ] **Step 2: 修改文件 — 替换 `observation` 为 `categorization`**
+
+在 `AssistantModels.ets` 中找到 line 138 那行：
+
+```
+小朋友完成后会返回 correct_count/total_count,根据正确率夸赞或温柔点评,然后 child_profile(action:"update") 更新 observation 评估。
+```
+
+将该行末尾的 `更新 observation 评估。` 改为 `更新 categorization 评估。`。
+
+建议使用 Edit 工具，old_string 用整行（应该唯一，因为该行只有一处出现）。new_string 是修改后的版本。
+
+**重要：**
+- 这次修改是替换，不是新增。**绝对不要**复制这行
+- 保留所有其他字符（包括空格、句号、括号）不变
+- **不要**触碰模板字面量的反引号
+
+- [ ] **Step 3: 验证 line 138 现在引用 categorization**
+
+运行：
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+grep -n "更新 categorization 评估" entry/src/main/ets/models/AssistantModels.ets
+```
+
+预期输出：1 行匹配（line 138 附近）。
+
+- [ ] **Step 4: 验证 line 138 不再引用 observation**
+
+运行：
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+grep -n "更新 observation 评估" entry/src/main/ets/models/AssistantModels.ets
+```
+
+预期输出：0 行匹配（已删除）。如果有匹配，说明修改不完整。
+
+- [ ] **Step 5: 编译**
+
+运行：
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk /Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw assembleHap --mode module -p product=default -p buildMode=debug 2>&1 | tail -30
+```
+
+预期：退出码 0，无 ArkTS 编译错误。
+
+- [ ] **Step 6: 提交**
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+git add entry/src/main/ets/models/AssistantModels.ets
+git commit -m "fix(prompt): categorize results to update categorization dimension (not observation)"
+```
+
+---
+
 ## Task 4: 整体编译与端到端冒烟验证
 
 **Files:**
