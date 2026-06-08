@@ -54,6 +54,11 @@ export class PreferenceKeys {
   static readonly NUMBER_PUZZLE_BEST_TIME_PREFIX: string = 'number_puzzle_best_time_'
   static readonly NUMBER_PUZZLE_BEST_MOVES_PREFIX: string = 'number_puzzle_best_moves_'
 
+  // 分类小管家最佳成绩 (按难度区分: categorization_best_time_1/2/3, categorization_best_perfect_1/2/3)
+  // 速度王: 任意完成的最快用时; 全对王: correct===total 时的最快用时
+  static readonly CATEGORIZATION_BEST_TIME_PREFIX: string = 'categorization_best_time_'
+  static readonly CATEGORIZATION_BEST_PERFECT_PREFIX: string = 'categorization_best_perfect_'
+
   // 数学小游戏连胜 (按 skill_key 区分: math_quiz_streak_current_<skill_key>, math_quiz_streak_best_<skill_key>)
   static readonly MATH_QUIZ_STREAK_CURRENT_PREFIX: string = 'math_quiz_streak_current_'
   static readonly MATH_QUIZ_STREAK_BEST_PREFIX: string = 'math_quiz_streak_best_'

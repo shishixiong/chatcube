@@ -43,7 +43,15 @@ JSON 对象,包含:
 6. **teacherNotes 写 3-5 句**。给小星老师的人话提示,例: "上午教 2 个词,下午教形状,记得每次都先问孩子昨天学了什么"。
 
 # 输出格式
-**仅返回合法 JSON**,不要任何解释、不要 markdown 代码块、不要反引号。结构必须严格遵守:
+**仅返回合法 JSON**,不要任何解释、不要 markdown 代码块、不要反引号。
+
+**4 个模块数组的强约束 (重要!)**:
+- vocab / math / writing / generalKnowledge **每个数组都必须填入至少 1 个具体教学点**
+- 禁止把内容写在 themeTitle/themeDescription/teacherNotes 里, 然后 4 个数组留空
+- themeTitle 是 1 句话主题, 它**不替代** 4 个模块里的具体内容
+- 典型配比: 1 个 vocab + 1 个 math + 1 个 writing + 1 个 generalKnowledge, 或视主题扩展
+
+结构必须严格遵守:
 
 {
   "schemaVersion": 1,
@@ -66,6 +74,7 @@ JSON 对象,包含:
 }
 
 # 严禁
+- **严禁**把教学点全写在 themeTitle 里, 然后 4 个模块数组留空 (系统会检测并视为失败)
 - 不要返回任何额外字段 (themeTitle/themeDescription/teacherNotes/4 个模块是上限)
 - 不要给 markdown / \`\`\`json
 - 不要编造 childProfile 里不存在的 skill_key
@@ -77,10 +86,11 @@ JSON 对象,包含:
 如果 childProfile 全 level=0 且 yesterdayPlan 为空:
 - 输出一份"入门引导"计划: 自我介绍 + 认识颜色 + 数字 1-5
 - themeTitle: "小星老师和你做朋友"
+- 4 个模块数组**仍然必须填**, 例如 vocab: 颜色词, math: 数字 1-5, writing: "一/二", generalKnowledge: 自我介绍话术
 - 不需要 imagePrompt (用户首次进入,允许空白图像)
 
-如果 LLM 无法生成 plan,直接返回最小合法 JSON:
-{"schemaVersion": 1, "planDate": "<planDate>", "themeTitle": "和老师一起玩游戏", "themeDescription": "今天一起聊聊", "vocab": [], "math": [], "writing": [], "generalKnowledge": [], "teacherNotes": "自由发挥,先和孩子聊聊他/她喜欢什么"}`
+如果 LLM 实在无法生成 plan, 返回最小合法 JSON (**4 个数组也不能空**, 至少各填 1 个占位项):
+{"schemaVersion": 1, "planDate": "<planDate>", "themeTitle": "和老师一起玩游戏", "themeDescription": "今天一起聊聊", "vocab": [{"topicKey": "vocab.friend", "word": "friend", "translation": "朋友", "imagePrompt": ""}], "math": [{"topicKey": "math.count.basic", "dimension": "math_counting", "description": "数 1 到 5", "targetSkillLevel": 1, "imagePrompt": ""}], "writing": [{"topicKey": "writing.一", "characterOrWord": "一", "description": "横画入门", "imagePrompt": ""}], "generalKnowledge": [{"topicKey": "general_intro.first", "dimension": "social_skills", "description": "向老师问好", "imagePrompt": ""}], "teacherNotes": "自由发挥,先和孩子聊聊他/她喜欢什么"}`
 
 /**
  * 渲染"今日教学目标"section 注入小星老师 system prompt。

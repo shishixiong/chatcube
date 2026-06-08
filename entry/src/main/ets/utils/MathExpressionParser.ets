@@ -57,7 +57,10 @@ function tokenize(input: string): Token[] {
     } else if (ch === '*') {
       tokens.push(new Token(TT_MUL))
       i++
-    } else if (ch === '/') {
+    } else if (ch === '*' || ch === '×') {
+      tokens.push(new Token(TT_MUL))
+      i++
+    } else if (ch === '/' || ch === '÷') {
       tokens.push(new Token(TT_DIV))
       i++
     } else if (ch === '(') {
@@ -171,8 +174,8 @@ export function evaluateMathExpression(expr: string): number {
   if (trimmed === '') {
     throw new Error('Empty expression')
   }
-  // 安全校验：只允许数字、运算符、括号、小数点、空格
-  const safePattern = /^[\d+\-*/ ().]+$/
+  // 安全校验：只允许数字、运算符、括号、小数点、空格 (运算符白名单与 tokenize 的分支保持一致)
+  const safePattern = /^[\d+\-*/ ().×÷]+$/
   if (!safePattern.test(trimmed)) {
     throw new Error(`Invalid characters in expression: ${trimmed}`)
   }

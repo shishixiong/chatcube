@@ -263,6 +263,20 @@ export class EnglishQuizImageIndex {
     await this.ensureLoaded()
     return this.index.size
   }
+
+  /**
+   * 获取所有缓存条目（仅 filePath 非空），按 createdAt DESC 排序。
+   * slice(0, 200) 防御性截断，避免返回过多数据。
+   */
+  async getAllEntries(): Promise<EnglishQuizImageEntry[]> {
+    await this.ensureLoaded()
+    const all: EnglishQuizImageEntry[] = []
+    this.index.forEach((entry: EnglishQuizImageEntry) => {
+      all.push(entry)
+    })
+    all.sort((a: EnglishQuizImageEntry, b: EnglishQuizImageEntry) => b.createdAt - a.createdAt)
+    return all.slice(0, 200)
+  }
 }
 
 export function getEnglishQuizImageIndex(): EnglishQuizImageIndex {

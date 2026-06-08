@@ -4611,6 +4611,15 @@ struct Index {
       onOpenUsageStats: (): void => {
         this.openSettingsDestination(SettingsRouteName.USAGE_STATS)
       },
+      onOpenLearningProfile: (): void => {
+        this.openSettingsDestination(SettingsRouteName.LEARNING_PROFILE)
+      },
+      onOpenLearningTomorrowPlan: (): void => {
+        this.openSettingsDestination(SettingsRouteName.LEARNING_TOMORROW_PLAN)
+      },
+      onOpenLearningEnglishImages: (): void => {
+        this.openSettingsDestination(SettingsRouteName.LEARNING_ENGLISH_IMAGES)
+      },
       onOpenAbout: (): void => {
         this.openSettingsDestination(SettingsRouteName.ABOUT)
       },

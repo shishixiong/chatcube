@@ -49,8 +49,9 @@ const SKILL_DEFINITIONS: [string, string][] = [
   ['general_nature', '自然常识'],
   ['general_social', '社交礼仪'],
   ['general_life', '生活常识'],
-  ['logic_puzzle', '逻辑思维'],
-  ['observation', '观察力']
+  ['logic_thinking', '逻辑思维'],
+  ['observation', '观察力'],
+  ['spatial_reasoning', '空间推理']
 ]
 
 /**

@@ -3,14 +3,13 @@ export const SEARCH_WEB_TOOL_ID: string = 'search_web'
 export const SCRAPE_WEB_TOOL_ID: string = 'scrape_web'
 export const ASK_USER_TOOL_ID: string = 'ask_user'
 export const GET_TIME_INFO_TOOL_ID: string = 'get_time_info'
-export const NUMBER_PUZZLE_TOOL_ID: string = 'number_puzzle'
 export const IMAGE_GENERATION_TOOL_ID: string = 'image_generation'
 export const CHILD_PROFILE_TOOL_ID: string = 'child_profile'
 export const MATH_VERIFY_TOOL_ID: string = 'math_verify'
 export const MATH_QUIZ_TOOL_ID: string = 'math_quiz'
 export const ENGLISH_QUIZ_TOOL_ID: string = 'english_quiz'
-export const HANDWRITING_PRACTICE_TOOL_ID: string = 'handwriting_practice'
-export const CATEGORIZATION_TOOL_ID: string = 'categorization'
+export const HUARONGDAO_TOOL_ID: string = 'huarongdao'
+
 
 export function normalizeToolFunctionName(raw: string): string {
   const value = raw as string | null | undefined
@@ -76,24 +75,10 @@ export function isEnglishQuizFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === ENGLISH_QUIZ_TOOL_ID
 }
 
-export function isNumberPuzzleFunctionName(functionName: string): boolean {
-  return normalizeToolFunctionName(functionName) === NUMBER_PUZZLE_TOOL_ID
+export function isHuarongdaoFunctionName(functionName: string): boolean {
+  return normalizeToolFunctionName(functionName) === HUARONGDAO_TOOL_ID
 }
 
-export function isHandwritingPracticeFunctionName(functionName: string): boolean {
-  const normalized = normalizeToolFunctionName(functionName)
-  return normalized === HANDWRITING_PRACTICE_TOOL_ID ||
-    normalized === 'handwriting' ||
-    normalized === 'write_practice' ||
-    normalized === 'learn_to_write'
-}
-
-export function isCategorizationFunctionName(functionName: string): boolean {
-  const normalized = normalizeToolFunctionName(functionName)
-  return normalized === CATEGORIZATION_TOOL_ID ||
-    normalized === 'classify' ||
-    normalized === 'categorize'
-}
 
 export function getSearchToolIds(): string[] {
   return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID]

@@ -24,6 +24,7 @@ interface ToolArgumentDict {
   word?: string
   sentence?: string
   question_type?: string
+  difficulty?: number
 }
 
 const MAX_SNIPPET = 24
@@ -59,6 +60,13 @@ function truncate(value: string, maxLength: number = MAX_SNIPPET): string {
 function coerceString(value: string | undefined): string {
   if (value === undefined || value === null) {
     return ''
+  }
+  return value
+}
+
+function coerceNumber(value: number | undefined): number {
+  if (value === undefined || value === null) {
+    return 0
   }
   return value
 }
@@ -206,6 +214,15 @@ export function buildToolTitle(toolCall: ToolCall): string {
       return `英语看图: ${truncate(sentence)}`
     }
     return '英语看图说话'
+  }
+  if (fn === 'huarongdao') {
+    const difficulty = coerceNumber(args.difficulty)
+    const labels = ['入门', '简单', '中等', '较难', '挑战']
+    const label = difficulty >= 1 && difficulty <= 5 ? labels[difficulty - 1] : ''
+    if (label !== '') {
+      return `数字华容道(${label})`
+    }
+    return '数字华容道'
   }
   return fallback
 }

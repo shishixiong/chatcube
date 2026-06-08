@@ -34,6 +34,9 @@ const PROFILE_KEYWORDS: string[] = [
 const ENGLISH_KEYWORDS: string[] = [
   'english_quiz', 'english_vocab', 'english'
 ]
+const HUARONGDAO_KEYWORDS: string[] = [
+  'huarongdao', 'sliding_puzzle', 'number_puzzle'
+]
 
 function matchesAny(name: string, keywords: string[]): boolean {
   for (let i = 0; i < keywords.length; i++) {
@@ -92,6 +95,9 @@ export function resolveToolSymbol(functionName: string): Resource {
   }
   if (matchesAny(name, ENGLISH_KEYWORDS)) {
     return $r('sys.symbol.square_and_pencil')
+  }
+  if (matchesAny(name, HUARONGDAO_KEYWORDS)) {
+    return $r('sys.symbol.grid')
   }
   return $r('sys.symbol.wrench_and_screwdriver')
 }

@@ -125,18 +125,14 @@ function hydrateLessonPlan(raw: Object): LessonPlan {
   if (typeof r['teacherNotes'] === 'string') {
     plan.teacherNotes = r['teacherNotes'] as string
   }
-  if (Array.isArray(r['vocab'])) {
-    plan.vocab = (r['vocab'] as Object[]).map(hydrateVocabItem)
-  }
-  if (Array.isArray(r['math'])) {
-    plan.math = (r['math'] as Object[]).map(hydrateMathItem)
-  }
-  if (Array.isArray(r['writing'])) {
-    plan.writing = (r['writing'] as Object[]).map(hydrateWritingItem)
-  }
-  if (Array.isArray(r['generalKnowledge'])) {
-    plan.generalKnowledge = (r['generalKnowledge'] as Object[]).map(hydrateGeneralItem)
-  }
+  // 4 个核心模块: 优先读规范 key, 兼容 LLM 常见的同义命名
+  plan.vocab = extractArray(r, ['vocab', 'vocabulary', 'words', 'englishWords', 'english'], hydrateVocabItem)
+  plan.math = extractArray(r, ['math', 'mathItems', 'mathematics'], hydrateMathItem)
+  plan.writing = extractArray(r, ['writing', 'characters', 'characterWriting', 'handwriting', 'chineseWriting'],
+    hydrateWritingItem)
+  plan.generalKnowledge = extractArray(r,
+    ['generalKnowledge', 'general', 'generalItems', 'knowledge', 'commonSense', 'science'],
+    hydrateGeneralItem)
   if (r['freeform'] !== undefined && typeof r['freeform'] === 'object' && r['freeform'] !== null) {
     plan.freeform = r['freeform'] as Record<string, Object>
   }
@@ -144,6 +140,27 @@ function hydrateLessonPlan(raw: Object): LessonPlan {
     plan.childSnapshot = hydrateChildSnapshot(r['childSnapshot'] as Object)
   }
   return plan
+}
+
+/**
+ * 按候选 key 顺序查找数组字段, 调用 hydrate 对每条记录类型化。
+ * - 返回非空数组时短路 (first-wins)
+ * - 候选都不是数组时返回空数组
+ * - T 必须是 hydrate 函数的返回类型, 由调用方显式标注
+ */
+function extractArray<T>(r: Record<string, Object>, keys: string[],
+  hydrate: (raw: Object) => T): T[] {
+  for (let i = 0; i < keys.length; i++) {
+    const v = r[keys[i]]
+    if (Array.isArray(v)) {
+      const out: T[] = []
+      for (let j = 0; j < v.length; j++) {
+        out.push(hydrate(v[j] as Object))
+      }
+      return out
+    }
+  }
+  return []
 }
 
 function hydrateVocabItem(raw: Object): LessonPlanVocabItem {

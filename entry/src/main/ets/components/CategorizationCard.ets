@@ -15,7 +15,7 @@
 import { ToolCall } from '../models/ChatModels'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { getPreferencesService } from '../services/PreferencesService'
+import { getPreferencesService, PreferenceKeys } from '../services/PreferencesService'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { curves } from '@kit.ArkUI'
 
@@ -107,6 +107,13 @@ export struct CategorizationCard {
   // 共享物品动画相位: 所有未选中物品的呼吸 scale 派生于此, 首物品在 tutorial 状态下额外叠加 translateY 浮动
   @Local itemAnimPhase: number = 0
 
+  // 最佳成绩: 速度王 (任意完成) + 全对王 (correct===total), 按 difficulty 区分
+  @Local bestTimeSeconds: number = -1
+  @Local bestPerfectSeconds: number = -1
+  @Local isNewBest: boolean = false
+  // 防止在 loadBestScores 完成前 saveBestScoresIfImproved 用 stale -1 覆盖已有最佳
+  @Local bestScoresLoaded: boolean = false
+
   // 非响应式
   private timerId: number = -1
   private shakeTimerId: number = -1
@@ -140,6 +147,8 @@ export struct CategorizationCard {
     this.items = v.items
     this.difficulty = v.difficulty
     this.placedItems = this.createPlacedArray(this.items.length)
+    // 最佳成绩两个分支都需要: 未回答时给新纪录检测用, 已回答时给在线视图展示「最佳 X:Y」
+    this.loadBestScores(this.difficulty)
     if (this.isAnswered) {
       this.parseAnsweredPayload()
       // 在线视图: 视为已看过引导 (不会显示气泡)
@@ -198,6 +207,67 @@ export struct CategorizationCard {
     } catch (_e) {
       hilog.warn(DOMAIN, TAG, 'failed to persist tutorial seen flag')
     }
+  }
+
+  // 异步读最佳成绩。已回答/未回答两个分支都需要, 让在线视图也能展示「最佳 X:Y · 0 错」
+  private async loadBestScores(difficulty: number): Promise<void> {
+    try {
+      const prefs = getPreferencesService()
+      const timeKey = `${PreferenceKeys.CATEGORIZATION_BEST_TIME_PREFIX}${difficulty}`
+      const perfectKey = `${PreferenceKeys.CATEGORIZATION_BEST_PERFECT_PREFIX}${difficulty}`
+      // Promise.all 把两次 getNumber 批成 1 次 render, 避免 3 次 post-await 触发连续重绘。
+      // ArkTS 不支持解构声明 (arkts-no-destruct-decls), 用数组索引代替。
+      const results: number[] = await Promise.all([
+        prefs.getNumber(timeKey, -1),
+        prefs.getNumber(perfectKey, -1)
+      ])
+      this.bestTimeSeconds = results[0]
+      this.bestPerfectSeconds = results[1]
+      this.bestScoresLoaded = true
+    } catch (_e) {
+      this.bestTimeSeconds = -1
+      this.bestPerfectSeconds = -1
+      // 加载失败也要解除守卫, 否则 saveBestScoresIfImproved 永远不写
+      this.bestScoresLoaded = true
+      hilog.warn(DOMAIN, TAG, 'failed to load best scores')
+    }
+  }
+
+  // 在 evaluateWin 命中后异步调用, 不阻塞 onAnswer。
+  // 速度王: 任意完成的最快; 全对王: 仅 wrongAttempts===0 的最快。
+  private async saveBestScoresIfImproved(): Promise<void> {
+    // 防止 race: loadBestScores 未完成时 bestTimeSeconds/bestPerfectSeconds 是 stale 的 -1,
+    // 会让任何一次完成都被当成"新纪录"覆盖已有最佳. 这种情况直接放弃本次保存.
+    if (!this.bestScoresLoaded) {
+      return
+    }
+    try {
+      const prefs = getPreferencesService()
+      const timeKey = `${PreferenceKeys.CATEGORIZATION_BEST_TIME_PREFIX}${this.difficulty}`
+      const perfectKey = `${PreferenceKeys.CATEGORIZATION_BEST_PERFECT_PREFIX}${this.difficulty}`
+      const isNewBestTime = this.bestTimeSeconds < 0 || this.elapsedSeconds < this.bestTimeSeconds
+      const isNewBestPerfect = this.wrongAttempts === 0 &&
+        (this.bestPerfectSeconds < 0 || this.elapsedSeconds < this.bestPerfectSeconds)
+      if (isNewBestTime) {
+        await prefs.setNumber(timeKey, this.elapsedSeconds)
+        this.bestTimeSeconds = this.elapsedSeconds
+      }
+      if (isNewBestPerfect) {
+        await prefs.setNumber(perfectKey, this.elapsedSeconds)
+        this.bestPerfectSeconds = this.elapsedSeconds
+      }
+      this.isNewBest = isNewBestTime || isNewBestPerfect
+    } catch (_e) {
+      // 持久化失败不阻塞 UI
+      hilog.warn(DOMAIN, TAG, 'failed to save best scores')
+    }
+  }
+
+  private formatBestTime(seconds: number): string {
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    const sStr = s < 10 ? `0${s}` : `${s}`
+    return `${m}:${sStr}`
   }
 
   private createPlacedArray(len: number): number[] {
@@ -445,6 +515,8 @@ export struct CategorizationCard {
     this.isCompleted = true
     this.hasWon = true
     this.submitResult(true)
+    // 异步持久化最佳成绩, 不阻塞 onAnswer 回传 (race-guard 防止 stale -1 覆盖)
+    this.saveBestScoresIfImproved()
   }
 
   private handleGiveUp(): void {
@@ -492,13 +564,6 @@ export struct CategorizationCard {
       return '简单'
     }
     return '进阶'
-  }
-
-  private formatTime(): string {
-    const m = Math.floor(this.elapsedSeconds / 60)
-    const s = this.elapsedSeconds % 60
-    const sStr = s < 10 ? `0${s}` : `${s}`
-    return `${m}:${sStr}`
   }
 
   private getBinAccentColor(binIndex: number): string {
@@ -614,13 +679,27 @@ export struct CategorizationCard {
           .fontSize(15)
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.status_success'))
-        Text(`${this.correctCount}/${this.items.length} · ${this.formatTime()} · 失败 ${this.wrongAttempts} 次`)
+        Text(`${this.correctCount}/${this.items.length} · ${this.formatBestTime(this.elapsedSeconds)} · 失败 ${this.wrongAttempts} 次`)
           .fontSize(12)
           .fontColor($r('app.color.text_secondary'))
           .margin({ top: 2 })
+        if (this.bestPerfectSeconds >= 0) {
+          Text(`最佳 ${this.formatBestTime(this.bestPerfectSeconds)} · 0 错`)
+            .fontSize(12)
+            .fontColor($r('app.color.text_secondary'))
+            .margin({ top: 2 })
+        }
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
+      if (this.isNewBest) {
+        Text('新纪录')
+          .fontSize(10)
+          .fontColor(Color.White)
+          .backgroundColor($r('app.color.status_success'))
+          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+          .borderRadius(6)
+      }
     }
     .width('100%')
     .padding(12)
@@ -822,7 +901,7 @@ export struct CategorizationCard {
   @Builder
   StatsGrid() {
     Row({ space: 8 }) {
-      this.StatCard($r('sys.symbol.clock'), '时间', this.formatTime())
+      this.StatCard($r('sys.symbol.clock'), '时间', this.formatBestTime(this.elapsedSeconds))
       this.StatCard($r('sys.symbol.checkmark'), '进度', `${this.correctCount}/${this.items.length}`)
     }
     .width('100%')

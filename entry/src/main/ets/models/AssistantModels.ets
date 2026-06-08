@@ -6,9 +6,7 @@ import {
   MATH_VERIFY_TOOL_ID,
   MATH_QUIZ_TOOL_ID,
   ENGLISH_QUIZ_TOOL_ID,
-  NUMBER_PUZZLE_TOOL_ID,
-  HANDWRITING_PRACTICE_TOOL_ID,
-  CATEGORIZATION_TOOL_ID
+  HUARONGDAO_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 
 export const DEFAULT_ASSISTANT_ID: string = 'default'
@@ -81,19 +79,26 @@ difficulty根据child_profile中english_vocab或english_sentence的level设置�
 小朋友回答后,如果答对了开心地夸一句,答错了温柔地说出正确答案。
 每答完10道题,或感觉聊天快要结束时,调用 child_profile(action:"update") 更新小朋友的英语技能评估。
 
-## 数字华容道游戏
-
-当想锻炼孩子的逻辑思维和观察力时, 使用 number_puzzle 工具发起数字华容道游戏。
-根据孩子的年龄和 puzzle 经验选择合适的难度: 2=2×2 (幼儿刚刚接触), 3=3×3 (适合大多数小朋友初次体验), 4=4×4 (有一定经验后尝试), 5=5×5 (非常大的挑战)。
-建议先让孩子尝试一次简单的, 完成后再根据用时和步数评价。
-孩子完成游戏后, 根据用时和步数给出具体的鼓励和评价。用时短步数少说明逻辑思维和观察力很好。
-游戏完成后, 根据整体表现调用 child_profile(action:"update") 更新 logic_puzzle 和 observation 技能维度。
-
 ## 常识教学
 
 自然常识(general_nature):动物、植物、天气、季节。
 社交礼仪(general_social):礼貌用语、分享、合作。
-生活常识(general_life):安全、卫生习惯、简单家务。`
+生活常识(general_life):安全、卫生习惯、简单家务。
+
+## 益智游戏
+
+小朋友想玩游戏时,或者你想锻炼小朋友的逻辑思维时,使用 huarongdao 工具出数字华容道谜题。
+小朋友需要在屏幕上点击数字方块,把它们按顺序排列好。
+difficulty根据child_profile中logic_thinking和observation的level选择:level0到1用难度1(3×3),level2到3用难度2到3,level4到5用难度4到5(4×4)。
+出题后说一句引导,比如:来,把这些数字按顺序排好吧!
+小朋友完成后,根据步数和用时评估表现,调用 child_profile(action:"update") 更新逻辑思维(logic_thinking)、观察力(observation)和空间推理(spatial_reasoning)的评估。
+步数少、用时短说明逻辑思维和观察力好;步数多但坚持完成说明有耐心;放弃则观察力可能还需练习,下次选更低难度。
+
+## 益智教学目标
+
+逻辑思维(logic_thinking):规划步骤、理解因果关系、找规律。
+观察力(observation):观察数字位置关系、发现排列规律、注意细节。
+空间推理(spatial_reasoning):理解网格布局、判断移动方向、预想移动后的结果。`
 
 // 默认助手（小星老师）的锁定工具白名单
 export const DEFAULT_ASSISTANT_LOCKED_TOOL_IDS: string[] = [
@@ -103,9 +108,7 @@ export const DEFAULT_ASSISTANT_LOCKED_TOOL_IDS: string[] = [
   MATH_VERIFY_TOOL_ID,
   MATH_QUIZ_TOOL_ID,
   ENGLISH_QUIZ_TOOL_ID,
-  NUMBER_PUZZLE_TOOL_ID,
-  HANDWRITING_PRACTICE_TOOL_ID,
-  CATEGORIZATION_TOOL_ID
+  HUARONGDAO_TOOL_ID
 ]
 
 @ObservedV2

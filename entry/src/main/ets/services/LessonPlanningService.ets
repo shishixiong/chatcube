@@ -300,7 +300,43 @@ export class LessonPlanningService {
       console.info('LessonPlanningService', 'triggerPlanningForToday: already running, reuse promise')
       return this.runningPromise
     }
-    this.runningPromise = this.runPlanningPipeline(force, source)
+    // 计划日期 = 明日（本地时区）
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const planDate = formatLocalYMD(tomorrow)
+    this.runningPromise = this.runPlanningPipeline(planDate, force, source)
+    try {
+      await this.runningPromise
+    } finally {
+      this.runningPromise = null
+    }
+  }
+
+  /**
+   * 手动触发生成指定日期的备课计划。
+   * 主要供设置页"立即生成今日计划"按钮使用 — 用户希望立即给当天备课
+   * 而不是等明天才生效 (默认 triggerPlanningForToday 永远生成明日)。
+   *
+   * 幂等性: 与 triggerPlanningForToday 一致, force=true 会跳过幂等检查并覆盖。
+   *
+   * 注意: 输入数据 (今日会话/child profile/昨日 plan) 与 planDate 无关,
+   * 始终是"今天"的视角 — 老师想基于刚发生的内容来备课, 不论 planDate 是哪天。
+   */
+  async triggerPlanningForDate(planDate: string, force: boolean = true, source: TriggerSource = 'manual'): Promise<void> {
+    if (this.context === null) {
+      console.warn('LessonPlanningService', 'triggerPlanningForDate: context not initialized')
+      return
+    }
+    if (planDate === '') {
+      console.warn('LessonPlanningService', 'triggerPlanningForDate: empty planDate, skip')
+      return
+    }
+    if (this.runningPromise !== null) {
+      console.info('LessonPlanningService',
+        `triggerPlanningForDate(${planDate}): already running, reuse promise`)
+      return this.runningPromise
+    }
+    this.runningPromise = this.runPlanningPipeline(planDate, force, source)
     try {
       await this.runningPromise
     } finally {
@@ -452,12 +488,13 @@ export class LessonPlanningService {
   // 内部：主流程
   // ============================================================
 
-  private async runPlanningPipeline(force: boolean, source: TriggerSource): Promise<void> {
+  private async runPlanningPipeline(planDate: string, force: boolean, source: TriggerSource): Promise<void> {
     if (this.inFlight && !force) {
       console.info('LessonPlanningService', 'runPlanningPipeline: in flight, skip')
       return
     }
     this.inFlight = true
+    const planId = `plan_${planDate.replace(/-/g, '')}`
     try {
       // 1. 全局开关
       const enabled = await this.preferencesService.getBoolean(PreferenceKeys.PLANNER_ENABLED, true)
@@ -466,11 +503,7 @@ export class LessonPlanningService {
         return
       }
 
-      // 2. 计划日期 = 明日（本地时区）
-      const tomorrow = new Date()
-      tomorrow.setDate(tomorrow.getDate() + 1)
-      const planDate = formatLocalYMD(tomorrow)
-      const planId = `plan_${formatLocalYMDCompact(tomorrow)}`
+      // 2. 幂等检查
 
       // 3. 幂等检查
       const existing = await this.databaseService.getDailyLessonPlanByDate(planDate)
@@ -507,10 +540,15 @@ export class LessonPlanningService {
       await this.writeRunning(planId, planDate, existing)
 
       // 5. 准备输入：今日 sessions + child profile + 昨日 plan
+      // (注意: 不论 planDate 是今天还是明天, 输入都是今天的会话,
+      // 因为老师想基于"刚刚发生"的内容来备课)
       const todayDate = new Date()
       const todayYMD = formatLocalYMD(todayDate)
       const dayStart = this.startOfDay(todayDate).getTime()
-      const dayEnd = this.startOfDay(tomorrow).getTime() // 明日 00:00 = 今日结束
+      // 真实明天 00:00 = 今日结束 (与 planDate 无关)
+      const realTomorrow = new Date()
+      realTomorrow.setDate(realTomorrow.getDate() + 1)
+      const dayEnd = this.startOfDay(realTomorrow).getTime()
 
       const sessions = await this.databaseService.getSessionsByAssistantAndDate(
         DEFAULT_ASSISTANT_ID_VALUE,
@@ -571,6 +609,23 @@ export class LessonPlanningService {
       plan.planDate = planDate
       plan.childSnapshot = childSnapshot
 
+      // 校验: 4 个模块数组全空 + themeTitle/teacherNotes 非空 = LLM 把所有内容
+      // 写成叙述文字塞进 theme, 没有按 schema 填入结构化模块。视为无效输出, 失败重试
+      const hasAnyModuleItem = plan.vocab.length > 0 || plan.math.length > 0 ||
+        plan.writing.length > 0 || plan.generalKnowledge.length > 0
+      const hasNarrative = plan.themeTitle !== '' || plan.teacherNotes !== ''
+      if (!hasAnyModuleItem && hasNarrative) {
+        console.warn('LessonPlanningService',
+          `LLM output for ${planDate} has all 4 module arrays empty (theme/notes only) — ` +
+          `vocab=${plan.vocab.length} math=${plan.math.length} writing=${plan.writing.length} ` +
+          `general=${plan.generalKnowledge.length} themeLen=${plan.themeTitle.length} ` +
+          `notesLen=${plan.teacherNotes.length}. Marking failed.`)
+        await this.markFailed(planId, planDate,
+          'LLM 输出未遵循 schema: 4 个模块数组全空, 仅有 theme/teacherNotes 叙述',
+          sessions.length, messageCount, sessionIdsJson)
+        return
+      }
+
       // 8. 持久化
       const row = this.buildRow(planId, planDate, plan, llmResult.modelName, llmResult.providerId,
         llmResult.modelId, messageCount, sessionIdsJson)
@@ -617,10 +672,6 @@ export class LessonPlanningService {
     } catch (error) {
       console.error('LessonPlanningService', `runPlanningPipeline error: ${JSON.stringify(error)}`)
       // 顶层 catch：写一行 failed 记录（如果还没写）
-      const tomorrow = new Date()
-      tomorrow.setDate(tomorrow.getDate() + 1)
-      const planDate = formatLocalYMD(tomorrow)
-      const planId = `plan_${formatLocalYMDCompact(tomorrow)}`
       await this.markFailed(planId, planDate, `pipeline 异常: ${JSON.stringify(error)}`, 0, 0, '[]')
     } finally {
       this.inFlight = false

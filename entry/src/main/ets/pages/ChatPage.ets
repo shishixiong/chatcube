@@ -72,6 +72,7 @@ import { ChatMessageListSection } from '../components/chat/ChatMessageListSectio
 import { ChatToolPickerSheetContent } from '../components/chat/ChatToolPickerSheetContent'
 import { ChatToolExecutionApprovalSheetContent } from '../components/chat/ChatToolExecutionApprovalSheetContent'
 import { TodayStarDetailSheet } from '../components/chat/TodayStarDetailSheet'
+import { StarBurstOverlay } from '../components/StarBurstOverlay'
 import { StarActivityType, STAR_ACTIVITY_TYPES, getActivityMeta } from '../models/StarEventModels'
 import { SearchEngineMenuOption } from '../components/ChatToolbar'
 import { getSearchEngineRegistry, registerAllSearchEngines, SearchEngineDescriptor } from '../services/search/Index'
@@ -284,6 +285,8 @@ export struct ChatPage {
   @Local toolExecutionApprovalSourceLabel: string = ''
   @Local toolExecutionApprovalName: string = ''
   @Local showStarSheet: boolean = false
+  // 星星浮层触发信号: 每次 onStarEarnedTickChanged 自增, StarBurstOverlay 通过 @Monitor 监听
+  @Local starBurstTrigger: number = 0
   @Local toolExecutionApprovalSourceId: string = ''
   @Local toolExecutionApprovalArgumentSummary: string = ''
   @Local toolExecutionApprovalArgumentEntries: ToolPreviewEntry[] = []
@@ -834,6 +837,8 @@ export struct ChatPage {
       }
       const tip = this.formatStarGrantTip(type, stars)
       showToast(this.getUIContext(), tip, 1500)
+      // 触发即时浮层 (StarBurstOverlay 通过 @Monitor('starBurstTrigger') 监听)
+      this.starBurstTrigger++
     } catch (error) {
       console.error('ChatPage', `Failed to parse starLastGrant: ${JSON.stringify(error)}`)
     }
@@ -2676,6 +2681,13 @@ export struct ChatPage {
           .position({ x: 0, y: '100%' })
           .translate({ y: '-100%', x: 0 })
         }
+
+        // 星星授奖即时浮层 (覆盖在消息列表之上, 不接收触摸, 不与 sheet 冲突)
+        StarBurstOverlay({
+          burstTrigger: this.starBurstTrigger,
+          containerWidthVp: this.windowWidthVp,
+          containerHeightVp: this.windowHeightVp
+        })
 
         // 分享预览 Sheet 宿主（bindContentCover 和 bindSheet 不能在同一组件上，否则会冲突）
       Column()

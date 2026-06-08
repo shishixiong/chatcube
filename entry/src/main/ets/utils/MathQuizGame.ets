@@ -31,6 +31,10 @@ export interface ExpressionToken {
   value: string
 }
 
+// 单源的运算符字母表: AI 可能直接发中文 × ÷, 需与 ASCII 同等识别。
+// 下方的显示正则字符类与 op 分类器必须与这里保持一致, 避免任一侧漏掉符号。
+const MATH_OP_CHARS: string = '+-*/()×÷'
+
 /**
  * 解析 AI 传入的 toolCall.arguments JSON 字符串为题目数据。
  * 解析失败时返回空对象, 不抛异常, 由上层决定如何降级渲染。
@@ -92,13 +96,14 @@ export function parseMathQuizAnswer(payloadJson: string): MathQuizAnswerPayload 
  */
 export function tokenizeExpression(expr: string): ExpressionToken[] {
   const tokens: ExpressionToken[] = []
-  const regex = /(\d+\.?\d*|[+\-*/()])/g
+  // 正则字符类必须与上方 MATH_OP_CHARS 保持同步
+  const regex = /(\d+\.?\d*|[+\-*/()×÷])/g
   const matches = expr.match(regex)
   if (!matches) {
     return [{ type: 'number', value: expr }]
   }
   for (const m of matches) {
-    if (m.length === 1 && '+-*/()'.includes(m)) {
+    if (m.length === 1 && MATH_OP_CHARS.includes(m)) {
       tokens.push({ type: 'op', value: m })
     } else {
       tokens.push({ type: 'number', value: m })

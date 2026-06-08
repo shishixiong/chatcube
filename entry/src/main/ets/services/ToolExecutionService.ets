@@ -1,7 +1,4 @@
 import {
-  AttachmentType,
-  MessageAttachment,
-  ModelProvider,
   ToolApprovalPolicy,
   ToolCall,
   ToolPermissionLevel,
@@ -16,29 +13,18 @@ import {
   SEARCH_WEB_TOOL_ID,
   MATH_QUIZ_TOOL_ID,
   ENGLISH_QUIZ_TOOL_ID,
-  NUMBER_PUZZLE_TOOL_ID,
-  HANDWRITING_PRACTICE_TOOL_ID,
-  CATEGORIZATION_TOOL_ID,
+  HUARONGDAO_TOOL_ID,
   isAskUserFunctionName,
   isMathQuizFunctionName,
   isEnglishQuizFunctionName,
-  isNumberPuzzleFunctionName,
-  isHandwritingPracticeFunctionName,
-  isCategorizationFunctionName,
+  isHuarongdaoFunctionName,
   isScrapeWebFunctionName,
   isSearchWebFunctionName
 } from '../utils/SearchToolIdentityUtils'
-import { getDatabaseService } from './DatabaseService'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
 import { getEnglishQuizImageIndex, EnglishQuizImageIndex } from './EnglishQuizImageIndex'
-import { getStarRewardService } from './StarRewardService'
-import { StarActivityType } from '../models/StarEventModels'
-import { ServiceRegistry } from './ServiceRegistry'
-import { modelSupportsVision } from './registry/ModelAbilityRegistry'
-import { RequestMessage, AIApiConfig } from './AIApiService'
-import { getProviderViewModel } from '../viewmodels/ProviderViewModel'
-import { getEffectiveApiKey } from '../config/PresetProviders'
+import { generatePuzzle } from '../utils/HuarongdaoPuzzleGenerator'
 
 
 // 取消检查回调类型
@@ -398,20 +384,6 @@ export class ToolExecutionService {
     return undefined
   }
 
-  private recordStarEvent(
-    activityType: StarActivityType,
-    toolCall: ToolCall,
-    context: ToolExecutionContext,
-    answerJson: string
-  ): void {
-    void getStarRewardService().recordEvent({
-      activityType: activityType,
-      payloadJson: answerJson,
-      toolCallId: toolCall.id,
-      sessionId: context.sessionId
-    })
-  }
-
   private buildCancelledResult(toolCall: ToolCall, displayName: string, sourceLabel: string): ToolResult {
     return new ToolResult(
       toolCall.id,
@@ -602,7 +574,6 @@ export class ToolExecutionService {
     toolCall.approvalState = 'answered'
     toolCall.approvalReason = answerJson
     console.info('ToolExecutionService', `math_quiz answered: ${toolCall.id}`)
-    this.recordStarEvent('math_quiz', toolCall, context, answerJson)
     return new ToolResult(
       toolCall.id,
       answerJson,
@@ -723,7 +694,6 @@ export class ToolExecutionService {
     toolCall.approvalState = 'answered'
     toolCall.approvalReason = answerJson
     console.info('ToolExecutionService', `english_quiz answered: ${toolCall.id}`)
-    this.recordStarEvent('english_quiz', toolCall, context, answerJson)
     return new ToolResult(
       toolCall.id,
       answerJson,
@@ -733,10 +703,10 @@ export class ToolExecutionService {
     )
   }
 
-  // number_puzzle 特殊路径: 与 math_quiz 类似, 挂起等待 NumberPuzzleCard 回答。
-  // 孩子完成拼图后结果写入 puzzle_records 表, 再返回给 AI 用于学习画像更新。
-  private async handleNumberPuzzle(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
-    toolCall.toolId = NUMBER_PUZZLE_TOOL_ID
+  // huarongdao 特殊路径: 与 math_quiz/english_quiz 类似, 挂起等待 HuarongdaoCard 回答。
+  // 谜题生成在后台完成并注入 toolCall.arguments。
+  private async handleHuarongdao(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = HUARONGDAO_TOOL_ID
     if (toolCall.displayName.trim() === '') {
       toolCall.displayName = '数字华容道'
     }
@@ -746,7 +716,30 @@ export class ToolExecutionService {
     }
     toolCall.permissionLevel = ToolPermissionLevel.READ
 
+    // 1. 立即设置 pending 状态, 让卡片立即出现
     toolCall.approvalState = 'pending'
+
+    // 2. 后台生成谜题并注入到 toolCall.arguments
+    try {
+      const parsed = JSON.parse(toolCall.arguments) as Record<string, Object>
+      const difficulty = (parsed['difficulty'] as number) ?? 1
+      const clampedDifficulty = Math.max(1, Math.min(5, difficulty))
+
+      console.info('ToolExecutionService',
+        `huarongdao puzzle generation start: difficulty=${clampedDifficulty}`)
+
+      const state = generatePuzzle(clampedDifficulty)
+
+      parsed['tiles'] = state.tiles as Object[]
+      parsed['grid_size'] = state.gridSize as Object
+      parsed['difficulty'] = clampedDifficulty as Object
+      toolCall.arguments = JSON.stringify(parsed)
+
+      console.info('ToolExecutionService',
+        `huarongdao puzzle generated: gridSize=${state.gridSize}, difficulty=${state.difficulty}`)
+    } catch (error) {
+      console.error('ToolExecutionService', `huarongdao puzzle generation exception: ${JSON.stringify(error)}`)
+    }
 
     let answerJson: string | null = null
     try {
@@ -758,16 +751,16 @@ export class ToolExecutionService {
         }
         const snapshot = this.buildAskUserSnapshot(toolCall, context)
         snapshot.kind = PendingToolInteractionKind.ASK_USER
-        snapshot.toolId = NUMBER_PUZZLE_TOOL_ID
+        snapshot.toolId = HUARONGDAO_TOOL_ID
         this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
         this.publishPendingInteractionChanged()
       })
     } catch (error) {
-      console.error('ToolExecutionService', `number_puzzle answer callback failed: ${JSON.stringify(error)}`)
+      console.error('ToolExecutionService', `huarongdao answer callback failed: ${JSON.stringify(error)}`)
       toolCall.approvalState = 'denied'
       return new ToolResult(
         toolCall.id,
-        JSON.stringify({ error: `number_puzzle 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        JSON.stringify({ error: `huarongdao 失败: ${JSON.stringify(error)}`, cancelled: true }),
         true,
         toolCall.displayName,
         toolCall.sourceLabel
@@ -775,7 +768,7 @@ export class ToolExecutionService {
     }
 
     if (this.isCancelled()) {
-      console.info('ToolExecutionService', 'number_puzzle cancelled by external stop')
+      console.info('ToolExecutionService', 'huarongdao cancelled by external stop')
       toolCall.approvalState = 'denied'
       return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
     }
@@ -784,35 +777,16 @@ export class ToolExecutionService {
       toolCall.approvalState = 'denied'
       return new ToolResult(
         toolCall.id,
-        JSON.stringify({ cancelled: true, error: '小朋友未完成该华容道游戏' }),
+        JSON.stringify({ cancelled: true, error: '小朋友未完成该谜题' }),
         true,
         toolCall.displayName,
         toolCall.sourceLabel
       )
     }
 
-    // 将游戏记录持久化到 puzzle_records 表
-    try {
-      const result = JSON.parse(answerJson) as Record<string, Object>
-      const difficulty = (result['difficulty'] as number) ?? 3
-      const timeSeconds = (result['time_seconds'] as number) ?? 0
-      const moveCount = (result['move_count'] as number) ?? 0
-      const completed = (result['completed'] as boolean) ?? true
-      await getDatabaseService().insertPuzzleRecord(
-        context.sessionId,
-        difficulty,
-        timeSeconds,
-        moveCount,
-        completed
-      )
-    } catch (error) {
-      console.error('ToolExecutionService', `Failed to persist puzzle record: ${JSON.stringify(error)}`)
-    }
-
     toolCall.approvalState = 'answered'
     toolCall.approvalReason = answerJson
-    console.info('ToolExecutionService', `number_puzzle answered: ${toolCall.id}`)
-    this.recordStarEvent('number_puzzle', toolCall, context, answerJson)
+    console.info('ToolExecutionService', `huarongdao answered: ${toolCall.id}`)
     return new ToolResult(
       toolCall.id,
       answerJson,
@@ -820,268 +794,6 @@ export class ToolExecutionService {
       toolCall.displayName,
       toolCall.sourceLabel
     )
-  }
-
-  // categorization 特殊路径: 与 math_quiz 类似, 挂起等待 CategorizationCard 回答。
-  private async handleCategorization(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
-    toolCall.toolId = CATEGORIZATION_TOOL_ID
-    if (toolCall.displayName.trim() === '') {
-      toolCall.displayName = '分类小管家'
-    }
-    toolCall.sourceType = ToolSourceType.BUILTIN
-    if (toolCall.sourceLabel.trim() === '') {
-      toolCall.sourceLabel = '内置工具'
-    }
-    toolCall.permissionLevel = ToolPermissionLevel.READ
-
-    toolCall.approvalState = 'pending'
-
-    let answerJson: string | null = null
-    try {
-      answerJson = await new Promise<string | null>((resolve) => {
-        const existing = this.pendingAnswers.get(toolCall.id)
-        if (existing !== undefined) {
-          existing.resolve(null)
-          this.pendingAnswers.delete(toolCall.id)
-        }
-        const snapshot = this.buildAskUserSnapshot(toolCall, context)
-        snapshot.kind = PendingToolInteractionKind.ASK_USER
-        snapshot.toolId = CATEGORIZATION_TOOL_ID
-        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
-        this.publishPendingInteractionChanged()
-      })
-    } catch (error) {
-      console.error('ToolExecutionService', `categorization answer callback failed: ${JSON.stringify(error)}`)
-      toolCall.approvalState = 'denied'
-      return new ToolResult(
-        toolCall.id,
-        JSON.stringify({ error: `categorization 失败: ${JSON.stringify(error)}`, cancelled: true }),
-        true,
-        toolCall.displayName,
-        toolCall.sourceLabel
-      )
-    }
-
-    if (this.isCancelled()) {
-      console.info('ToolExecutionService', 'categorization cancelled by external stop')
-      toolCall.approvalState = 'denied'
-      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
-    }
-
-    if (answerJson === null) {
-      toolCall.approvalState = 'denied'
-      return new ToolResult(
-        toolCall.id,
-        JSON.stringify({ cancelled: true, error: '小朋友未完成分类' }),
-        true,
-        toolCall.displayName,
-        toolCall.sourceLabel
-      )
-    }
-
-    toolCall.approvalState = 'answered'
-    toolCall.approvalReason = answerJson
-    console.info('ToolExecutionService', `categorization answered: ${toolCall.id}`)
-    this.recordStarEvent('categorization', toolCall, context, answerJson)
-    return new ToolResult(
-      toolCall.id,
-      answerJson,
-      false,
-      toolCall.displayName,
-      toolCall.sourceLabel
-    )
-  }
-
-  // handwriting_practice 特殊路径: 与 number_puzzle 类似, 挂起等待 HandwritingCard 回答。
-  // 孩子完成书写后调用 AI vision 评价, 将评价文字作为 ToolResult 返回。
-  private async handleHandwriting(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
-    toolCall.toolId = HANDWRITING_PRACTICE_TOOL_ID
-    if (toolCall.displayName.trim() === '') {
-      toolCall.displayName = '学写字'
-    }
-    toolCall.sourceType = ToolSourceType.BUILTIN
-    if (toolCall.sourceLabel.trim() === '') {
-      toolCall.sourceLabel = '内置工具'
-    }
-    toolCall.permissionLevel = ToolPermissionLevel.READ
-
-    toolCall.approvalState = 'pending'
-
-    let answerJson: string | null = null
-    try {
-      answerJson = await new Promise<string | null>((resolve) => {
-        const existing = this.pendingAnswers.get(toolCall.id)
-        if (existing !== undefined) {
-          existing.resolve(null)
-          this.pendingAnswers.delete(toolCall.id)
-        }
-        const snapshot = this.buildAskUserSnapshot(toolCall, context)
-        snapshot.kind = PendingToolInteractionKind.ASK_USER
-        snapshot.toolId = HANDWRITING_PRACTICE_TOOL_ID
-        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
-        this.publishPendingInteractionChanged()
-      })
-    } catch (error) {
-      console.error('ToolExecutionService', `handwriting_practice answer callback failed: ${JSON.stringify(error)}`)
-      toolCall.approvalState = 'denied'
-      return new ToolResult(
-        toolCall.id,
-        JSON.stringify({ error: `handwriting_practice 失败: ${JSON.stringify(error)}`, cancelled: true }),
-        true,
-        toolCall.displayName,
-        toolCall.sourceLabel
-      )
-    }
-
-    if (this.isCancelled()) {
-      console.info('ToolExecutionService', 'handwriting_practice cancelled by external stop')
-      toolCall.approvalState = 'denied'
-      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
-    }
-
-    if (answerJson === null) {
-      toolCall.approvalState = 'denied'
-      return new ToolResult(
-        toolCall.id,
-        JSON.stringify({ cancelled: true, error: '小朋友未完成书写练习' }),
-        true,
-        toolCall.displayName,
-        toolCall.sourceLabel
-      )
-    }
-
-    // 解析结果生成反馈
-    let evalText: string = ''
-    try {
-      const answer = JSON.parse(answerJson) as Record<string, Object>
-      const handwritingBase64 = (answer['handwriting_base64'] as string) ?? ''
-      const character = (answer['character'] as string) ?? '字'
-      const charType = (answer['type'] as string) ?? 'letter'
-      const completed = (answer['completed'] as boolean) ?? true
-
-      if (!completed || handwritingBase64 === '') {
-        // 放弃: 返回简单提示
-        evalText = `小朋友这次没有完成${character}的书写，没关系，下次再来！`
-      } else {
-        // 调用 AI vision 评价
-        evalText = await this.evaluateHandwriting(handwritingBase64, character, charType)
-      }
-    } catch (error) {
-      console.error('ToolExecutionService', `Failed to evaluate handwriting: ${JSON.stringify(error)}`)
-      evalText = '写得真棒！继续加油！'
-    }
-
-    const resultContent = JSON.stringify({ evaluation: evalText })
-    toolCall.approvalState = 'answered'
-    toolCall.approvalReason = answerJson
-    console.info('ToolExecutionService', `handwriting_practice answered: ${toolCall.id}`)
-    this.recordStarEvent('handwriting_practice', toolCall, context, answerJson)
-    return new ToolResult(
-      toolCall.id,
-      resultContent,
-      false,
-      toolCall.displayName,
-      toolCall.sourceLabel
-    )
-  }
-
-  // 调用 AI vision 模型评价书写
-  private async evaluateHandwriting(
-    base64Image: string,
-    character: string,
-    charType: string
-  ): Promise<string> {
-    try {
-      // 遍历所有启用的 provider，找到第一个支持 vision 的模型
-      const providerViewModel = getProviderViewModel()
-      const providers: ModelProvider[] = await providerViewModel.loadProviders()
-
-      let chosenProvider: ModelProvider | null = null
-      let chosenModelId: string = ''
-
-      for (let pi = 0; pi < providers.length; pi++) {
-        const provider = providers[pi]
-        if (provider === null) {
-          continue
-        }
-        const models = provider.models
-        for (let mi = 0; mi < models.length; mi++) {
-          const model = models[mi]
-          if (model === null) {
-            continue
-          }
-          if (!model.isEnabled) {
-            continue
-          }
-          if (!modelSupportsVision(model.id)) {
-            continue
-          }
-          chosenProvider = provider
-          chosenModelId = model.id
-          break
-        }
-        if (chosenProvider !== null) {
-          break
-        }
-      }
-
-      if (chosenProvider === null || chosenModelId === '') {
-        console.info('ToolExecutionService', "no provider find")
-        return '写得真不错！继续练习会越来越好的！'
-      }
-
-      const effectiveApiKey: string = getEffectiveApiKey(chosenProvider.id, chosenProvider.apiKey)
-      if (effectiveApiKey === '') {
-        return '写得很好，下次一定会更棒！'
-      }
-
-      // 构建 API 配置
-      const apiConfig: AIApiConfig = {
-        providerId: chosenProvider.id,
-        providerType: chosenProvider.type,
-        apiStyle: chosenProvider.apiStyle,
-        apiKey: effectiveApiKey,
-        baseUrl: chosenProvider.baseUrl
-      }
-      // 构造评价请求消息
-      const typeLabel: string = charType === 'letter' ? '英文字母' : charType === 'number' ? '数字' : '汉字'
-      const prompt: string = `请用鼓励的语气评价小朋友写的"${character}"（${typeLabel}）。
-
-注意观察：
-- 笔画方向是否正确
-- 字形大小是否合适
-- 整体是否端正
-
-请给出1-2句鼓励性反馈，语气要温暖，像幼儿园老师对小朋友说话。用中文回复。`
-
-      const attachment: MessageAttachment = new MessageAttachment(
-        'handwriting_eval',
-        AttachmentType.IMAGE,
-        'handwriting.jpg',
-        '',
-        'image/jpeg',
-        0
-      )
-      attachment.base64Data = base64Image
-
-      const msg: RequestMessage = new RequestMessage('user', prompt)
-      console.info('ToolExecutionService', `prompt, ${prompt}`)
-      msg.attachments = [attachment]
-
-      const apiResult = await ServiceRegistry.aiApi().sendChatRequest(
-        apiConfig,
-        [msg],
-        chosenModelId
-      )
-
-      if (apiResult.success && apiResult.content.trim() !== '') {
-        return apiResult.content.trim()
-      }
-      return '写得真好，继续练习会越来越棒！'
-    } catch (error) {
-      console.error('ToolExecutionService', `evaluateHandwriting failed: ${JSON.stringify(error)}`)
-      return '写得很认真哦，下次一定会更好的！'
-    }
   }
 
   // 执行单个工具调用
@@ -1117,22 +829,10 @@ export class ToolExecutionService {
       return await this.handleEnglishQuiz(toolCall, context)
     }
 
-    // === number_puzzle 特殊路径 ===
-    // 数字华容道互动工具, 由 NumberPuzzleCard 收集小朋友的游戏结果。
-    if (isNumberPuzzleFunctionName(normalizedFunctionName)) {
-      return await this.handleNumberPuzzle(toolCall, context)
-    }
-
-    // === categorization 特殊路径 ===
-    // 分类小管家互动工具, 由 CategorizationCard 收集小朋友的分类结果。
-    if (isCategorizationFunctionName(normalizedFunctionName)) {
-      return await this.handleCategorization(toolCall, context)
-    }
-
-    // === handwriting_practice 特殊路径 ===
-    // 学写字互动工具, 由 HandwritingCard 收集小朋友的书写, 然后调用 AI vision 评价。
-    if (isHandwritingPracticeFunctionName(normalizedFunctionName)) {
-      return await this.handleHandwriting(toolCall, context)
+    // === huarongdao 特殊路径 ===
+    // 数字华容道游戏互动工具, 由 HuarongdaoCard 收集小朋友的答案。
+    if (isHuarongdaoFunctionName(normalizedFunctionName)) {
+      return await this.handleHuarongdao(toolCall, context)
     }
 
     // 通过函数名获取工具 ID

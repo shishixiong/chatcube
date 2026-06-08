@@ -3139,6 +3139,194 @@
     {
       "name": "microphone_permission_reason",
       "value": "Used for voice input to convert your speech to text."
+    },
+    {
+      "name": "settings_learning_center",
+      "value": "学习中心"
+    },
+    {
+      "name": "learning_profile_title",
+      "value": "学习画像"
+    },
+    {
+      "name": "learning_profile_desc",
+      "value": "查看孩子的能力水平"
+    },
+    {
+      "name": "learning_tomorrow_plan_title",
+      "value": "今日计划"
+    },
+    {
+      "name": "learning_tomorrow_plan_desc",
+      "value": "今日学习计划 + 过去 7 天记录"
+    },
+    {
+      "name": "learning_english_images_title",
+      "value": "英语学习图片"
+    },
+    {
+      "name": "learning_english_images_desc",
+      "value": "答英语题时生成的图"
+    },
+    {
+      "name": "learning_profile_empty_title",
+      "value": "尚未生成学习画像"
+    },
+    {
+      "name": "learning_profile_empty_desc",
+      "value": "和小星老师多聊几次，画像就会逐步建立"
+    },
+    {
+      "name": "learning_plan_empty_title",
+      "value": "今日计划尚未生成"
+    },
+    {
+      "name": "learning_plan_empty_desc",
+      "value": "会话结束 5 分钟后自动触发备课，也可以点下方按钮立即生成"
+    },
+    {
+      "name": "learning_plan_refresh",
+      "value": "立即生成今日计划"
+    },
+    {
+      "name": "learning_plan_generating",
+      "value": "正在生成…"
+    },
+    {
+      "name": "learning_plan_generate_failed",
+      "value": "生成失败，点此重试"
+    },
+    {
+      "name": "learning_plan_recent_plans",
+      "value": "过去 7 天"
+    },
+    {
+      "name": "learning_plan_no_recent",
+      "value": "暂无历史计划"
+    },
+    {
+      "name": "learning_plan_status_done",
+      "value": "已生成"
+    },
+    {
+      "name": "learning_plan_status_pending",
+      "value": "待生成"
+    },
+    {
+      "name": "learning_plan_status_failed",
+      "value": "失败"
+    },
+    {
+      "name": "learning_images_empty_title",
+      "value": "暂无英语学习图片"
+    },
+    {
+      "name": "learning_images_empty_desc",
+      "value": "小星老师答英语题时生成的图会出现在这里"
+    },
+    {
+      "name": "learning_image_source_quiz_word",
+      "value": "Quiz · 单词"
+    },
+    {
+      "name": "learning_image_source_quiz_sentence",
+      "value": "Quiz · 句子"
+    },
+    {
+      "name": "learning_image_source_plan",
+      "value": "备课 · 词汇"
+    },
+    {
+      "name": "learning_image_filter_all",
+      "value": "全部"
+    },
+    {
+      "name": "learning_image_filter_quiz",
+      "value": "出题"
+    },
+    {
+      "name": "learning_image_filter_plan",
+      "value": "备课"
+    },
+    {
+      "name": "learning_skill_section_math",
+      "value": "数学"
+    },
+    {
+      "name": "learning_skill_section_english",
+      "value": "英语"
+    },
+    {
+      "name": "learning_skill_section_general",
+      "value": "常识"
+    },
+    {
+      "name": "learning_skill_section_cognitive",
+      "value": "认知"
+    },
+    {
+      "name": "learning_section_strengths",
+      "value": "擅长"
+    },
+    {
+      "name": "learning_section_weak_areas",
+      "value": "薄弱"
+    },
+    {
+      "name": "learning_section_overall_note",
+      "value": "总体评语"
+    },
+    {
+      "name": "learning_section_theme",
+      "value": "今日主题"
+    },
+    {
+      "name": "learning_section_teacher_notes",
+      "value": "老师提示"
+    },
+    {
+      "name": "learning_section_vocab",
+      "value": "英语词汇"
+    },
+    {
+      "name": "learning_section_math",
+      "value": "数学"
+    },
+    {
+      "name": "learning_section_writing",
+      "value": "写字"
+    },
+    {
+      "name": "learning_section_general",
+      "value": "常识"
+    },
+    {
+      "name": "learning_section_child_snapshot",
+      "value": "孩子情况"
+    },
+    {
+      "name": "learning_meta_sessions",
+      "value": "共 %d 次对话"
+    },
+    {
+      "name": "learning_meta_last_assessed",
+      "value": "上次评估 %s"
+    },
+    {
+      "name": "learning_meta_session_count",
+      "value": "会话数"
+    },
+    {
+      "name": "learning_meta_age_years",
+      "value": "%d 岁"
+    },
+    {
+      "name": "learning_level_label",
+      "value": "等级"
+    },
+    {
+      "name": "learning_untitled_word",
+      "value": "未命名"
     }
   ]
 }

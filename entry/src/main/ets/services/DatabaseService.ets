@@ -3791,6 +3791,35 @@ export class DatabaseService {
     return result
   }
 
+  /** 按 topic_module 列出所有就绪且未过期的预生成图（按 created_at DESC） */
+  async listReadyPreparedMediaByModule(topicModule: string, limit: number,
+    nowMs: number): Promise<PreparedMediaRow[]> {
+    const result: PreparedMediaRow[] = []
+    if (this.rdbStore === null || topicModule === '' || limit <= 0) {
+      return result
+    }
+    const safeLimit: number = Math.max(1, Math.min(limit, 500))
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.PREPARED_MEDIA)
+      predicates.equalTo('topic_module', topicModule)
+      predicates.equalTo('status', 'ready')
+      predicates.greaterThan('expires_at', nowMs)
+      predicates.orderByDesc('created_at')
+      predicates.limitAs(safeLimit)
+      const resultSet = await this.rdbStore.query(predicates)
+      try {
+        while (resultSet.goToNextRow()) {
+          result.push(this.buildPreparedMediaRowFromResultSet(resultSet))
+        }
+      } finally {
+        resultSet.close()
+      }
+    } catch (error) {
+      console.error('DatabaseService', `Failed to list ready prepared media by module: ${JSON.stringify(error)}`)
+    }
+    return result
+  }
+
   private buildPreparedMediaRowFromResultSet(rs: relationalStore.ResultSet): PreparedMediaRow {
     const row = new PreparedMediaRow()
     row.id = this.safeGetString(rs, 'id')

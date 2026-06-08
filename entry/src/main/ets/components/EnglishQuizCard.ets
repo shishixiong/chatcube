@@ -53,6 +53,10 @@ export struct EnglishQuizCard {
   @Local correctAnswerText: string = ''
   @Local isRecording: boolean = false
   @Local recognitionPreview: string = ''
+  // 麦克风权限被拒后, 隐藏语音按钮并展示键盘输入提示, 避免孩子反复点不出声音卡住
+  @Local voicePermissionDenied: boolean = false
+  // 标记本次语音会话已被 cancel / retry 重置, onComplete 收到时直接吞掉, 防止覆盖 retry 清空的状态
+  @Local wasCancelled: boolean = false
   // 组件内部异步解析的图片路径, 不再依赖 handleEnglishQuiz 注入 image_path
   @Local resolvedImagePath: string = ''
   // 供 @Builder 直接读取的展示路径, 避免方法调用导致 V2 响应式追踪失效
@@ -414,8 +418,22 @@ export struct EnglishQuizCard {
     this.onAnswer(this.toolCall.id, JSON.stringify(payload))
   }
 
+  private handleRetry(): void {
+    // retry 是纯本地重置: AI 已收到第一次 onAnswer, 不再调 onAnswer, 避免重复计分。
+    if (!this.showResult || this.isCorrect || this.isAnswered) {
+      return
+    }
+    if (this.isRecording) {
+      this.handleVoiceRecordCancel()
+    }
+    this.showResult = false
+    this.isCorrect = false
+    this.inputText = ''
+    this.recognitionPreview = ''
+  }
+
   private handleVoiceRecordStart(): void {
-    if (this.isRecording || this.isAnswered || this.showResult) {
+    if (this.isRecording || this.isAnswered || this.showResult || this.voicePermissionDenied) {
       return
     }
 
@@ -424,6 +442,8 @@ export struct EnglishQuizCard {
 
     speechService.checkPermission(context).then((granted: boolean) => {
       if (!granted) {
+        // 权限被拒: 标记为降级, InputArea 会隐藏语音按钮并提示改用键盘, 不再静默 return
+        this.voicePermissionDenied = true
         return
       }
       speechService.init().then(() => {
@@ -440,6 +460,11 @@ export struct EnglishQuizCard {
           },
           onComplete: (finalText: string) => {
             this.isRecording = false
+            // 防御 cancel 后引擎仍可能触发的延迟 onComplete, 避免覆盖 retry 重置的 inputText / 重复 submit
+            if (this.wasCancelled) {
+              this.wasCancelled = false
+              return
+            }
             if (finalText.trim() !== '') {
               this.inputText = finalText.trim()
               // 语音识别完成后直接提交答案
@@ -468,6 +493,8 @@ export struct EnglishQuizCard {
   private handleVoiceRecordCancel(): void {
     ServiceRegistry.speechRecognition().cancelListening()
     this.isRecording = false
+    // 引擎 cancel 后仍可能触发延迟 onComplete, 标记一下让 onComplete 吞掉, 防止 inputText 被覆盖
+    this.wasCancelled = true
   }
 
   private getCardBackgroundColor(): string {
@@ -595,41 +622,56 @@ export struct EnglishQuizCard {
   @Builder
   InputArea() {
     Column({ space: 8 }) {
-      // 语音输入按钮
-      Row() {
-        Button() {
-          Row({ space: 6 }) {
-            SymbolGlyph($r('sys.symbol.mic'))
-              .fontSize(16)
-              .fontColor([Color.White])
-            Text(this.isRecording ? '松开结束' : '按住说话')
-              .fontSize(14)
-              .fontColor(Color.White)
-          }
-        }
-        .type(ButtonType.Normal)
-        .height(40)
-        .layoutWeight(1)
-        .backgroundColor(this.isRecording ? '#FF6B6B' : this.themePrimary)
-        .borderRadius(20)
-        .onTouch((event: TouchEvent) => {
-          if (this.isAnswered || this.showResult) {
-            return
-          }
-          if (event.type === TouchType.Down) {
-            this.handleVoiceRecordStart()
-          } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-            if (this.isRecording) {
-              if (event.type === TouchType.Cancel) {
-                this.handleVoiceRecordCancel()
-              } else {
-                this.handleVoiceRecordFinish()
-              }
+      if (!this.voicePermissionDenied) {
+        Row() {
+          Button() {
+            Row({ space: 6 }) {
+              SymbolGlyph($r('sys.symbol.mic'))
+                .fontSize(16)
+                .fontColor([Color.White])
+              Text(this.isRecording ? '松开结束' : '按住说话')
+                .fontSize(14)
+                .fontColor(Color.White)
             }
           }
-        })
+          .type(ButtonType.Normal)
+          .height(40)
+          .layoutWeight(1)
+          .backgroundColor(this.isRecording ? '#FF6B6B' : this.themePrimary)
+          .borderRadius(20)
+          .onTouch((event: TouchEvent) => {
+            if (this.isAnswered || this.showResult) {
+              return
+            }
+            if (event.type === TouchType.Down) {
+              this.handleVoiceRecordStart()
+            } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+              if (this.isRecording) {
+                if (event.type === TouchType.Cancel) {
+                  this.handleVoiceRecordCancel()
+                } else {
+                  this.handleVoiceRecordFinish()
+                }
+              }
+            }
+          })
+        }
+        .width('100%')
+      } else {
+        // 权限被拒降级提示: 显式告诉孩子「麦克风没开, 改用键盘也行」, 避免无声卡住
+        Row({ space: 6 }) {
+          SymbolGlyph($r('sys.symbol.mic'))
+            .fontSize(14)
+            .fontColor([$r('app.color.text_tertiary')])
+          Text('麦克风不可用 · 用键盘输入也可以 ✏️')
+            .fontSize(13)
+            .fontColor($r('app.color.text_tertiary'))
+        }
+        .width('100%')
+        .height(40)
+        .justifyContent(FlexAlign.Center)
+        .enabled(false)
       }
-      .width('100%')
 
       // 语音识别预览
       if (this.isRecording && this.recognitionPreview !== '') {
@@ -695,6 +737,16 @@ export struct EnglishQuizCard {
               .fontSize(14)
               .fontWeight(FontWeight.Medium)
               .fontColor('#FF9F43')
+            if (!this.isAnswered) {
+              Text('再试一次 ↻')
+                .fontSize(14)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.themePrimary)
+                .margin({ left: 4 })
+                .onClick(() => {
+                  this.handleRetry()
+                })
+            }
           }
           .width('100%')
         }

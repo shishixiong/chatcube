@@ -50,6 +50,9 @@ export struct IndexSettingsPanel {
   @Event onOpenImportData: () => void = () => {}
   @Event onOpenWebDAVSync: () => void = () => {}
   @Event onOpenUsageStats: () => void = () => {}
+  @Event onOpenLearningProfile: () => void = () => {}
+  @Event onOpenLearningTomorrowPlan: () => void = () => {}
+  @Event onOpenLearningEnglishImages: () => void = () => {}
   @Event onOpenAbout: () => void = () => {}
   @Event onOpenSupportDevelopment: () => void = () => {}
   @Event onOpenPrivacy: () => void = () => {}
@@ -75,6 +78,33 @@ export struct IndexSettingsPanel {
 
   private buildGroups(): SettingsGroupModel[] {
     return [
+      {
+        key: 'learning_center',
+        title: $r('app.string.settings_learning_center'),
+        items: [
+          {
+            key: SettingsRouteName.LEARNING_PROFILE,
+            icon: $r('sys.symbol.person_2_fill'),
+            title: $r('app.string.learning_profile_title'),
+            subtitle: $r('app.string.learning_profile_desc'),
+            action: (): void => { this.onOpenLearningProfile() }
+          } as SettingsListItemModel,
+          {
+            key: SettingsRouteName.LEARNING_TOMORROW_PLAN,
+            icon: $r('sys.symbol.calendar'),
+            title: $r('app.string.learning_tomorrow_plan_title'),
+            subtitle: $r('app.string.learning_tomorrow_plan_desc'),
+            action: (): void => { this.onOpenLearningTomorrowPlan() }
+          } as SettingsListItemModel,
+          {
+            key: SettingsRouteName.LEARNING_ENGLISH_IMAGES,
+            icon: $r('sys.symbol.picture'),
+            title: $r('app.string.learning_english_images_title'),
+            subtitle: $r('app.string.learning_english_images_desc'),
+            action: (): void => { this.onOpenLearningEnglishImages() }
+          } as SettingsListItemModel
+        ]
+      } as SettingsGroupModel,
       {
         key: 'creation',
         title: $r('app.string.settings_ai_creation'),
