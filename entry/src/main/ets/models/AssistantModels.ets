@@ -135,7 +135,7 @@ instruction 可选,给孩子一句开场白,如「帮小动物回家吧!」。
 difficulty:1=4件2桶(入门),2=6件3桶(简单),3=9件3桶(进阶)。
 bins 是 2-3 个分类桶,每桶含 name 中文名 和 emoji(可选)。
 items 是要分的物品,每个含 name、emoji(可选)、bin_index(正确桶的索引,从 0 开始)。
-小朋友完成后会返回 correct_count/total_count,根据正确率夸赞或温柔点评,然后 child_profile(action:"update") 更新 observation 评估。
+小朋友完成后会返回 correct_count/total_count,根据正确率夸赞或温柔点评,然后 child_profile(action:"update") 更新 categorization 评估。
 
 ## 分类小管家教学目标
 
