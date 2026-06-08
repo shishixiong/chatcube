@@ -54,7 +54,8 @@ const SKILL_GROUPS: LearningSkillGroup[] = [
       'english_alphabet',
       'english_vocab',
       'english_sentence',
-      'english_phonics'
+      'english_phonics',
+      'english_writing'
     ]
   },
   {
@@ -64,7 +65,9 @@ const SKILL_GROUPS: LearningSkillGroup[] = [
     keys: [
       'general_nature',
       'general_social',
-      'general_life'
+      'general_life',
+      'fine_motor',
+      'chinese_writing'
     ]
   },
   {
@@ -73,7 +76,8 @@ const SKILL_GROUPS: LearningSkillGroup[] = [
     sectionIcon: $r('sys.symbol.lightbulb'),
     keys: [
       'logic_puzzle',
-      'observation'
+      'observation',
+      'categorization'
     ]
   }
 ]
