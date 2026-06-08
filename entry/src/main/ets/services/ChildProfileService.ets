@@ -51,7 +51,11 @@ const SKILL_DEFINITIONS: [string, string][] = [
   ['general_life', '生活常识'],
   ['logic_thinking', '逻辑思维'],
   ['observation', '观察力'],
-  ['spatial_reasoning', '空间推理']
+  ['spatial_reasoning', '空间推理'],
+  ['fine_motor', '精细动作'],
+  ['english_writing', '英文书写'],
+  ['chinese_writing', '中文书写'],
+  ['categorization', '分类归纳']
 ]
 
 /**
