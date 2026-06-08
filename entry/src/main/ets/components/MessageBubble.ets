@@ -16,6 +16,8 @@ import { AskUserCard } from './AskUserCard'
 import { MathQuizCard } from './MathQuizCard'
 import { EnglishQuizCard } from './EnglishQuizCard'
 import { HuarongdaoCard } from './HuarongdaoCard'
+import { HandwritingCard, HandwritingResult } from './HandwritingCard'
+import { CategorizationCard, CategorizationResult } from './CategorizationCard'
 import { HtmlPreviewCard } from './HtmlPreviewCard'
 import { MermaidPreviewCard } from './MermaidPreviewCard'
 import { TypingDots } from './TypingDots'
@@ -34,7 +36,7 @@ import {
   getMarkdownTitleSizes
 } from '../utils/MarkdownTypographyUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isEnglishQuizFunctionName, isHuarongdaoFunctionName } from '../utils/SearchToolIdentityUtils'
+import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isEnglishQuizFunctionName, isHuarongdaoFunctionName, isHandwritingPracticeFunctionName, isCategorizationFunctionName } from '../utils/SearchToolIdentityUtils'
 import { MessagePart, MessagePartKind, ToolPartStatus } from '../models/MessageParts'
 import {
   ensureMessageParts,
@@ -2069,6 +2071,69 @@ export struct MessageBubble {
                   }
                 }, (toolCall: ToolCall, index: number) => 'huarongdao_' + toolCall.id + '_' + index.toString())
               }
+              // handwriting_practice 待答时显示紧凑横幅，点击打开全屏 sheet
+              if (this.message.hasToolCalls()) {
+                ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
+                  if (this.shouldRenderHandwritingInteractionCard(toolCall, index)) {
+                    Row() {
+                      Column() {
+                        SymbolGlyph($r('sys.symbol.AI_pencil'))
+                          .fontSize(15)
+                          .fontColor([this.themePrimary])
+                      }
+                      .width(32)
+                      .height(32)
+                      .borderRadius(16)
+                      .backgroundColor(withColorAlpha(this.themePrimary, '18'))
+                      .alignItems(HorizontalAlign.Center)
+                      .justifyContent(FlexAlign.Center)
+
+                      Column({ space: 2 }) {
+                        Text(`学写字 · ${this.getHandwritingCharacter(toolCall)}`)
+                          .fontSize(13)
+                          .fontWeight(FontWeight.Medium)
+                          .fontColor($r('app.color.text_primary'))
+                        Text('点击开始写字')
+                          .fontSize(11)
+                          .fontColor($r('app.color.text_tertiary'))
+                      }
+                      .alignItems(HorizontalAlign.Start)
+                      .margin({ left: 8 })
+                      .layoutWeight(1)
+
+                      Text('>')
+                        .fontSize(14)
+                        .fontColor($r('app.color.text_tertiary'))
+                    }
+                    .width('100%')
+                    .padding(12)
+                    .backgroundColor(this.themeAiBubble)
+                    .borderRadius(12)
+                    .border({ width: 1, color: $r('app.color.divider') })
+                    .margin({ bottom: 6 })
+                    .onClick(() => {
+                      this.onOpenHandwritingSheet(toolCall)
+                    })
+                  }
+                }, (toolCall: ToolCall, index: number) => 'handwriting_' + toolCall.id + '_' + index.toString())
+              }
+              // categorization 待答时显示独立互动卡片;提交后收缩到 timeline step 内。
+              if (this.message.hasToolCalls()) {
+                ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
+                  if (this.shouldRenderCategorizationInteractionCard(toolCall, index)) {
+                    CategorizationCard({
+                      toolCall: toolCall,
+                      isAnswered: false,
+                      answeredPayload: '',
+                      largeSize: false,
+                      onAnswer: (toolCallId: string, answerJson: string): void => {
+                        this.onAskUserAnswer(toolCallId, answerJson)
+                      }
+                    })
+                      .margin({ bottom: 6 })
+                  }
+                }, (toolCall: ToolCall, index: number) => 'categorization_' + toolCall.id + '_' + index.toString())
+              }
             }
 
             // ========== 附件区域（AI 生成的图片） ==========
@@ -2491,6 +2556,14 @@ export struct MessageBubble {
       // 数字华容道: 已完成的可以展开查看答题详情
       return this.isSuccessfulToolStep(part)
     }
+    if (isHandwritingPracticeFunctionName(part.toolName)) {
+      // 学写字: 已完成的可以展开查看书写结果
+      return this.isSuccessfulToolStep(part)
+    }
+    if (isCategorizationFunctionName(part.toolName)) {
+      // 分类小管家: 已完成的可以展开查看分类结果
+      return this.isSuccessfulToolStep(part)
+    }
     if (isImageGenerationFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
@@ -2539,7 +2612,7 @@ export struct MessageBubble {
       return true
     }
     // 默认行为: 图片生成/数学游戏/英语看图说话 成功后默认展开查看结果
-    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName)) {
+    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
     return false
@@ -2549,7 +2622,7 @@ export struct MessageBubble {
     const key = this.getToolStepKey(part)
     // 默认展开的工具类型: 图片生成、数学游戏、英语看图说话、数字华容道
     const isDefaultExpanded = this.isSuccessfulToolStep(part) &&
-      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName))
+      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName))
     const next: string[] = []
     let found = false
     let foundCollapsed = false
@@ -2631,6 +2704,41 @@ export struct MessageBubble {
       return false
     }
     return !this.isAskUserToolCallAnswered(toolCall, index)
+  }
+
+  private shouldRenderHandwritingInteractionCard(toolCall: ToolCall, index: number): boolean {
+    if (!isHandwritingPracticeFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
+      return false
+    }
+    return !this.isAskUserToolCallAnswered(toolCall, index)
+  }
+
+  private getHandwritingCharacter(toolCall: ToolCall): string {
+    try {
+      const args = JSON.parse(toolCall.arguments) as Record<string, Object>
+      return (args['character'] as string) ?? '字'
+    } catch (_e) {
+      return '字'
+    }
+  }
+
+  private shouldRenderCategorizationInteractionCard(toolCall: ToolCall, index: number): boolean {
+    if (!isCategorizationFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
+      return false
+    }
+    return !this.isAskUserToolCallAnswered(toolCall, index)
+  }
+
+  private getCategorizationTheme(toolCall: ToolCall): string {
+    try {
+      const args = JSON.parse(toolCall.arguments) as Record<string, Object>
+      const theme = args['theme']
+      if (typeof theme === 'string' && theme.trim() !== '') {
+        return theme.trim()
+      }
+    } catch (_e) {
+    }
+    return ''
   }
 
   private parseAskUserQuestions(raw: string): AskUserTimelineQuestion[] {
@@ -2965,6 +3073,16 @@ export struct MessageBubble {
     }
     // 数字华容道: 展开/折叠查看答题详情
     if (isHuarongdaoFunctionName(part.toolName)) {
+      this.toggleToolStep(part)
+      return
+    }
+    // 学写字: 展开/折叠查看结果
+    if (isHandwritingPracticeFunctionName(part.toolName)) {
+      this.toggleToolStep(part)
+      return
+    }
+    // 分类小管家: 展开/折叠查看分类结果
+    if (isCategorizationFunctionName(part.toolName)) {
       this.toggleToolStep(part)
       return
     }
@@ -3391,6 +3509,10 @@ export struct MessageBubble {
       this.EnglishQuizStepContent(step)
     } else if (isHuarongdaoFunctionName(step.toolName)) {
       this.HuarongdaoStepContent(step)
+    } else if (isHandwritingPracticeFunctionName(step.toolName)) {
+      this.HandwritingStepContent(step)
+    } else if (isCategorizationFunctionName(step.toolName)) {
+      this.CategorizationStepContent(step)
     } else if (isImageGenerationFunctionName(step.toolName) && this.isToolStepClickable(step)) {
       // 图片生成: 折叠/展开, 在下方直接展示生成结果缩略图
       Column() {
@@ -3768,6 +3890,118 @@ export struct MessageBubble {
     }
     .width('100%')
   }
+
+  // handwriting_practice 工具步骤: 已完成的书写练习, 在 timeline 中显示简化结果, 可展开查看详情
+  @Builder
+  HandwritingStepContent(step: MessagePart) {
+    Column() {
+      Row({ space: 6 }) {
+        if (step.toolStatus === 'succeeded') {
+          SymbolGlyph($r('sys.symbol.checkmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_success')])
+        } else if (step.toolStatus === 'failed' || step.toolStatus === 'denied') {
+          SymbolGlyph($r('sys.symbol.xmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_error')])
+        } else {
+          Column()
+            .width(8)
+            .height(8)
+            .borderRadius(4)
+            .backgroundColor(this.themePrimary)
+        }
+
+        Text(this.buildToolStepTitle(step))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+
+        if (this.isToolStepClickable(step)) {
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(12)
+            .fontColor([$r('app.color.text_tertiary')])
+            .rotate({ angle: this.isToolStepExpanded(step) ? 0 : -90 })
+            .animation({ duration: 200, curve: Curve.EaseOut })
+        }
+      }
+      .width('100%')
+      .onClick(() => {
+        if (this.isToolStepClickable(step)) {
+          this.handleToolStepClick(step)
+        }
+      })
+
+      if (this.isToolStepExpanded(step) && step.toolResult !== '') {
+        HandwritingCard({
+          toolCall: this.buildToolCallFromStep(step),
+          isAnswered: true,
+          answeredPayload: step.toolResult,
+          onAnswer: (_toolCallId: string, _answerJson: string): void => {}
+        })
+        .margin({ top: 8 })
+      }
+    }
+    .width('100%')
+  }
+
+  // categorization 工具步骤: 已完成的分类小管家, 在 timeline 中显示简化结果, 可展开查看详情
+  @Builder
+  CategorizationStepContent(step: MessagePart) {
+    Column() {
+      Row({ space: 6 }) {
+        if (step.toolStatus === 'succeeded') {
+          SymbolGlyph($r('sys.symbol.checkmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_success')])
+        } else if (step.toolStatus === 'failed' || step.toolStatus === 'denied') {
+          SymbolGlyph($r('sys.symbol.xmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_error')])
+        } else {
+          Column()
+            .width(8)
+            .height(8)
+            .borderRadius(4)
+            .backgroundColor(this.themePrimary)
+        }
+
+        Text(this.buildToolStepTitle(step))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+
+        if (this.isToolStepClickable(step)) {
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(12)
+            .fontColor([$r('app.color.text_tertiary')])
+            .rotate({ angle: this.isToolStepExpanded(step) ? 0 : -90 })
+            .animation({ duration: 200, curve: Curve.EaseOut })
+        }
+      }
+      .width('100%')
+      .onClick(() => {
+        if (this.isToolStepClickable(step)) {
+          this.handleToolStepClick(step)
+        }
+      })
+
+      if (this.isToolStepExpanded(step) && step.toolResult !== '') {
+        CategorizationCard({
+          toolCall: this.buildToolCallFromStep(step),
+          isAnswered: true,
+          answeredPayload: step.toolResult,
+          largeSize: false,
+          onAnswer: (_toolCallId: string, _answerJson: string): void => {}
+        })
+        .margin({ top: 8 })
+      }
+    }
+    .width('100%')
+  }
+
   private buildToolCallFromStep(step: MessagePart): ToolCall {
     const toolCall = new ToolCall()
     toolCall.id = step.toolCallId

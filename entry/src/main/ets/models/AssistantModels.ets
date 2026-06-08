@@ -6,7 +6,9 @@ import {
   MATH_VERIFY_TOOL_ID,
   MATH_QUIZ_TOOL_ID,
   ENGLISH_QUIZ_TOOL_ID,
-  HUARONGDAO_TOOL_ID
+  HUARONGDAO_TOOL_ID,
+  HANDWRITING_PRACTICE_TOOL_ID,
+  CATEGORIZATION_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 
 export const DEFAULT_ASSISTANT_ID: string = 'default'
@@ -98,7 +100,26 @@ difficulty根据child_profile中logic_thinking和observation的level选择:level
 
 逻辑思维(logic_thinking):规划步骤、理解因果关系、找规律。
 观察力(observation):观察数字位置关系、发现排列规律、注意细节。
-空间推理(spatial_reasoning):理解网格布局、判断移动方向、预想移动后的结果。`
+空间推理(spatial_reasoning):理解网格布局、判断移动方向、预想移动后的结果。
+
+## 学写字
+
+小朋友想学写字、问"怎么写X"、要练字、或你想锻炼小朋友的精细动作时,使用 handwriting_practice 工具发起书写练习。
+character 是单个字符:英文字母用"A"/"a",数字用"5",汉字用"人"/"大"等。
+type 必须是 letter(英文字母)/number(数字)/chinese(汉字)三选一。
+出题后说一句引导,比如:来,看着笔顺写一遍试试。
+小朋友写完后,系统会调 AI vision 评价,你只需要根据评价文字给出额外鼓励即可。
+适合 letter A-Z a-z、digit 0-9、basic chinese(人 大 小 上 下 口 日 月 山 水 火 木 etc.),从简单字符起步。
+
+## 分类小管家
+
+小朋友想玩归纳分类游戏、或你想锻炼小朋友的分类归纳能力时,使用 categorization 工具出分类题。
+theme 给主题名称(2-12字),如「动物的家」「水果与蔬菜」「会飞的和不会飞的」。
+instruction 可选,给孩子一句开场白,如「帮小动物回家吧!」。
+difficulty:1=4件2桶(入门),2=6件3桶(简单),3=9件3桶(进阶)。
+bins 是 2-3 个分类桶,每桶含 name 中文名 和 emoji(可选)。
+items 是要分的物品,每个含 name、emoji(可选)、bin_index(正确桶的索引,从 0 开始)。
+小朋友完成后会返回 correct_count/total_count,根据正确率夸赞或温柔点评,然后 child_profile(action:"update") 更新 observation 评估。`
 
 // 默认助手（小星老师）的锁定工具白名单
 export const DEFAULT_ASSISTANT_LOCKED_TOOL_IDS: string[] = [
@@ -108,7 +129,9 @@ export const DEFAULT_ASSISTANT_LOCKED_TOOL_IDS: string[] = [
   MATH_VERIFY_TOOL_ID,
   MATH_QUIZ_TOOL_ID,
   ENGLISH_QUIZ_TOOL_ID,
-  HUARONGDAO_TOOL_ID
+  HUARONGDAO_TOOL_ID,
+  HANDWRITING_PRACTICE_TOOL_ID,
+  CATEGORIZATION_TOOL_ID
 ]
 
 @ObservedV2
