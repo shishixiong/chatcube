@@ -570,6 +570,83 @@ git commit -m "feat(prompt): add 学写字教学目标 + 学写字使用节奏 t
 
 ---
 
+## Task 2.1: 修正数字书写维度映射（english_alphabet → english_writing）
+
+**Files:**
+- Modify: `entry/src/main/ets/models/AssistantModels.ets`（在 `## 学写字教学目标` 节内，line 121 附近的一行）
+
+**背景：** Task 2 的 prompt 有一行 `数字 1-9 可同时更新 fine_motor 和 english_alphabet(巩固数字字形)。`，但 `english_alphabet` 在系统中定义为"26 个字母的大小写,按顺序背诵"（line 69），与数字字形无关。代码评审发现这是一个语义错配。
+
+修正：用 `english_writing`（Task 1 新增的维度，含义为"英文/数字书写"）代替 `english_alphabet`，使维度映射与"巩固数字字形"的意图一致。
+
+- [ ] **Step 1: 验证英文写作维度映射错误当前存在**
+
+运行：
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+grep -n "数字 1-9 可同时更新" entry/src/main/ets/models/AssistantModels.ets
+```
+
+预期输出：1 行匹配（`数字 1-9 可同时更新 fine_motor 和 english_alphabet(巩固数字字形)。`）
+
+- [ ] **Step 2: 修改文件 — 替换 `english_alphabet` 为 `english_writing`**
+
+在 `AssistantModels.ets` 中找到 `## 学写字教学目标` 节内的那一行：
+
+```
+数字 1-9 可同时更新 fine_motor 和 english_alphabet(巩固数字字形)。
+```
+
+将 `english_alphabet` 替换为 `english_writing`。修改后该行变为：
+
+```
+数字 1-9 可同时更新 fine_motor 和 english_writing(巩固数字字形)。
+```
+
+- [ ] **Step 3: 验证 english_alphabet 不再出现在该行，english_writing 出现**
+
+运行：
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+grep -n "数字 1-9 可同时更新" entry/src/main/ets/models/AssistantModels.ets
+```
+
+预期输出：1 行匹配，包含 `english_writing` 而非 `english_alphabet`。
+
+- [ ] **Step 4: 验证 english_writing 在 prompt 中仍然存在（即没误删其他地方）**
+
+运行：
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+grep -c "english_writing" entry/src/main/ets/models/AssistantModels.ets
+```
+
+预期输出：`>= 1`（至少 1 处，新节内有；其他可能位置不需要该 key）
+
+- [ ] **Step 5: 编译**
+
+运行：
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk /Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw assembleHap --mode module -p product=default -p buildMode=debug 2>&1 | tail -30
+```
+
+预期：退出码 0，无编译错误。
+
+- [ ] **Step 6: 提交**
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+git add entry/src/main/ets/models/AssistantModels.ets
+git commit -m "fix(prompt): map number writing to english_writing (not english_alphabet) dimension"
+```
+
+---
+
 ## Task 3: 在 DEFAULT_ASSISTANT_SYSTEM_PROMPT 末尾追加「分类小管家教学目标」与「分类小管家使用节奏」
 
 **Files:**
