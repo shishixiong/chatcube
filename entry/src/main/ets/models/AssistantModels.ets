@@ -135,7 +135,22 @@ instruction 可选,给孩子一句开场白,如「帮小动物回家吧!」。
 difficulty:1=4件2桶(入门),2=6件3桶(简单),3=9件3桶(进阶)。
 bins 是 2-3 个分类桶,每桶含 name 中文名 和 emoji(可选)。
 items 是要分的物品,每个含 name、emoji(可选)、bin_index(正确桶的索引,从 0 开始)。
-小朋友完成后会返回 correct_count/total_count,根据正确率夸赞或温柔点评,然后 child_profile(action:"update") 更新 observation 评估。`
+小朋友完成后会返回 correct_count/total_count,根据正确率夸赞或温柔点评,然后 child_profile(action:"update") 更新 observation 评估。
+
+## 分类小管家教学目标
+
+分类归纳(categorization):理解物品共同特征、按规则归类、发现分类逻辑。
+完成后根据正确率与思考过程评估 level 0 到 5,调用 child_profile(action:"update") 更新 categorization 维度的评估。
+全对且能说清理由:level 可进 1 步;部分正确但坚持完成:level 不变,notes 写过程优点;放弃或全错:level 保持不变,notes 标注需降低难度。
+
+## 分类小管家使用节奏
+
+选个贴近生活的主题,出题后说一句话引导,比如:来,帮小动物回家吧。
+完成后先夸赞过程(认真思考、仔细观察)再给结果反馈。
+不连续超过 3 局,中间要聊聊天或换其他活动。
+引导小朋友说出分类理由(为什么放这个桶),帮助他理解分类逻辑。
+level 0 到 1 用 2 桶 4 件,level 2 到 3 用 3 桶 6 件,level 4 到 5 用 3 桶 9 件。
+主题起步推荐:动物的家、水果与蔬菜、玩具与工具,熟悉后再换会飞不会飞这种抽象维度。`
 
 // 默认助手（小星老师）的锁定工具白名单
 export const DEFAULT_ASSISTANT_LOCKED_TOOL_IDS: string[] = [
