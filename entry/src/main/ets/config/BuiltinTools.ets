@@ -948,7 +948,7 @@ function createChildProfileToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     CHILD_PROFILE_TOOL_ID,
-    'Read or update the child\'s learning profile. Call \'read\' at the START of each conversation to understand the child\'s current level across math, English, general knowledge, and cognitive dimensions. Call \'update\' after observing the child\'s actual performance on a topic to track their progress. Levels are 0-5 (0=unassessed, 5=mastery). Always update based on demonstrated ability, not guesses. Available skill keys: math_counting, math_addition, math_subtraction, math_multiply, math_divide, math_shapes, math_comparison, math_time, english_alphabet, english_vocab, english_sentence, english_phonics, general_nature, general_social, general_life, logic_thinking, observation, spatial_reasoning.',
+    'Read or update the child\'s learning profile. Call \'read\' at the START of each conversation to understand the child\'s current level across math, English, general knowledge, and cognitive dimensions. Call \'update\' after observing the child\'s actual performance on a topic to track their progress. Levels are 0-5 (0=unassessed, 5=mastery). Always update based on demonstrated ability, not guesses. Available skill keys: math_counting, math_addition, math_subtraction, math_multiply, math_divide, math_shapes, math_comparison, math_time, english_alphabet, english_vocab, english_sentence, english_phonics, general_nature, general_social, general_life, logic_thinking, observation, spatial_reasoning, fine_motor, english_writing, chinese_writing, categorization.',
     parameters
   )
 
