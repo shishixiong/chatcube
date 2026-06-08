@@ -15,6 +15,8 @@
 | 文件 | 类型 | 责任 |
 |------|------|------|
 | `entry/src/main/ets/services/ChildProfileService.ets` | Modify | 在 `SKILL_DEFINITIONS` 末尾追加 4 个新维度（line 54 之后） |
+| `entry/src/main/ets/config/BuiltinTools.ets` | Modify | 更新 `child_profile` 工具的 `key` 参数描述（line 914）以包含 4 个新 key |
+| `entry/src/main/ets/pages/LearningProfilePage.ets` | Modify | 在 `SKILL_GROUPS` 数组中添加 4 个新 key 到合适分组 |
 | `entry/src/main/ets/models/AssistantModels.ets` | Modify | 在 `DEFAULT_ASSISTANT_SYSTEM_PROMPT` 字符串中追加 4 个子节（line 112 之后追加学写字两块，line 122 之后追加分类小管家两块） |
 
 无新文件创建。
@@ -129,6 +131,238 @@ DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk /Applications/DevEc
 cd /Users/mac/mygame/HarmonyOS-app/chatcube
 git add entry/src/main/ets/services/ChildProfileService.ets
 git commit -m "feat(child-profile): add 4 new skill dimensions for handwriting/categorization"
+```
+
+---
+
+## Task 1.5: 更新 child_profile 工具的 key 参数描述
+
+**Files:**
+- Modify: `entry/src/main/ets/config/BuiltinTools.ets:914`（在 child_profile 工具的 rawSchemaJson 中，key 字段的 description 字符串）
+
+- [ ] **Step 1: 写失败的结构断言 — 4 个新 key 未在 description 字符串中**
+
+运行：
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+node -e "
+const f=require('fs').readFileSync('entry/src/main/ets/config/BuiltinTools.ets','utf-8');
+const childProfileBlock = f.match(/child_profile[\s\S]*?rawSchemaJson: string = \`([\s\S]*?)\`/);
+if (!childProfileBlock) { console.log('no-match'); process.exit(0); }
+const s = childProfileBlock[1];
+const need = ['fine_motor', 'english_writing', 'chinese_writing', 'categorization'];
+const missing = need.filter(k => !s.includes(k));
+console.log('totalLen=' + s.length);
+console.log('missing=' + JSON.stringify(missing));
+"
+```
+
+预期输出：`missing=["fine_motor","english_writing","chinese_writing","categorization"]`（4 个 key 全部缺失）
+
+- [ ] **Step 2: 修改文件 — 在 description 字符串中追加 4 个新 key**
+
+在 `BuiltinTools.ets` 中找到 line 914 的 description 字符串：
+
+```
+"description": "Skill dimension key: math_counting, math_addition, math_subtraction, math_multiply, math_divide, math_shapes, math_comparison, math_time, english_alphabet, english_vocab, english_sentence, english_phonics, general_nature, general_social, general_life, logic_thinking, observation, spatial_reasoning"
+```
+
+将该字符串末尾的 `spatial_reasoning"` 改为 `spatial_reasoning, fine_motor, english_writing, chinese_writing, categorization"`。
+
+修改后该 description 字符串的完整内容：
+
+```
+"description": "Skill dimension key: math_counting, math_addition, math_subtraction, math_multiply, math_divide, math_shapes, math_comparison, math_time, english_alphabet, english_vocab, english_sentence, english_phonics, general_nature, general_social, general_life, logic_thinking, observation, spatial_reasoning, fine_motor, english_writing, chinese_writing, categorization"
+```
+
+- [ ] **Step 3: 验证 4 个新 key 都在 child_profile 工具的 schema 中**
+
+运行：
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+node -e "
+const f=require('fs').readFileSync('entry/src/main/ets/config/BuiltinTools.ets','utf-8');
+const blocks = f.match(/rawSchemaJson: string = \`([\s\S]*?)\`/g);
+const childProfileBlock = blocks.find(b => b.includes('child_profile') || b.includes('Skill dimension key'));
+const m = childProfileBlock.match(/rawSchemaJson: string = \`([\s\S]*?)\`/);
+const s = m[1];
+const need = ['fine_motor', 'english_writing', 'chinese_writing', 'categorization'];
+const missing = need.filter(k => !s.includes(k));
+console.log('missing=' + JSON.stringify(missing));
+"
+```
+
+预期输出：`missing=[]`（4 个新 key 全部在 schema 描述中）
+
+- [ ] **Step 4: 验证 schema 仍可解析为有效 JSON**
+
+运行：
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+node -e "
+const f=require('fs').readFileSync('entry/src/main/ets/config/BuiltinTools.ets','utf-8');
+const m=f.match(/rawSchemaJson: string = \`([\s\S]*?)\`[\s\S]*?child_profile/);
+if (!m) {
+  // Try the broader pattern
+  const all = f.match(/rawSchemaJson: string = \`([\s\S]*?)\`/g);
+  for (const b of all) {
+    if (b.includes('Skill dimension key')) {
+      const inner = b.match(/\`([\s\S]*?)\`/)[1];
+      try { const o = JSON.parse(inner); console.log('parsedKeys=' + JSON.stringify(Object.keys(o))); } catch(e) { console.log('parseErr=' + e.message); }
+      break;
+    }
+  }
+} else {
+  try { const o = JSON.parse(m[1]); console.log('parsedKeys=' + JSON.stringify(Object.keys(o))); } catch(e) { console.log('parseErr=' + e.message); }
+}
+"
+```
+
+预期输出：`parsedKeys=["type","properties","required"]`（标准 JSON Schema 顶层 keys，无解析错误）
+
+- [ ] **Step 5: 编译**
+
+运行：
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk /Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw assembleHap --mode module -p product=default -p buildMode=debug 2>&1 | tail -30
+```
+
+预期：退出码 0，无编译错误。
+
+- [ ] **Step 6: 提交**
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+git add entry/src/main/ets/config/BuiltinTools.ets
+git commit -m "fix(builtin-tools): enumerate 4 new skill dimensions in child_profile schema"
+```
+
+---
+
+## Task 1.6: 在 LearningProfilePage.SKILL_GROUPS 中加入 4 个新 key
+
+**Files:**
+- Modify: `entry/src/main/ets/pages/LearningProfilePage.ets:33-79`（在 4 个现有 group 中按语义分配 4 个新 key）
+
+**分组决定：**
+- `english_writing` → "english" 分组（与 `english_*` 聚类）
+- `categorization` → "cognitive" 分组（与逻辑/观察/空间归类）
+- `fine_motor` → "general" 分组（手部精细动作作为生活能力）
+- `chinese_writing` → "general" 分组（中文书写作为基础技能）
+
+不新增分组（避免新增 string resource 引入额外范围）。
+
+- [ ] **Step 1: 写失败的结构断言 — 4 个新 key 不在 SKILL_GROUPS 中**
+
+运行：
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+node -e "
+const f=require('fs').readFileSync('entry/src/main/ets/pages/LearningProfilePage.ets','utf-8');
+const m = f.match(/const SKILL_GROUPS: LearningSkillGroup\[\] = \[([\s\S]*?)\]/);
+const s = m[1];
+const need = ['fine_motor', 'english_writing', 'chinese_writing', 'categorization'];
+const missing = need.filter(k => !s.includes(k));
+console.log('missing=' + JSON.stringify(missing));
+"
+```
+
+预期输出：`missing=["fine_motor","english_writing","chinese_writing","categorization"]`（4 个 key 全部缺失）
+
+- [ ] **Step 2: 修改文件 — 在 4 个现有 group 的 keys 数组末尾追加 1 个新 key**
+
+在 `LearningProfilePage.ets` 中找到以下 4 处，做如下修改：
+
+- line 53-58 (english group 的 keys 数组)：在 `english_phonics` 之后追加 `english_writing`
+- line 64-68 (general group 的 keys 数组)：在 `general_life` 之后追加 `fine_motor` 和 `chinese_writing`
+- line 74-77 (cognitive group 的 keys 数组)：在 `observation` 之后追加 `categorization`
+
+修改后 4 个 group 的 keys 数组应当是：
+
+```ts
+// math group (line 38-47, 不变)
+keys: [
+  'math_counting',
+  'math_addition',
+  'math_subtraction',
+  'math_multiply',
+  'math_divide',
+  'math_shapes',
+  'math_comparison',
+  'math_time'
+]
+
+// english group (line 53-58)
+keys: [
+  'english_alphabet',
+  'english_vocab',
+  'english_sentence',
+  'english_phonics',
+  'english_writing'
+]
+
+// general group (line 64-68)
+keys: [
+  'general_nature',
+  'general_social',
+  'general_life',
+  'fine_motor',
+  'chinese_writing'
+]
+
+// cognitive group (line 74-77)
+keys: [
+  'logic_puzzle',
+  'observation',
+  'categorization'
+]
+```
+
+注意：
+- 保留原 `logic_puzzle`（这是 pre-existing drift，不在本次 scope）
+- 数组内每个元素逗号结尾，最后一个元素（`english_writing` 在 english group 是最后一个；`chinese_writing` 在 general group 是最后一个；`categorization` 在 cognitive group 是最后一个）**不加**逗号（保持 ArkTS 数组语法）
+
+- [ ] **Step 3: 验证 4 个新 key 都在 SKILL_GROUPS 中**
+
+运行：
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+node -e "
+const f=require('fs').readFileSync('entry/src/main/ets/pages/LearningProfilePage.ets','utf-8');
+const m = f.match(/const SKILL_GROUPS: LearningSkillGroup\[\] = \[([\s\S]*?)\]/);
+const s = m[1];
+const need = ['fine_motor', 'english_writing', 'chinese_writing', 'categorization'];
+const missing = need.filter(k => !s.includes(k));
+console.log('missing=' + JSON.stringify(missing));
+"
+```
+
+预期输出：`missing=[]`
+
+- [ ] **Step 4: 验证每个 group 的 keys 数组都仍是合法 ArkTS 字面量**
+
+运行：
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk /Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw assembleHap --mode module -p product=default -p buildMode=debug 2>&1 | tail -30
+```
+
+预期：退出码 0，无 ArkTS 编译错误。
+
+- [ ] **Step 5: 提交**
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+git add entry/src/main/ets/pages/LearningProfilePage.ets
+git commit -m "feat(profile-ui): show 4 new skill dimensions (fine_motor/writing/categorization) in profile page"
 ```
 
 ---
