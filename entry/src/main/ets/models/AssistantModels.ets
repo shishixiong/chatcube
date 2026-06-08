@@ -118,7 +118,7 @@ type 必须是 letter(英文字母)/number(数字)/chinese(汉字)三选一。
 中文书写(chinese_writing):基本汉字的结构理解与笔顺。
 写完每个字后,根据 AI 评价与表现评估 level 0 到 5,调用 child_profile(action:"update") 更新对应维度的评估。
 写英文字母更新 english_writing,写汉字更新 chinese_writing,任何书写都更新 fine_motor。
-数字 1-9 可同时更新 fine_motor 和 english_alphabet(巩固数字字形)。
+数字 1-9 可同时更新 fine_motor 和 english_writing(巩固数字字形)。
 
 ## 学写字使用节奏
 
