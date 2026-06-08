@@ -244,6 +244,90 @@ git commit -m "fix(builtin-tools): enumerate 4 new skill dimensions in child_pro
 
 ---
 
+## Task 1.5.1: 同步更新 child_profile 顶层工具描述中的 skill key 列表
+
+**Files:**
+- Modify: `entry/src/main/ets/config/BuiltinTools.ets:951`（`createChildProfileToolDefinition` 中 `ToolFunction` 构造函数调用的第 2 个参数，即 tool 的顶层 description 字符串）
+
+**背景：** Task 1.5 只更新了 schema 内部 `key` 字段的 description。同一文件的 line 951 有一个独立的顶层工具描述字符串，也枚举了所有 skill key（旧的 18 个）。如果不同步，LLM 会在 schema 与顶层 description 之间看到不一致信息。
+
+- [ ] **Step 1: 验证 line 951 仍只列 18 个旧 key**
+
+运行：
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+node -e "
+const f=require('fs').readFileSync('entry/src/main/ets/config/BuiltinTools.ets','utf-8');
+const idx = f.indexOf('Available skill keys:');
+if (idx < 0) { console.log('not-found'); process.exit(0); }
+const slice = f.slice(idx, idx + 800);
+const need = ['fine_motor', 'english_writing', 'chinese_writing', 'categorization'];
+const missing = need.filter(k => !slice.includes(k));
+console.log('present-fine_motor=' + slice.includes('fine_motor'));
+console.log('present-english_writing=' + slice.includes('english_writing'));
+console.log('present-chinese_writing=' + slice.includes('chinese_writing'));
+console.log('present-categorization=' + slice.includes('categorization'));
+console.log('missing=' + JSON.stringify(missing));
+"
+```
+
+预期输出：`present-fine_motor=false` ... `missing=["fine_motor","english_writing","chinese_writing","categorization"]`（4 个 key 全部缺失）
+
+- [ ] **Step 2: 修改文件 — 在顶层 description 末尾追加 4 个新 key**
+
+在 `BuiltinTools.ets` 中找到 line 951 那一行，定位到 `spatial_reasoning.'`（即顶层 description 的字符串末尾，紧邻右单引号 `'`）。
+
+将该字符串末尾的 `spatial_reasoning.'` 改为 `spatial_reasoning, fine_motor, english_writing, chinese_writing, categorization.'`。
+
+修改后 line 951 该描述字符串的相关片段（仅末尾部分示意）应当是：
+
+```
+... logic_thinking, observation, spatial_reasoning, fine_motor, english_writing, chinese_writing, categorization.', parameters
+```
+
+注意：line 951 是 ArkTS 单引号字符串字面量（不是 template literal），不需要担心 JSON 解析。直接追加即可。
+
+- [ ] **Step 3: 验证 4 个新 key 都在顶层 description 中**
+
+运行：
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+node -e "
+const f=require('fs').readFileSync('entry/src/main/ets/config/BuiltinTools.ets','utf-8');
+const idx = f.indexOf('Available skill keys:');
+if (idx < 0) { console.log('not-found'); process.exit(0); }
+const slice = f.slice(idx, idx + 800);
+const need = ['fine_motor', 'english_writing', 'chinese_writing', 'categorization'];
+const missing = need.filter(k => !slice.includes(k));
+console.log('missing=' + JSON.stringify(missing));
+"
+```
+
+预期输出：`missing=[]`
+
+- [ ] **Step 4: 编译**
+
+运行：
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk /Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw assembleHap --mode module -p product=default -p buildMode=debug 2>&1 | tail -30
+```
+
+预期：退出码 0，无 ArkTS 编译错误。
+
+- [ ] **Step 5: 提交**
+
+```bash
+cd /Users/mac/mygame/HarmonyOS-app/chatcube
+git add entry/src/main/ets/config/BuiltinTools.ets
+git commit -m "fix(builtin-tools): sync 4 new skill keys in child_profile top-level tool description"
+```
+
+---
+
 ## Task 1.6: 在 LearningProfilePage.SKILL_GROUPS 中加入 4 个新 key
 
 **Files:**
