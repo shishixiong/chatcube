@@ -15,6 +15,7 @@ export class AppUiState {
   @Trace openImageGenerationTick: number = 0
   @Trace sessionListRefreshAt: number = 0
   @Trace assistantAvatarRefreshAt: number = 0
+  @Trace assistantRuntimeRefreshAt: number = 0
   @Trace taskEventTick: number = 0
   @Trace inAppTaskAlertPayload: string = ''
   @Trace inAppImageGenerationAlertPayload: string = ''
@@ -96,6 +97,9 @@ function applyAppUiStateValue<T extends string | number | boolean>(state: AppUiS
       return
     case AppStorageKeys.ASSISTANT_AVATAR_REFRESH_AT:
       state.assistantAvatarRefreshAt = value as number
+      return
+    case AppStorageKeys.ASSISTANT_RUNTIME_REFRESH_AT:
+      state.assistantRuntimeRefreshAt = value as number
       return
     case AppStorageKeys.TASK_EVENT_TICK:
       state.taskEventTick = value as number
@@ -268,6 +272,8 @@ function createAppUiStateFromStorage(): AppUiState {
     readStorageValue<number>(AppStorageKeys.SESSION_LIST_REFRESH_AT, 0))
   applyAppUiStateValue(state, AppStorageKeys.ASSISTANT_AVATAR_REFRESH_AT,
     readStorageValue<number>(AppStorageKeys.ASSISTANT_AVATAR_REFRESH_AT, 0))
+  applyAppUiStateValue(state, AppStorageKeys.ASSISTANT_RUNTIME_REFRESH_AT,
+    readStorageValue<number>(AppStorageKeys.ASSISTANT_RUNTIME_REFRESH_AT, 0))
   applyAppUiStateValue(state, AppStorageKeys.TASK_EVENT_TICK, readStorageValue<number>(AppStorageKeys.TASK_EVENT_TICK, 0))
   applyAppUiStateValue(state, AppStorageKeys.IN_APP_TASK_ALERT_PAYLOAD,
     readStorageValue<string>(AppStorageKeys.IN_APP_TASK_ALERT_PAYLOAD, ''))
@@ -385,6 +391,7 @@ export function syncAppUiStateFromStorage(): void {
   state.openImageGenerationTick = freshState.openImageGenerationTick
   state.sessionListRefreshAt = freshState.sessionListRefreshAt
   state.assistantAvatarRefreshAt = freshState.assistantAvatarRefreshAt
+  state.assistantRuntimeRefreshAt = freshState.assistantRuntimeRefreshAt
   state.taskEventTick = freshState.taskEventTick
   state.inAppTaskAlertPayload = freshState.inAppTaskAlertPayload
   state.inAppImageGenerationAlertPayload = freshState.inAppImageGenerationAlertPayload
@@ -478,6 +485,8 @@ function resolveAppUiStatePath(path: string): string {
       return 'sessionListRefreshAt'
     case AppStorageKeys.ASSISTANT_AVATAR_REFRESH_AT:
       return 'assistantAvatarRefreshAt'
+    case AppStorageKeys.ASSISTANT_RUNTIME_REFRESH_AT:
+      return 'assistantRuntimeRefreshAt'
     case AppStorageKeys.TASK_EVENT_TICK:
       return 'taskEventTick'
     case AppStorageKeys.IN_APP_TASK_ALERT_PAYLOAD:

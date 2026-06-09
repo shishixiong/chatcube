@@ -3139,6 +3139,98 @@
     {
       "name": "microphone_permission_reason",
       "value": "用于语音输入功能，将您的语音转换为文字发送。"
+    },
+    {
+      "name": "assistant_editor_tools_section",
+      "value": "工具"
+    },
+    {
+      "name": "assistant_editor_tools_desc",
+      "value": "为该助手选择可用工具。默认助手不可修改。"
+    },
+    {
+      "name": "assistant_editor_reasoning_section",
+      "value": "思考模式"
+    },
+    {
+      "name": "assistant_editor_reasoning_desc",
+      "value": "回答前的推理深度。仅在默认模型支持时生效。"
+    },
+    {
+      "name": "assistant_editor_tools_label",
+      "value": "已启用工具"
+    },
+    {
+      "name": "assistant_editor_tools_pick",
+      "value": "选择"
+    },
+    {
+      "name": "assistant_editor_tools_default_locked_summary",
+      "value": "默认工具白名单(已锁定)"
+    },
+    {
+      "name": "assistant_editor_tools_count_label_one",
+      "value": "已启用 %d 个工具"
+    },
+    {
+      "name": "assistant_editor_tools_count_label_other",
+      "value": "已启用 %d 个工具"
+    },
+    {
+      "name": "assistant_editor_tools_default_locked_hint",
+      "value": "默认助手的工具白名单已锁定,无法编辑。"
+    },
+    {
+      "name": "assistant_editor_tools_hint",
+      "value": "空 = 继承所有已启用工具;勾选 = 该助手的白名单。"
+    },
+    {
+      "name": "assistant_editor_tools_picker_title",
+      "value": "选择工具"
+    },
+    {
+      "name": "assistant_editor_reasoning_label",
+      "value": "推理级别"
+    },
+    {
+      "name": "assistant_editor_reasoning_off_summary",
+      "value": "关闭 — 不启用推理"
+    },
+    {
+      "name": "assistant_editor_reasoning_on_summary",
+      "value": "已为该助手启用推理"
+    },
+    {
+      "name": "assistant_editor_reasoning_hint",
+      "value": "随助手保存,切换助手自动应用对应的推理级别。"
+    },
+    {
+      "name": "assistant_editor_reasoning_level_off",
+      "value": "关闭"
+    },
+    {
+      "name": "assistant_editor_reasoning_level_auto",
+      "value": "自动"
+    },
+    {
+      "name": "assistant_editor_reasoning_level_low",
+      "value": "轻度"
+    },
+    {
+      "name": "assistant_editor_reasoning_level_medium",
+      "value": "中度"
+    },
+    {
+      "name": "assistant_editor_reasoning_level_high",
+      "value": "高度"
+    },
+    {
+      "name": "assistant_editor_reasoning_level_xhigh",
+      "value": "超高"
+    },
+    {
+      "name": "assistant_editor_tools_count_zero",
+      "value": "未启用任何工具(继承全部)"
     }
   ]
 }

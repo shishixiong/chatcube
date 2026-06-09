@@ -292,6 +292,13 @@ export class ChatViewModel {
 	    return config.enabledToolIds.slice()
 	  }
 
+	  // 当前助手的推理级别。取代旧的全局 CHAT_REASONING_LEVEL 偏好。
+	  // 默认 OFF。ChatPage 在切助手/保存助手后调此方法拿最新值,不再自己维护 @Local 状态。
+	  async getCurrentAssistantReasoningLevel(): Promise<ReasoningLevel> {
+	    const config = await this.getAssistantRuntimeConfig()
+	    return config.reasoningLevel
+	  }
+
 	  private async buildRequestSystemPrompt(extraPrompt: string = ''): Promise<string> {
 	    let globalPrompt = ''
 	    const assistantConfig = await this.getAssistantRuntimeConfig()

@@ -17,8 +17,8 @@ import {
   buildCompactTabsFloatingStyle,
   CompactTabsFloatingStyleOptions
 } from '../utils/HdsTabsFloatingStyleHelper'
-import { ChatSession, ChatMessage, ModelProvider } from '../models/ChatModels'
-import { Assistant, DEFAULT_ASSISTANT_ID } from '../models/AssistantModels'
+import { ChatSession, ChatMessage, ModelProvider, ReasoningLevel, ToolConfig } from '../models/ChatModels'
+import { Assistant, DEFAULT_ASSISTANT_ID, DEFAULT_ASSISTANT_LOCKED_TOOL_IDS } from '../models/AssistantModels'
 import { ChatViewModel } from '../viewmodels/ChatViewModel'
 import { SettingsChangeCallback } from '../viewmodels/SettingsManager'
 import { ThemeMode, AppLanguage, PreferenceKeys } from '../services/PreferencesService'
@@ -77,6 +77,7 @@ import {
   refreshAssistantAvatarCache
 } from '../components/AssistantAvatar'
 import { AssistantAvatarEditorSheet } from '../components/AssistantAvatarEditorSheet'
+import { ChatToolPickerSheetContent } from '../components/chat/ChatToolPickerSheetContent'
 import { SettingsSheetType, SessionFilterType, SessionGroupData } from './index/IndexPageTypes'
 import { getFilteredSessionsForIndex, buildSessionGroupsForIndex } from './index/IndexSessionGroupHelper'
 import { SessionListGroupViewModel, rebuildSessionListGroupViewModels } from './index/IndexSessionListDataSource'
@@ -200,6 +201,12 @@ struct Index {
   @Local assistantFormFrequencyPenalty: number = 0
   @Local assistantFormContextMessageCount: number = 0
   @Local assistantFormMaxOutputTokens: number = 0
+  // 工具与思考模式表单字段(per-assistant,2026-06 迁移到助手编辑页)。
+  @Local assistantFormEnabledToolIds: string[] = []
+  @Local assistantFormReasoningLevel: ReasoningLevel = ReasoningLevel.OFF
+  // 工具选择 sub-sheet 状态 + 可用工具列表(内置+MCP),从 toolRegistry 加载。
+  @Local showAssistantToolPickerSheet: boolean = false
+  @Local availableChatTools: ToolConfig[] = []
   @Local currentChatRouteName: string = ''
   @Local chatTabTopSessionId: string = ''
   @Local chatListPaneUserWidth: number = 0
@@ -2028,6 +2035,21 @@ struct Index {
           title: { title: $r('app.string.assistant_default_model') }
         })
 
+      Column()
+        .width(0)
+        .height(0)
+        .bindSheet($$this.showAssistantToolPickerSheet, this.AssistantToolPickerSheetBuilder(), {
+          height: SheetSize.LARGE,
+          dragBar: true,
+          showClose: true,
+          backgroundColor: this.themeBackground,
+          preferType: SheetType.BOTTOM,
+          title: { title: $r('app.string.assistant_editor_tools_picker_title') },
+          onDisappear: () => {
+            this.showAssistantToolPickerSheet = false
+          }
+        })
+
       if (this.onboardingActive) {
         OnboardingOverlay({
           onCompleted: (prefillText: string): void => {
@@ -2728,6 +2750,8 @@ struct Index {
     this.assistantFormFrequencyPenalty = 0
     this.assistantFormContextMessageCount = 0
     this.assistantFormMaxOutputTokens = 0
+    this.assistantFormEnabledToolIds = []
+    this.assistantFormReasoningLevel = ReasoningLevel.OFF
   }
 
   private fillAssistantEditorForm(assistant: Assistant): void {
@@ -2757,6 +2781,10 @@ struct Index {
     this.assistantFormFrequencyPenalty = assistant.frequencyPenalty
     this.assistantFormContextMessageCount = assistant.contextMessageCount
     this.assistantFormMaxOutputTokens = assistant.maxOutputTokens
+    // enabledToolIds 默认助手会被 normalizeAssistant 强制覆盖为锁定列表;
+    // 这里仍写真实值以便用户看到"勾选了哪些"再切回。
+    this.assistantFormEnabledToolIds = [...assistant.enabledToolIds]
+    this.assistantFormReasoningLevel = assistant.reasoningLevel
   }
 
   private setAssistantFormAvatarSymbol(value: string): void {
@@ -2774,6 +2802,7 @@ struct Index {
     this.resetAssistantEditorForm()
     this.showAssistantEditorSheet = true
     await this.loadAssistantProvidersIfNeeded()
+    await this.loadAssistantChatToolsIfNeeded()
   }
 
   private async openAssistantEditor(assistant: Assistant): Promise<void> {
@@ -2792,6 +2821,7 @@ struct Index {
     this.fillAssistantEditorForm(target)
     this.showAssistantEditorSheet = true
     await this.loadAssistantProvidersIfNeeded()
+    await this.loadAssistantChatToolsIfNeeded()
   }
 
   private getAssistantEditorTitle(): Resource {
@@ -2852,6 +2882,12 @@ struct Index {
     assistant.frequencyPenalty = this.assistantFormFrequencyPenalty
     assistant.contextMessageCount = this.assistantFormContextMessageCount
     assistant.maxOutputTokens = this.assistantFormMaxOutputTokens
+    // 工具白名单:默认助手会被 normalizeAssistant 强制覆盖为锁定列表,这里写值无副作用;
+    // 用户自建助手走 form 字段的真实值。
+    assistant.enabledToolIds = this.editingAssistantIsDefault
+      ? [...DEFAULT_ASSISTANT_LOCKED_TOOL_IDS]
+      : [...this.assistantFormEnabledToolIds]
+    assistant.reasoningLevel = this.assistantFormReasoningLevel
     assistant.createdAt = this.editingAssistantCreatedAt
     assistant.sortOrder = this.editingAssistantSortOrder
     assistant.isDefault = this.editingAssistantIsDefault
@@ -3524,6 +3560,14 @@ struct Index {
             this.AssistantPresencePenaltyRow()
             this.AssistantFrequencyPenaltyRow()
 
+            this.AssistantEditorSectionHeader($r('app.string.assistant_editor_tools_section'),
+              $r('app.string.assistant_editor_tools_desc'))
+            this.AssistantToolsSection()
+
+            this.AssistantEditorSectionHeader($r('app.string.assistant_editor_reasoning_section'),
+              $r('app.string.assistant_editor_reasoning_desc'))
+            this.AssistantReasoningSection()
+
             this.AssistantEditorSectionHeader($r('app.string.assistant_editor_context_section'),
               $r('app.string.assistant_editor_context_desc'))
             this.AssistantContextMessageCountRow()
@@ -3543,6 +3587,242 @@ struct Index {
     .width('100%')
     .height('100%')
     .backgroundColor(this.themeBackground)
+  }
+
+  // 工具 section:已选数量 + 编辑按钮(打开 sub-sheet),默认助手整体锁定。
+  @Builder
+  private AssistantToolsSection() {
+    Column({ space: 10 }) {
+      Row() {
+        Column({ space: 4 }) {
+          Text($r('app.string.assistant_editor_tools_label'))
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.text_primary'))
+          Text(this.getAssistantToolsSummaryText())
+            .fontSize(12)
+            .fontColor($r('app.color.text_secondary'))
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        if (!this.editingAssistantIsDefault) {
+          Button() {
+            Text($r('app.string.assistant_editor_tools_pick'))
+              .fontSize(13)
+              .fontColor(this.themePrimary)
+          }
+          .type(ButtonType.Normal)
+          .height(32)
+          .padding({ left: 12, right: 12 })
+          .backgroundColor(this.themeSurface)
+          .borderRadius(16)
+          .onClick(() => {
+            this.showAssistantToolPickerSheet = true
+          })
+        }
+      }
+      .width('100%')
+
+      if (this.editingAssistantIsDefault) {
+        Text($r('app.string.assistant_editor_tools_default_locked_hint'))
+          .fontSize(11)
+          .fontColor($r('app.color.text_tertiary'))
+          .width('100%')
+      } else {
+        Text($r('app.string.assistant_editor_tools_hint'))
+          .fontSize(11)
+          .fontColor($r('app.color.text_tertiary'))
+          .width('100%')
+      }
+    }
+    .width('100%')
+    .padding(14)
+    .backgroundColor(this.themeSurface)
+    .borderRadius(16)
+    .opacity(this.editingAssistantIsDefault ? 0.55 : 1)
+  }
+
+  private getAssistantToolsSummaryText(): ResourceStr {
+    if (this.editingAssistantIsDefault) {
+      return $r('app.string.assistant_editor_tools_default_locked_summary')
+    }
+    const count = this.assistantFormEnabledToolIds.length
+    if (count === 0) {
+      return $r('app.string.assistant_editor_tools_count_zero')
+    }
+    if (count === 1) {
+      return $r('app.string.assistant_editor_tools_count_label_one')
+    }
+    return $r('app.string.assistant_editor_tools_count_label_other')
+  }
+
+  // 推理 section:Toggle + bindMenu 选级别;Toggle 同步 enabled/disabled 状态。
+  @Builder
+  private AssistantReasoningSection() {
+    Column({ space: 10 }) {
+      Row() {
+        Column({ space: 4 }) {
+          Text($r('app.string.assistant_editor_reasoning_label'))
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.text_primary'))
+          Text(this.getAssistantReasoningSummaryText())
+            .fontSize(12)
+            .fontColor($r('app.color.text_secondary'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        Button() {
+          Row({ space: 4 }) {
+            Text(this.getReasoningLevelLabel(this.assistantFormReasoningLevel))
+              .fontSize(13)
+              .fontColor(this.assistantFormReasoningLevel === ReasoningLevel.OFF
+                ? $r('app.color.text_secondary') : this.themePrimary)
+            SymbolGlyph($r('sys.symbol.chevron_up'))
+              .fontSize(12)
+              .fontColor([$r('app.color.text_secondary')])
+          }
+        }
+        .type(ButtonType.Normal)
+        .height(32)
+        .padding({ left: 12, right: 10 })
+        .backgroundColor(this.themeSurface)
+        .borderRadius(16)
+        .bindMenu(this.AssistantReasoningMenuBuilder(), {
+          placement: Placement.BottomLeft,
+          offset: { x: 0, y: 8 }
+        })
+      }
+      .width('100%')
+
+      Text($r('app.string.assistant_editor_reasoning_hint'))
+        .fontSize(11)
+        .fontColor($r('app.color.text_tertiary'))
+        .width('100%')
+    }
+    .width('100%')
+    .padding(14)
+    .backgroundColor(this.themeSurface)
+    .borderRadius(16)
+  }
+
+  private getAssistantReasoningSummaryText(): ResourceStr {
+    if (this.assistantFormReasoningLevel === ReasoningLevel.OFF) {
+      return $r('app.string.assistant_editor_reasoning_off_summary')
+    }
+    return $r('app.string.assistant_editor_reasoning_on_summary')
+  }
+
+  private getReasoningLevelLabel(level: ReasoningLevel): ResourceStr {
+    switch (level) {
+      case ReasoningLevel.OFF: return $r('app.string.assistant_editor_reasoning_level_off')
+      case ReasoningLevel.AUTO: return $r('app.string.assistant_editor_reasoning_level_auto')
+      case ReasoningLevel.LOW: return $r('app.string.assistant_editor_reasoning_level_low')
+      case ReasoningLevel.MEDIUM: return $r('app.string.assistant_editor_reasoning_level_medium')
+      case ReasoningLevel.HIGH: return $r('app.string.assistant_editor_reasoning_level_high')
+      case ReasoningLevel.XHIGH: return $r('app.string.assistant_editor_reasoning_level_xhigh')
+      default: return $r('app.string.assistant_editor_reasoning_level_off')
+    }
+  }
+
+  @Builder
+  private AssistantReasoningMenuBuilder() {
+    Menu() {
+      this.AssistantReasoningMenuItem(ReasoningLevel.OFF)
+      this.AssistantReasoningMenuItem(ReasoningLevel.AUTO)
+      this.AssistantReasoningMenuItem(ReasoningLevel.LOW)
+      this.AssistantReasoningMenuItem(ReasoningLevel.MEDIUM)
+      this.AssistantReasoningMenuItem(ReasoningLevel.HIGH)
+      this.AssistantReasoningMenuItem(ReasoningLevel.XHIGH)
+    }
+  }
+
+  @Builder
+  private AssistantReasoningMenuItem(level: ReasoningLevel) {
+    if (this.assistantFormReasoningLevel === level) {
+      MenuItem({
+        startIcon: $r('sys.symbol.checkmark'),
+        content: this.getReasoningLevelLabel(level)
+      })
+        .contentFont({ size: 14 })
+        .onClick(() => {
+          this.assistantFormReasoningLevel = level
+        })
+    } else {
+      MenuItem({
+        content: this.getReasoningLevelLabel(level)
+      })
+        .contentFont({ size: 14 })
+        .onClick(() => {
+          this.assistantFormReasoningLevel = level
+        })
+    }
+  }
+
+  @Builder
+  private AssistantToolPickerSheetBuilder() {
+    ChatToolPickerSheetContent({
+      availableChatTools: this.availableChatTools,
+      selectedToolIds: this.assistantFormEnabledToolIds,
+      isRefreshingMcpToolAvailability: false,
+      themePrimary: this.themePrimary,
+      isDarkMode: this.isDarkMode,
+      onClose: (): void => {
+        this.showAssistantToolPickerSheet = false
+      },
+      onRefresh: (): void => {
+      },
+      onToggleTool: (toolId: string, enabled: boolean): void => {
+        this.toggleAssistantFormTool(toolId, enabled)
+      },
+      onToggleMcpGroup: (toolIds: string[], enabled: boolean): void => {
+        for (let i = 0; i < toolIds.length; i++) {
+          this.toggleAssistantFormTool(toolIds[i], enabled)
+        }
+      }
+    })
+  }
+
+  private toggleAssistantFormTool(toolId: string, enabled: boolean): void {
+    const current = this.assistantFormEnabledToolIds
+    const index = current.indexOf(toolId)
+    if (enabled && index === -1) {
+      const next: string[] = []
+      for (let i = 0; i < current.length; i++) {
+        next.push(current[i])
+      }
+      next.push(toolId)
+      this.assistantFormEnabledToolIds = next
+      return
+    }
+    if (!enabled && index !== -1) {
+      const next: string[] = []
+      for (let i = 0; i < current.length; i++) {
+        if (i !== index) {
+          next.push(current[i])
+        }
+      }
+      this.assistantFormEnabledToolIds = next
+    }
+  }
+
+  // 加载可用工具列表(内置 + MCP enabled),供助手编辑页的工具选择 sub-sheet 使用。
+  // 与 ChatPage 加载时序解耦:助手编辑可能独立于 ChatPage 打开。
+  private async loadAssistantChatToolsIfNeeded(): Promise<void> {
+    try {
+      const toolRegistry = ServiceRegistry.toolRegistry()
+      const toolList = toolRegistry.getAllToolConfigs()
+      this.availableChatTools = [...toolList]
+    } catch (error) {
+      console.warn('Index', `loadAssistantChatToolsIfNeeded failed: ${JSON.stringify(error)}`)
+      this.availableChatTools = []
+    }
   }
 
   @Builder

@@ -1,4 +1,5 @@
 import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
+import { ReasoningLevel } from './ChatModels'
 import {
   CHILD_PROFILE_TOOL_ID,
   GET_TIME_INFO_TOOL_ID,
@@ -193,6 +194,9 @@ export class Assistant {
   // 助手专属工具白名单。空数组 = 不设边界(继承全局所有工具);
   // 非空 = 仅允许列出的 toolId。搜索工具不在此白名单内(走独立 webSearch 通道)。
   @Trace enabledToolIds: string[] = []
+  // 助手专属推理级别。OFF = 不启用推理;AUTO/LOW/MEDIUM/HIGH/XHIGH 视模型能力而定。
+  // 切助手时由 ChatPage 从该字段加载,取代旧的全局 CHAT_REASONING_LEVEL 偏好。
+  @Trace reasoningLevel: ReasoningLevel = ReasoningLevel.OFF
   @Trace isDefault: boolean = false
   @Trace isPreset: boolean = false
   @Trace createdAt: number = 0
@@ -220,6 +224,7 @@ export class Assistant {
     this.contextMessageCount = 0
     this.maxOutputTokens = 0
     this.enabledToolIds = []
+    this.reasoningLevel = ReasoningLevel.OFF
     this.isDefault = id === DEFAULT_ASSISTANT_ID
     this.createdAt = now
     this.updatedAt = now

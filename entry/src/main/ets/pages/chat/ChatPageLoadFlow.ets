@@ -6,7 +6,6 @@ import { PreferenceKeys, PreferencesService } from '../../services/PreferencesSe
 import { AssistantService } from '../../services/AssistantService'
 import { ChatPageRouteParams } from './ChatPageRouteTypes'
 import { Assistant, DEFAULT_ASSISTANT_ID } from '../../models/AssistantModels'
-import { normalizeStoredChatReasoningLevel } from './ChatReasoningStateHelper'
 import { DEFAULT_PRIMARY_COLOR } from '../../config/ThemeDefaults'
 
 export class ChatPageLoadResult {
@@ -15,7 +14,9 @@ export class ChatPageLoadResult {
   // 联网模式: external_engine (默认) | openai_builtin
   searchMode: ChatSearchMode = ChatSearchMode.EXTERNAL_ENGINE
   builtinImageGenEnabled: boolean = false
-  reasoningLevel: ReasoningLevel = ReasoningLevel.OFF
+  // 推理级别: 不再从全局 CHAT_REASONING_LEVEL 读, 而是从当前 assistant.reasoningLevel 取。
+  // 取代 ChatPageLoadResult.reasoningLevel(原读取全局 key)。
+  assistantReasoningLevel: ReasoningLevel = ReasoningLevel.OFF
   providers: ModelProvider[] = []
   pendingInitialPrompt: string = ''
   pendingInitialDraft: string = ''
@@ -72,10 +73,9 @@ export class ChatPageLoadFlow {
       PreferenceKeys.CHAT_BUILTIN_IMAGE_GEN_ENABLED,
       false
     )
-    result.reasoningLevel = normalizeStoredChatReasoningLevel(await this.deps.preferencesService.getString(
-      PreferenceKeys.CHAT_REASONING_LEVEL,
-      ReasoningLevel.OFF
-    ))
+    // 推理级别由当前 assistant 决定, 不再从全局 CHAT_REASONING_LEVEL 读。
+    // 在下方两条路径(load existing session / new chat)里通过 applyAssistantSnapshot 写入。
+    result.assistantReasoningLevel = ReasoningLevel.OFF
     result.providers = await this.deps.providerViewModel.loadProviders()
 
     result.pendingInitialPrompt =
@@ -139,6 +139,8 @@ export class ChatPageLoadFlow {
     result.assistantId = assistant.id !== '' ? assistant.id : DEFAULT_ASSISTANT_ID
     result.assistantAvatarSymbol = assistant.avatarSymbol !== '' ? assistant.avatarSymbol : 'AI'
     result.assistantColor = assistant.color !== '' ? assistant.color : DEFAULT_PRIMARY_COLOR
+    // 推理级别跟随 assistant 走, send-time / runtime refresh 时再叠加模型能力归一化。
+    result.assistantReasoningLevel = assistant.reasoningLevel
   }
 
   private cloneDraftAttachments(attachments: MessageAttachment[]): MessageAttachment[] {

@@ -1,6 +1,9 @@
 import { Assistant, DEFAULT_ASSISTANT_ID, DEFAULT_ASSISTANT_SYSTEM_PROMPT, DEFAULT_ASSISTANT_LOCKED_TOOL_IDS } from '../models/AssistantModels'
+import { ReasoningLevel } from '../models/ChatModels'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
+import { PreferenceKeys } from './PreferencesService'
+import { getPreferencesService } from './PreferencesService'
 import { isPresetAssistant } from '../config/PresetAssistants'
 import { getAppUiState, setAppUiStateValue } from '../state/AppUiState'
 import { getAppSettingsStore, AppSettingsStore } from '../state/AppSettingsStore'
@@ -22,6 +25,8 @@ export class AssistantRuntimeConfig {
   // 详见 Assistant.maxOutputTokens 注释。
   maxOutputTokens: number = 0
   enabledToolIds: string[] = []
+  // 推理级别(per-assistant)。默认 OFF;切助手时 ChatPage 读取该字段。
+  reasoningLevel: ReasoningLevel = ReasoningLevel.OFF
 }
 
 /**
@@ -59,6 +64,55 @@ export class AssistantService {
   async initialize(): Promise<void> {
     await this.store.ensureAssistantsInitialized()
     await this.ensureValidCurrentAssistant()
+    await this.migrateLegacyReasoningPreferenceIfNeeded()
+  }
+
+  /**
+   * 一次性迁移：把旧全局 CHAT_REASONING_LEVEL 写入默认助手(小星老师)的 reasoningLevel,
+   * 然后删全局 key,避免双源。仅当默认助手当前 reasoningLevel 仍为默认 OFF 时迁移;
+   * 已经手动设过(非 OFF)的默认助手保持不动。
+   */
+  private async migrateLegacyReasoningPreferenceIfNeeded(): Promise<void> {
+    try {
+      const preferencesService = getPreferencesService()
+      const legacyLevel = await preferencesService.getString(PreferenceKeys.CHAT_REASONING_LEVEL, '')
+      if (legacyLevel === '') {
+        return
+      }
+      const normalized = this.normalizeReasoningLevelString(legacyLevel)
+      const defaultAssistant = this.store.getAssistantById(DEFAULT_ASSISTANT_ID)
+      if (defaultAssistant !== null && defaultAssistant.reasoningLevel === ReasoningLevel.OFF) {
+        defaultAssistant.reasoningLevel = normalized
+        defaultAssistant.updatedAt = Date.now()
+        await this.store.upsertAssistant(defaultAssistant, false)
+        console.info('AssistantService',
+          `Migrated legacy CHAT_REASONING_LEVEL=${legacyLevel} -> default assistant reasoningLevel=${normalized}`)
+      }
+      await preferencesService.remove(PreferenceKeys.CHAT_REASONING_LEVEL)
+    } catch (error) {
+      console.error('AssistantService',
+        `migrateLegacyReasoningPreferenceIfNeeded failed: ${JSON.stringify(error)}`)
+    }
+  }
+
+  private normalizeReasoningLevelString(value: string): ReasoningLevel {
+    const lower = value.trim().toLowerCase()
+    if (lower === ReasoningLevel.AUTO) {
+      return ReasoningLevel.AUTO
+    }
+    if (lower === ReasoningLevel.LOW) {
+      return ReasoningLevel.LOW
+    }
+    if (lower === ReasoningLevel.MEDIUM) {
+      return ReasoningLevel.MEDIUM
+    }
+    if (lower === ReasoningLevel.HIGH) {
+      return ReasoningLevel.HIGH
+    }
+    if (lower === ReasoningLevel.XHIGH) {
+      return ReasoningLevel.XHIGH
+    }
+    return ReasoningLevel.OFF
   }
 
   // ============================================================================
@@ -87,6 +141,14 @@ export class AssistantService {
     const current = getAppUiState().assistantAvatarRefreshAt
     const now = Date.now()
     setAppUiStateValue(AppStorageKeys.ASSISTANT_AVATAR_REFRESH_AT, now > current ? now : current + 1)
+  }
+
+  // 助手保存/创建后通知 ChatPage 等订阅方重新读取 enabledToolIds / reasoningLevel。
+  // 与 avatar 脉冲并行触发,但走不同 key,避免 avatar 未变时漏触发 runtime 重读。
+  private notifyAssistantRuntimeChanged(): void {
+    const current = getAppUiState().assistantRuntimeRefreshAt
+    const now = Date.now()
+    setAppUiStateValue(AppStorageKeys.ASSISTANT_RUNTIME_REFRESH_AT, now > current ? now : current + 1)
   }
 
   private hasAvatarPresentationChanged(previous: Assistant | null, next: Assistant): boolean {
@@ -224,6 +286,7 @@ export class AssistantService {
     if (avatarChanged) {
       this.notifyAssistantAvatarChanged()
     }
+    this.notifyAssistantRuntimeChanged()
   }
 
   async reorderAssistants(assistants: Assistant[]): Promise<void> {
@@ -286,6 +349,7 @@ export class AssistantService {
     config.contextMessageCount = assistant.contextMessageCount
     config.maxOutputTokens = assistant.maxOutputTokens
     config.enabledToolIds = assistant.enabledToolIds.slice()
+    config.reasoningLevel = assistant.reasoningLevel
     return config
   }
 

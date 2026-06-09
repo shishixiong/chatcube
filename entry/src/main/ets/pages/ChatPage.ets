@@ -263,10 +263,7 @@ export struct ChatPage {
   // 当前选中的引擎 id(SearchEngine 枚举字符串或 OPENAI_BUILTIN_SEARCH_ENGINE_ID)。
   // 普通引擎与 PreferenceKeys.SEARCH_ENGINE 同步; 哨兵 id 与 PreferenceKeys.SEARCH_MODE 同步。
   @Local activeSearchEngineId: string = SearchEngine.BING
-  @Local selectedToolIds: string[] = []
   @Local availableChatTools: ToolConfig[] = []
-  @Local isRefreshingMcpToolAvailability: boolean = false
-  @Local showToolPickerSheet: boolean = false
   @Local showToolExecutionApprovalSheet: boolean = false
   @Local pendingToolExecutionApprovalToolCallId: string = ''
   private isResolvingToolExecutionApproval: boolean = false
@@ -293,7 +290,7 @@ export struct ChatPage {
   @Local toolExecutionApprovalArgumentsPreview: string = '{}'
   @Local toolExecutionApprovalArgumentsTruncated: boolean = false
   @Local showRawToolExecutionApprovalArguments: boolean = false
-  // 推理级别状态
+  // 推理级别(从 assistant.reasoningLevel 同步,供 ChatSendFlow 同步读取;源是 assistant,加载/运行时刷新同步过来)
   @Local reasoningLevel: ReasoningLevel = ReasoningLevel.OFF
   // 最近截图检测状态（由 ChatInputBar 回调设置，ScreenshotBanner 独立渲染）
   @Local hasRecentScreenshot: boolean = false
@@ -634,7 +631,7 @@ export struct ChatPage {
     await this.syncToolAvailabilityFromPreferences()
     console.info(
       'ChatPage',
-      `[loadData] 联网可用=${this.webSearchAvailable}, 联网查询=${this.webSearchConversationEnabled}, 已选工具=${this.selectedToolIds.join(',')}`
+      `[loadData] 联网可用=${this.webSearchAvailable}, 联网查询=${this.webSearchConversationEnabled}`
     )
 
     // 历史会话: 让 List 在 spinner 后面静默对齐到底部, 完成后再撤 spinner;
@@ -696,7 +693,8 @@ export struct ChatPage {
       this.activeSearchEngineId = OPENAI_BUILTIN_SEARCH_ENGINE_ID
     }
     this.builtinImageGenEnabled = loadResult.builtinImageGenEnabled
-    this.reasoningLevel = loadResult.reasoningLevel
+    // 推理级别由 assistant.reasoningLevel 提供, 加载阶段先同步一次缓存, 后续编辑助手由 ASSISTANT_RUNTIME_REFRESH_AT 刷新
+    this.reasoningLevel = loadResult.assistantReasoningLevel
     // initialDraft(来自推荐提示词点击)优先于持久化 draftText, 仅 prefill 不自动发送
     this.inputText = loadResult.pendingInitialDraft !== '' ? loadResult.pendingInitialDraft : loadResult.draftText
     this.resetDocumentParseQueue()
@@ -815,6 +813,7 @@ export struct ChatPage {
       observeAppUiState(AppStorageKeys.PENDING_TOOL_INTERACTION_TICK,
         (): void => this.onPendingToolInteractionChanged()),
       observeAppUiState(AppStorageKeys.ASSISTANT_AVATAR_REFRESH_AT, (): void => this.onAssistantAvatarRefreshChanged()),
+      observeAppUiState(AppStorageKeys.ASSISTANT_RUNTIME_REFRESH_AT, (): void => this.onAssistantRuntimeRefreshChanged()),
       observeAppUiState(AppStorageKeys.APP_IN_BACKGROUND, (): void => this.onAppBackgroundChanged()),
       observeAppUiState(AppStorageKeys.STAR_EARNED_TICK, (): void => this.onStarEarnedTickChanged()),
       getToolExecutionService().addPendingInteractionChangeCallback((): void => {
@@ -856,6 +855,36 @@ export struct ChatPage {
     this.reloadCurrentAssistantAvatarSnapshot().catch((error: Error): void => {
       console.error('ChatPage', `Failed to reload assistant avatar snapshot: ${JSON.stringify(error)}`)
     })
+  }
+
+  private onAssistantRuntimeRefreshChanged(): void {
+    this.reloadCurrentAssistantRuntimeSnapshot().catch((error: Error): void => {
+      console.error('ChatPage', `Failed to reload assistant runtime snapshot: ${JSON.stringify(error)}`)
+    })
+  }
+
+  // 当前助手的工具白名单(从 ChatViewModel 透传)。空数组 = 全部允许;非空 = 收窄。
+  // 取代旧的 ChatPage 内部 selectedToolIds 全局状态。发送时由 ChatSendFlow 调 ChatViewModel 收窄。
+  private async getCurrentAssistantEnabledToolIds(): Promise<string[]> {
+    return await this.chatViewModel.getCurrentAssistantEnabledToolIds()
+  }
+
+  // 当前助手的推理级别。取代旧的全局 CHAT_REASONING_LEVEL 偏好 + ChatPage @Local reasoningLevel(本身仍在,
+  // 但仅作 ChatSendFlow 的同步读取缓存,源是 assistant.reasoningLevel)。
+  // 切助手/编辑助手后由 ASSISTANT_RUNTIME_REFRESH_AT 脉冲触发 reloadCurrentAssistantRuntimeSnapshot 拉一次。
+  private async getCurrentAssistantReasoningLevel(): Promise<ReasoningLevel> {
+    return await this.chatViewModel.getCurrentAssistantReasoningLevel()
+  }
+
+  // 切助手 / 编辑助手后, 把新的推理级别同步到本地缓存(供 ChatSendFlow 同步读取)。
+  // 工具白名单仍由 ChatViewModel.getCurrentAssistantEnabledToolIds() 在 send-time 实时拉, 不缓存。
+  private async reloadCurrentAssistantRuntimeSnapshot(): Promise<void> {
+    try {
+      const nextLevel = await this.chatViewModel.getCurrentAssistantReasoningLevel()
+      this.reasoningLevel = this.normalizeReasoningLevelForCurrentModel(nextLevel)
+    } catch (error) {
+      console.warn('ChatPage', `reloadCurrentAssistantRuntimeSnapshot: ${JSON.stringify(error)}`)
+    }
   }
 
   private unregisterAppUiStateObservers(): void {
@@ -1080,29 +1109,12 @@ export struct ChatPage {
     return ''
   }
 
-  private syncReasoningAvailabilityWithCurrentModel(): void {
-    const controlMode = this.getReasoningControlModeForCurrentModel()
-    if (controlMode === ReasoningControlMode.NONE) {
-      this.reasoningLevel = ReasoningLevel.OFF
-      return
-    }
-    this.reasoningLevel = this.normalizeReasoningLevelForCurrentModel(this.reasoningLevel)
-  }
-
-  private resetReasoningForSelectedModel(provider: ModelProvider, model: ModelInfo): void {
-    const controlMode = this.getReasoningControlModeForModel(provider, model)
-    const resetLevel = resolveModelSwitchReasoningLevel(controlMode)
-    if (resetLevel === ReasoningLevel.OFF) {
-      this.reasoningLevel = ReasoningLevel.OFF
-    } else {
-      this.reasoningLevel = this.normalizeReasoningLevelForControlMode(
-        ReasoningLevel.AUTO,
-        controlMode,
-        provider,
-        model
-      )
-    }
-    this.persistReasoningPreference(this.reasoningLevel)
+  // 切模型时归一化推理级别(降级 XHIGH→HIGH 等)。不再重置为 AUTO, 不再持久化到全局 key。
+  // 推理级别现在是 assistant 字段, 由助手编辑页负责写入, 这里只做当前模型兼容性归一化的占位。
+  // 实际归一化在 reloadCurrentAssistantRuntimeSnapshot() 调用 normalizeReasoningLevelForCurrentModel 完成。
+  private normalizeReasoningForSelectedModel(_provider: ModelProvider, _model: ModelInfo): void {
+    // 占位实现: 不再重置 in-memory 状态, 也不持久化。后续若需归一化, 在 reloadCurrentAssistantRuntimeSnapshot
+    // 内调用 normalizeReasoningLevelForCurrentModel 即可。
   }
 
   private normalizeReasoningLevelForCurrentModel(value: ReasoningLevel): ReasoningLevel {
@@ -1138,17 +1150,6 @@ export struct ChatPage {
       return ReasoningLevel.HIGH
     }
     return normalized
-  }
-
-  private applySelectedToolIdsInMemory(toolIds: string[], enabledMcpServerIds?: Set<string>): void {
-    this.selectedToolIds = [...this.normalizeSelectedToolIdsForPicker(toolIds, enabledMcpServerIds)]
-  }
-
-  private async setSelectedToolIds(toolIds: string[]): Promise<void> {
-    const normalizedToolIds = this.normalizeSelectedToolIdsForPicker(toolIds)
-    const savedToolIds = await this.mcpService.saveSelectedToolIds(normalizedToolIds)
-    const enabledMcpServerIds = await this.loadEnabledMcpServerIds()
-    this.applySelectedToolIdsInMemory(savedToolIds, enabledMcpServerIds)
   }
 
   private isWebSearchReady(): boolean {
@@ -1288,9 +1289,9 @@ export struct ChatPage {
       this.webSearchConversationEnabled = false
       await this.preferencesService.setBoolean(PreferenceKeys.SEARCH_CONVERSATION_ENABLED, false)
     }
-    const enabledMcpServerIds = await this.loadEnabledMcpServerIds()
-    const selectedToolIds = await this.mcpService.loadSelectedToolIds()
-    this.applySelectedToolIdsInMemory(selectedToolIds, enabledMcpServerIds)
+    // 工具白名单 / 推理级别 改为 per-assistant 持久化, 不再读全局 mcpService.loadSelectedToolIds。
+    // 保留 loadEnabledMcpServerIds 供其它路径(若有)使用。
+    await this.loadEnabledMcpServerIds()
   }
 
   // 重建联网菜单的引擎列表 + 当前活跃引擎。
@@ -1407,9 +1408,7 @@ export struct ChatPage {
       console.warn('ChatPage', `[refreshMcpToolAvailability] MCP refresh failed: ${JSON.stringify(error)}`)
     }
     this.rebuildAvailableChatTools()
-    const enabledMcpServerIds = await this.loadEnabledMcpServerIds()
-    const selectedToolIds = await this.mcpService.loadSelectedToolIds()
-    this.applySelectedToolIdsInMemory(selectedToolIds, enabledMcpServerIds)
+    await this.loadEnabledMcpServerIds()
     if (showError && refreshError !== null) {
       this.showError(pickLocalizedText('刷新工具失败', 'Failed to refresh tools'))
     }
@@ -1419,14 +1418,13 @@ export struct ChatPage {
     if (this.mcpToolAvailabilityRefreshTask !== null) {
       return this.mcpToolAvailabilityRefreshTask
     }
-    this.isRefreshingMcpToolAvailability = true
+    // isRefreshingMcpToolAvailability UI 状态已随 ToolPickerBuilder 一同删除(per-assistant 化后 ChatPage 不再展示工具刷新 spinner)。
     const task = this.refreshMcpToolAvailability(showError).catch((error: Object) => {
       console.error('ChatPage', `[runMcpToolAvailabilityRefresh] Failed: ${JSON.stringify(error)}`)
       if (showError) {
         this.showError(pickLocalizedText('刷新工具失败', 'Failed to refresh tools'))
       }
     }).finally(() => {
-      this.isRefreshingMcpToolAvailability = false
       if (this.mcpToolAvailabilityRefreshTask === task) {
         this.mcpToolAvailabilityRefreshTask = null
       }
@@ -1437,22 +1435,6 @@ export struct ChatPage {
 
   private refreshMcpToolAvailabilityInBackground(showError: boolean): void {
     this.runMcpToolAvailabilityRefresh(showError)
-  }
-
-  private collectPendingEnabledMcpToolIds(toolIds: string[], enabledMcpServerIds: Set<string>): string[] {
-    const pendingToolIds: string[] = []
-    const normalizedToolIds = this.normalizeStoredSelectedToolIdsLocally(toolIds)
-    for (let i = 0; i < normalizedToolIds.length; i++) {
-      const toolId = normalizedToolIds[i]
-      const sourceId = this.extractMcpSourceIdFromToolId(toolId)
-      if (sourceId === '' || !enabledMcpServerIds.has(sourceId)) {
-        continue
-      }
-      if (!this.toolRegistry.isToolRegistered(toolId)) {
-        pendingToolIds.push(toolId)
-      }
-    }
-    return pendingToolIds
   }
 
   private isMcpChatTool(tool: ToolConfig): boolean {
@@ -1529,35 +1511,6 @@ export struct ChatPage {
     return this.webSearchConversationEnabled
   }
 
-  private getActiveComposerSelectedToolIds(): string[] {
-    return this.selectedToolIds
-  }
-
-  private getActiveComposerReasoningLevel(): ReasoningLevel {
-    return this.reasoningLevel
-  }
-
-  private updateActiveComposerSelectedToolIds(toolIds: string[]): Promise<void> {
-    const normalizedToolIds = this.normalizeSelectedToolIdsForPicker(toolIds)
-    return this.setSelectedToolIds(normalizedToolIds)
-  }
-
-  private updateActiveComposerReasoningLevel(value: ReasoningLevel): void {
-    const normalizedLevel = this.normalizeReasoningLevelForCurrentModel(value)
-    this.reasoningLevel = normalizedLevel
-    this.persistReasoningPreference(normalizedLevel)
-  }
-
-  private persistReasoningPreference(level: ReasoningLevel): void {
-    this.persistReasoningPreferenceAsync(level).catch((error: Object) => {
-      console.error('ChatPage', `[persistReasoningPreference] Failed: ${JSON.stringify(error)}`)
-    })
-  }
-
-  private async persistReasoningPreferenceAsync(level: ReasoningLevel): Promise<void> {
-    await this.preferencesService.setString(PreferenceKeys.CHAT_REASONING_LEVEL, level)
-  }
-
   private handleComposerWebSearchSelect(engineId: string): void {
     // engineId 非空 = 选择某个引擎并启用联网; 空串 = "禁用联网"项。
     // 'openai_builtin' 哨兵 → 切到 hosted 搜索模式 (不写 SEARCH_ENGINE), 其它 → 外部引擎模式。
@@ -1589,28 +1542,6 @@ export struct ChatPage {
     this.preferencesService.setString(PreferenceKeys.SEARCH_ENGINE, engineId).catch((error: Object) => {
       console.error('ChatPage', `Failed to persist search engine: ${JSON.stringify(error)}`)
     })
-  }
-
-  private handleMcpToolGroupSelectionToggle(toolIds: string[], enabled: boolean): void {
-    const nextToolIds = [...this.getActiveComposerSelectedToolIds()]
-    for (let i = 0; i < toolIds.length; i++) {
-      const toolId = toolIds[i]
-      const index = nextToolIds.indexOf(toolId)
-      if (enabled && index < 0) {
-        nextToolIds.push(toolId)
-      }
-      if (!enabled && index >= 0) {
-        nextToolIds.splice(index, 1)
-      }
-    }
-    this.updateActiveComposerSelectedToolIds(nextToolIds).catch((error: Object) => {
-      console.error('ChatPage', `Failed to update selected MCP tool group: ${JSON.stringify(error)}`)
-      this.showError(pickLocalizedText('工具选择保存失败', 'Failed to save tool selection'))
-    })
-  }
-
-  private hasSelectedTools(): boolean {
-    return this.getActiveComposerSelectedToolIds().length > 0
   }
 
   private getDefaultSessionTitle(): string {
@@ -1817,31 +1748,28 @@ export struct ChatPage {
         content: string,
         attachments: MessageAttachment[],
         webSearchEnabled: boolean,
-        selectedToolIds: string[],
-        reasoningLevel: ReasoningLevel
+        _selectedToolIds: string[],
+        _reasoningLevel: ReasoningLevel
       ): void => {
         this.inputText = content
         this.resetDocumentParseQueue()
         this.pendingAttachments = [...attachments]
         this.preparePendingDocumentAttachments()
         this.webSearchConversationEnabled = this.isWebSearchReady() && webSearchEnabled
-        this.applySelectedToolIdsInMemory(selectedToolIds)
-        this.reasoningLevel = this.normalizeReasoningLevelForCurrentModel(reasoningLevel)
+        // 工具白名单 / 推理级别 已 per-assistant 化, 这两个参数仅保留签名兼容 ChatInlineEditFlow。
       },
       onTriggerSend: async (
         content: string,
         attachments: MessageAttachment[],
         webSearchEnabled: boolean,
-        selectedToolIds: string[],
-        reasoningLevel: ReasoningLevel
+        _selectedToolIds: string[],
+        _reasoningLevel: ReasoningLevel
       ): Promise<void> => {
         this.inputText = content
         this.resetDocumentParseQueue()
         this.pendingAttachments = [...attachments]
         this.preparePendingDocumentAttachments()
         this.webSearchConversationEnabled = this.isWebSearchReady() && webSearchEnabled
-        this.applySelectedToolIdsInMemory(selectedToolIds)
-        this.reasoningLevel = this.normalizeReasoningLevelForCurrentModel(reasoningLevel)
         await this.sendMessage()
       },
       onShowToast: (message: string | Resource): void => {
@@ -2048,9 +1976,7 @@ export struct ChatPage {
     this.currentModelId = model.id
     this.currentModel = modelName
     if (resetReasoning) {
-      this.resetReasoningForSelectedModel(provider, model)
-    } else {
-      this.syncReasoningAvailabilityWithCurrentModel()
+      this.normalizeReasoningForSelectedModel(provider, model)
     }
     if (syncGlobalModel) {
       await this.appStateManager.setCurrentModel(model.id, modelName, provider.id)
@@ -2129,7 +2055,7 @@ export struct ChatPage {
     this.currentProvider = null
     this.currentModelId = ''
     this.currentModel = ''
-    this.syncReasoningAvailabilityWithCurrentModel()
+    // 推理级别跟随 assistant, 加载/编辑助手时由 reloadCurrentAssistantRuntimeSnapshot 同步; 此处无需 in-memory 调整
   }
 
   private async refreshProviders(): Promise<void> {
@@ -2146,7 +2072,7 @@ export struct ChatPage {
       this.currentModel = ''
       this.currentModelId = ''
       this.currentProvider = null
-      this.syncReasoningAvailabilityWithCurrentModel()
+      // 推理级别跟随 assistant, 此处无 provider 时也不做 in-memory 调整
     } else {
       // 验证并设置当前模型
       await this.validateAndSetCurrentModel()
@@ -2581,26 +2507,12 @@ export struct ChatPage {
               onSearchEngineSelect: (engineId: string): void => {
                 this.handleComposerWebSearchSelect(engineId)
               },
-              toolSelectionAvailable: shouldShowToolSelectionChipForChat(
-                this.availableChatTools.length,
-                this.getActiveComposerSelectedToolIds().length
-              ),
-              hasSelectedTools: this.hasSelectedTools(),
               imageGenAvailable: this.isOpenAIBuiltinImageGenAvailableForCurrentProvider(),
               imageGenEnabled: this.getActiveComposerBuiltinImageGenEnabled(),
               onImageGenToggle: (): void => {
                 this.handleComposerImageGenToggle()
               },
-              reasoningAvailable: this.supportsReasoningForCurrentModel(),
-              reasoningControlMode: this.getReasoningControlModeForCurrentModel(),
-              reasoningXhighAvailable: this.supportsReasoningXhighForCurrentModel(),
-              onOpenTools: (): void => {
-                this.showToolPickerSheet = true
-              },
-              reasoningLevel: this.getActiveComposerReasoningLevel(),
-              onReasoningLevelChange: (value: ReasoningLevel): void => {
-                this.updateActiveComposerReasoningLevel(value)
-              },
+              // 工具 / 推理模式 chip 已迁到助手编辑页, ChatPage 不再透传这两个 chip 的 props
               hasRecentScreenshot: this.hasRecentScreenshot,
               bottomAvoidHeight: this.getComposerBottomAvoidHeightVp(),
               contentMaxWidth: this.getChatContentMaxWidth(),
@@ -2771,21 +2683,6 @@ export struct ChatPage {
             this.performPendingMessageMapJump()
           }
         })
-
-        Column()
-          .width(0)
-          .height(0)
-          .bindSheet($$this.showToolPickerSheet, this.ToolPickerBuilder(), {
-            height: SheetSize.FIT_CONTENT,
-            dragBar: true,
-            showClose: false,
-            backgroundColor: this.themeBackground,
-            blurStyle: BlurStyle.Thick,
-            preferType: SheetType.BOTTOM,
-            onDisappear: () => {
-              this.showToolPickerSheet = false
-            }
-          })
 
         Column()
           .width(0)
@@ -3452,44 +3349,6 @@ export struct ChatPage {
       ScrollAlign.START,
       this.getMessageMapJumpTopClearance()
     )
-  }
-
-  private handleToolSelectionToggle(toolId: string, enabled: boolean): void {
-    const nextToolIds = [...this.getActiveComposerSelectedToolIds()]
-    const index = nextToolIds.indexOf(toolId)
-    if (enabled && index < 0) {
-      nextToolIds.push(toolId)
-    }
-    if (!enabled && index >= 0) {
-      nextToolIds.splice(index, 1)
-    }
-    this.updateActiveComposerSelectedToolIds(nextToolIds).catch((error: Object) => {
-      console.error('ChatPage', `Failed to update selected tools: ${JSON.stringify(error)}`)
-      this.showError(pickLocalizedText('工具选择保存失败', 'Failed to save tool selection'))
-    })
-  }
-
-  @Builder
-  ToolPickerBuilder() {
-    ChatToolPickerSheetContent({
-      availableChatTools: this.availableChatTools,
-      selectedToolIds: this.getActiveComposerSelectedToolIds(),
-      isRefreshingMcpToolAvailability: this.isRefreshingMcpToolAvailability,
-      themePrimary: this.themePrimary,
-      isDarkMode: this.isDarkMode,
-      onClose: (): void => {
-        this.showToolPickerSheet = false
-      },
-      onRefresh: (): void => {
-        this.refreshMcpToolAvailabilityInBackground(true)
-      },
-      onToggleTool: (toolId: string, enabled: boolean): void => {
-        this.handleToolSelectionToggle(toolId, enabled)
-      },
-      onToggleMcpGroup: (toolIds: string[], enabled: boolean): void => {
-        this.handleMcpToolGroupSelectionToggle(toolIds, enabled)
-      }
-    })
   }
 
   @Builder
@@ -4558,18 +4417,22 @@ export struct ChatPage {
       const effectiveApiKey = prepareResult.effectiveApiKey
 
       await this.syncToolAvailabilityFromPreferences()
-      const requestedToolIds = [
-        ...this.selectedToolIds,
-        ...this.forcedToolIdsOnce
-      ]
-      const enabledMcpServerIds = await this.loadEnabledMcpServerIds()
-      if (this.collectPendingEnabledMcpToolIds(requestedToolIds, enabledMcpServerIds).length > 0) {
-        this.refreshMcpToolAvailabilityInBackground(false)
+      // per-assistant 工具白名单: 取代旧版 chatpage chip 选择的 selectedToolIds。
+      // 助手 enabledToolIds 是 ChatSendFlow 的"基础 tool 集合":
+      //   - 非空(默认助手 / 用户在编辑器内挑过工具): 用此列表
+      //   - 空(自定义助手未选, 语义"放行所有"): 展开为当前所有可用的非搜索 chat 工具
+      // forcedToolIdsOnce 用于单次强制工具调用(路由参数 / inline edit 携带), 始终叠加上去。
+      let selectedToolIds = await this.getCurrentAssistantEnabledToolIds()
+      if (selectedToolIds.length === 0) {
+        const expanded: string[] = []
+        for (let i = 0; i < this.availableChatTools.length; i++) {
+          expanded.push(this.availableChatTools[i].id)
+        }
+        selectedToolIds = expanded
       }
 
       const attachmentsToSend = [...this.pendingAttachments]
       const searchEnabled = this.isWebSearchReady() && this.webSearchConversationEnabled
-      const selectedToolIds = [...this.selectedToolIds]
       const forcedToolIds = [...this.forcedToolIdsOnce]
       // SEARCH_MODE 是用户偏好,发送时再按当前 provider 收敛为实际可执行模式。
       const activeSearchMode: ChatSearchMode = this.resolveEffectiveSearchModeForCurrentProvider(this.searchMode)
@@ -5075,8 +4938,8 @@ export struct ChatPage {
       this.inputText,
       this.pendingAttachments,
       this.getActiveComposerWebSearchEnabled(),
-      this.getActiveComposerSelectedToolIds(),
-      this.getActiveComposerReasoningLevel()
+      [], // 工具白名单 per-assistant, 不再从 ChatPage 内部状态传
+      this.reasoningLevel
     )
   }
 

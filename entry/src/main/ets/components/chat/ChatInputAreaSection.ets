@@ -1,8 +1,7 @@
-import { MessageAttachment, ReasoningLevel } from '../../models/ChatModels'
+import { MessageAttachment } from '../../models/ChatModels'
 import { ChatToolbar, SearchEngineMenuOption } from '../ChatToolbar'
 import { ChatInputBar } from '../ChatInputBar'
 import { ScreenshotBanner } from '../ScreenshotBanner'
-import { ReasoningControlMode } from '../../services/registry/CompatibilityResolver'
 
 @ComponentV2
 export struct ChatInputAreaSection {
@@ -33,19 +32,10 @@ export struct ChatInputAreaSection {
   @Param availableSearchEngines: SearchEngineMenuOption[] = []
   @Param activeSearchEngineId: string = ''
   @Event onSearchEngineSelect: (engineId: string) => void = (_id: string): void => {}
-  @Param toolSelectionAvailable: boolean = false
-  @Param hasSelectedTools: boolean = false
-  @Event onOpenTools: () => void = (): void => {}
   // OpenAI Responses 内置生图 chip
   @Param imageGenAvailable: boolean = false
   @Param imageGenEnabled: boolean = false
   @Event onImageGenToggle: () => void = (): void => {}
-  @Param reasoningAvailable: boolean = false
-  @Param reasoningControlMode: ReasoningControlMode = ReasoningControlMode.NONE
-  @Param reasoningXhighAvailable: boolean = false
-  @Param reasoningLevel: ReasoningLevel = ReasoningLevel.OFF
-  @Event onReasoningLevelChange: (value: ReasoningLevel) => void =
-    (_value: ReasoningLevel): void => {}
   @Param hasRecentScreenshot: boolean = false
   @Param bottomAvoidHeight: number = 0
   @Param contentMaxWidth: number = 99999
@@ -94,23 +84,11 @@ export struct ChatInputAreaSection {
           onSearchEngineSelect: (engineId: string): void => {
             this.onSearchEngineSelect(engineId)
           },
-          toolSelectionAvailable: this.toolSelectionAvailable,
-          hasSelectedTools: this.hasSelectedTools,
-          onOpenTools: (): void => {
-            this.onOpenTools()
-          },
           imageGenAvailable: this.imageGenAvailable,
           imageGenEnabled: this.imageGenEnabled,
           onImageGenToggle: (): void => {
             this.onImageGenToggle()
           },
-          reasoningAvailable: this.reasoningAvailable,
-          reasoningControlMode: this.reasoningControlMode,
-          reasoningXhighAvailable: this.reasoningXhighAvailable,
-          reasoningLevel: this.reasoningLevel,
-          onReasoningLevelChange: (value: ReasoningLevel): void => {
-            this.onReasoningLevelChange(value)
-          }
         })
 
         ChatInputBar({

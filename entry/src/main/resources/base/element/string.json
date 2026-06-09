@@ -3327,6 +3327,98 @@
     {
       "name": "learning_untitled_word",
       "value": "未命名"
+    },
+    {
+      "name": "assistant_editor_tools_section",
+      "value": "Tools"
+    },
+    {
+      "name": "assistant_editor_tools_desc",
+      "value": "Choose which tools this assistant can use. Default assistant is locked."
+    },
+    {
+      "name": "assistant_editor_reasoning_section",
+      "value": "Reasoning"
+    },
+    {
+      "name": "assistant_editor_reasoning_desc",
+      "value": "How deeply the model reasons before answering. Effective when the model supports it."
+    },
+    {
+      "name": "assistant_editor_tools_label",
+      "value": "Enabled tools"
+    },
+    {
+      "name": "assistant_editor_tools_pick",
+      "value": "Pick"
+    },
+    {
+      "name": "assistant_editor_tools_default_locked_summary",
+      "value": "Default tool whitelist (locked)"
+    },
+    {
+      "name": "assistant_editor_tools_count_label_one",
+      "value": "%d tool enabled"
+    },
+    {
+      "name": "assistant_editor_tools_count_label_other",
+      "value": "%d tools enabled"
+    },
+    {
+      "name": "assistant_editor_tools_default_locked_hint",
+      "value": "Default assistant tool whitelist is locked and cannot be edited."
+    },
+    {
+      "name": "assistant_editor_tools_hint",
+      "value": "Empty = inherit all enabled tools. Toggled list = whitelist for this assistant."
+    },
+    {
+      "name": "assistant_editor_tools_picker_title",
+      "value": "Pick tools"
+    },
+    {
+      "name": "assistant_editor_reasoning_label",
+      "value": "Reasoning level"
+    },
+    {
+      "name": "assistant_editor_reasoning_off_summary",
+      "value": "Off — no reasoning"
+    },
+    {
+      "name": "assistant_editor_reasoning_on_summary",
+      "value": "Reasoning enabled for this assistant"
+    },
+    {
+      "name": "assistant_editor_reasoning_hint",
+      "value": "Saved with the assistant. Switch assistants to apply different reasoning levels."
+    },
+    {
+      "name": "assistant_editor_reasoning_level_off",
+      "value": "Off"
+    },
+    {
+      "name": "assistant_editor_reasoning_level_auto",
+      "value": "Auto"
+    },
+    {
+      "name": "assistant_editor_reasoning_level_low",
+      "value": "Low"
+    },
+    {
+      "name": "assistant_editor_reasoning_level_medium",
+      "value": "Medium"
+    },
+    {
+      "name": "assistant_editor_reasoning_level_high",
+      "value": "High"
+    },
+    {
+      "name": "assistant_editor_reasoning_level_xhigh",
+      "value": "Extra high"
+    },
+    {
+      "name": "assistant_editor_tools_count_zero",
+      "value": "No tool enabled (inherits all)"
     }
   ]
 }
