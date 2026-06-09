@@ -66,3 +66,45 @@ export function isSameDay(timestamp1: number, timestamp2: number): boolean {
          date1.getMonth() === date2.getMonth() &&
          date1.getDate() === date2.getDate()
 }
+
+/**
+ * 取指定年月初的 00:00:00 时间戳 (本地时区)
+ * @param year 年份 (e.g., 2026)
+ * @param month 月份, 1-12 (13 自动回卷到次年 1 月)
+ * @returns 月初时间戳 (ms)
+ */
+export function getStartOfMonthMs(year: number, month: number): number {
+  const d = new Date(year, month - 1, 1, 0, 0, 0, 0)
+  return d.getTime()
+}
+
+/**
+ * 格式化为 YYYY-MM-DD (本地时区)
+ * @param timestamp 时间戳 (ms)
+ * @returns YYYY-MM-DD 字符串
+ */
+export function formatYMD(timestamp: number): string {
+  const d = new Date(timestamp)
+  const y = d.getFullYear()
+  const m = (d.getMonth() + 1).toString().padStart(2, '0')
+  const day = d.getDate().toString().padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+/**
+ * 取 ISO 8601 周几索引 (周一=0, 周日=6)
+ * 与项目内 getTimeInfo 工具对齐,日历列序保持一致
+ * @param timestamp 时间戳 (ms)
+ * @returns 0-6 之间的整数
+ */
+export function getIsoWeekday(timestamp: number): number {
+  const d = new Date(timestamp)
+  const js = d.getDay() // Sun=0, Mon=1, ..., Sat=6
+  return js === 0 ? 6 : js - 1
+}
+
+/**
+ * 周一为第一列的短标签 (与 getIsoWeekday 索引对齐)
+ * 索引 0='一', 1='二', ..., 6='日'
+ */
+export const WEEKDAY_SHORT_LABELS_ZH: string[] = ['一', '二', '三', '四', '五', '六', '日']

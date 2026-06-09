@@ -14,6 +14,7 @@ import {
   GeneratedMedia,
   GeneratedMediaType,
   ImageAspectRatio,
+  ImageGenerationApiRoute,
   ImageGenerationItem,
   ImageGenerationModeration,
   ImageGenerationOutputFormat,
@@ -81,6 +82,10 @@ export class ImageGenerationViewModel {
   @Trace providers: ModelProvider[] = []
   @Trace isProvidersLoaded: boolean = false
   @Trace isOptimizingPrompt: boolean = false
+  @Trace promptOptimizer: boolean = false
+  @Trace seed: number = -1
+  @Trace styleType: string = ''
+  @Trace styleWeight: number = -1
   @Trace promptTemplates: ImagePromptTemplate[] = []
   @Trace visiblePromptTemplates: ImagePromptTemplate[] = []
   @Trace promptTemplateRecommendationsVisible: boolean = true
@@ -146,10 +151,11 @@ export class ImageGenerationViewModel {
   }
 
   updateNumberOfImages(value: number): void {
+    const maxCount = this.getCurrentRouteCapabilities().maxImageCount
     if (value < 1) {
       this.numberOfImages = 1
-    } else if (value > 4) {
-      this.numberOfImages = 4
+    } else if (value > maxCount) {
+      this.numberOfImages = maxCount
     } else {
       this.numberOfImages = Math.floor(value)
     }
@@ -541,6 +547,10 @@ export class ImageGenerationViewModel {
     request.outputFormat = this.outputFormat
     request.outputCompression = this.outputCompression
     request.moderation = this.moderation
+    request.promptOptimizer = this.promptOptimizer
+    request.seed = this.seed
+    request.styleType = this.styleType
+    request.styleWeight = this.styleWeight
     return request
   }
 
@@ -711,6 +721,12 @@ export class ImageGenerationViewModel {
       capabilities
     )
     this.moderation = ImageGenerationCapabilityResolver.normalizeModeration(this.moderation, capabilities)
+    this.seed = ImageGenerationCapabilityResolver.normalizeSeed(this.seed!, capabilities)
+    this.styleWeight = ImageGenerationCapabilityResolver.normalizeStyleWeight(this.styleWeight!, capabilities)
+    this.styleType = ImageGenerationCapabilityResolver.normalizeStyleType(this.styleType!, capabilities)
+    if (!capabilities.supportsPromptOptimizer) {
+      this.promptOptimizer = false
+    }
   }
 
   private async trimReferenceImagesForCurrentRoute(): Promise<void> {
@@ -737,7 +753,11 @@ export class ImageGenerationViewModel {
       request.quality,
       request.outputFormat,
       request.outputCompression,
-      request.moderation
+      request.moderation,
+      request.promptOptimizer,
+      request.seed,
+      request.styleType,
+      request.styleWeight
     )
   }
 
@@ -757,7 +777,7 @@ export class ImageGenerationViewModel {
     if (route.startsWith('openai')) {
       return ImageGenerationCapabilityResolver.getOpenAIImageSize(request.aspectRatio)
     }
-    if (provider.apiStyle === ApiStyle.GOOGLE) {
+    if (provider.apiStyle === ApiStyle.GOOGLE || route === ImageGenerationApiRoute.MINIMAX_IMAGE) {
       if (request.aspectRatio === ImageAspectRatio.LANDSCAPE) {
         return '16:9'
       }

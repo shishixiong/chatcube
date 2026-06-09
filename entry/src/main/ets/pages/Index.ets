@@ -168,9 +168,9 @@ struct Index {
   @Local isSearchExpanded: boolean = false
   @Local currentSessionFilter: SessionFilterType = SessionFilterType.ALL
   @Local assistants: Assistant[] = []
-  @Local currentAssistantName: string = '默认助手'
-  @Local currentAssistantAvatarSymbol: string = 'AI'
-  @Local currentAssistantColor: string = DEFAULT_PRIMARY_COLOR
+  @Local currentAssistantName: string = '小星老师'
+  @Local currentAssistantAvatarSymbol: string = '⭐'
+  @Local currentAssistantColor: string = '#FF9F43'
   @Local assistantProviders: ModelProvider[] = []
   @Local currentAssistantId: string = DEFAULT_ASSISTANT_ID
   @Local showAssistantSwitchSheet: boolean = false
@@ -1169,9 +1169,9 @@ struct Index {
 
   private applyCurrentAssistantSnapshot(assistant: Assistant | null): void {
     if (assistant === null) {
-      this.currentAssistantName = '默认助手'
-      this.currentAssistantAvatarSymbol = 'AI'
-      this.currentAssistantColor = this.themePrimary
+      this.currentAssistantName = '小星老师'
+      this.currentAssistantAvatarSymbol = '⭐'
+      this.currentAssistantColor = '#FF9F43'
       return
     }
     this.currentAssistantName = assistant.name
@@ -2836,7 +2836,9 @@ struct Index {
       buildAssistantModelAvatarValue(this.assistantFormDefaultProviderId, this.assistantFormDefaultModelId) :
       this.normalizeAssistantAvatarSymbol(this.assistantFormAvatarSymbol)
     assistant.color = this.assistantFormColor
-    assistant.systemPrompt = this.assistantFormSystemPrompt.trim()
+    if (!this.editingAssistantIsDefault) {
+      assistant.systemPrompt = this.assistantFormSystemPrompt.trim()
+    }
     assistant.defaultProviderId = this.assistantFormDefaultProviderId
     assistant.defaultModelId = this.assistantFormDefaultModelId
     assistant.defaultModelName = this.assistantFormDefaultModelName
@@ -2874,7 +2876,7 @@ struct Index {
   }
 
   private async deleteAssistantFromTab(assistant: Assistant): Promise<void> {
-    if (assistant.id === DEFAULT_ASSISTANT_ID || assistant.isDefault) {
+    if (assistant.id === DEFAULT_ASSISTANT_ID || assistant.isDefault || assistant.isPreset) {
       return
     }
     if (this.getAssistantSessionCount(assistant.id) <= 0) {
@@ -3088,7 +3090,7 @@ struct Index {
 
   @Builder
   private AssistantEndSwipePanel(assistant: Assistant) {
-    if (assistant.id !== DEFAULT_ASSISTANT_ID && !assistant.isDefault) {
+    if (assistant.id !== DEFAULT_ASSISTANT_ID && !assistant.isDefault && !assistant.isPreset) {
       Row() {
         this.AssistantSwipeButton($r('sys.symbol.trash'), $r('app.string.delete'), $r('app.color.status_error'),
           72, (): void => {
@@ -3440,7 +3442,7 @@ struct Index {
           this.openAssistantEditor(assistant)
         })
 
-      if (assistant.id !== DEFAULT_ASSISTANT_ID && !assistant.isDefault) {
+      if (assistant.id !== DEFAULT_ASSISTANT_ID && !assistant.isDefault && !assistant.isPreset) {
         MenuItem({
           startIcon: $r('sys.symbol.trash'),
           content: $r('app.string.delete')
@@ -3716,21 +3718,29 @@ struct Index {
   @Builder
   private AssistantPromptEditor() {
     Column({ space: 8 }) {
-      Text($r('app.string.assistant_prompt'))
-        .fontSize(13)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_secondary'))
-        .width('100%')
+      Row({ space: 6 }) {
+        Text($r('app.string.assistant_prompt'))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_secondary'))
+        if (this.editingAssistantIsDefault) {
+          Text($r('app.string.assistant_prompt_locked'))
+            .fontSize(11)
+            .fontColor($r('app.color.text_tertiary'))
+        }
+      }
+      .width('100%')
 
       TextArea({ text: this.assistantFormSystemPrompt, placeholder: $r('app.string.assistant_prompt_placeholder') })
         .width('100%')
         .height(150)
         .fontSize(14)
-        .fontColor($r('app.color.text_primary'))
+        .fontColor(this.editingAssistantIsDefault ? $r('app.color.text_secondary') : $r('app.color.text_primary'))
         .placeholderColor($r('app.color.text_tertiary'))
-        .backgroundColor(this.themeSurface)
+        .backgroundColor(this.editingAssistantIsDefault ? this.themeBackground : this.themeSurface)
         .borderRadius(16)
         .padding(14)
+        .enabled(!this.editingAssistantIsDefault)
         .onChange((value: string) => {
           this.assistantFormSystemPrompt = value
         })
@@ -4600,6 +4610,15 @@ struct Index {
       },
       onOpenUsageStats: (): void => {
         this.openSettingsDestination(SettingsRouteName.USAGE_STATS)
+      },
+      onOpenLearningProfile: (): void => {
+        this.openSettingsDestination(SettingsRouteName.LEARNING_PROFILE)
+      },
+      onOpenLearningTomorrowPlan: (): void => {
+        this.openSettingsDestination(SettingsRouteName.LEARNING_TOMORROW_PLAN)
+      },
+      onOpenLearningEnglishImages: (): void => {
+        this.openSettingsDestination(SettingsRouteName.LEARNING_ENGLISH_IMAGES)
       },
       onOpenAbout: (): void => {
         this.openSettingsDestination(SettingsRouteName.ABOUT)

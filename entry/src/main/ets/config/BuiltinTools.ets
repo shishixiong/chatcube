@@ -1,9 +1,14 @@
 import {
-  ToolDefinition,
+  AttachmentType,
+  MessageAttachment,
+  ModelInfo,
+  ModelProvider,
+  OutputMode,
   ToolConfig,
-  ToolParameters,
+  ToolDefinition,
   ToolFunction,
   ToolParameterProperty,
+  ToolParameters,
   ToolPermissionLevel,
   ToolSourceType
 } from '../models/ChatModels'
@@ -12,11 +17,37 @@ import { getWebSearchService, SearchResult, WebSearchResult } from '../services/
 import {
   ASK_USER_TOOL_ID,
   GET_TIME_INFO_TOOL_ID,
+  IMAGE_GENERATION_TOOL_ID,
   LEGACY_WEB_SEARCH_TOOL_ID,
   SCRAPE_WEB_TOOL_ID,
-  SEARCH_WEB_TOOL_ID
+  SEARCH_WEB_TOOL_ID,
+  CHILD_PROFILE_TOOL_ID,
+  MATH_VERIFY_TOOL_ID,
+  MATH_QUIZ_TOOL_ID,
+  ENGLISH_QUIZ_TOOL_ID,
+  HUARONGDAO_TOOL_ID,
+  HANDWRITING_PRACTICE_TOOL_ID,
+  CATEGORIZATION_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { i18n } from '@kit.LocalizationKit'
+import {
+  GeneratedMedia,
+  GeneratedMediaType,
+  ImageAspectRatio,
+  ImageGenerationItem,
+  ImageGenerationQuality,
+  ImageGenerationRequest
+} from '../models/ImageGenerationModels'
+import { getImageGenerationService } from '../services/ImageGenerationService'
+import { getAttachmentStorageService } from '../services/AttachmentStorageService'
+import { getGeneratedMediaRepository } from '../services/GeneratedMediaRepository'
+import { getAppSettingsState } from '../state/AppSettingsState'
+import { getEffectiveOutputMode } from '../utils/ModelCapabilityDeriver'
+import { getChildProfileService, ChildProfileService, ChildKnowledgeProfile } from '../services/ChildProfileService'
+import { evaluateMathExpression } from '../utils/MathExpressionParser'
+import { getEnglishQuizImageIndex } from '../services/EnglishQuizImageIndex'
+import { generatePuzzle, HuarongdaoPuzzleState } from '../utils/HuarongdaoPuzzleGenerator'
+
 
 // search_web 工具参数接口
 interface SearchWebArgs {
@@ -454,6 +485,1057 @@ function createGetTimeInfoToolConfig(): ToolConfig {
   )
 }
 
+// ===== image_generation 工具 =====
+// 让 AI 对话模型调用图片生成能力, 使用用户已配置的图片生成模型(默认 MiniMax)。
+// 执行器调用现有的 ImageGenerationService, 生成结果保存到本地文件并在聊天中显示缩略图。
+
+interface ImageGenerationArgs {
+  prompt: string
+  aspect_ratio?: string
+  number_of_images?: number
+  quality?: string
+  style?: string
+}
+
+class ImageGenerationOutputItem {
+  filePath: string = ''
+  mimeType: string = ''
+  prompt: string = ''
+  revisedPrompt: string = ''
+
+  constructor(filePath: string, mimeType: string, prompt: string, revisedPrompt: string) {
+    this.filePath = filePath
+    this.mimeType = mimeType
+    this.prompt = prompt
+    this.revisedPrompt = revisedPrompt
+  }
+}
+
+class ImageGenerationOutput {
+  images: ImageGenerationOutputItem[] = []
+
+  constructor(images: ImageGenerationOutputItem[]) {
+    this.images = images
+  }
+}
+
+class ImageGenErrorOutput {
+  error: string = ''
+
+  constructor(error: string) {
+    this.error = error
+  }
+}
+
+function resolveExtension(mimeType: string): string {
+  if (mimeType === 'image/jpeg') {
+    return '.jpg'
+  }
+  if (mimeType === 'image/webp') {
+    return '.webp'
+  }
+  return '.png'
+}
+
+class ImageGenerationExecutor implements ToolExecutor {
+  async execute(args: string): Promise<string> {
+    try {
+      const params = JSON.parse(args) as ImageGenerationArgs
+      if (params.prompt === undefined || params.prompt.trim() === '') {
+        return JSON.stringify(new ImageGenErrorOutput('图片描述不能为空'))
+      }
+
+      const prompt = params.prompt.trim()
+      const numberOfImages = Math.min(Math.max(params.number_of_images !== undefined ? params.number_of_images : 1, 1), 4)
+
+      // 解析宽高比
+      let aspectRatio = ImageAspectRatio.SQUARE
+      const ratioStr = (params.aspect_ratio !== undefined ? params.aspect_ratio : '1:1').trim()
+      if (ratioStr === '16:9') {
+        aspectRatio = ImageAspectRatio.LANDSCAPE
+      } else if (ratioStr === '9:16') {
+        aspectRatio = ImageAspectRatio.PORTRAIT
+      }
+
+      // 解析图片生成 provider/model
+      const state = getAppSettingsState()
+      const defaultImage = state.defaultImageModel
+      let provider: ModelProvider | null = null
+      let model: ModelInfo | null = null
+
+      // 从默认图片模型配置中查找
+      if (defaultImage.providerId !== '' && defaultImage.modelId !== '') {
+        for (let i = 0; i < state.providers.length; i++) {
+          const p = state.providers[i]
+          if (p.id === defaultImage.providerId) {
+            for (let j = 0; j < p.models.length; j++) {
+              const m = p.models[j]
+              if (m.id === defaultImage.modelId && getEffectiveOutputMode(m) === OutputMode.IMAGE) {
+                provider = p
+                model = m
+                break
+              }
+            }
+            break
+          }
+        }
+      }
+
+      // 回退: 扫描所有 provider 找到第一个可用的图片模型
+      if (provider === null || model === null) {
+        for (let i = 0; i < state.providers.length; i++) {
+          const p = state.providers[i]
+          for (let j = 0; j < p.models.length; j++) {
+            const m = p.models[j]
+            if (m.isEnabled && getEffectiveOutputMode(m) === OutputMode.IMAGE) {
+              provider = p
+              model = m
+              break
+            }
+          }
+          if (provider !== null) {
+            break
+          }
+        }
+      }
+
+      if (provider === null || model === null) {
+        return JSON.stringify(new ImageGenErrorOutput('未找到可用的图片生成模型, 请先在设置中配置图片生成服务商'))
+      }
+
+      console.info('ImageGenerationExecutor',
+        `Generating: prompt="${prompt}", provider=${provider.id}, model=${model.id}, n=${numberOfImages}, ratio=${aspectRatio}`)
+
+      // 构建请求 & 调用服务
+      const request = new ImageGenerationRequest()
+      request.providerId = provider.id
+      request.modelId = model.id
+      request.prompt = prompt
+      request.numberOfImages = numberOfImages
+      request.aspectRatio = aspectRatio
+      if (params.quality !== undefined && params.quality.trim() !== '') {
+        request.quality = params.quality.trim() as ImageGenerationQuality
+      }
+      if (params.style !== undefined && params.style.trim() !== '') {
+        request.styleType = params.style.trim()
+      }
+
+      const result = await getImageGenerationService().generateImage(provider, model, request)
+      const outputItems: ImageGenerationOutputItem[] = []
+      const attachmentService = getAttachmentStorageService()
+      const repository = getGeneratedMediaRepository()
+      const itemPrompt = request.prompt
+
+      for (let i = 0; i < result.items.length; i++) {
+        const item: ImageGenerationItem = result.items[i]
+        const id = `gen_${Date.now()}_${i}_${Math.floor(Math.random() * 100000)}`
+        const attachment = new MessageAttachment(
+          id,
+          AttachmentType.IMAGE,
+          `${id}${resolveExtension(item.mimeType)}`,
+          '',
+          item.mimeType,
+          0
+        )
+        attachment.base64Data = item.base64Data
+        const filePath = await attachmentService.saveAttachment(attachment)
+        attachment.base64Data = ''
+        if (filePath === '') {
+          console.error('ImageGenerationExecutor', `Failed to save image ${i}`)
+          continue
+        }
+
+        // 持久化到图库
+        const media = new GeneratedMedia()
+        media.id = id
+        media.type = GeneratedMediaType.IMAGE_GENERATION
+        media.prompt = itemPrompt
+        media.providerId = provider!.id
+        media.providerName = provider!.name
+        media.modelId = model!.id
+        media.modelName = model!.name !== '' ? model!.name : model!.id
+        media.filePath = filePath
+        media.mimeType = item.mimeType
+        media.aspectRatio = aspectRatio
+        media.revisedPrompt = item.revisedPrompt
+        media.createdAt = Date.now()
+        await repository.insert(media)
+
+        outputItems.push(new ImageGenerationOutputItem(
+          filePath,
+          item.mimeType,
+          itemPrompt,
+          item.revisedPrompt
+        ))
+      }
+
+      if (outputItems.length === 0) {
+        return JSON.stringify(new ImageGenErrorOutput('图片生成失败, 所有图片保存出错'))
+      }
+
+      return JSON.stringify(new ImageGenerationOutput(outputItems))
+    } catch (error) {
+      console.error('ImageGenerationExecutor', `Image generation error: ${JSON.stringify(error)}`)
+      return JSON.stringify(new ImageGenErrorOutput(`图片生成失败: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createImageGenerationToolDefinition(): ToolDefinition {
+  const parameters = new ToolParameters()
+  parameters.addProperty('prompt', new ToolParameterProperty(
+    'string',
+    'Detailed description of the image to generate, in the user\'s language. Include style, subject, composition, colors, and mood. ~20-200 characters.'
+  ))
+  parameters.addProperty('aspect_ratio', new ToolParameterProperty(
+    'string',
+    'Image aspect ratio. "1:1" for square, "16:9" for widescreen landscape, "9:16" for portrait/vertical.'
+  ))
+  parameters.addProperty('number_of_images', new ToolParameterProperty(
+    'integer',
+    'Number of images to generate, between 1 and 4. Default 1.'
+  ))
+  parameters.addProperty('quality', new ToolParameterProperty(
+    'string',
+    'Image quality: "auto", "low", "medium", or "high". Leave as default "auto" unless the user specifically requests a quality level.'
+  ))
+  parameters.addProperty('style', new ToolParameterProperty(
+    'string',
+    'Optional style description for the image, e.g. "photorealistic", "oil painting", "anime", "watercolor".'
+  ))
+  parameters.addRequired('prompt')
+
+  const func = new ToolFunction(
+    IMAGE_GENERATION_TOOL_ID,
+    'Generate images from text descriptions. Use this when the user asks you to draw, create, or generate an image, picture, illustration, or artwork. The generated images will be displayed directly in the chat. Describe the desired image in detail including subject, style, composition, colors, and mood.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createImageGenerationToolConfig(): ToolConfig {
+  return new ToolConfig(
+    IMAGE_GENERATION_TOOL_ID,
+    '生成图片',
+    '根据文本描述生成图片, 结果直接展示在对话中。使用已配置的图片生成服务商(如 MiniMax)。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    IMAGE_GENERATION_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+// ===== child_profile 工具 =====
+// 儿童学习画像工具：让小星老师等教育类助手可以读取和更新小朋友的知识画像，实现因材施教。
+// 画像通过 ChildProfileService 持久化到 PreferencesService JSON，跨会话保留。
+
+class ChildProfileSkillSummary {
+  key: string = ''
+  label: string = ''
+  level: number = 0
+  lastAssessed: number = 0
+  notes: string = ''
+
+  constructor(key: string, label: string, level: number, lastAssessed: number, notes: string) {
+    this.key = key
+    this.label = label
+    this.level = level
+    this.lastAssessed = lastAssessed
+    this.notes = notes
+  }
+}
+
+class ChildProfileSummary {
+  childName: string = ''
+  ageYears: number = 0
+  overallNote: string = ''
+  sessionCount: number = 0
+  lastInteraction: number = 0
+  strengths: string[] = []
+  weakAreas: string[] = []
+  skills: ChildProfileSkillSummary[] = []
+
+  constructor(
+    childName: string, ageYears: number, overallNote: string,
+    sessionCount: number, lastInteraction: number,
+    strengths: string[], weakAreas: string[],
+    skills: ChildProfileSkillSummary[]
+  ) {
+    this.childName = childName
+    this.ageYears = ageYears
+    this.overallNote = overallNote
+    this.sessionCount = sessionCount
+    this.lastInteraction = lastInteraction
+    this.strengths = strengths
+    this.weakAreas = weakAreas
+    this.skills = skills
+  }
+}
+
+interface ChildProfileArgs {
+  action: string
+  child_name?: string
+  age_years?: number
+  skill_updates?: Object[]
+  overall_note?: string
+  strengths?: string[]
+  weak_areas?: string[]
+}
+
+interface SkillUpdateItem {
+  key: string
+  level: number
+  notes?: string
+}
+
+class ChildProfileExecutor implements ToolExecutor {
+  async execute(args: string): Promise<string> {
+    try {
+      const params = JSON.parse(args) as ChildProfileArgs
+      const action = (params.action ?? '').trim()
+      const service = getChildProfileService()
+
+      if (action === 'read') {
+        const profile = await service.getProfile()
+        return JSON.stringify(this.formatProfileForAI(profile))
+      } else if (action === 'update') {
+        return await this.handleUpdate(params, service)
+      } else {
+        return JSON.stringify(new ErrorOutput(`Unknown action: '${action}'. Use 'read' or 'update'.`))
+      }
+    } catch (error) {
+      console.error('ChildProfileExecutor', `Error: ${JSON.stringify(error)}`)
+      return JSON.stringify(new ErrorOutput(`child_profile error: ${JSON.stringify(error)}`))
+    }
+  }
+
+  private async handleUpdate(params: ChildProfileArgs, service: ChildProfileService): Promise<string> {
+    const profile = await service.getProfile()
+
+    if (params.child_name !== undefined && params.child_name.trim() !== '') {
+      profile.childName = params.child_name.trim()
+    }
+    if (params.age_years !== undefined && params.age_years > 0) {
+      profile.ageYears = params.age_years
+    }
+    if (params.overall_note !== undefined) {
+      profile.overallNote = params.overall_note
+    }
+
+    // 更新技能维度
+    if (params.skill_updates !== undefined && Array.isArray(params.skill_updates)) {
+      const now = Date.now()
+      for (let i = 0; i < params.skill_updates.length; i++) {
+        const item = params.skill_updates[i] as Record<string, Object>
+        const key = (item['key'] as string) ?? ''
+        if (key === '' || profile.skills[key] === undefined) {
+          continue
+        }
+        const level = (item['level'] as number) ?? profile.skills[key].level
+        const notes = (item['notes'] as string) ?? ''
+        const clampedLevel = Math.max(0, Math.min(5, level))
+        profile.skills[key].level = clampedLevel
+        profile.skills[key].lastAssessed = now
+        if (notes !== '') {
+          profile.skills[key].notes = notes
+        }
+      }
+    }
+
+    if (params.strengths !== undefined && Array.isArray(params.strengths)) {
+      profile.strengths = []
+      for (let i = 0; i < params.strengths.length; i++) {
+        if (typeof params.strengths[i] === 'string') {
+          profile.strengths.push(params.strengths[i] as string)
+        }
+      }
+    }
+    if (params.weak_areas !== undefined && Array.isArray(params.weak_areas)) {
+      profile.weakAreas = []
+      for (let i = 0; i < params.weak_areas.length; i++) {
+        if (typeof params.weak_areas[i] === 'string') {
+          profile.weakAreas.push(params.weak_areas[i] as string)
+        }
+      }
+    }
+
+    profile.lastInteraction = Date.now()
+    await service.saveProfile(profile)
+    return JSON.stringify(this.formatProfileForAI(profile))
+  }
+
+  private formatProfileForAI(profile: ChildKnowledgeProfile): Object {
+    const skillsArray: ChildProfileSkillSummary[] = []
+    const keys = Object.keys(profile.skills)
+    for (let i = 0; i < keys.length; i++) {
+      const dim = profile.skills[keys[i]]
+      skillsArray.push(new ChildProfileSkillSummary(
+        dim.key, dim.label, dim.level, dim.lastAssessed, dim.notes
+      ))
+    }
+    return new ChildProfileSummary(
+      profile.childName, profile.ageYears, profile.overallNote,
+      profile.sessionCount, profile.lastInteraction,
+      profile.strengths, profile.weakAreas, skillsArray
+    )
+  }
+}
+
+function createChildProfileToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["read", "update"],
+        "description": "Action to perform. 'read' to get the child's current learning profile. 'update' to save new assessment data."
+      },
+      "child_name": {
+        "type": "string",
+        "description": "Child's name. Only include when updating."
+      },
+      "age_years": {
+        "type": "number",
+        "description": "Child's age in years. Only include when updating."
+      },
+      "skill_updates": {
+        "type": "array",
+        "description": "Array of skill assessments to update. Each item: {key, level (0-5), notes}. Only include for skills where you observed the child's actual performance.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "description": "Skill dimension key: math_counting, math_addition, math_subtraction, math_multiply, math_divide, math_shapes, math_comparison, math_time, english_alphabet, english_vocab, english_sentence, english_phonics, general_nature, general_social, general_life, logic_thinking, observation, spatial_reasoning, fine_motor, english_writing, chinese_writing, categorization"
+            },
+            "level": {
+              "type": "number",
+              "description": "Assessed level 0-5. 0=unassessed, 1=beginner, 2=basic, 3=intermediate, 4=good, 5=mastery. Base on actual demonstrated ability."
+            },
+            "notes": {
+              "type": "string",
+              "description": "Brief observation note, e.g. 'Correctly solved 3+5 and 7+2 without counting on fingers'"
+            }
+          },
+          "required": ["key", "level"]
+        }
+      },
+      "overall_note": {
+        "type": "string",
+        "description": "Overall observation or summary note about the child."
+      },
+      "strengths": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Tags for the child's strengths, e.g. ['quick learner', 'good memory']."
+      },
+      "weak_areas": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Tags for areas that need more practice, e.g. ['subtraction', 'English sentences']."
+      }
+    },
+    "required": ["action"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    CHILD_PROFILE_TOOL_ID,
+    'Read or update the child\'s learning profile. Call \'read\' at the START of each conversation to understand the child\'s current level across math, English, general knowledge, and cognitive dimensions. Call \'update\' after observing the child\'s actual performance on a topic to track their progress. Levels are 0-5 (0=unassessed, 5=mastery). Always update based on demonstrated ability, not guesses. Available skill keys: math_counting, math_addition, math_subtraction, math_multiply, math_divide, math_shapes, math_comparison, math_time, english_alphabet, english_vocab, english_sentence, english_phonics, general_nature, general_social, general_life, logic_thinking, observation, spatial_reasoning, fine_motor, english_writing, chinese_writing, categorization.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createChildProfileToolConfig(): ToolConfig {
+  return new ToolConfig(
+    CHILD_PROFILE_TOOL_ID,
+    '学习画像',
+    '读取或更新小朋友的学习画像(知识水平评估), 用于教育类助手因材施教。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    CHILD_PROFILE_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+// ===== math_verify 工具 =====
+// 数学验证工具：让小星老师在出完数学题后，通过程序化计算验证小朋友的答案是否正确。
+
+interface MathVerifyArgs {
+  expression: string
+  child_answer: number
+}
+
+class MathVerifyResult {
+  correct: boolean = false
+  correct_answer: number = 0
+  expression: string = ''
+  child_answer: number = 0
+
+  constructor(correct: boolean, correctAnswer: number, expression: string, childAnswer: number) {
+    this.correct = correct
+    this.correct_answer = correctAnswer
+    this.expression = expression
+    this.child_answer = childAnswer
+  }
+}
+
+class MathVerifyExecutor implements ToolExecutor {
+  async execute(args: string): Promise<string> {
+    try {
+      const params = JSON.parse(args) as MathVerifyArgs
+      const expression = (params.expression ?? '').trim()
+      const childAnswer = params.child_answer ?? 0
+
+      if (expression === '') {
+        return JSON.stringify(new ErrorOutput('expression is required'))
+      }
+
+      const correctAnswer = evaluateMathExpression(expression)
+      const isCorrect = Math.abs(correctAnswer - childAnswer) < 0.001
+
+      return JSON.stringify(new MathVerifyResult(isCorrect, correctAnswer, expression, childAnswer))
+    } catch (error) {
+      console.error('MathVerifyExecutor', `Error: ${JSON.stringify(error)}`)
+      return JSON.stringify(new ErrorOutput(`math_verify error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createMathVerifyToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "expression": {
+        "type": "string",
+        "description": "The arithmetic expression to evaluate, e.g. '3 + 5', '12 / 4', '(8 - 3) * 2'. Only numbers, +, -, *, /, parentheses, and decimals."
+      },
+      "child_answer": {
+        "type": "number",
+        "description": "The answer the child gave."
+      }
+    },
+    "required": ["expression", "child_answer"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    MATH_VERIFY_TOOL_ID,
+    'Verify the child\'s answer to a math problem. Submit the arithmetic expression and the child\'s answer. Returns whether the answer is correct and the correct answer. Use this AFTER the child answers a math_quiz question or a verbal math question.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createMathVerifyToolConfig(): ToolConfig {
+  return new ToolConfig(
+    MATH_VERIFY_TOOL_ID,
+    '数学验证',
+    '验证小朋友的数学答案是否正确, 通过程序计算算术表达式。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    MATH_VERIFY_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+// ===== math_quiz 工具 =====
+// 数学游戏工具：让小星老师以互动卡片形式出数学题, 小朋友在屏幕上点选答案。
+
+interface MathQuizArgs {
+  question: string
+  expression: string
+  correct_answer: number
+  options: number[]
+  skill_key?: string
+}
+
+class MathQuizResult {
+  answered: boolean = false
+  child_answer: number = 0
+  child_answer_valid: boolean = false
+  correct: boolean = false
+  correct_answer: number = 0
+  expression: string = ''
+
+  constructor(answered: boolean, childAnswer: number, childAnswerValid: boolean,
+    correct: boolean, correctAnswer: number, expression: string) {
+    this.answered = answered
+    this.child_answer = childAnswer
+    this.child_answer_valid = childAnswerValid
+    this.correct = correct
+    this.correct_answer = correctAnswer
+    this.expression = expression
+  }
+}
+
+class MathQuizExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // math_quiz 工具的执行由前端 MathQuizCard 组件处理交互。
+    // 后端只需要返回参数解析成功即可, 实际答案由前端 onAnswer 回调提交。
+    // 如果工具被直接调用(没有前端交互), 返回提示信息。
+    try {
+      const params = JSON.parse(_args) as MathQuizArgs
+      return JSON.stringify(new MathQuizResult(
+        false, 0, false, false, params.correct_answer ?? 0, params.expression ?? ''
+      ))
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`math_quiz error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createMathQuizToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "question": {
+        "type": "string",
+        "description": "The quiz question in natural spoken language, e.g. '桌上有 3 个苹果, 再放 2 个, 一共几个呀'."
+      },
+      "expression": {
+        "type": "string",
+        "description": "The arithmetic expression, e.g. '3 + 2'. Will be displayed as '3 + 2 = ?'."
+      },
+      "correct_answer": {
+        "type": "number",
+        "description": "The correct answer to the expression."
+      },
+      "options": {
+        "type": "array",
+        "items": { "type": "number" },
+        "description": "3-4 answer options as numbers. Must include the correct answer. Shuffle the order."
+      },
+      "skill_key": {
+        "type": "string",
+        "description": "Optional. The child profile skill dimension key this quiz targets, e.g. 'math_addition'. Used for updating the child's profile after answering."
+      }
+    },
+    "required": ["question", "expression", "correct_answer", "options"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    MATH_QUIZ_TOOL_ID,
+    'Present a math quiz to the child as an interactive game card on screen. Use this INSTEAD of writing math problems in plain text. The child will see the question, the expression, and clickable number buttons to select their answer. Provide 3-4 options including the correct answer.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createMathQuizToolConfig(): ToolConfig {
+  return new ToolConfig(
+    MATH_QUIZ_TOOL_ID,
+    '数学游戏',
+    '以互动卡片形式给小朋友出数学题, 小朋友可以在屏幕上点选答案。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    MATH_QUIZ_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+// ===== english_quiz 工具 =====
+// 英语看图说话工具：让 AI 出示图片，小朋友通过语音或文字说出对应的英语单词/句子。
+// 图片优先从本地缓存加载（EnglishQuizImageIndex），缓存未命中时调用图片生成 API。
+// 交互由前端 EnglishQuizCard 组件处理，与 math_quiz 模式类似。
+
+interface EnglishQuizArgs {
+  question: string
+  image_prompt: string
+  correct_answer: string
+  question_type: string
+  difficulty: number
+  skill_key: string
+}
+
+class EnglishQuizExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // english_quiz 工具的交互由前端 EnglishQuizCard 组件处理。
+    // 后端由 ToolExecutionService.handleEnglishQuiz 拦截处理图片生成/缓存逻辑。
+    // 如果工具被直接调用（没有前端交互），返回提示信息。
+    try {
+      const params = JSON.parse(_args) as EnglishQuizArgs
+      const questionType = (params.question_type ?? 'word').trim()
+      const answer = params.correct_answer ?? ''
+      let word = ''
+      let sentence = ''
+      if (questionType === 'sentence') {
+        sentence = answer
+      } else {
+        word = answer
+      }
+      return JSON.stringify({
+        answered: false,
+        correct_answer: params.correct_answer ?? '',
+        word: word,
+        sentence: sentence
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`english_quiz error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createEnglishQuizToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "question": {
+        "type": "string",
+        "description": "The Chinese word or sentence the child needs to say in English. For word quizzes: the Chinese word (e.g. '苹果', '小狗'). For sentence quizzes: the Chinese sentence (e.g. '我喜欢吃苹果')."
+      },
+      "image_prompt": {
+        "type": "string",
+        "description": "Detailed English prompt for generating the image. Should be child-friendly, colorful, and clearly depict the word/concept. e.g. 'A bright red apple on a wooden table, children illustration style, colorful, simple background'"
+      },
+      "correct_answer": {
+        "type": "string",
+        "description": "The correct English answer. For word quiz: the English word. For sentence quiz: the English sentence. e.g. 'apple' or 'I like apples'"
+      },
+      "question_type": {
+        "type": "string",
+        "enum": ["word", "sentence"],
+        "description": "Type of quiz: 'word' for single word, 'sentence' for full sentence"
+      },
+      "difficulty": {
+        "type": "number",
+        "description": "Difficulty level 1-5. 1=very easy (common objects), 5=harder (abstract concepts). Base on child profile."
+      },
+      "skill_key": {
+        "type": "string",
+        "description": "The child profile skill dimension this quiz targets: 'english_vocab' for words, 'english_sentence' for sentences, 'english_phonics' for phonics-related."
+      }
+    },
+    "required": ["correct_answer", "question_type", "image_prompt", "question"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    ENGLISH_QUIZ_TOOL_ID,
+    'Present an English vocabulary quiz to the child with an image. The child sees a picture and speaks or types the English word/sentence. Use this to teach English vocabulary through visual association. Provide a child-friendly image_prompt that clearly depicts the concept. Set difficulty based on the child\'s english_vocab/english_sentence level from child_profile. Alternate between word and sentence types.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createEnglishQuizToolConfig(): ToolConfig {
+  return new ToolConfig(
+    ENGLISH_QUIZ_TOOL_ID,
+    '英语看图说话',
+    '出示图片让小朋友说出对应的英语单词或句子, 通过语音或文字作答。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    ENGLISH_QUIZ_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
+// ===== huarongdao 工具 =====
+// 数字华容道游戏工具：让小星老师以互动卡片形式给小朋友出数字滑块谜题。
+// 小朋友通过拖动/点击数字方块将乱序数字排列成正确顺序。
+// 交互由前端 HuarongdaoCard 组件处理，与 math_quiz/english_quiz 模式类似。
+
+interface HuarongdaoArgs {
+  difficulty: number
+}
+
+class HuarongdaoExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // huarongdao 工具的交互由前端 HuarongdaoCard 组件处理。
+    // 后端由 ToolExecutionService.handleHuarongdao 拦截处理谜题生成逻辑。
+    // 如果工具被直接调用（没有前端交互），返回提示信息。
+    try {
+      const params = JSON.parse(_args) as HuarongdaoArgs
+      const difficulty = Math.max(1, Math.min(5, params.difficulty ?? 1))
+      const state = generatePuzzle(difficulty)
+      return JSON.stringify({
+        grid_size: state.gridSize,
+        difficulty: state.difficulty,
+        tiles: state.tiles,
+        answered: false
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`huarongdao error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createHuarongdaoToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "difficulty": {
+        "type": "number",
+        "description": "难度等级 1-5。1-2使用3×3棋盘(8数字), 3-5使用4×4棋盘(15数字)。根据 child_profile 中 logic_thinking 和 observation 的 level 选择合适难度。",
+        "enum": [1, 2, 3, 4, 5]
+      }
+    },
+    "required": ["difficulty"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    HUARONGDAO_TOOL_ID,
+    'Present a number sliding puzzle (数字华容道) to the child as an interactive game. A grid of numbered tiles is shuffled, and the child slides tiles into the empty space to arrange them in order. Difficulty 1-2 uses 3×3 (8 numbers), difficulty 3-5 uses 4×4 (15 numbers). Use difficulty based on the child\'s logic_thinking and observation levels from child_profile. After completion or giving up, you receive result (moves, time, completed). Then call child_profile update to record logic_thinking, observation, and spatial_reasoning based on performance.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createHuarongdaoToolConfig(): ToolConfig {
+  return new ToolConfig(
+    HUARONGDAO_TOOL_ID,
+    '数字华容道',
+    '以互动卡片形式给小朋友出数字滑块谜题, 小朋友拖动数字方块将乱序数字排列成正确顺序。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    HUARONGDAO_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+// ===== handwriting_practice 工具 =====
+// 学写字互动工具：教小朋友写英文字母、数字、基础汉字，通过 Canvas 自由书写，AI 评价。
+
+interface HandwritingPracticeArgs {
+  character: string
+  type: string
+  strokes?: HandwritingStroke[]
+}
+
+interface HandwritingStroke {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  label: string
+}
+
+class HandwritingPracticeExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    try {
+      const params = JSON.parse(_args) as HandwritingPracticeArgs
+      return JSON.stringify({
+        character: params.character ?? 'A',
+        type: params.type ?? 'letter',
+        completed: false,
+        stroke_count: 0
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`handwriting_practice error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createHandwritingPracticeToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "character": {
+        "type": "string",
+        "description": "The character to practice. For letters use 'A', 'a' etc. For numbers use '5'. For Chinese characters use the single character like 人, 大."
+      },
+      "type": {
+        "type": "string",
+        "description": "The type of character: letter for English letters, number for digits, chinese for Chinese characters.",
+        "enum": ["letter", "number", "chinese"]
+      },
+      "strokes": {
+        "type": "array",
+        "description": "Optional. Stroke order data as array of objects with x1,y1,x2,y2 (relative 0-1 coordinates) and label. If omitted, the built-in stroke library will be used for common characters.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "x1": { "type": "number" },
+            "y1": { "type": "number" },
+            "x2": { "type": "number" },
+            "y2": { "type": "number" },
+            "label": { "type": "string" }
+          }
+        }
+      }
+    },
+    "required": ["character", "type"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    HANDWRITING_PRACTICE_TOOL_ID,
+    "Launch a handwriting practice activity for the child. The child watches a stroke order demonstration of a character (letter, number, or simple Chinese character), then practices writing it on a blank canvas. After submission, AI vision evaluates the handwriting and gives encouraging feedback. Choose characters appropriate to the child's age and skill level. Start with simple letters (A, B, C) or numbers (1, 2, 3) for beginners.",
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createHandwritingPracticeToolConfig(): ToolConfig {
+  return new ToolConfig(
+    HANDWRITING_PRACTICE_TOOL_ID,
+    '学写字',
+    '学写字互动工具, 观看笔顺示范后在 Canvas 上自由书写, AI 识别评价书写成果。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    HANDWRITING_PRACTICE_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+// ===== categorization 工具 =====
+// 分类小管家工具：让小星老师发起分类归纳互动游戏，孩子把物品拖拽/点击到对应的分类桶里，训练分类归纳能力。
+// 交互由前端 CategorizationCard 组件处理，后端 ToolExecutionService.handleCategorization 拦截处理记录保存。
+
+interface CategorizationArgs {
+  theme: string
+  instruction?: string
+  difficulty?: number
+  bins: Object[]
+  items: Object[]
+}
+
+class CategorizationExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    try {
+      const params = JSON.parse(_args) as CategorizationArgs
+      return JSON.stringify({
+        theme: params.theme ?? '',
+        instruction: params.instruction ?? '',
+        difficulty: params.difficulty ?? 1,
+        bins: params.bins ?? [],
+        items: params.items ?? [],
+        completed: false,
+        correct_count: 0,
+        total_count: 0
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`categorization error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createCategorizationToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "theme": {
+        "type": "string",
+        "description": "主题名称，如「动物的家」、「水果与蔬菜」。2-12 字。"
+      },
+      "instruction": {
+        "type": "string",
+        "description": "可选，给孩子的开场白，如「帮小动物回家吧！」"
+      },
+      "difficulty": {
+        "type": "integer",
+        "enum": [1, 2, 3],
+        "description": "难度：1=4件2桶，2=6件3桶，3=9件3桶"
+      },
+      "bins": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 3,
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "description": "桶名（中文）" },
+            "emoji": { "type": "string", "description": "桶标识 emoji，可选" }
+          },
+          "required": ["name"]
+        }
+      },
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "emoji": { "type": "string" },
+            "bin_index": { "type": "integer", "description": "所属桶的索引（从 0 开始）" }
+          },
+          "required": ["name", "bin_index"]
+        }
+      }
+    },
+    "required": ["theme", "bins", "items"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    CATEGORIZATION_TOOL_ID,
+    '让孩子把物品拖拽/点击到对应的分类桶里，训练分类归纳能力。',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createCategorizationToolConfig(): ToolConfig {
+  return new ToolConfig(
+    CATEGORIZATION_TOOL_ID,
+    '分类小管家',
+    '分类归纳互动游戏, 让孩子把物品拖拽或点击到对应的分类桶里, 训练分类与归纳能力。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    CATEGORIZATION_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
 // 注册所有内置工具
 export function registerBuiltinTools(): void {
   const registry = getToolRegistry()
@@ -514,6 +1596,94 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(IMAGE_GENERATION_TOOL_ID)) {
+    const imageGenTool = new RegisteredTool(
+      IMAGE_GENERATION_TOOL_ID,
+      createImageGenerationToolConfig(),
+      createImageGenerationToolDefinition(),
+      new ImageGenerationExecutor()
+    )
+    registry.registerTool(imageGenTool)
+    registeredNow += 1
+  }
+
+  if (!registry.isToolRegistered(CHILD_PROFILE_TOOL_ID)) {
+    const childProfileTool = new RegisteredTool(
+      CHILD_PROFILE_TOOL_ID,
+      createChildProfileToolConfig(),
+      createChildProfileToolDefinition(),
+      new ChildProfileExecutor()
+    )
+    registry.registerTool(childProfileTool)
+    registeredNow += 1
+  }
+
+  if (!registry.isToolRegistered(MATH_VERIFY_TOOL_ID)) {
+    const mathVerifyTool = new RegisteredTool(
+      MATH_VERIFY_TOOL_ID,
+      createMathVerifyToolConfig(),
+      createMathVerifyToolDefinition(),
+      new MathVerifyExecutor()
+    )
+    registry.registerTool(mathVerifyTool)
+    registeredNow += 1
+  }
+
+  if (!registry.isToolRegistered(MATH_QUIZ_TOOL_ID)) {
+    const mathQuizTool = new RegisteredTool(
+      MATH_QUIZ_TOOL_ID,
+      createMathQuizToolConfig(),
+      createMathQuizToolDefinition(),
+      new MathQuizExecutor()
+    )
+    registry.registerTool(mathQuizTool)
+    registeredNow += 1
+  }
+
+  if (!registry.isToolRegistered(ENGLISH_QUIZ_TOOL_ID)) {
+    const englishQuizTool = new RegisteredTool(
+      ENGLISH_QUIZ_TOOL_ID,
+      createEnglishQuizToolConfig(),
+      createEnglishQuizToolDefinition(),
+      new EnglishQuizExecutor()
+    )
+    registry.registerTool(englishQuizTool)
+    registeredNow += 1
+  }
+
+  if (!registry.isToolRegistered(HUARONGDAO_TOOL_ID)) {
+    const huarongdaoTool = new RegisteredTool(
+      HUARONGDAO_TOOL_ID,
+      createHuarongdaoToolConfig(),
+      createHuarongdaoToolDefinition(),
+      new HuarongdaoExecutor()
+    )
+    registry.registerTool(huarongdaoTool)
+    registeredNow += 1
+  }
+
+  if (!registry.isToolRegistered(HANDWRITING_PRACTICE_TOOL_ID)) {
+    const handwritingTool = new RegisteredTool(
+      HANDWRITING_PRACTICE_TOOL_ID,
+      createHandwritingPracticeToolConfig(),
+      createHandwritingPracticeToolDefinition(),
+      new HandwritingPracticeExecutor()
+    )
+    registry.registerTool(handwritingTool)
+    registeredNow += 1
+  }
+
+  if (!registry.isToolRegistered(CATEGORIZATION_TOOL_ID)) {
+    const categorizationTool = new RegisteredTool(
+      CATEGORIZATION_TOOL_ID,
+      createCategorizationToolConfig(),
+      createCategorizationToolDefinition(),
+      new CategorizationExecutor()
+    )
+    registry.registerTool(categorizationTool)
+    registeredNow += 1
+  }
+
   console.info(
     'BuiltinTools',
     `Builtin tools ready: total=${registry.getToolCount()}, newlyRegistered=${registeredNow}`
@@ -522,5 +1692,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, HUARONGDAO_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID]
 }

@@ -23,6 +23,7 @@ export default class EntryAbility extends UIAbility {
   private pendingNewChat: boolean = false;
   private pendingOpenSessionPayload: string = '';
   private pendingOpenImageGeneration: boolean = false;
+  private pendingPlannerTrigger: boolean = false;
   private readonly windowSizeChangeCallback = (size: window.Size): void => {
     this.updateLayoutProfile(size.width, size.height);
   };
@@ -57,6 +58,9 @@ export default class EntryAbility extends UIAbility {
         }
       } else if (action === 'openImageGeneration') {
         this.pendingOpenImageGeneration = true;
+      } else if (action === 'plannerTrigger') {
+        // WorkScheduler 唤醒：进入 onCreate 后再处理（需等服务初始化）
+        this.pendingPlannerTrigger = true;
       }
     }
 
@@ -88,6 +92,12 @@ export default class EntryAbility extends UIAbility {
         }
       } else if (action === 'openImageGeneration') {
         setAppUiStateValue(AppStorageKeys.OPEN_IMAGE_GENERATION, Date.now());
+      } else if (action === 'plannerTrigger') {
+        // WorkScheduler 唤醒（应用已在运行）：直接触发备课
+        ServiceRegistry.lessonPlanning().triggerPlanningForToday(false)
+          .catch((err: Object) => {
+            hilog.warn(DOMAIN, 'testTag', `planner trigger on new want failed: ${JSON.stringify(err)}`)
+          })
       }
     }
   }
@@ -134,6 +144,10 @@ export default class EntryAbility extends UIAbility {
       await ServiceRegistry.assistant().initialize();
       hilog.info(DOMAIN, 'testTag', 'AssistantService initialized successfully');
 
+      // 预热今日星星汇总到 AppUiState, 避免 ChatPage 首屏拿到默认 0
+      await ServiceRegistry.starReward().ensureLoaded();
+      hilog.info(DOMAIN, 'testTag', 'StarRewardService ensured');
+
       // 应用保存的主题设置
       // 在调用 setAppColorMode 之前先记录系统色彩模式：
       // 此时 context.config.colorMode 反映的是系统真实值（应用尚未注入覆盖），
@@ -161,6 +175,9 @@ export default class EntryAbility extends UIAbility {
       // 初始化后台任务守护与通知服务
       ServiceRegistry.backgroundGuard().initialize(this.context)
       ServiceRegistry.backgroundGuard().onAppBackgroundChanged(false)
+
+      // 初始化备课老师服务（启动补跑今日 plan + 清理过期 prepared_media）
+      ServiceRegistry.lessonPlanning().initialize(this.context)
     } catch (error) {
       if (error instanceof AppError) {
         hilog.error(
@@ -311,6 +328,14 @@ export default class EntryAbility extends UIAbility {
       if (this.pendingOpenImageGeneration) {
         setAppUiStateValue(AppStorageKeys.OPEN_IMAGE_GENERATION, Date.now())
         this.pendingOpenImageGeneration = false
+      }
+      if (this.pendingPlannerTrigger) {
+        // 冷启动被 WorkScheduler 唤醒：直接触发一次备课
+        this.pendingPlannerTrigger = false
+        ServiceRegistry.lessonPlanning().triggerPlanningForToday(false)
+          .catch((err: Object) => {
+            hilog.warn(DOMAIN, 'testTag', `planner trigger on create failed: ${JSON.stringify(err)}`)
+          })
       }
       });
     };

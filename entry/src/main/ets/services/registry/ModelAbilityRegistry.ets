@@ -178,6 +178,7 @@ const DEFS: AbilityDef[] = [
   def([{ tokens: ['minimax', 'm', '2'] }], [TOOL, REASON]),
   def([{ tokens: ['minimax', 'm', '2', '5'] }], [TOOL, REASON]),
   def([{ tokens: ['minimax', 'm', '2', '7'] }], [TOOL, REASON]),
+  def([{ tokens: ['minimax', 'm', '3'] }], [TOOL, REASON], [T, I]),
 
   // --- MiMo ---
   def([{ tokens: ['mimo', 'v', '2'] }], [TOOL, REASON]),

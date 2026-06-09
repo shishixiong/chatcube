@@ -9,8 +9,10 @@ import {
   AttachmentType,
   SearchReference
 } from '../models/ChatModels'
-import { Assistant, DEFAULT_ASSISTANT_ID, createDefaultAssistant } from '../models/AssistantModels'
+import { Assistant, DEFAULT_ASSISTANT_ID, createDefaultAssistant, DEFAULT_ASSISTANT_SYSTEM_PROMPT, DEFAULT_ASSISTANT_LOCKED_TOOL_IDS } from '../models/AssistantModels'
 import { GeneratedMedia } from '../models/ImageGenerationModels'
+import { StarEventInsert, StarEventRow } from '../models/StarEventModels'
+import { DailyLessonPlanRow, PreparedMediaRow, PlannerStats } from '../models/LessonPlanModels'
 import { deserializeMessageParts, serializeMessageParts } from '../models/MessageParts'
 import { ensureMessageParts, buildMessagePartsFromLegacy } from '../utils/ChatMessagePartsHelper'
 import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
@@ -35,7 +37,22 @@ export class TableNames {
 	  static readonly TOOL_EVENTS: string = 'tool_events'
 	  static readonly ASSISTANTS: string = 'assistants'
   static readonly GENERATED_MEDIA: string = 'generated_media'
+  static readonly PUZZLE_RECORDS: string = 'puzzle_records'
+  static readonly STAR_EVENTS: string = 'star_events'
+  static readonly DAILY_LESSON_PLANS: string = 'daily_lesson_plans'
+  static readonly PREPARED_MEDIA: string = 'prepared_media'
 	}
+
+// 拼图记录数据接口
+export interface PuzzleRecord {
+  id: number
+  sessionId: string
+  difficulty: number
+  timeSeconds: number
+  moveCount: number
+  completed: number
+  createdAt: number
+}
 
 // 模型数据接口（用于 JSON 序列化，兼容扩展格式）
 interface ModelJsonData {
@@ -213,6 +230,7 @@ export class DatabaseService {
 	        reasoning_level_preference TEXT DEFAULT '',
 	        enabled_tool_ids_json TEXT DEFAULT '',
 	        is_default INTEGER DEFAULT 0,
+	        is_preset INTEGER DEFAULT 0,
 	        created_at INTEGER,
 	        updated_at INTEGER,
 	        sort_order INTEGER DEFAULT 0
@@ -317,6 +335,77 @@ export class DatabaseService {
       )
     `
 
+    const createPuzzleRecordsTable = `
+      CREATE TABLE IF NOT EXISTS ${TableNames.PUZZLE_RECORDS} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        difficulty INTEGER NOT NULL,
+        time_seconds REAL NOT NULL,
+        move_count INTEGER NOT NULL,
+        completed INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL
+      )
+    `
+
+    const createStarEventsTable = `
+      CREATE TABLE IF NOT EXISTS ${TableNames.STAR_EVENTS} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at INTEGER NOT NULL,
+        activity_type TEXT NOT NULL,
+        stars INTEGER NOT NULL,
+        tool_call_id TEXT DEFAULT '',
+        session_id TEXT DEFAULT '',
+        skill_key TEXT DEFAULT '',
+        metadata_json TEXT DEFAULT ''
+      )
+    `
+
+    // 每日教学计划表（备课老师每日生成）
+    const createDailyLessonPlansTable = `
+      CREATE TABLE IF NOT EXISTS ${TableNames.DAILY_LESSON_PLANS} (
+        id TEXT PRIMARY KEY,
+        plan_date TEXT NOT NULL,
+        plan_json TEXT NOT NULL,
+        plan_version INTEGER NOT NULL DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'pending',
+        error_message TEXT DEFAULT '',
+        planner_provider_id TEXT DEFAULT '',
+        planner_model_id TEXT DEFAULT '',
+        planner_model_name TEXT DEFAULT '',
+        session_ids_json TEXT DEFAULT '[]',
+        message_count INTEGER DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        completed_at INTEGER DEFAULT 0
+      )
+    `
+
+    // 预生成图片表（小星老师次日优先消费，减少实时生图延迟）
+    const createPreparedMediaTable = `
+      CREATE TABLE IF NOT EXISTS ${TableNames.PREPARED_MEDIA} (
+        id TEXT PRIMARY KEY,
+        plan_id TEXT NOT NULL,
+        topic_key TEXT NOT NULL,
+        topic_module TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        revised_prompt TEXT DEFAULT '',
+        provider_id TEXT DEFAULT '',
+        provider_name TEXT DEFAULT '',
+        model_id TEXT DEFAULT '',
+        model_name TEXT DEFAULT '',
+        file_path TEXT NOT NULL,
+        mime_type TEXT DEFAULT 'image/png',
+        aspect_ratio TEXT DEFAULT 'square',
+        status TEXT NOT NULL DEFAULT 'ready',
+        error_message TEXT DEFAULT '',
+        consumed_count INTEGER DEFAULT 0,
+        last_consumed_at INTEGER DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        FOREIGN KEY (plan_id) REFERENCES ${TableNames.DAILY_LESSON_PLANS}(id) ON DELETE CASCADE
+      )
+    `
+
     try {
       await this.rdbStore.executeSql(createSessionsTable)
 	      await this.rdbStore.executeSql(createMessagesTable)
@@ -325,8 +414,30 @@ export class DatabaseService {
       await this.rdbStore.executeSql(createAttachmentsTable)
       await this.rdbStore.executeSql(createToolEventsTable)
       await this.rdbStore.executeSql(createGeneratedMediaTable)
+      await this.rdbStore.executeSql(createPuzzleRecordsTable)
+      await this.rdbStore.executeSql(createStarEventsTable)
+      await this.rdbStore.executeSql(createDailyLessonPlansTable)
+      await this.rdbStore.executeSql(createPreparedMediaTable)
       await this.rdbStore.executeSql(
         `CREATE INDEX IF NOT EXISTS idx_generated_media_created_at ON ${TableNames.GENERATED_MEDIA}(created_at DESC)`
+      )
+      await this.rdbStore.executeSql(
+        `CREATE INDEX IF NOT EXISTS idx_star_events_created_at ON ${TableNames.STAR_EVENTS}(created_at)`
+      )
+      await this.rdbStore.executeSql(
+        `CREATE INDEX IF NOT EXISTS idx_daily_lesson_plans_plan_date ON ${TableNames.DAILY_LESSON_PLANS}(plan_date DESC)`
+      )
+      await this.rdbStore.executeSql(
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_lesson_plans_plan_date_unique ON ${TableNames.DAILY_LESSON_PLANS}(plan_date)`
+      )
+      await this.rdbStore.executeSql(
+        `CREATE INDEX IF NOT EXISTS idx_prepared_media_topic_key ON ${TableNames.PREPARED_MEDIA}(topic_key)`
+      )
+      await this.rdbStore.executeSql(
+        `CREATE INDEX IF NOT EXISTS idx_prepared_media_status ON ${TableNames.PREPARED_MEDIA}(status)`
+      )
+      await this.rdbStore.executeSql(
+        `CREATE INDEX IF NOT EXISTS idx_prepared_media_expires_at ON ${TableNames.PREPARED_MEDIA}(expires_at)`
       )
       // 尝试添加 sort_order 字段（如果表已存在但没有该字段）
       await this.addSortOrderColumnIfNeeded()
@@ -343,6 +454,8 @@ export class DatabaseService {
       await this.addProviderCustomHeadersColumnIfNeeded()
       await this.addProviderRequiresApiKeyColumnIfNeeded()
       await this.addGeneratedMediaOptionColumnsIfNeeded()
+      // generated_media 加列：关联 prepared_media 命中率统计
+      await this.addGeneratedMediaConsumedColumnsIfNeeded()
       await this.addAttachmentParseColumnsIfNeeded()
       // 尝试添加同步相关字段（为 WebDAV 同步预留）
       await this.addSyncColumnsIfNeeded()
@@ -359,6 +472,8 @@ export class DatabaseService {
       await this.addMessageModelIdColumnIfNeeded()
       // 尝试添加助手采样参数列(top_p / presence_penalty / frequency_penalty)
       await this.addAssistantSamplingColumnsIfNeeded()
+      // 尝试添加助手预设标记列
+      await this.addAssistantPresetColumnIfNeeded()
 	      // 迁移现有供应商数据
 	      await this.migrateExistingProviders()
 	      await this.ensureDefaultAssistant()
@@ -443,6 +558,23 @@ export class DatabaseService {
       await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.GENERATED_MEDIA} ADD COLUMN revised_prompt TEXT DEFAULT ''`)
     } catch (_error) {
       console.info('DatabaseService', 'revised_prompt column may already exist')
+    }
+  }
+
+  // 给 generated_media 加 prepared_media 关联列（用于预生成图命中率统计）
+  private async addGeneratedMediaConsumedColumnsIfNeeded(): Promise<void> {
+    if (this.rdbStore === null) {
+      return
+    }
+    try {
+      await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.GENERATED_MEDIA} ADD COLUMN prepared_media_id TEXT DEFAULT ''`)
+    } catch (_error) {
+      console.info('DatabaseService', 'prepared_media_id column may already exist')
+    }
+    try {
+      await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.GENERATED_MEDIA} ADD COLUMN topic_key TEXT DEFAULT ''`)
+    } catch (_error) {
+      console.info('DatabaseService', 'topic_key column may already exist')
     }
   }
 
@@ -773,6 +905,7 @@ export class DatabaseService {
 	      context_message_count: assistant.contextMessageCount || 0,
 	      max_output_tokens: assistant.maxOutputTokens || 0,
 	      is_default: assistant.isDefault ? 1 : 0,
+	      is_preset: assistant.isPreset ? 1 : 0,
 	      created_at: assistant.createdAt,
 	      updated_at: assistant.updatedAt,
 	      sort_order: assistant.sortOrder
@@ -861,6 +994,11 @@ export class DatabaseService {
 	      assistant.isDefault = assistant.id === DEFAULT_ASSISTANT_ID
 	    }
 	    try {
+	      assistant.isPreset = resultSet.getLong(resultSet.getColumnIndex('is_preset')) === 1
+	    } catch (error) {
+	      assistant.isPreset = false
+	    }
+	    try {
 	      assistant.createdAt = resultSet.getLong(resultSet.getColumnIndex('created_at'))
 	    } catch (error) {
 	      assistant.createdAt = Date.now()
@@ -887,8 +1025,31 @@ export class DatabaseService {
 	    }
 	    const existing = await this.queryAssistantByIdNoWait(DEFAULT_ASSISTANT_ID)
 	    if (existing !== null) {
+	      let needUpdate = false
 	      if (!existing.isDefault) {
 	        existing.isDefault = true
+	        needUpdate = true
+	      }
+	      // 迁移旧名称：将"默认助手"更新为"小星老师"
+	      if (existing.name === '默认助手') {
+	        existing.name = '小星老师'
+	        existing.avatarSymbol = '⭐'
+	        existing.color = '#FF9F43'
+	        needUpdate = true
+	      }
+	      // 迁移系统提示词：为空或旧版内容的默认助手统一更新为锁定版本
+	      if (existing.systemPrompt !== DEFAULT_ASSISTANT_SYSTEM_PROMPT) {
+	        existing.systemPrompt = DEFAULT_ASSISTANT_SYSTEM_PROMPT
+	        needUpdate = true
+	      }
+	      // 迁移工具白名单：为空或旧版内容的默认助手统一更新为锁定版本
+	      const existingToolIdsSorted = [...existing.enabledToolIds].sort()
+	      const lockedToolIdsSorted = [...DEFAULT_ASSISTANT_LOCKED_TOOL_IDS].sort()
+	      if (JSON.stringify(existingToolIdsSorted) !== JSON.stringify(lockedToolIdsSorted)) {
+	        existing.enabledToolIds = [...DEFAULT_ASSISTANT_LOCKED_TOOL_IDS]
+	        needUpdate = true
+	      }
+	      if (needUpdate) {
 	        const predicates = new relationalStore.RdbPredicates(TableNames.ASSISTANTS)
 	        predicates.equalTo('id', DEFAULT_ASSISTANT_ID)
 	        try {
@@ -969,6 +1130,17 @@ export class DatabaseService {
       } catch (error) {
         // 列已存在会抛错,忽略
       }
+    }
+  }
+
+  private async addAssistantPresetColumnIfNeeded(): Promise<void> {
+    if (this.rdbStore === null) {
+      return
+    }
+    try {
+      await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.ASSISTANTS} ADD COLUMN is_preset INTEGER DEFAULT 0`)
+    } catch (error) {
+      console.info('DatabaseService', 'is_preset column may already exist')
     }
   }
 
@@ -1705,6 +1877,59 @@ export class DatabaseService {
     return sessions
   }
 
+  /**
+   * 备课老师专用：按 assistant_id + 时间范围查询轻量级 session 列表（仅 id/title/createdAt/updatedAt/messageCount）
+   * 不触发 legacy 修复、不加载 draft 字段，避免和 getAllSessions 抢主线程。
+   */
+  async getSessionsByAssistantAndDate(
+    assistantId: string,
+    rangeStartMs: number,
+    rangeEndMs: number
+  ): Promise<ChatSession[]> {
+    const result: ChatSession[] = []
+    try {
+      await this.waitForInitialization()
+    } catch (error) {
+      console.error('DatabaseService', `Failed to wait for database init: ${JSON.stringify(error)}`)
+      return result
+    }
+    if (this.rdbStore === null || assistantId === '') {
+      return result
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.SESSIONS)
+      predicates.equalTo('assistant_id', assistantId)
+      predicates.greaterThanOrEqualTo('updated_at', rangeStartMs)
+      predicates.lessThan('updated_at', rangeEndMs)
+      predicates.orderByAsc('updated_at')
+      const resultSet = await this.rdbStore.query(predicates)
+      try {
+        while (resultSet.goToNextRow()) {
+          const session = new ChatSession(
+            resultSet.getString(resultSet.getColumnIndex('id')),
+            resultSet.getString(resultSet.getColumnIndex('title')),
+            resultSet.getString(resultSet.getColumnIndex('model_id')),
+            this.safeGetString(resultSet, 'provider_id'),
+            assistantId
+          )
+          session.createdAt = resultSet.getLong(resultSet.getColumnIndex('created_at'))
+          session.updatedAt = resultSet.getLong(resultSet.getColumnIndex('updated_at'))
+          try {
+            session.messageCount = resultSet.getLong(resultSet.getColumnIndex('message_count'))
+          } catch (_e) {
+            session.messageCount = 0
+          }
+          result.push(session)
+        }
+      } finally {
+        resultSet.close()
+      }
+    } catch (error) {
+      console.error('DatabaseService', `Failed to get sessions by assistant and date: ${JSON.stringify(error)}`)
+    }
+    return result
+  }
+
   // 获取单个会话
   async getSession(sessionId: string): Promise<ChatSession | null> {
     await this.waitForInitialization()
@@ -2190,6 +2415,8 @@ export class DatabaseService {
       request_options_json: media.requestOptionsJson,
       actual_options_json: media.actualOptionsJson,
       revised_prompt: media.revisedPrompt,
+      prepared_media_id: media.preparedMediaId,
+      topic_key: media.topicKey,
       created_at: media.createdAt
     }
     try {
@@ -2261,6 +2488,8 @@ export class DatabaseService {
     media.requestOptionsJson = this.safeGetString(resultSet, 'request_options_json')
     media.actualOptionsJson = this.safeGetString(resultSet, 'actual_options_json')
     media.revisedPrompt = this.safeGetString(resultSet, 'revised_prompt')
+    media.preparedMediaId = this.safeGetString(resultSet, 'prepared_media_id')
+    media.topicKey = this.safeGetString(resultSet, 'topic_key')
     try {
       media.createdAt = resultSet.getLong(resultSet.getColumnIndex('created_at'))
     } catch (_error) {
@@ -2590,6 +2819,202 @@ export class DatabaseService {
       }
     } catch (error) {
       console.error('DatabaseService', `Failed to update providers order: ${JSON.stringify(error)}`)
+    }
+  }
+
+  // ============ 拼图记录操作 ============
+
+  // 插入拼图记录
+  async insertPuzzleRecord(
+    sessionId: string,
+    difficulty: number,
+    timeSeconds: number,
+    moveCount: number,
+    completed: boolean
+  ): Promise<number> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return -1
+    }
+    const now = Date.now()
+    const valueBucket: relationalStore.ValuesBucket = {
+      session_id: sessionId,
+      difficulty: difficulty,
+      time_seconds: timeSeconds,
+      move_count: moveCount,
+      completed: completed ? 1 : 0,
+      created_at: now
+    }
+    try {
+      const rowId = await this.rdbStore.insert(TableNames.PUZZLE_RECORDS, valueBucket)
+      console.info('DatabaseService', `Puzzle record saved: rowId=${rowId}`)
+      return rowId
+    } catch (error) {
+      console.error('DatabaseService', `Failed to insert puzzle record: ${JSON.stringify(error)}`)
+      return -1
+    }
+  }
+
+  // 获取会话的拼图记录
+  async getPuzzleRecordsBySession(sessionId: string): Promise<PuzzleRecord[]> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return []
+    }
+    const records: PuzzleRecord[] = []
+    const predicates = new relationalStore.RdbPredicates(TableNames.PUZZLE_RECORDS)
+    predicates.equalTo('session_id', sessionId)
+    predicates.orderByDesc('created_at')
+    try {
+      const resultSet = await this.rdbStore.query(predicates)
+      while (resultSet.goToNextRow()) {
+        records.push({
+          id: resultSet.getLong(resultSet.getColumnIndex('id')),
+          sessionId: resultSet.getString(resultSet.getColumnIndex('session_id')),
+          difficulty: resultSet.getLong(resultSet.getColumnIndex('difficulty')),
+          timeSeconds: resultSet.getDouble(resultSet.getColumnIndex('time_seconds')),
+          moveCount: resultSet.getLong(resultSet.getColumnIndex('move_count')),
+          completed: resultSet.getLong(resultSet.getColumnIndex('completed')),
+          createdAt: resultSet.getLong(resultSet.getColumnIndex('created_at'))
+        })
+      }
+      resultSet.close()
+    } catch (error) {
+      console.error('DatabaseService', `Failed to query puzzle records: ${JSON.stringify(error)}`)
+    }
+    return records
+  }
+
+  // 获取所有拼图记录
+  async getAllPuzzleRecords(): Promise<PuzzleRecord[]> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return []
+    }
+    const records: PuzzleRecord[] = []
+    const predicates = new relationalStore.RdbPredicates(TableNames.PUZZLE_RECORDS)
+    predicates.orderByDesc('created_at')
+    try {
+      const resultSet = await this.rdbStore.query(predicates)
+      while (resultSet.goToNextRow()) {
+        records.push({
+          id: resultSet.getLong(resultSet.getColumnIndex('id')),
+          sessionId: resultSet.getString(resultSet.getColumnIndex('session_id')),
+          difficulty: resultSet.getLong(resultSet.getColumnIndex('difficulty')),
+          timeSeconds: resultSet.getDouble(resultSet.getColumnIndex('time_seconds')),
+          moveCount: resultSet.getLong(resultSet.getColumnIndex('move_count')),
+          completed: resultSet.getLong(resultSet.getColumnIndex('completed')),
+          createdAt: resultSet.getLong(resultSet.getColumnIndex('created_at'))
+        })
+      }
+      resultSet.close()
+    } catch (error) {
+      console.error('DatabaseService', `Failed to query all puzzle records: ${JSON.stringify(error)}`)
+    }
+    return records
+  }
+
+  // ============ 星星事件操作 ============
+
+  async insertStarEvent(event: StarEventInsert): Promise<number> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return -1
+    }
+    const valueBucket: relationalStore.ValuesBucket = {
+      created_at: event.createdAt,
+      activity_type: event.activityType,
+      stars: event.stars,
+      tool_call_id: event.toolCallId,
+      session_id: event.sessionId,
+      skill_key: event.skillKey,
+      metadata_json: event.metadataJson
+    }
+    try {
+      const rowId = await this.rdbStore.insert(TableNames.STAR_EVENTS, valueBucket)
+      console.info('DatabaseService', `Star event saved: rowId=${rowId}, type=${event.activityType}, stars=${event.stars}`)
+      return rowId
+    } catch (error) {
+      console.error('DatabaseService', `Failed to insert star event: ${JSON.stringify(error)}`)
+      return -1
+    }
+  }
+
+  async getStarEventsSince(startMs: number): Promise<StarEventRow[]> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return []
+    }
+    const events: StarEventRow[] = []
+    const predicates = new relationalStore.RdbPredicates(TableNames.STAR_EVENTS)
+    predicates.greaterThanOrEqualTo('created_at', startMs)
+    predicates.orderByAsc('created_at')
+    try {
+      const resultSet = await this.rdbStore.query(predicates)
+      while (resultSet.goToNextRow()) {
+        events.push(this.readStarEventRow(resultSet))
+      }
+      resultSet.close()
+    } catch (error) {
+      console.error('DatabaseService', `Failed to query star events since ${startMs}: ${JSON.stringify(error)}`)
+    }
+    return events
+  }
+
+  /**
+   * 取指定时间区间内的星事件 (含 startMs, 不含 endMs),按 created_at 升序
+   * - 用于日历视图按月分页, 避免 getStarEventsSince(0) 拉整表
+   * - 走 idx_star_events_created_at 索引
+   */
+  async getStarEventsInRange(startMs: number, endMs: number): Promise<StarEventRow[]> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return []
+    }
+    const events: StarEventRow[] = []
+    const predicates = new relationalStore.RdbPredicates(TableNames.STAR_EVENTS)
+    predicates.greaterThanOrEqualTo('created_at', startMs)
+    predicates.lessThan('created_at', endMs)
+    predicates.orderByAsc('created_at')
+    try {
+      const resultSet = await this.rdbStore.query(predicates)
+      while (resultSet.goToNextRow()) {
+        events.push(this.readStarEventRow(resultSet))
+      }
+      resultSet.close()
+    } catch (error) {
+      console.error('DatabaseService', `Failed to query star events in range [${startMs}, ${endMs}): ${JSON.stringify(error)}`)
+    }
+    return events
+  }
+
+  async deleteStarEventsOlderThan(cutoffMs: number): Promise<number> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return 0
+    }
+    const predicates = new relationalStore.RdbPredicates(TableNames.STAR_EVENTS)
+    predicates.lessThan('created_at', cutoffMs)
+    try {
+      const deleted = await this.rdbStore.delete(predicates)
+      console.info('DatabaseService', `Deleted ${deleted} star events older than ${cutoffMs}`)
+      return deleted
+    } catch (error) {
+      console.error('DatabaseService', `Failed to delete old star events: ${JSON.stringify(error)}`)
+      return 0
+    }
+  }
+
+  private readStarEventRow(resultSet: relationalStore.ResultSet): StarEventRow {
+    return {
+      id: resultSet.getLong(resultSet.getColumnIndex('id')),
+      createdAt: resultSet.getLong(resultSet.getColumnIndex('created_at')),
+      activityType: resultSet.getString(resultSet.getColumnIndex('activity_type')),
+      stars: resultSet.getLong(resultSet.getColumnIndex('stars')),
+      toolCallId: resultSet.getString(resultSet.getColumnIndex('tool_call_id')),
+      sessionId: resultSet.getString(resultSet.getColumnIndex('session_id')),
+      skillKey: resultSet.getString(resultSet.getColumnIndex('skill_key')),
+      metadataJson: resultSet.getString(resultSet.getColumnIndex('metadata_json'))
     }
   }
 
@@ -3000,6 +3425,423 @@ export class DatabaseService {
       console.error('DatabaseService', `Failed to get model usage ranking: ${JSON.stringify(error)}`)
     }
     return items
+  }
+
+  // ==================== 每日教学计划 CRUD ====================
+
+  /** 插入或更新今日教学计划（按 plan_date 唯一索引去重） */
+  async upsertDailyLessonPlan(row: DailyLessonPlanRow): Promise<boolean> {
+    if (this.rdbStore === null) {
+      return false
+    }
+    try {
+      const valueBucket: relationalStore.ValuesBucket = {
+        id: row.id,
+        plan_date: row.planDate,
+        plan_json: row.planJson,
+        plan_version: row.planVersion,
+        status: row.status,
+        error_message: row.errorMessage,
+        planner_provider_id: row.plannerProviderId,
+        planner_model_id: row.plannerModelId,
+        planner_model_name: row.plannerModelName,
+        session_ids_json: row.sessionIdsJson,
+        message_count: row.messageCount,
+        created_at: row.createdAt,
+        updated_at: row.updatedAt,
+        completed_at: row.completedAt
+      }
+      const predicates = new relationalStore.RdbPredicates(TableNames.DAILY_LESSON_PLANS)
+      predicates.equalTo('id', row.id)
+      const updated = await this.rdbStore.update(valueBucket, predicates)
+      if (updated === 0) {
+        await this.rdbStore.insert(TableNames.DAILY_LESSON_PLANS, valueBucket)
+      }
+      return true
+    } catch (error) {
+      console.error('DatabaseService', `Failed to upsert daily lesson plan: ${JSON.stringify(error)}`)
+      return false
+    }
+  }
+
+  /** 按 plan_date 查找教学计划 */
+  async getDailyLessonPlanByDate(planDate: string): Promise<DailyLessonPlanRow | null> {
+    if (this.rdbStore === null) {
+      return null
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.DAILY_LESSON_PLANS)
+      predicates.equalTo('plan_date', planDate)
+      const resultSet = await this.rdbStore.query(predicates)
+      try {
+        if (resultSet.goToFirstRow()) {
+          return this.buildDailyLessonPlanRowFromResultSet(resultSet)
+        }
+      } finally {
+        resultSet.close()
+      }
+    } catch (error) {
+      console.error('DatabaseService', `Failed to get daily lesson plan by date: ${JSON.stringify(error)}`)
+    }
+    return null
+  }
+
+  /** 按 plan_date 查找最近 N 天的教学计划（按日期倒序） */
+  async getRecentDailyLessonPlans(limit: number): Promise<DailyLessonPlanRow[]> {
+    const result: DailyLessonPlanRow[] = []
+    if (this.rdbStore === null) {
+      return result
+    }
+    const safeLimit = limit > 0 ? limit : 7
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.DAILY_LESSON_PLANS)
+      predicates.orderByDesc('plan_date')
+      predicates.limitAs(safeLimit)
+      const resultSet = await this.rdbStore.query(predicates)
+      try {
+        while (resultSet.goToNextRow()) {
+          result.push(this.buildDailyLessonPlanRowFromResultSet(resultSet))
+        }
+      } finally {
+        resultSet.close()
+      }
+    } catch (error) {
+      console.error('DatabaseService', `Failed to get recent daily lesson plans: ${JSON.stringify(error)}`)
+    }
+    return result
+  }
+
+  private buildDailyLessonPlanRowFromResultSet(rs: relationalStore.ResultSet): DailyLessonPlanRow {
+    const row = new DailyLessonPlanRow()
+    row.id = this.safeGetString(rs, 'id')
+    row.planDate = this.safeGetString(rs, 'plan_date')
+    row.planJson = this.safeGetString(rs, 'plan_json')
+    row.planVersion = this.safeGetLong(rs, 'plan_version', 1)
+    row.status = this.safeGetString(rs, 'status', 'pending')
+    row.errorMessage = this.safeGetString(rs, 'error_message')
+    row.plannerProviderId = this.safeGetString(rs, 'planner_provider_id')
+    row.plannerModelId = this.safeGetString(rs, 'planner_model_id')
+    row.plannerModelName = this.safeGetString(rs, 'planner_model_name')
+    row.sessionIdsJson = this.safeGetString(rs, 'session_ids_json', '[]')
+    row.messageCount = this.safeGetLong(rs, 'message_count', 0)
+    row.createdAt = this.safeGetLong(rs, 'created_at', 0)
+    row.updatedAt = this.safeGetLong(rs, 'updated_at', 0)
+    row.completedAt = this.safeGetLong(rs, 'completed_at', 0)
+    return row
+  }
+
+  // ==================== 预生成图片 CRUD ====================
+
+  /** 插入或更新预生成图片行 */
+  async upsertPreparedMedia(row: PreparedMediaRow): Promise<boolean> {
+    if (this.rdbStore === null) {
+      return false
+    }
+    try {
+      const valueBucket: relationalStore.ValuesBucket = {
+        id: row.id,
+        plan_id: row.planId,
+        topic_key: row.topicKey,
+        topic_module: row.topicModule,
+        prompt: row.prompt,
+        revised_prompt: row.revisedPrompt,
+        provider_id: row.providerId,
+        provider_name: row.providerName,
+        model_id: row.modelId,
+        model_name: row.modelName,
+        file_path: row.filePath,
+        mime_type: row.mimeType,
+        aspect_ratio: row.aspectRatio,
+        status: row.status,
+        error_message: row.errorMessage,
+        consumed_count: row.consumedCount,
+        last_consumed_at: row.lastConsumedAt,
+        created_at: row.createdAt,
+        expires_at: row.expiresAt
+      }
+      const predicates = new relationalStore.RdbPredicates(TableNames.PREPARED_MEDIA)
+      predicates.equalTo('id', row.id)
+      const updated = await this.rdbStore.update(valueBucket, predicates)
+      if (updated === 0) {
+        await this.rdbStore.insert(TableNames.PREPARED_MEDIA, valueBucket)
+      }
+      return true
+    } catch (error) {
+      console.error('DatabaseService', `Failed to upsert prepared media: ${JSON.stringify(error)}`)
+      return false
+    }
+  }
+
+  /** 按 topicKey 查找最近一张未过期的 ready 预生成图 */
+  async findReadyPreparedMediaByTopicKey(topicKey: string, nowMs: number): Promise<PreparedMediaRow | null> {
+    if (this.rdbStore === null || topicKey === '') {
+      return null
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.PREPARED_MEDIA)
+      predicates.equalTo('topic_key', topicKey)
+      predicates.equalTo('status', 'ready')
+      predicates.greaterThan('expires_at', nowMs)
+      predicates.orderByDesc('created_at')
+      predicates.limitAs(1)
+      const resultSet = await this.rdbStore.query(predicates)
+      try {
+        if (resultSet.goToFirstRow()) {
+          return this.buildPreparedMediaRowFromResultSet(resultSet)
+        }
+      } finally {
+        resultSet.close()
+      }
+    } catch (error) {
+      console.error('DatabaseService', `Failed to find prepared media by topic key: ${JSON.stringify(error)}`)
+    }
+    return null
+  }
+
+  /** 命中一次预生成图：递增 consumed_count + 更新 last_consumed_at */
+  async markPreparedMediaConsumed(id: string, nowMs: number): Promise<void> {
+    if (this.rdbStore === null || id === '') {
+      return
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.PREPARED_MEDIA)
+      predicates.equalTo('id', id)
+      const current = await this.findPreparedMediaById(id)
+      const nextCount = (current?.consumedCount ?? 0) + 1
+      const valueBucket: relationalStore.ValuesBucket = {
+        consumed_count: nextCount,
+        last_consumed_at: nowMs
+      }
+      await this.rdbStore.update(valueBucket, predicates)
+    } catch (error) {
+      console.error('DatabaseService', `Failed to mark prepared media consumed: ${JSON.stringify(error)}`)
+    }
+  }
+
+  private async findPreparedMediaById(id: string): Promise<PreparedMediaRow | null> {
+    if (this.rdbStore === null) {
+      return null
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.PREPARED_MEDIA)
+      predicates.equalTo('id', id)
+      const resultSet = await this.rdbStore.query(predicates)
+      try {
+        if (resultSet.goToFirstRow()) {
+          return this.buildPreparedMediaRowFromResultSet(resultSet)
+        }
+      } finally {
+        resultSet.close()
+      }
+    } catch (_e) {
+      return null
+    }
+    return null
+  }
+
+  /** 删除某 plan 关联的全部 prepared_media（级联清理） */
+  async deletePreparedMediaByPlanId(planId: string): Promise<number> {
+    if (this.rdbStore === null || planId === '') {
+      return 0
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.PREPARED_MEDIA)
+      predicates.equalTo('plan_id', planId)
+      return await this.rdbStore.delete(predicates)
+    } catch (error) {
+      console.error('DatabaseService', `Failed to delete prepared media by plan id: ${JSON.stringify(error)}`)
+      return 0
+    }
+  }
+
+  /** 列出已过期的预生成图（按 expires_at < nowMs），调用方可先删文件再调 deleteExpiredPreparedMedia 删行 */
+  async listExpiredPreparedMedia(nowMs: number): Promise<PreparedMediaRow[]> {
+    const result: PreparedMediaRow[] = []
+    if (this.rdbStore === null) {
+      return result
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.PREPARED_MEDIA)
+      predicates.lessThan('expires_at', nowMs)
+      const resultSet = await this.rdbStore.query(predicates)
+      try {
+        while (resultSet.goToNextRow()) {
+          result.push(this.buildPreparedMediaRowFromResultSet(resultSet))
+        }
+      } finally {
+        resultSet.close()
+      }
+    } catch (error) {
+      console.error('DatabaseService', `Failed to list expired prepared media: ${JSON.stringify(error)}`)
+    }
+    return result
+  }
+
+  /** 删除已过期的预生成图（按 expires_at < nowMs） */
+  async deleteExpiredPreparedMedia(nowMs: number): Promise<number> {
+    if (this.rdbStore === null) {
+      return 0
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.PREPARED_MEDIA)
+      predicates.lessThan('expires_at', nowMs)
+      return await this.rdbStore.delete(predicates)
+    } catch (error) {
+      console.error('DatabaseService', `Failed to delete expired prepared media: ${JSON.stringify(error)}`)
+      return 0
+    }
+  }
+
+  /**
+   * 备课老师运行时统计：plan 总数、明日 plan 状态、预生成图数量/命中次数/命中率、最近成功时间。
+   * - preparedCount: status='ready' AND expires_at>nowMs
+   * - consumedCount: 上述范围内的 sum(consumed_count)
+   * - hitRate: consumedCount / max(preparedCount, 1)
+   *
+   * 单次调用 4 个独立查询（沿用 RdbPredicates，无聚合 SQL），全部 best-effort。
+   */
+  async getPlannerStats(nowMs: number, tomorrowYMD: string): Promise<PlannerStats> {
+    const stats = new PlannerStats()
+    if (this.rdbStore === null) {
+      return stats
+    }
+    try {
+      // 1) totalPlans: COUNT(*) from daily_lesson_plans
+      const allPlansPred = new relationalStore.RdbPredicates(TableNames.DAILY_LESSON_PLANS)
+      const allPlansRs = await this.rdbStore.query(allPlansPred, ['id'])
+      try {
+        let count = 0
+        while (allPlansRs.goToNextRow()) {
+          count += 1
+        }
+        stats.totalPlans = count
+      } finally {
+        allPlansRs.close()
+      }
+
+      // 2) todayPlanStatus: 明日 plan row
+      const todayRow = await this.getDailyLessonPlanByDate(tomorrowYMD)
+      stats.todayPlanStatus = todayRow === null ? 'none' : todayRow.status
+
+      // 3) preparedCount: status='ready' AND expires_at>nowMs
+      const readyPred = new relationalStore.RdbPredicates(TableNames.PREPARED_MEDIA)
+      readyPred.equalTo('status', 'ready')
+      readyPred.greaterThan('expires_at', nowMs)
+      const readyRs = await this.rdbStore.query(readyPred, ['consumed_count'])
+      let totalConsumed = 0
+      try {
+        let readyCount = 0
+        while (readyRs.goToNextRow()) {
+          readyCount += 1
+          totalConsumed += this.safeGetLong(readyRs, 'consumed_count', 0)
+        }
+        stats.preparedCount = readyCount
+        stats.consumedCount = totalConsumed
+      } finally {
+        readyRs.close()
+      }
+
+      // 4) lastPlanAt: MAX(completed_at) WHERE status='done'
+      const donePred = new relationalStore.RdbPredicates(TableNames.DAILY_LESSON_PLANS)
+      donePred.equalTo('status', 'done')
+      const doneRs = await this.rdbStore.query(donePred, ['completed_at'])
+      try {
+        let maxCompleted = 0
+        while (doneRs.goToNextRow()) {
+          const ts = this.safeGetLong(doneRs, 'completed_at', 0)
+          if (ts > maxCompleted) {
+            maxCompleted = ts
+          }
+        }
+        stats.lastPlanAt = maxCompleted
+      } finally {
+        doneRs.close()
+      }
+
+      // 5) hitRate
+      stats.hitRate = stats.preparedCount > 0
+        ? stats.consumedCount / stats.preparedCount
+        : 0
+    } catch (error) {
+      console.error('DatabaseService', `getPlannerStats failed: ${JSON.stringify(error)}`)
+    }
+    return stats
+  }
+
+  /** 列出某 plan 的全部预生成图（含 failed） */
+  async listPreparedMediaByPlanId(planId: string): Promise<PreparedMediaRow[]> {
+    const result: PreparedMediaRow[] = []
+    if (this.rdbStore === null || planId === '') {
+      return result
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.PREPARED_MEDIA)
+      predicates.equalTo('plan_id', planId)
+      const resultSet = await this.rdbStore.query(predicates)
+      try {
+        while (resultSet.goToNextRow()) {
+          result.push(this.buildPreparedMediaRowFromResultSet(resultSet))
+        }
+      } finally {
+        resultSet.close()
+      }
+    } catch (error) {
+      console.error('DatabaseService', `Failed to list prepared media by plan id: ${JSON.stringify(error)}`)
+    }
+    return result
+  }
+
+  /** 按 topic_module 列出所有就绪且未过期的预生成图（按 created_at DESC） */
+  async listReadyPreparedMediaByModule(topicModule: string, limit: number,
+    nowMs: number): Promise<PreparedMediaRow[]> {
+    const result: PreparedMediaRow[] = []
+    if (this.rdbStore === null || topicModule === '' || limit <= 0) {
+      return result
+    }
+    const safeLimit: number = Math.max(1, Math.min(limit, 500))
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.PREPARED_MEDIA)
+      predicates.equalTo('topic_module', topicModule)
+      predicates.equalTo('status', 'ready')
+      predicates.greaterThan('expires_at', nowMs)
+      predicates.orderByDesc('created_at')
+      predicates.limitAs(safeLimit)
+      const resultSet = await this.rdbStore.query(predicates)
+      try {
+        while (resultSet.goToNextRow()) {
+          result.push(this.buildPreparedMediaRowFromResultSet(resultSet))
+        }
+      } finally {
+        resultSet.close()
+      }
+    } catch (error) {
+      console.error('DatabaseService', `Failed to list ready prepared media by module: ${JSON.stringify(error)}`)
+    }
+    return result
+  }
+
+  private buildPreparedMediaRowFromResultSet(rs: relationalStore.ResultSet): PreparedMediaRow {
+    const row = new PreparedMediaRow()
+    row.id = this.safeGetString(rs, 'id')
+    row.planId = this.safeGetString(rs, 'plan_id')
+    row.topicKey = this.safeGetString(rs, 'topic_key')
+    row.topicModule = this.safeGetString(rs, 'topic_module')
+    row.prompt = this.safeGetString(rs, 'prompt')
+    row.revisedPrompt = this.safeGetString(rs, 'revised_prompt')
+    row.providerId = this.safeGetString(rs, 'provider_id')
+    row.providerName = this.safeGetString(rs, 'provider_name')
+    row.modelId = this.safeGetString(rs, 'model_id')
+    row.modelName = this.safeGetString(rs, 'model_name')
+    row.filePath = this.safeGetString(rs, 'file_path')
+    row.mimeType = this.safeGetString(rs, 'mime_type', 'image/png')
+    row.aspectRatio = this.safeGetString(rs, 'aspect_ratio', 'square')
+    row.status = this.safeGetString(rs, 'status', 'ready')
+    row.errorMessage = this.safeGetString(rs, 'error_message')
+    row.consumedCount = this.safeGetLong(rs, 'consumed_count', 0)
+    row.lastConsumedAt = this.safeGetLong(rs, 'last_consumed_at', 0)
+    row.createdAt = this.safeGetLong(rs, 'created_at', 0)
+    row.expiresAt = this.safeGetLong(rs, 'expires_at', 0)
+    return row
   }
 }
 

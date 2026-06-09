@@ -1,4 +1,7 @@
 import {
+  AttachmentType,
+  MessageAttachment,
+  ModelProvider,
   ToolApprovalPolicy,
   ToolCall,
   ToolPermissionLevel,
@@ -11,12 +14,32 @@ import {
   LEGACY_WEB_SEARCH_TOOL_ID,
   SCRAPE_WEB_TOOL_ID,
   SEARCH_WEB_TOOL_ID,
+  MATH_QUIZ_TOOL_ID,
+  ENGLISH_QUIZ_TOOL_ID,
+  HUARONGDAO_TOOL_ID,
+  HANDWRITING_PRACTICE_TOOL_ID,
+  CATEGORIZATION_TOOL_ID,
   isAskUserFunctionName,
+  isMathQuizFunctionName,
+  isEnglishQuizFunctionName,
+  isHuarongdaoFunctionName,
+  isHandwritingPracticeFunctionName,
+  isCategorizationFunctionName,
   isScrapeWebFunctionName,
   isSearchWebFunctionName
 } from '../utils/SearchToolIdentityUtils'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
+import { getEnglishQuizImageIndex, EnglishQuizImageIndex } from './EnglishQuizImageIndex'
+import { generatePuzzle } from '../utils/HuarongdaoPuzzleGenerator'
+import { ServiceRegistry } from './ServiceRegistry'
+import { modelSupportsVision } from './registry/ModelAbilityRegistry'
+import { RequestMessage, AIApiConfig } from './AIApiService'
+import { getProviderViewModel } from '../viewmodels/ProviderViewModel'
+import { getEffectiveApiKey } from '../config/PresetProviders'
+import { getStarRewardService } from './StarRewardService'
+import { StarActivityType } from '../models/StarEventModels'
+
 
 // 取消检查回调类型
 type CancelCheckCallback = () => boolean
@@ -375,6 +398,20 @@ export class ToolExecutionService {
     return undefined
   }
 
+  private recordStarEvent(
+    activityType: StarActivityType,
+    toolCall: ToolCall,
+    context: ToolExecutionContext,
+    answerJson: string
+  ): void {
+    void getStarRewardService().recordEvent({
+      activityType: activityType,
+      payloadJson: answerJson,
+      toolCallId: toolCall.id,
+      sessionId: context.sessionId
+    })
+  }
+
   private buildCancelledResult(toolCall: ToolCall, displayName: string, sourceLabel: string): ToolResult {
     return new ToolResult(
       toolCall.id,
@@ -505,6 +542,553 @@ export class ToolExecutionService {
     )
   }
 
+  // math_quiz 特殊路径: 与 ask_user 类似, 挂起等待 UI 层 (MathQuizCard) 的回答。
+  private async handleMathQuiz(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = MATH_QUIZ_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '数学游戏'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    toolCall.approvalState = 'pending'
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = MATH_QUIZ_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `math_quiz answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `math_quiz 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'math_quiz cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未回答该题目' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `math_quiz answered: ${toolCall.id}`)
+    this.recordStarEvent('math_quiz', toolCall, context, answerJson)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
+  // english_quiz 特殊路径: 与 math_quiz 类似, 挂起等待 EnglishQuizCard 回答。
+  // 图片解析 (缓存查询 + API 生成) 在后台完成并注入 toolCall.arguments,
+  // 卡片自身只做轻量的缓存查询作为首帧优化。
+  private async handleEnglishQuiz(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = ENGLISH_QUIZ_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '英语看图说话'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 1. 立即设置 pending 状态, 让卡片立即出现
+    toolCall.approvalState = 'pending'
+
+    // 2. 后台解析图片: 缓存查询 + API 生成, 完成后注入 image_path
+    try {
+      const parsed = JSON.parse(toolCall.arguments) as Record<string, Object>
+      const questionType = (parsed['question_type'] as string) ?? 'word'
+      const question = (parsed['question'] as string) ?? ''
+      const answer = (parsed['correct_answer'] as string) ?? ''
+      let word = ''
+      let sentence = ''
+      if (questionType === 'sentence') {
+        sentence = answer
+      } else {
+        word = answer
+      }
+      const imagePrompt = (parsed['image_prompt'] as string) ?? ''
+
+      console.info('ToolExecutionService',
+        `english_quiz image resolution start: question="${question}", questionType="${questionType}", answer="${answer}", imagePrompt="${imagePrompt.substring(0, 80)}..."`)
+
+      const imageIndex = getEnglishQuizImageIndex()
+      let imagePath = ''
+
+      const cached = await imageIndex.lookup(word, sentence)
+      if (cached !== null && cached.filePath !== '') {
+        imagePath = cached.filePath
+        console.info('ToolExecutionService', `english_quiz cache HIT: key="${EnglishQuizImageIndex.buildKey(word, sentence)}"`)
+      } else if (imagePrompt !== '') {
+        console.info('ToolExecutionService', 'english_quiz cache miss, starting API generation...')
+        const generated = await imageIndex.generate(word, sentence, imagePrompt)
+        if (generated !== null) {
+          imagePath = generated.filePath
+          console.info('ToolExecutionService', `english_quiz generation SUCCESS: path="${imagePath}"`)
+        } else {
+          console.error('ToolExecutionService', 'english_quiz generation FAILED: generate() returned null')
+        }
+      } else {
+        console.warn('ToolExecutionService', 'english_quiz: no cache hit and imagePrompt is empty, cannot generate')
+      }
+
+      if (imagePath !== '') {
+        parsed['image_path'] = imagePath as Object
+        toolCall.arguments = JSON.stringify(parsed)
+      } else {
+        console.warn('ToolExecutionService', 'english_quiz: imagePath still empty after resolution, card will show loading')
+      }
+    } catch (error) {
+      console.error('ToolExecutionService', `english_quiz image resolution exception: ${JSON.stringify(error)}`)
+    }
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = ENGLISH_QUIZ_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `english_quiz answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `english_quiz 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'english_quiz cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未回答该题目' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `english_quiz answered: ${toolCall.id}`)
+    this.recordStarEvent('english_quiz', toolCall, context, answerJson)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
+  // huarongdao 特殊路径: 与 math_quiz/english_quiz 类似, 挂起等待 HuarongdaoCard 回答。
+  // 谜题生成在后台完成并注入 toolCall.arguments。
+  private async handleHuarongdao(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = HUARONGDAO_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '数字华容道'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 1. 立即设置 pending 状态, 让卡片立即出现
+    toolCall.approvalState = 'pending'
+
+    // 2. 后台生成谜题并注入到 toolCall.arguments
+    try {
+      const parsed = JSON.parse(toolCall.arguments) as Record<string, Object>
+      const difficulty = (parsed['difficulty'] as number) ?? 1
+      const clampedDifficulty = Math.max(1, Math.min(5, difficulty))
+
+      console.info('ToolExecutionService',
+        `huarongdao puzzle generation start: difficulty=${clampedDifficulty}`)
+
+      const state = generatePuzzle(clampedDifficulty)
+
+      parsed['tiles'] = state.tiles as Object[]
+      parsed['grid_size'] = state.gridSize as Object
+      parsed['difficulty'] = clampedDifficulty as Object
+      toolCall.arguments = JSON.stringify(parsed)
+
+      console.info('ToolExecutionService',
+        `huarongdao puzzle generated: gridSize=${state.gridSize}, difficulty=${state.difficulty}`)
+    } catch (error) {
+      console.error('ToolExecutionService', `huarongdao puzzle generation exception: ${JSON.stringify(error)}`)
+    }
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = HUARONGDAO_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `huarongdao answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `huarongdao 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'huarongdao cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未完成该谜题' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `huarongdao answered: ${toolCall.id}`)
+    this.recordStarEvent('number_puzzle', toolCall, context, answerJson)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
+  // categorization 特殊路径: 与 math_quiz 类似, 挂起等待 CategorizationCard 回答。
+  private async handleCategorization(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = CATEGORIZATION_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '分类小管家'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    toolCall.approvalState = 'pending'
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = CATEGORIZATION_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `categorization answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `categorization 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'categorization cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未完成分类' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `categorization answered: ${toolCall.id}`)
+    this.recordStarEvent('categorization', toolCall, context, answerJson)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
+  // handwriting_practice 特殊路径: 与 huarongdao 类似, 挂起等待 HandwritingCard 回答。
+  // 孩子完成书写后调用 AI vision 评价, 将评价文字作为 ToolResult 返回。
+  private async handleHandwriting(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = HANDWRITING_PRACTICE_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '学写字'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    toolCall.approvalState = 'pending'
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = HANDWRITING_PRACTICE_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `handwriting_practice answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `handwriting_practice 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'handwriting_practice cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未完成书写练习' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    // 解析结果生成反馈
+    let evalText: string = ''
+    try {
+      const answer = JSON.parse(answerJson) as Record<string, Object>
+      const handwritingBase64 = (answer['handwriting_base64'] as string) ?? ''
+      const character = (answer['character'] as string) ?? '字'
+      const charType = (answer['type'] as string) ?? 'letter'
+      const completed = (answer['completed'] as boolean) ?? true
+
+      if (!completed || handwritingBase64 === '') {
+        // 放弃: 返回简单提示
+        evalText = `小朋友这次没有完成${character}的书写，没关系，下次再来！`
+      } else {
+        // 调用 AI vision 评价
+        evalText = await this.evaluateHandwriting(handwritingBase64, character, charType)
+      }
+    } catch (error) {
+      console.error('ToolExecutionService', `Failed to evaluate handwriting: ${JSON.stringify(error)}`)
+      evalText = '写得真棒！继续加油！'
+    }
+
+    const resultContent = JSON.stringify({ evaluation: evalText })
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `handwriting_practice answered: ${toolCall.id}`)
+    this.recordStarEvent('handwriting_practice', toolCall, context, answerJson)
+    return new ToolResult(
+      toolCall.id,
+      resultContent,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
+  // 调用 AI vision 模型评价书写
+  private async evaluateHandwriting(
+    base64Image: string,
+    character: string,
+    charType: string
+  ): Promise<string> {
+    try {
+      // 遍历所有启用的 provider，找到第一个支持 vision 的模型
+      const providerViewModel = getProviderViewModel()
+      const providers: ModelProvider[] = await providerViewModel.loadProviders()
+
+      let chosenProvider: ModelProvider | null = null
+      let chosenModelId: string = ''
+
+      for (let pi = 0; pi < providers.length; pi++) {
+        const provider = providers[pi]
+        if (provider === null) {
+          continue
+        }
+        const models = provider.models
+        for (let mi = 0; mi < models.length; mi++) {
+          const model = models[mi]
+          if (model === null) {
+            continue
+          }
+          if (!model.isEnabled) {
+            continue
+          }
+          if (!modelSupportsVision(model.id)) {
+            continue
+          }
+          chosenProvider = provider
+          chosenModelId = model.id
+          break
+        }
+        if (chosenProvider !== null) {
+          break
+        }
+      }
+
+      if (chosenProvider === null || chosenModelId === '') {
+        console.info('ToolExecutionService', 'no provider find')
+        return '写得真不错！继续练习会越来越好的！'
+      }
+
+      const effectiveApiKey: string = getEffectiveApiKey(chosenProvider.id, chosenProvider.apiKey)
+      if (effectiveApiKey === '') {
+        return '写得很好，下次一定会更棒！'
+      }
+
+      // 构建 API 配置
+      const apiConfig: AIApiConfig = {
+        providerId: chosenProvider.id,
+        providerType: chosenProvider.type,
+        apiStyle: chosenProvider.apiStyle,
+        apiKey: effectiveApiKey,
+        baseUrl: chosenProvider.baseUrl
+      }
+      // 构造评价请求消息
+      const typeLabel: string = charType === 'letter' ? '英文字母' : charType === 'number' ? '数字' : '汉字'
+      const prompt: string = `请用鼓励的语气评价小朋友写的"${character}"（${typeLabel}）。
+
+注意观察：
+- 笔画方向是否正确
+- 字形大小是否合适
+- 整体是否端正
+
+请给出1-2句鼓励性反馈，语气要温暖，像幼儿园老师对小朋友说话。用中文回复。`
+
+      const attachment: MessageAttachment = new MessageAttachment(
+        'handwriting_eval',
+        AttachmentType.IMAGE,
+        'handwriting.jpg',
+        '',
+        'image/jpeg',
+        0
+      )
+      attachment.base64Data = base64Image
+
+      const msg: RequestMessage = new RequestMessage('user', prompt)
+      console.info('ToolExecutionService', `prompt, ${prompt}`)
+      msg.attachments = [attachment]
+
+      const apiResult = await ServiceRegistry.aiApi().sendChatRequest(
+        apiConfig,
+        [msg],
+        chosenModelId
+      )
+
+      if (apiResult.success && apiResult.content.trim() !== '') {
+        return apiResult.content.trim()
+      }
+      return '写得真好，继续练习会越来越棒！'
+    } catch (error) {
+      console.error('ToolExecutionService', `evaluateHandwriting failed: ${JSON.stringify(error)}`)
+      return '写得很认真哦，下次一定会更好的！'
+    }
+  }
+
   // 执行单个工具调用
   async executeToolCall(
     toolCall: ToolCall,
@@ -524,6 +1108,36 @@ export class ToolExecutionService {
     // 人机交互工具, 不走通用 executor 和 write 审批 sheet, 由 AskUserCard 直接收集答案。
     if (isAskUserFunctionName(normalizedFunctionName)) {
       return await this.handleAskUser(toolCall, context)
+    }
+
+    // === math_quiz 特殊路径 ===
+    // 数学游戏互动工具, 由 MathQuizCard 收集小朋友的答案。
+    if (isMathQuizFunctionName(normalizedFunctionName)) {
+      return await this.handleMathQuiz(toolCall, context)
+    }
+
+    // === english_quiz 特殊路径 ===
+    // 英语看图说话互动工具, 由 EnglishQuizCard 收集小朋友的答案。
+    if (isEnglishQuizFunctionName(normalizedFunctionName)) {
+      return await this.handleEnglishQuiz(toolCall, context)
+    }
+
+    // === huarongdao 特殊路径 ===
+    // 数字华容道游戏互动工具, 由 HuarongdaoCard 收集小朋友的答案。
+    if (isHuarongdaoFunctionName(normalizedFunctionName)) {
+      return await this.handleHuarongdao(toolCall, context)
+    }
+
+    // === categorization 特殊路径 ===
+    // 分类小管家互动工具, 由 CategorizationCard 收集小朋友的分类结果。
+    if (isCategorizationFunctionName(normalizedFunctionName)) {
+      return await this.handleCategorization(toolCall, context)
+    }
+
+    // === handwriting_practice 特殊路径 ===
+    // 学写字互动工具, 由 HandwritingCard 收集小朋友的书写, 然后调用 AI vision 评价。
+    if (isHandwritingPracticeFunctionName(normalizedFunctionName)) {
+      return await this.handleHandwriting(toolCall, context)
     }
 
     // 通过函数名获取工具 ID

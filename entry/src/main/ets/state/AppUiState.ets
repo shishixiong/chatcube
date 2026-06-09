@@ -62,6 +62,11 @@ export class AppUiState {
   @Trace materialType: number = 100   // ADAPTIVE
   @Trace materialLevel: number = 10   // ADAPTIVE
   @Trace lightColorMode: string = 'default'
+  // 星星奖励系统
+  @Trace starEarnedTick: number = 0          // 每次 recordEvent 后自增, ChatPage 浮层触发信号
+  @Trace starLastGrant: string = ''          // 最近一次授星详情 (JSON 字符串)
+  @Trace starTodaySummary: string = ''       // TodayStarSummary JSON 字符串
+  @Trace starTodayLoaded: boolean = false    // 预热守卫
 }
 
 function readStorageValue<T>(key: string, fallback: T): T {
@@ -233,6 +238,18 @@ function applyAppUiStateValue<T extends string | number | boolean>(state: AppUiS
     case AppStorageKeys.LIGHT_COLOR_MODE:
       state.lightColorMode = value as string
       return
+    case AppStorageKeys.STAR_EARNED_TICK:
+      state.starEarnedTick = value as number
+      return
+    case AppStorageKeys.STAR_LAST_GRANT:
+      state.starLastGrant = value as string
+      return
+    case AppStorageKeys.STAR_TODAY_SUMMARY:
+      state.starTodaySummary = value as string
+      return
+    case AppStorageKeys.STAR_TODAY_LOADED:
+      state.starTodayLoaded = value as boolean
+      return
     default:
       return
   }
@@ -339,6 +356,14 @@ function createAppUiStateFromStorage(): AppUiState {
     readStorageValue<number>(AppStorageKeys.MATERIAL_LEVEL, 10))
   applyAppUiStateValue(state, AppStorageKeys.LIGHT_COLOR_MODE,
     readStorageValue<string>(AppStorageKeys.LIGHT_COLOR_MODE, 'default'))
+  applyAppUiStateValue(state, AppStorageKeys.STAR_EARNED_TICK,
+    readStorageValue<number>(AppStorageKeys.STAR_EARNED_TICK, 0))
+  applyAppUiStateValue(state, AppStorageKeys.STAR_LAST_GRANT,
+    readStorageValue<string>(AppStorageKeys.STAR_LAST_GRANT, ''))
+  applyAppUiStateValue(state, AppStorageKeys.STAR_TODAY_SUMMARY,
+    readStorageValue<string>(AppStorageKeys.STAR_TODAY_SUMMARY, ''))
+  applyAppUiStateValue(state, AppStorageKeys.STAR_TODAY_LOADED,
+    readStorageValue<boolean>(AppStorageKeys.STAR_TODAY_LOADED, false))
   return state
 }
 
@@ -407,6 +432,10 @@ export function syncAppUiStateFromStorage(): void {
   state.materialType = freshState.materialType
   state.materialLevel = freshState.materialLevel
   state.lightColorMode = freshState.lightColorMode
+  state.starEarnedTick = freshState.starEarnedTick
+  state.starLastGrant = freshState.starLastGrant
+  state.starTodaySummary = freshState.starTodaySummary
+  state.starTodayLoaded = freshState.starTodayLoaded
 }
 
 export function applyThemeToAppUiState(themeId: string, colors: ThemeColorConfig): void {
@@ -543,6 +572,10 @@ function resolveAppUiStatePath(path: string): string {
       return 'materialLevel'
     case AppStorageKeys.LIGHT_COLOR_MODE:
       return 'lightColorMode'
+    case AppStorageKeys.STAR_EARNED_TICK:
+      return 'starEarnedTick'
+    case AppStorageKeys.STAR_TODAY_SUMMARY:
+      return 'starTodaySummary'
     default:
       return path
   }

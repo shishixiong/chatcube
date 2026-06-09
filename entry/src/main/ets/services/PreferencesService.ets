@@ -44,6 +44,28 @@ export class PreferenceKeys {
   static readonly CUSTOM_SYSTEM_PROMPT: string = 'custom_system_prompt'
   static readonly SYSTEM_PROMPT_ENABLED: string = 'system_prompt_enabled'
 
+  // 儿童学习画像
+  static readonly CHILD_PROFILE_JSON: string = 'child_profile_json'
+
+  // 英语出题工具图片缓存索引
+  static readonly ENGLISH_QUIZ_IMAGE_INDEX_JSON: string = 'english_quiz_image_index_json'
+
+  // 数字华容道最佳成绩 (按难度区分: number_puzzle_best_time_2/3/4/5, number_puzzle_best_moves_2/3/4/5)
+  static readonly NUMBER_PUZZLE_BEST_TIME_PREFIX: string = 'number_puzzle_best_time_'
+  static readonly NUMBER_PUZZLE_BEST_MOVES_PREFIX: string = 'number_puzzle_best_moves_'
+
+  // 分类小管家最佳成绩 (按难度区分: categorization_best_time_1/2/3, categorization_best_perfect_1/2/3)
+  // 速度王: 任意完成的最快用时; 全对王: correct===total 时的最快用时
+  static readonly CATEGORIZATION_BEST_TIME_PREFIX: string = 'categorization_best_time_'
+  static readonly CATEGORIZATION_BEST_PERFECT_PREFIX: string = 'categorization_best_perfect_'
+
+  // 数学小游戏连胜 (按 skill_key 区分: math_quiz_streak_current_<skill_key>, math_quiz_streak_best_<skill_key>)
+  static readonly MATH_QUIZ_STREAK_CURRENT_PREFIX: string = 'math_quiz_streak_current_'
+  static readonly MATH_QUIZ_STREAK_BEST_PREFIX: string = 'math_quiz_streak_best_'
+
+  // 分类小管家引导已观看标记 (true = 已看过, false 或无值 = 首次玩, 显示引导气泡)
+  static readonly CATEGORIZATION_TUTORIAL_SEEN: string = 'categorization_tutorial_seen'
+
   // 搜索服务配置
   static readonly SEARCH_SERVICE_ENABLED: string = 'search_service_enabled'
   static readonly SEARCH_CONVERSATION_ENABLED: string = 'search_conversation_enabled'
@@ -108,6 +130,14 @@ export class PreferenceKeys {
 
   // 首次启动引导
   static readonly ONBOARDING_COMPLETED: string = 'onboarding_completed'
+
+  // 备课老师（每日动态教学）配置
+  // 总开关：关闭后 notifySessionEnd 是 no-op，WorkScheduler 取消注册
+  static readonly PLANNER_ENABLED: string = 'planner_enabled'
+  // 触发时间（HH:MM 24h 本地时区），默认 21:00
+  static readonly PLANNER_TRIGGER_TIME: string = 'planner_trigger_time'
+  // 备课老师失败计数前缀（按 YYYYMMDD 区分），用于同日重试上限 3 次
+  static readonly PLANNER_FAIL_COUNT_PREFIX: string = 'planner_fail_count_'
 }
 
 // models.dev 默认基址，PreferenceKeys.MODELS_DEV_BASE_URL 未配置时使用
@@ -487,6 +517,16 @@ export class PreferencesService {
   // 设置首次启动引导完成态
   async setOnboardingCompleted(completed: boolean): Promise<void> {
     await this.setBoolean(PreferenceKeys.ONBOARDING_COMPLETED, completed)
+  }
+
+  // 获取分类小管家引导是否已观看
+  async getCategorizationTutorialSeen(): Promise<boolean> {
+    return await this.getBoolean(PreferenceKeys.CATEGORIZATION_TUTORIAL_SEEN, false)
+  }
+
+  // 设置分类小管家引导已观看
+  async setCategorizationTutorialSeen(seen: boolean): Promise<void> {
+    await this.setBoolean(PreferenceKeys.CATEGORIZATION_TUTORIAL_SEEN, seen)
   }
 }
 

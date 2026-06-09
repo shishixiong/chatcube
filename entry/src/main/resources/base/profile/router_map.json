@@ -101,6 +101,21 @@
       "buildFunction": "UsageStatsPageBuilder"
     },
     {
+      "name": "LearningProfilePage",
+      "pageSourceFile": "src/main/ets/pages/LearningProfilePage.ets",
+      "buildFunction": "LearningProfilePageBuilder"
+    },
+    {
+      "name": "LearningTomorrowPlanPage",
+      "pageSourceFile": "src/main/ets/pages/LearningTomorrowPlanPage.ets",
+      "buildFunction": "LearningTomorrowPlanPageBuilder"
+    },
+    {
+      "name": "LearningEnglishImagesPage",
+      "pageSourceFile": "src/main/ets/pages/LearningEnglishImagesPage.ets",
+      "buildFunction": "LearningEnglishImagesPageBuilder"
+    },
+    {
       "name": "PrivacyPolicyPage",
       "pageSourceFile": "src/main/ets/pages/PrivacyPolicyPage.ets",
       "buildFunction": "PrivacyPolicyPageBuilder"

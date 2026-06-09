@@ -20,6 +20,12 @@ import { getAttachmentStorageService, AttachmentStorageService } from '../servic
 import { getToolExecutionService, ToolExecutionService, ToolExecutionContext, isCancelledToolResult, CancelledToolResultInfo } from '../services/ToolExecutionService'
 import { getProviderViewModel, ProviderViewModel } from './ProviderViewModel'
 import { getAssistantService, AssistantService, AssistantRuntimeConfig } from '../services/AssistantService'
+import { DEFAULT_ASSISTANT_ID } from '../models/AssistantModels'
+import { getLessonPlanningService } from '../services/LessonPlanningService'
+import {
+  renderDailyPlanSection,
+  renderYesterdaySummarySection
+} from '../utils/LessonPlanPromptUtils'
 import { ChatMessage, ChatSession, MessageRole, ProviderType, ApiStyle, MessageAttachment, AttachmentType, ReasoningLevel, ToolDefinition, ToolCall, ToolResult, SearchReference, OpenAITransport, ToolSourceType, ToolPermissionLevel } from '../models/ChatModels'
 import { AIGeneratedImageFileResult, AIGeneratedImageFileSink } from '../models/AIGeneratedImageFileModels'
 import { WebSearchResult, SearchResult } from '../services/WebSearchService'
@@ -118,6 +124,11 @@ const OPENAI_RESPONSES_WEB_SEARCH_PREFIX = 'hws'
 const OPENAI_RESPONSES_IMAGE_GENERATION_PREFIX = 'hig'
 const OPENAI_RESPONSES_TOOL_SEQUENCE_OFFSET = 0
 const OPENAI_RESPONSES_IMAGE_SEQUENCE_OFFSET = 1
+
+// 每次请求保留的历史消息上限（最近 N 条）。超过部分丢弃。
+// 设计动机：长会话的 token 浪费在用户已经忘记的旧对话上，截断到最近 30 条
+// 既能保留上下文连贯性，又能显著降低 prompt token 与首字延迟。
+const MAX_HISTORY_MESSAGES_FOR_REQUEST: number = 30
 
 // 聊天状态管理
 export class ChatViewModel {
@@ -282,10 +293,77 @@ export class ChatViewModel {
 	  }
 
 	  private async buildRequestSystemPrompt(extraPrompt: string = ''): Promise<string> {
-	    const globalPrompt = await this.getRenderedSystemPrompt()
+	    let globalPrompt = ''
 	    const assistantConfig = await this.getAssistantRuntimeConfig()
+      if (assistantConfig.assistantId !== DEFAULT_ASSISTANT_ID) {
+        globalPrompt = await this.getRenderedSystemPrompt()
+      }
 	    const basePrompt = this.assistantService.combineSystemPrompts(globalPrompt, assistantConfig.systemPrompt)
-	    return this.assistantService.combineSystemPrompts(basePrompt, extraPrompt)
+	    const withExtra = this.assistantService.combineSystemPrompts(basePrompt, extraPrompt)
+	    // 动态教学计划注入：仅当助手是小星老师时生效（其他助手保持原 prompt 纯净）
+	    if (assistantConfig.assistantId !== DEFAULT_ASSISTANT_ID) {
+	      return withExtra
+	    }
+	    return await this.injectDailyPlanSections(withExtra)
+	  }
+
+	  /**
+	   * 把"今日教学目标"和"昨日小结"section 拼到小星老师 system prompt 末尾。
+	   * - 仅当今日/昨日 plan 存在且 status='done' 时才注入
+	   * - plan 缺失时静默降级,不报错
+	   */
+	  private async injectDailyPlanSections(basePrompt: string): Promise<string> {
+	    try {
+	      const planner = getLessonPlanningService()
+	      const today = await planner.getTodayPlan()
+	      const yesterday = await planner.getYesterdaySummary()
+	      let composed = basePrompt
+	      if (today !== null) {
+	        const planDate = today.plan.planDate
+	        const weekday = this.weekdayLabel(planDate)
+	        const section = renderDailyPlanSection(today.plan, planDate, weekday)
+	        if (section !== '') {
+	          composed = this.assistantService.combineSystemPrompts(composed, section)
+	        }
+	      }
+	      if (yesterday !== null) {
+	        const planDate = yesterday.plan.planDate
+	        const section = renderYesterdaySummarySection(yesterday.plan, planDate)
+	        if (section !== '') {
+	          composed = this.assistantService.combineSystemPrompts(composed, section)
+	        }
+	      }
+	      return composed
+	    } catch (error) {
+	      console.error('ChatViewModel', `injectDailyPlanSections failed: ${JSON.stringify(error)}`)
+	      return basePrompt
+	    }
+	  }
+
+	  /**
+	   * 把 'YYYY-MM-DD' 转成 "星期X" 标签
+	   */
+	  private weekdayLabel(ymd: string): string {
+	    if (ymd === '') {
+	      return ''
+	    }
+	    const parts = ymd.split('-')
+	    if (parts.length !== 3) {
+	      return ''
+	    }
+	    const year = parseInt(parts[0], 10)
+	    const month = parseInt(parts[1], 10) - 1
+	    const day = parseInt(parts[2], 10)
+	    if (isNaN(year) || isNaN(month) || isNaN(day)) {
+	      return ''
+	    }
+	    const d = new Date(year, month, day)
+	    const labels = ['日', '一', '二', '三', '四', '五', '六']
+	    const idx = d.getDay()
+	    if (idx < 0 || idx > 6) {
+	      return ''
+	    }
+	    return labels[idx]
 	  }
 
 	  private async getRequestTemperature(): Promise<number | undefined> {
@@ -1100,7 +1178,8 @@ export class ChatViewModel {
     messages: ChatMessage[],
     contextStartIndex: number,
     preserveToolPartOrder: boolean = false,
-    includeAttachmentPayloads: boolean = true
+    includeAttachmentPayloads: boolean = true,
+    maxHistoryMessages: number = MAX_HISTORY_MESSAGES_FOR_REQUEST
   ): RequestMessage[] {
     const historyMessages: RequestMessage[] = []
     for (let i = contextStartIndex; i < messages.length; i++) {
@@ -1112,6 +1191,14 @@ export class ChatViewModel {
         continue
       }
       this.appendFlatRequestHistoryMessage(historyMessages, msg, includeAttachmentPayloads)
+    }
+    // 截断到最近 maxHistoryMessages 条。maxHistoryMessages<=0 表示不截断
+    if (maxHistoryMessages > 0 && historyMessages.length > maxHistoryMessages) {
+      const dropped = historyMessages.length - maxHistoryMessages
+      const truncated = historyMessages.slice(historyMessages.length - maxHistoryMessages)
+      console.info('ChatViewModel',
+        `History truncated: kept ${truncated.length} of ${historyMessages.length} messages (dropped ${dropped})`)
+      return truncated
     }
     return historyMessages
   }
@@ -2394,7 +2481,7 @@ ${limitedSearchContext}
     // 不需要在 system 中再复述一遍，避免与 description 冲突或重复消耗 token。
     const toolUsageSystemPrompt = `当前时间: ${currentTime}
 
-你是一个智能助手。你的首要任务是直接完成用户请求，只在确实需要访问外部信息或外部系统时才调用工具。
+你的首要任务是直接完成用户请求，只在确实需要访问外部信息或外部系统时才调用工具。
 
 工具使用规则(非常重要):
 - 绝大多数普通问答不需要调用工具，请优先用自身知识直接回答。
@@ -2558,12 +2645,28 @@ ${limitedSearchContext}
         if (shouldAutoGenerateTitle) {
           this.generateSmartTitle(snapshotSession)
         }
+        // 备课老师：会话成功结束后通知一次（仅小星老师助手）
+        // 5min 静默 debounce 合并多次,失败/取消路径不会触发
+        this.notifyPlannerSessionEnd(snapshotSessionId, snapshotSession.assistantId)
       }
     } catch (persistError) {
       console.error('ChatViewModel', `Failed to persist AI message in finalizeAIMessage: ${JSON.stringify(persistError)}`)
     } finally {
       this.unregisterActiveRequest(requestId)
       onComplete()
+    }
+  }
+
+  /**
+   * 通知备课老师：会话成功结束。
+   * - 仅当 assistantId === DEFAULT_ASSISTANT_ID 时才触发
+   * - 失败/取消的会话不会进入 finalizeAIMessage 的成功路径,天然不触发
+   */
+  private notifyPlannerSessionEnd(sessionId: string, assistantId: string): void {
+    try {
+      getLessonPlanningService().notifySessionEnd(sessionId, assistantId)
+    } catch (error) {
+      console.error('ChatViewModel', `notifyPlannerSessionEnd failed: ${JSON.stringify(error)}`)
     }
   }
 

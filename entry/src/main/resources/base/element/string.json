@@ -69,6 +69,50 @@
       "value": "New Chat"
     },
     {
+      "name": "today_star_dashboard",
+      "value": "Today's Stars"
+    },
+    {
+      "name": "star_calendar_view_today",
+      "value": "Today"
+    },
+    {
+      "name": "star_calendar_view_calendar",
+      "value": "Calendar"
+    },
+    {
+      "name": "star_calendar_cumulative_label",
+      "value": "All-time total"
+    },
+    {
+      "name": "star_calendar_month_total_label",
+      "value": "This month"
+    },
+    {
+      "name": "star_calendar_prev_month",
+      "value": "Previous month"
+    },
+    {
+      "name": "star_calendar_next_month",
+      "value": "Next month"
+    },
+    {
+      "name": "star_calendar_today_marker",
+      "value": "Today"
+    },
+    {
+      "name": "star_calendar_empty_day",
+      "value": "No events this day"
+    },
+    {
+      "name": "star_calendar_day_detail_header",
+      "value": "%s · %d events"
+    },
+    {
+      "name": "star_calendar_close_day_detail",
+      "value": "Close"
+    },
+    {
       "name": "no_sessions",
       "value": "No conversations yet"
     },
@@ -2217,6 +2261,10 @@
       "value": "Instructions only for this assistant"
     },
     {
+      "name": "assistant_prompt_locked",
+      "value": "(System Locked)"
+    },
+    {
       "name": "assistant_default_model",
       "value": "Default Model"
     },
@@ -2801,6 +2849,30 @@
       "value": "自动"
     },
     {
+      "name": "image_generation_prompt_optimizer",
+      "value": "自动优化提示词"
+    },
+    {
+      "name": "image_generation_seed",
+      "value": "随机种子"
+    },
+    {
+      "name": "image_generation_seed_placeholder",
+      "value": "留空使用随机种子"
+    },
+    {
+      "name": "image_generation_style",
+      "value": "风格控制"
+    },
+    {
+      "name": "image_generation_style_placeholder",
+      "value": "描述你想要的风格..."
+    },
+    {
+      "name": "image_generation_style_weight",
+      "value": "风格权重"
+    },
+    {
       "name": "image_generation_add_reference",
       "value": "添加参考图"
     },
@@ -3023,6 +3095,238 @@
     {
       "name": "default_model_select_image_model",
       "value": "选择图像生成模型"
+    },
+    {
+      "name": "voice_hold_to_speak",
+      "value": "Hold to Speak"
+    },
+    {
+      "name": "voice_release_to_send",
+      "value": "Release to Send"
+    },
+    {
+      "name": "voice_slide_up_cancel",
+      "value": "Slide Up to Cancel"
+    },
+    {
+      "name": "voice_release_cancel",
+      "value": "Release to Cancel"
+    },
+    {
+      "name": "voice_permission_denied",
+      "value": "Microphone permission is required for voice input"
+    },
+    {
+      "name": "voice_too_short",
+      "value": "Recording too short"
+    },
+    {
+      "name": "voice_empty_result",
+      "value": "No speech detected"
+    },
+    {
+      "name": "voice_network_error",
+      "value": "Voice recognition failed, please check your network"
+    },
+    {
+      "name": "voice_recognizing",
+      "value": "Recognizing..."
+    },
+    {
+      "name": "voice_speaking",
+      "value": "Reading..."
+    },
+    {
+      "name": "microphone_permission_reason",
+      "value": "Used for voice input to convert your speech to text."
+    },
+    {
+      "name": "settings_learning_center",
+      "value": "学习中心"
+    },
+    {
+      "name": "learning_profile_title",
+      "value": "学习画像"
+    },
+    {
+      "name": "learning_profile_desc",
+      "value": "查看孩子的能力水平"
+    },
+    {
+      "name": "learning_tomorrow_plan_title",
+      "value": "今日计划"
+    },
+    {
+      "name": "learning_tomorrow_plan_desc",
+      "value": "今日学习计划 + 过去 7 天记录"
+    },
+    {
+      "name": "learning_english_images_title",
+      "value": "英语学习图片"
+    },
+    {
+      "name": "learning_english_images_desc",
+      "value": "答英语题时生成的图"
+    },
+    {
+      "name": "learning_profile_empty_title",
+      "value": "尚未生成学习画像"
+    },
+    {
+      "name": "learning_profile_empty_desc",
+      "value": "和小星老师多聊几次，画像就会逐步建立"
+    },
+    {
+      "name": "learning_plan_empty_title",
+      "value": "今日计划尚未生成"
+    },
+    {
+      "name": "learning_plan_empty_desc",
+      "value": "会话结束 5 分钟后自动触发备课，也可以点下方按钮立即生成"
+    },
+    {
+      "name": "learning_plan_refresh",
+      "value": "立即生成今日计划"
+    },
+    {
+      "name": "learning_plan_generating",
+      "value": "正在生成…"
+    },
+    {
+      "name": "learning_plan_generate_failed",
+      "value": "生成失败，点此重试"
+    },
+    {
+      "name": "learning_plan_recent_plans",
+      "value": "过去 7 天"
+    },
+    {
+      "name": "learning_plan_no_recent",
+      "value": "暂无历史计划"
+    },
+    {
+      "name": "learning_plan_status_done",
+      "value": "已生成"
+    },
+    {
+      "name": "learning_plan_status_pending",
+      "value": "待生成"
+    },
+    {
+      "name": "learning_plan_status_failed",
+      "value": "失败"
+    },
+    {
+      "name": "learning_images_empty_title",
+      "value": "暂无英语学习图片"
+    },
+    {
+      "name": "learning_images_empty_desc",
+      "value": "小星老师答英语题时生成的图会出现在这里"
+    },
+    {
+      "name": "learning_image_source_quiz_word",
+      "value": "Quiz · 单词"
+    },
+    {
+      "name": "learning_image_source_quiz_sentence",
+      "value": "Quiz · 句子"
+    },
+    {
+      "name": "learning_image_source_plan",
+      "value": "备课 · 词汇"
+    },
+    {
+      "name": "learning_image_filter_all",
+      "value": "全部"
+    },
+    {
+      "name": "learning_image_filter_quiz",
+      "value": "出题"
+    },
+    {
+      "name": "learning_image_filter_plan",
+      "value": "备课"
+    },
+    {
+      "name": "learning_skill_section_math",
+      "value": "数学"
+    },
+    {
+      "name": "learning_skill_section_english",
+      "value": "英语"
+    },
+    {
+      "name": "learning_skill_section_general",
+      "value": "常识"
+    },
+    {
+      "name": "learning_skill_section_cognitive",
+      "value": "认知"
+    },
+    {
+      "name": "learning_section_strengths",
+      "value": "擅长"
+    },
+    {
+      "name": "learning_section_weak_areas",
+      "value": "薄弱"
+    },
+    {
+      "name": "learning_section_overall_note",
+      "value": "总体评语"
+    },
+    {
+      "name": "learning_section_theme",
+      "value": "今日主题"
+    },
+    {
+      "name": "learning_section_teacher_notes",
+      "value": "老师提示"
+    },
+    {
+      "name": "learning_section_vocab",
+      "value": "英语词汇"
+    },
+    {
+      "name": "learning_section_math",
+      "value": "数学"
+    },
+    {
+      "name": "learning_section_writing",
+      "value": "写字"
+    },
+    {
+      "name": "learning_section_general",
+      "value": "常识"
+    },
+    {
+      "name": "learning_section_child_snapshot",
+      "value": "孩子情况"
+    },
+    {
+      "name": "learning_meta_sessions",
+      "value": "共 %d 次对话"
+    },
+    {
+      "name": "learning_meta_last_assessed",
+      "value": "上次评估 %s"
+    },
+    {
+      "name": "learning_meta_session_count",
+      "value": "会话数"
+    },
+    {
+      "name": "learning_meta_age_years",
+      "value": "%d 岁"
+    },
+    {
+      "name": "learning_level_label",
+      "value": "等级"
+    },
+    {
+      "name": "learning_untitled_word",
+      "value": "未命名"
     }
   ]
 }

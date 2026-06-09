@@ -20,8 +20,12 @@ import { getWebDAVService, WebDAVService } from './WebDAVService'
 import { getWebDAVSyncService, WebDAVSyncService } from './WebDAVSyncService'
 import { getSettingsManager, SettingsManager } from '../viewmodels/SettingsManager'
 import { getAppStateManager, AppStateManager } from '../viewmodels/AppStateManager'
+import { getSpeechRecognitionService, SpeechRecognitionService } from './SpeechRecognitionService'
+import { getTTSService, TTSService } from './TTSService'
+import { getStarRewardService, StarRewardService } from './StarRewardService'
 import { getProviderViewModel, ProviderViewModel } from '../viewmodels/ProviderViewModel'
 import { createChatViewModel, ChatViewModel } from '../viewmodels/ChatViewModel'
+import { getLessonPlanningService, LessonPlanningService } from './LessonPlanningService'
 
 // 统一服务装配入口（过渡层），降低上层对具体单例实现的直接耦合
 export class ServiceRegistry {
@@ -117,7 +121,23 @@ export class ServiceRegistry {
     return getWebDAVSyncService()
   }
 
+  static speechRecognition(): SpeechRecognitionService {
+    return getSpeechRecognitionService()
+  }
+
+  static tts(): TTSService {
+    return getTTSService()
+  }
+
+  static starReward(): StarRewardService {
+    return getStarRewardService()
+  }
+
   static chat(): ChatViewModel {
     return createChatViewModel()
+  }
+
+  static lessonPlanning(): LessonPlanningService {
+    return getLessonPlanningService()
   }
 }

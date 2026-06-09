@@ -1,4 +1,4 @@
-import { ChatMessage, MessageAttachment } from '../../models/ChatModels'
+import { ChatMessage, MessageAttachment, ToolCall } from '../../models/ChatModels'
 import { DraftPreviewBubble } from './DraftPreviewBubble'
 import { shouldShowMessageHeader } from '../../utils/MessageListUtils'
 import { DateDivider } from '../DateDivider'
@@ -54,6 +54,8 @@ export struct ChatMessageListSection {
   @Event onEnterMultiSelect: (messageId: string) => void = (_messageId: string): void => {}
   @Event onAskUserAnswer: (toolCallId: string, answerJson: string) => void =
     (_toolCallId: string, _answerJson: string): void => {}
+  @Event onOpenNumberPuzzleSheet: (toolCall: ToolCall) => void = (_toolCall: ToolCall): void => {}
+  @Event onOpenHandwritingSheet: (toolCall: ToolCall) => void = (_toolCall: ToolCall): void => {}
   @Event onListAppear: () => void = (): void => {}
   @Event onReachStart: () => void = (): void => {}
   @Event onReachEnd: () => void = (): void => {}
@@ -490,7 +492,13 @@ export struct ChatMessageListSection {
                     },
                     onAskUserAnswer: (toolCallId: string, answerJson: string): void => {
                       this.onAskUserAnswer(toolCallId, answerJson)
-                    }
+                    },
+                    onOpenNumberPuzzleSheet: (toolCall: ToolCall): void => {
+                      this.onOpenNumberPuzzleSheet(toolCall)
+                    },
+                    onOpenHandwritingSheet: (toolCall: ToolCall): void => {
+                      this.onOpenHandwritingSheet(toolCall)
+                    },
                   })
                 }
                 .width('100%')

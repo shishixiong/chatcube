@@ -1,5 +1,6 @@
 import { ToolCall } from '../models/ChatModels'
 import {
+  isImageGenerationFunctionName,
   isScrapeWebFunctionName,
   isSearchWebFunctionName,
   normalizeToolFunctionName
@@ -19,6 +20,11 @@ interface ToolArgumentDict {
   path?: string
   question?: string
   questions?: Object[] | string
+  prompt?: string
+  word?: string
+  sentence?: string
+  question_type?: string
+  difficulty?: number
 }
 
 const MAX_SNIPPET = 24
@@ -54,6 +60,13 @@ function truncate(value: string, maxLength: number = MAX_SNIPPET): string {
 function coerceString(value: string | undefined): string {
   if (value === undefined || value === null) {
     return ''
+  }
+  return value
+}
+
+function coerceNumber(value: number | undefined): number {
+  if (value === undefined || value === null) {
+    return 0
   }
   return value
 }
@@ -164,6 +177,10 @@ export function buildToolTitle(toolCall: ToolCall): string {
     const text = firstNonEmpty([coerceString(args.text), coerceString(args.message), coerceString(args.content)])
     return text !== '' ? `朗读："${truncate(text)}"` : '朗读'
   }
+  if (isImageGenerationFunctionName(fn)) {
+    const prompt = coerceString(args.prompt)
+    return prompt !== '' ? `生成图片："${truncate(prompt)}"` : '生成图片'
+  }
   if (fn === 'ask_user' || fn === 'user_input' || fn === 'ask') {
     const count = arrayLengthOf(args.questions as string[] | string | undefined)
     if (count > 1) {
@@ -183,6 +200,29 @@ export function buildToolTitle(toolCall: ToolCall): string {
     }
     return '执行技能'
   }
-
+  if (fn === 'english_quiz') {
+    const question = coerceString(args.question)
+    const word = coerceString(args.word)
+    const sentence = coerceString(args.sentence)
+    if (question !== '') {
+      return `英语看图: ${truncate(question)}`
+    }
+    if (word !== '') {
+      return `英语看图: ${truncate(word)}`
+    }
+    if (sentence !== '') {
+      return `英语看图: ${truncate(sentence)}`
+    }
+    return '英语看图说话'
+  }
+  if (fn === 'huarongdao') {
+    const difficulty = coerceNumber(args.difficulty)
+    const labels = ['入门', '简单', '中等', '较难', '挑战']
+    const label = difficulty >= 1 && difficulty <= 5 ? labels[difficulty - 1] : ''
+    if (label !== '') {
+      return `数字华容道(${label})`
+    }
+    return '数字华容道'
+  }
   return fallback
 }

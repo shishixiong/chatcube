@@ -28,6 +28,7 @@ import {
   OPENAI_BUILTIN_SEARCH_ENGINE_ID,
   ReasoningLevel,
   ModelRole,
+  ToolCall,
   ToolConfig,
   ToolApprovalPolicy,
   ToolPermissionLevel,
@@ -40,6 +41,8 @@ import { ScrollToBottomButton } from '../components/ScrollToBottomButton'
 import { ScrollToBottomLoadingButton } from '../components/ScrollToBottomLoadingButton'
 import { SharePreviewSheet } from '../components/SharePreviewSheet'
 import { MessageMapSheet } from '../components/MessageMapSheet'
+import { NumberPuzzleCard, NumberPuzzleResult } from '../components/NumberPuzzleCard'
+import { HandwritingCard, HandwritingResult } from '../components/HandwritingCard'
 import { ChatViewModel, TitleGenerationCallbacks } from '../viewmodels/ChatViewModel'
 import { ProviderViewModel } from '../viewmodels/ProviderViewModel'
 import { AppStateManager } from '../viewmodels/AppStateManager'
@@ -47,7 +50,6 @@ import { AITaskService } from '../services/AITaskService'
 import { WebSearchService } from '../services/WebSearchService'
 import { DefaultModelService } from '../services/DefaultModelService'
 import { PreferenceKeys, PreferencesService } from '../services/PreferencesService'
-import { TTSService } from '../services/TTSService'
 import { McpService } from '../services/McpService'
 import { ToolRegistry } from '../services/ToolRegistry'
 import {
@@ -60,7 +62,7 @@ import { registerBuiltinTools } from '../config/BuiltinTools'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { inputMethod } from '@kit.IMEKit'
 import { webview } from '@kit.ArkWeb'
-import { dismissActiveSnackBarOnBack, showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
+import { dismissActiveSnackBarOnBack, showSnackBar, showToast, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
 import { getEffectiveCapabilities } from '../utils/ModelCapabilityDeriver'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { ChatModelSelectorSheetContent } from '../components/chat/ChatModelSelectorSheetContent'
@@ -69,6 +71,9 @@ import { ChatMultiSelectToolbar } from '../components/chat/ChatMultiSelectToolba
 import { ChatMessageListSection } from '../components/chat/ChatMessageListSection'
 import { ChatToolPickerSheetContent } from '../components/chat/ChatToolPickerSheetContent'
 import { ChatToolExecutionApprovalSheetContent } from '../components/chat/ChatToolExecutionApprovalSheetContent'
+import { TodayStarDetailSheet } from '../components/chat/TodayStarDetailSheet'
+import { StarBurstOverlay } from '../components/StarBurstOverlay'
+import { StarActivityType, STAR_ACTIVITY_TYPES, getActivityMeta } from '../models/StarEventModels'
 import { SearchEngineMenuOption } from '../components/ChatToolbar'
 import { getSearchEngineRegistry, registerAllSearchEngines, SearchEngineDescriptor } from '../services/search/Index'
 import { parseSearchEngineIdListJson } from '../utils/SearchEnginePreferenceUtils'
@@ -110,7 +115,8 @@ import { applyModelDraft } from '../utils/ModelDraftUtils'
 import { ToolPreviewEntry, buildToolArgumentsPreview } from '../utils/ToolPayloadSummaryUtils'
 import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
-import { getSearchToolIds, isSearchToolId } from '../utils/SearchToolIdentityUtils'
+import { getSearchToolIds, isSearchToolId, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID } from '../utils/SearchToolIdentityUtils'
+import { MessagePartKind } from '../models/MessageParts'
 import { normalizeAssistantAvatarValue } from '../components/AssistantAvatar'
 import {
   preparePreviewImageForShare,
@@ -199,6 +205,21 @@ export struct ChatPage {
   @Local multiSelectToolbarHeightVp: number = 0
   // 输入框是否处于焦点状态（用于控制预览气泡显示）
   @Local isInputFocused: boolean = false
+  // 语音输入模式状态
+  @Local isVoiceMode: boolean = false
+  @Local isRecording: boolean = false
+  @Local isRecordingCancelZone: boolean = false
+  private waveformTimerId: number = -1
+  // 录音安全超时：超过 65 秒自动取消（引擎 maxAudioDuration=60s + 5s 余量）
+  private recordingSafetyTimerId: number = -1
+  // 语音模式自动 TTS：追踪 isSending 变化以检测回复完成
+  private previousIsSending: boolean = false
+  // 语音模式：quiz 工具自动 TTS 去重追踪（防止同一 quiz 重复朗读）
+  private lastAutoTtsQuizToolCallId: string = ''
+  // quiz TTS 朗读完成后记录当时消息 content 长度，用于 onSendingCompleted 仅朗读新增的验证内容
+  private lastAutoTtsQuizMessageContentLength: number = 0
+  // 记录 quiz TTS 对应的消息 ID，跨会话时防止误用旧长度值
+  private lastAutoTtsQuizMessageId: string = ''
   // 计算滚动偏移
   private lastScrollOffset: number = 0
   private readonly inputBarShowThreshold: number = 6
@@ -255,8 +276,17 @@ export struct ChatPage {
   private dismissedPendingToolCallId: string = ''
   @Local toolExecutionApprovalToolId: string = ''
   @Local toolExecutionApprovalIsWriteTool: boolean = false
+  @Local showNumberPuzzleSheet: boolean = false
+  @Local numberPuzzleSheetToolCall: ToolCall = new ToolCall()
+  @Local numberPuzzleAnswered: boolean = false
+  @Local showHandwritingSheet: boolean = false
+  @Local handwritingSheetToolCall: ToolCall = new ToolCall()
+  @Local handwritingAnswered: boolean = false
   @Local toolExecutionApprovalSourceLabel: string = ''
   @Local toolExecutionApprovalName: string = ''
+  @Local showStarSheet: boolean = false
+  // 星星浮层触发信号: 每次 onStarEarnedTickChanged 自增, StarBurstOverlay 通过 @Monitor 监听
+  @Local starBurstTrigger: number = 0
   @Local toolExecutionApprovalSourceId: string = ''
   @Local toolExecutionApprovalArgumentSummary: string = ''
   @Local toolExecutionApprovalArgumentEntries: ToolPreviewEntry[] = []
@@ -363,7 +393,6 @@ export struct ChatPage {
   private toolRegistry: ToolRegistry = ServiceRegistry.toolRegistry()
   private mcpService: McpService = ServiceRegistry.mcp()
   private chatTaskOrchestrator = ServiceRegistry.chatTaskOrchestrator()
-  private ttsService: TTSService = new TTSService()
   // 当前服务商配置
   private currentProvider: ModelProvider | null = null
   private sessionId: string = ''
@@ -553,7 +582,11 @@ export struct ChatPage {
     this.closeActiveChatImagePreview(false)
     this.resetDocumentParseQueue()
     // 释放TTS资源
-    this.ttsService.destroy()
+    ServiceRegistry.tts().destroy()
+    // 释放语音识别资源
+    this.stopWaveformAnimation()
+    this.stopRecordingSafetyTimer()
+    ServiceRegistry.speechRecognition().shutdown()
     // 解绑 UIContext 防止 ChatPage 销毁后 typewriter 仍持有过期引用
     this.chatViewModel.setStreamingUIContext(null)
     this.clearInitialAlignmentTimers()
@@ -577,7 +610,7 @@ export struct ChatPage {
   private async initTTSService(): Promise<void> {
     try {
       const context = this.getUIContext().getHostContext() as common.UIAbilityContext
-      await this.ttsService.init(context)
+      await ServiceRegistry.tts().init(context)
     } catch (error) {
       console.error('ChatPage', 'TTS初始化失败: ' + error)
     }
@@ -783,10 +816,40 @@ export struct ChatPage {
         (): void => this.onPendingToolInteractionChanged()),
       observeAppUiState(AppStorageKeys.ASSISTANT_AVATAR_REFRESH_AT, (): void => this.onAssistantAvatarRefreshChanged()),
       observeAppUiState(AppStorageKeys.APP_IN_BACKGROUND, (): void => this.onAppBackgroundChanged()),
+      observeAppUiState(AppStorageKeys.STAR_EARNED_TICK, (): void => this.onStarEarnedTickChanged()),
       getToolExecutionService().addPendingInteractionChangeCallback((): void => {
         this.schedulePendingToolInteractionSync()
       })
     ]
+  }
+
+  private onStarEarnedTickChanged(): void {
+    const grantJson = getAppUiState().starLastGrant
+    if (grantJson === '') {
+      return
+    }
+    try {
+      const grant = JSON.parse(grantJson) as Record<string, Object>
+      const stars = (grant['stars'] as number) ?? 0
+      const type = (grant['activityType'] as string) ?? ''
+      if (stars <= 0) {
+        return
+      }
+      const tip = this.formatStarGrantTip(type, stars)
+      showToast(this.getUIContext(), tip, 1500)
+      // 触发即时浮层 (StarBurstOverlay 通过 @Monitor('starBurstTrigger') 监听)
+      this.starBurstTrigger++
+    } catch (error) {
+      console.error('ChatPage', `Failed to parse starLastGrant: ${JSON.stringify(error)}`)
+    }
+  }
+
+  private formatStarGrantTip(activityType: string, stars: number): string {
+    if (STAR_ACTIVITY_TYPES.indexOf(activityType as StarActivityType) < 0) {
+      return `+${stars} ⭐`
+    }
+    const meta = getActivityMeta(activityType as StarActivityType)
+    return `+${stars} ⭐ ${meta.grantedHint}`
   }
 
   private onAssistantAvatarRefreshChanged(): void {
@@ -2125,16 +2188,6 @@ export struct ChatPage {
     return seededSessionId.trim() !== ''
   }
 
-  private shouldShowTitleBarNewChatAction(): boolean {
-    if (!this.hasInitializedRoute) {
-      return this.isExistingSessionSeeded()
-    }
-    if (this.messages.length > 0) {
-      return true
-    }
-    return !this.isNewChatTransition && this.sessionId.trim() !== ''
-  }
-
   private getTitleBarOptions(): HdsNavigationTitleBarOptions {
     const options = new HdsTopNavigationBlurOptions()
     options.startPaddingVp = 16
@@ -2199,11 +2252,11 @@ export struct ChatPage {
     if (this.isChatSplitLayout()) {
       return 1
     }
-    return this.shouldShowTitleBarNewChatAction() ? 2 : 1
+    return 2
   }
 
   private getTitleBarMenuItemCount(): number {
-    return this.shouldShowTitleBarNewChatAction() ? 5 : 4
+    return 5
   }
 
   private getTitleBarVisibleActionSlotCount(): number {
@@ -2217,18 +2270,17 @@ export struct ChatPage {
 
   private getTitleBarMenuItems(): Array<HdsNavigationMenuItemOptions> {
     const menus: Array<HdsNavigationMenuItemOptions> = []
-    if (this.shouldShowTitleBarNewChatAction()) {
-      menus.push({
-        content: {
-          label: $r('app.string.new_chat'),
-          icon: this.createTitleBarSymbolIcon($r('sys.symbol.message_badge_plus'), 20),
-          action: () => {
-            void this.handleNewChat()
-          }
+    // 今日小明星 - HDS 标题栏第一格 visible slot, 沿用原 new_chat 位置
+    // HdsNavigationMenuItemOptions 限制: 仅渲染 SymbolGlyph + label, 无自定义背景/角标/动画
+    menus.push({
+      content: {
+        label: $r('app.string.today_star_dashboard'),
+        icon: this.createTitleBarSymbolIcon($r('sys.symbol.wand_and_stars'), 20),
+        action: () => {
+          this.showStarSheet = true
         }
-      })
-    }
-
+      }
+    })
     menus.push({
       content: {
         label: $r('app.string.message_map_menu_entry'),
@@ -2381,6 +2433,16 @@ export struct ChatPage {
           onAskUserAnswer: (toolCallId: string, answerJson: string): void => {
             this.handleAskUserAnswer(toolCallId, answerJson)
           },
+          onOpenNumberPuzzleSheet: (toolCall: ToolCall): void => {
+            this.numberPuzzleSheetToolCall = toolCall
+            this.numberPuzzleAnswered = false
+            this.showNumberPuzzleSheet = true
+          },
+          onOpenHandwritingSheet: (toolCall: ToolCall): void => {
+            this.handwritingSheetToolCall = toolCall
+            this.handwritingAnswered = false
+            this.showHandwritingSheet = true
+          },
           onReachStart: (): void => {
             this.handleMessageListReachStart()
           },
@@ -2489,15 +2551,26 @@ export struct ChatPage {
               },
               isSending: this.isSending,
               isAwaitingResponse: this.calcIsAwaitingAiOutput(),
-              currentModelId: this.currentModelId,
-              currentProviderId: this.currentProvider?.id ?? '',
-              currentModelName: this.currentModel,
-              currentProviderIconType: this.currentProvider?.iconType ?? 'svg',
-              currentProviderIconPath: this.currentProvider?.iconPath ?? '',
-              currentProviderTextIcon: this.currentProvider?.textIcon ?? '',
-              currentProviderTextIconBgColor: this.currentProvider?.textIconBgColor ?? '',
-              currentProviderCustomImagePath: this.currentProvider?.customImagePath ?? '',
-              currentProviderBrandColor: this.currentProvider?.brandColor ?? '',
+              isVoiceMode: this.isVoiceMode,
+              isVoiceSpeaking: this.isVoiceMode && this.speakingMessageId !== '',
+              onVoiceModeToggle: (): void => {
+                this.handleVoiceModeToggle()
+              },
+              onVoiceSpeakingStop: (): void => {
+                this.handleTTSStop()
+              },
+              onVoiceRecordStart: (): void => {
+                this.handleVoiceRecordStart()
+              },
+              onVoiceRecordCancel: (): void => {
+                this.handleVoiceRecordCancel()
+              },
+              onVoiceRecordFinish: (): void => {
+                this.handleVoiceRecordFinish()
+              },
+              onVoiceCancelZoneChange: (isCancel: boolean): void => {
+                this.isRecordingCancelZone = isCancel
+              },
               autoFocus: this.autoFocusInput,
               isEditing: this.isEditingMessage,
               isAttachmentPanelOpen: this.showAttachmentPicker,
@@ -2544,10 +2617,6 @@ export struct ChatPage {
               },
               onStop: (): void => {
                 this.handleStop()
-              },
-              onModelIconClick: (): void => {
-                this.isModelSelectorVisible = true
-                this.modelSheetActivePanel = 'selector'
               },
               onAttachmentClick: (): void => {
                 this.toggleAttachmentPanel()
@@ -2613,7 +2682,31 @@ export struct ChatPage {
           .translate({ y: '-100%', x: 0 })
         }
 
+        // 星星授奖即时浮层 (覆盖在消息列表之上, 不接收触摸, 不与 sheet 冲突)
+        StarBurstOverlay({
+          burstTrigger: this.starBurstTrigger,
+          containerWidthVp: this.windowWidthVp,
+          containerHeightVp: this.windowHeightVp
+        })
+
         // 分享预览 Sheet 宿主（bindContentCover 和 bindSheet 不能在同一组件上，否则会冲突）
+      Column()
+        .width(0)
+        .height(0)
+        .bindSheet($$this.showStarSheet, this.StarDetailSheetBuilder(), {
+          height: SheetSize.LARGE,
+          detents: [SheetSize.LARGE],
+          dragBar: true,
+          showClose: true,
+          backgroundColor: this.themeBackground,
+          blurStyle: BlurStyle.Thick,
+          preferType: SheetType.BOTTOM,
+          maskColor: '#66000000',
+          onDisappear: (): void => {
+            this.showStarSheet = false
+          }
+        })
+
       Column()
         .width(0)
         .height(0)
@@ -2710,6 +2803,70 @@ export struct ChatPage {
             }
           })
 
+        Column()
+          .width(0)
+          .height(0)
+          .bindSheet($$this.showNumberPuzzleSheet, this.NumberPuzzleSheetBuilder(), {
+            height: SheetSize.LARGE,
+            dragBar: true,
+            showClose: true,
+            blurStyle: BlurStyle.Thick,
+            backgroundColor: this.themeBackground,
+            preferType: SheetType.BOTTOM,
+            onDisappear: () => {
+              if (this.showNumberPuzzleSheet && !this.numberPuzzleAnswered) {
+                // Sheet dismissed without completing — send cancel result
+                const cancelResult: NumberPuzzleResult = {
+                  difficulty: 0,
+                  grid_size: '',
+                  time_seconds: 0,
+                  move_count: 0,
+                  completed: false
+                }
+                try {
+                  const parsed = JSON.parse(this.numberPuzzleSheetToolCall.arguments) as Record<string, Object>
+                  cancelResult.difficulty = (parsed['difficulty'] as number) ?? 0
+                } catch (_e) {
+                  // ignore
+                }
+                this.handleAskUserAnswer(this.numberPuzzleSheetToolCall.id, JSON.stringify(cancelResult))
+              }
+              this.showNumberPuzzleSheet = false
+            }
+          })
+
+        // Handwriting sheet
+        Column()
+          .width(0)
+          .height(0)
+          .bindSheet($$this.showHandwritingSheet, this.HandwritingSheetBuilder(), {
+            height: SheetSize.LARGE,
+            dragBar: true,
+            showClose: true,
+            blurStyle: BlurStyle.Thick,
+            backgroundColor: this.themeBackground,
+            preferType: SheetType.BOTTOM,
+            onDisappear: () => {
+              if (this.showHandwritingSheet && !this.handwritingAnswered) {
+                const cancelResult: HandwritingResult = {
+                  character: '',
+                  type: 'letter',
+                  completed: false,
+                  stroke_count: 0
+                }
+                try {
+                  const parsed = JSON.parse(this.handwritingSheetToolCall.arguments) as Record<string, Object>
+                  cancelResult.character = (parsed['character'] as string) ?? ''
+                  cancelResult.type = (parsed['type'] as string) ?? 'letter'
+                } catch (_e) {
+                  // ignore
+                }
+                this.handleAskUserAnswer(this.handwritingSheetToolCall.id, JSON.stringify(cancelResult))
+              }
+              this.showHandwritingSheet = false
+            }
+          })
+
         // 多选工具栏（多选模式时显示）
         if (this.isMultiSelectMode) {
           Column() {
@@ -2740,6 +2897,11 @@ export struct ChatPage {
             this.handleMultiSelectToolbarHeightChange(newArea)
           })
           .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
+        }
+
+        // 录音全屏遮罩
+        if (this.isRecording) {
+          this.RecordingOverlay()
         }
       }
       .width('100%')
@@ -3076,6 +3238,11 @@ export struct ChatPage {
   }
 
   @Builder
+  StarDetailSheetBuilder() {
+    TodayStarDetailSheet()
+  }
+
+  @Builder
   ModelSelectorSheetBuilder() {
     ChatModelSelectorSheetContent({
       providers: this.providers,
@@ -3179,6 +3346,36 @@ export struct ChatPage {
       assistantAvatarCacheKey: this.assistantAvatarRenderTick,
       onClose: () => {
         this.showSharePreview = false
+      }
+    })
+  }
+
+  @Builder
+  NumberPuzzleSheetBuilder() {
+    NumberPuzzleCard({
+      toolCall: this.numberPuzzleSheetToolCall,
+      isAnswered: false,
+      answeredPayload: '',
+      largeSize: true,
+      onAnswer: (toolCallId: string, answerJson: string): void => {
+        this.numberPuzzleAnswered = true
+        this.handleAskUserAnswer(toolCallId, answerJson)
+        this.showNumberPuzzleSheet = false
+      }
+    })
+  }
+
+  @Builder
+  HandwritingSheetBuilder() {
+    HandwritingCard({
+      toolCall: this.handwritingSheetToolCall,
+      isAnswered: false,
+      answeredPayload: '',
+      largeSize: true,
+      onAnswer: (toolCallId: string, answerJson: string): void => {
+        this.handwritingAnswered = true
+        this.handleAskUserAnswer(toolCallId, answerJson)
+        this.showHandwritingSheet = false
       }
     })
   }
@@ -3819,6 +4016,75 @@ export struct ChatPage {
     })
   }
 
+  @Builder
+  private RecordingOverlay() {
+    Column() {
+      // 顶部取消按钮（安全出口：当语音识别异常时可手动取消）
+      Row() {
+        Button({ type: ButtonType.Circle }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(18)
+            .fontColor([Color.White])
+        }
+        .width(40)
+        .height(40)
+        .backgroundColor('rgba(255,255,255,0.2)')
+        .onClick(() => {
+          ServiceRegistry.speechRecognition().cancelListening()
+          this.stopWaveformAnimation()
+          this.isRecording = false
+          this.isRecordingCancelZone = false
+        })
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+      .padding({ top: 60 })
+
+      Row() {
+        Text(this.isRecordingCancelZone ? $r('app.string.voice_release_cancel') : $r('app.string.voice_release_to_send'))
+          .fontSize(18)
+          .fontColor(Color.White)
+          .textAlign(TextAlign.Center)
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+      .padding({ top: 20 })
+
+      Blank()
+
+      // 声波动画指示器
+      Row() {
+        ForEach(Array.from({ length: 5 }, (_: undefined, i: number) => i), (index: number) => {
+          Column()
+            .width(4)
+            .height(16 + (index % 2 === 0 ? 12 : -4))
+            .borderRadius(2)
+            .backgroundColor(this.isRecordingCancelZone ? '#FF4444' : Color.White)
+            .margin({ left: 3, right: 3 })
+        })
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+      .padding({ bottom: 12 })
+
+      Row() {
+        Text($r('app.string.voice_slide_up_cancel'))
+          .fontSize(14)
+          .fontColor(this.isRecordingCancelZone ? '#FF4444' : '#CCCCCC')
+          .textAlign(TextAlign.Center)
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+      .padding({ bottom: 60 })
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(this.isRecordingCancelZone ? 'rgba(0,0,0,0.85)' : 'rgba(0,0,0,0.7)')
+    .onClick(() => {
+      // 点击遮罩不做任何事，录音由 VoiceRecordButton 的 touch 事件控制
+    })
+  }
+
   private canShowStandardScrollButton(): boolean {
     return !this.isEditingMessage && !this.hasDraftContent() && !this.showImagePreview &&
       !this.isMultiSelectMode && !this.isLoading && this.getTotalListItemCount() > 2
@@ -4061,6 +4327,195 @@ export struct ChatPage {
     this.getStopFlow().stopCurrentTask()
   }
 
+  // 语音模式切换
+  handleVoiceModeToggle(): void {
+    if (this.isSending || this.isRecording || this.isEditingMessage) {
+      return
+    }
+    if (!this.isVoiceMode) {
+      // 切换到语音模式前检查麦克风权限
+      const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+      ServiceRegistry.speechRecognition().checkPermission(context).then((granted: boolean) => {
+        if (granted) {
+          this.isVoiceMode = !this.isVoiceMode
+        } else {
+          this.showChatSnack($r('app.string.voice_permission_denied'), 2000, SnackBarTone.WARNING)
+        }
+      })
+    } else {
+      // 退出语音模式时停止朗读
+      if (this.speakingMessageId !== '') {
+        this.handleTTSStop()
+      }
+      this.isVoiceMode = false
+    }
+  }
+
+  // 开始录音
+  handleVoiceRecordStart(): void {
+    if (this.isRecording) {
+      return
+    }
+    // 停止正在进行的自动朗读
+    if (this.speakingMessageId !== '') {
+      this.handleTTSStop()
+    }
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+    ServiceRegistry.speechRecognition().checkPermission(context).then((granted: boolean) => {
+      if (!granted) {
+        this.showChatSnack($r('app.string.voice_permission_denied'), 2000, SnackBarTone.WARNING)
+        return
+      }
+      ServiceRegistry.speechRecognition().init().then(() => {
+        this.isRecording = true
+        this.isRecordingCancelZone = false
+        this.startWaveformAnimation()
+        ServiceRegistry.speechRecognition().startListening({
+          onStart: () => {
+            console.info('ChatPage', 'Voice recording started')
+          },
+          onResult: (_text: string, _isFinal: boolean) => {
+            // 中间结果不处理，等待 onComplete
+          },
+          onComplete: (finalText: string) => {
+            this.stopWaveformAnimation()
+            this.isRecording = false
+            this.isRecordingCancelZone = false
+            this.handleRecordingComplete(finalText)
+          },
+          onCancel: () => {
+            this.stopWaveformAnimation()
+            this.isRecording = false
+            this.isRecordingCancelZone = false
+          },
+          onError: (code: number, message: string) => {
+            this.stopWaveformAnimation()
+            this.isRecording = false
+            this.isRecordingCancelZone = false
+            console.error('ChatPage', `Voice recognition error: ${code} ${message}`)
+            this.showChatSnack($r('app.string.voice_network_error'), 2000, SnackBarTone.ERROR)
+          }
+        })
+      }).catch((err: Error) => {
+        console.error('ChatPage', `Failed to init speech recognition: ${err.message}`)
+        this.showChatSnack($r('app.string.voice_network_error'), 2000, SnackBarTone.ERROR)
+      })
+    })
+  }
+
+  // 取消录音（上滑取消）
+  handleVoiceRecordCancel(): void {
+    ServiceRegistry.speechRecognition().cancelListening()
+  }
+
+  // 结束录音（松开发送）
+  handleVoiceRecordFinish(): void {
+    ServiceRegistry.speechRecognition().finishListening()
+  }
+
+  // 录音完成，发送消息
+  private handleRecordingComplete(text: string): void {
+    if (text.trim() === '') {
+      this.showChatSnack($r('app.string.voice_empty_result'), 2000, SnackBarTone.WARNING)
+      return
+    }
+    this.inputText = text
+    if (!this.isSending && this.inputText.trim() !== '') {
+      this.handleSend()
+    }
+  }
+
+  // 声波动画
+  private startWaveformAnimation(): void {
+    this.waveformTimerId = 0
+  }
+
+  private stopWaveformAnimation(): void {
+    this.waveformTimerId = -1
+  }
+
+  // 录音安全超时管理：isRecording 变化时自动启停计时器
+  @Monitor('isRecording')
+  onRecordingStateChanged(): void {
+    if (this.isRecording) {
+      this.startRecordingSafetyTimer()
+    } else {
+      this.stopRecordingSafetyTimer()
+    }
+  }
+
+  private startRecordingSafetyTimer(): void {
+    this.stopRecordingSafetyTimer()
+    this.recordingSafetyTimerId = setTimeout(() => {
+      this.recordingSafetyTimerId = -1
+      if (this.isRecording) {
+        console.warn('ChatPage', 'Recording safety timeout: auto-cancelling after 65s')
+        ServiceRegistry.speechRecognition().cancelListening()
+        this.stopWaveformAnimation()
+        this.isRecording = false
+        this.isRecordingCancelZone = false
+        this.showChatSnack($r('app.string.voice_too_short'), 2000, SnackBarTone.WARNING)
+      }
+    }, 65000)
+  }
+
+  private stopRecordingSafetyTimer(): void {
+    if (this.recordingSafetyTimerId >= 0) {
+      clearTimeout(this.recordingSafetyTimerId)
+      this.recordingSafetyTimerId = -1
+    }
+  }
+
+  // 语音模式：AI 回复完成后自动触发 TTS 朗读
+  @Monitor('isSending')
+  onSendingCompleted(): void {
+    const wasSending = this.previousIsSending
+    this.previousIsSending = this.isSending
+    if (!wasSending || this.isSending) {
+      return // 不是 true→false 转换
+    }
+    // AI 回复完成，在语音模式下自动朗读最后一条 assistant 消息
+    if (!this.isVoiceMode || this.isRecording || this.isEditingMessage) {
+      this.lastAutoTtsQuizMessageContentLength = 0
+      this.lastAutoTtsQuizMessageId = ''
+      return
+    }
+    const lastMsg = this.findLastAssistantMessage()
+    if (lastMsg !== null && lastMsg.content.trim() !== '') {
+      // 消息切换时,旧 messageId 上的偏移量已无意义,清空避免误用
+      if (this.lastAutoTtsQuizMessageId !== '' &&
+          this.lastAutoTtsQuizMessageId !== lastMsg.id) {
+        this.lastAutoTtsQuizMessageContentLength = 0
+        this.lastAutoTtsQuizMessageId = ''
+      }
+      let content = lastMsg.content
+      // quiz 工具场景：仅朗读验证回复部分，跳过已读的题目文本
+      // 关键:这里更新而非清空 lastAutoTtsQuizMessageContentLength,
+      // 下一轮 buildQuizTtsText 可借此判断"该消息的 AI 文本已被读过"
+      // 避免一轮多次调用 quiz 工具时,第二道题的 TTS 重复朗读 intro + 总结。
+      if (this.lastAutoTtsQuizMessageContentLength > 0 &&
+          this.lastAutoTtsQuizMessageId === lastMsg.id) {
+        const start = this.lastAutoTtsQuizMessageContentLength
+        this.lastAutoTtsQuizMessageContentLength = lastMsg.content.length
+        if (start < content.length) {
+          content = content.substring(start)
+        }
+      }
+      if (content.trim() !== '') {
+        this.handleTTS(lastMsg.id, content)
+      }
+    }
+  }
+
+  private findLastAssistantMessage(): ChatMessage | null {
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      if (this.messages[i].role === MessageRole.ASSISTANT) {
+        return this.messages[i]
+      }
+    }
+    return null
+  }
+
   // 处理模型选择
   handleModelSelect(providerId: string, modelId: string, modelName: string): void {
     const selection = this.findProviderModelSelection(providerId, modelId)
@@ -4213,6 +4668,7 @@ export struct ChatPage {
     if (interaction === null) {
       // service 里已经没有 pending 了, 一并清掉折叠态记录, 下次出现新 pending 再重新弹。
       this.dismissedPendingToolCallId = ''
+      this.lastAutoTtsQuizToolCallId = ''
       if (this.pendingToolExecutionApprovalToolCallId !== '') {
         this.showToolExecutionApprovalSheet = false
         this.resetToolExecutionApprovalState()
@@ -4225,6 +4681,8 @@ export struct ChatPage {
         this.showToolExecutionApprovalSheet = false
         this.resetToolExecutionApprovalState()
       }
+      // 语音模式：quiz 工具出现时自动 TTS 朗读题目
+      this.tryAutoTtsForQuizInteraction(interaction)
       return
     }
     if (this.dismissedPendingToolCallId === interaction.id) {
@@ -4237,6 +4695,98 @@ export struct ChatPage {
       return
     }
     this.applyPendingToolExecutionApproval(interaction)
+  }
+
+  // 语音模式：quiz 工具（math_quiz / english_quiz）出现 pending 交互时自动朗读题目
+  private tryAutoTtsForQuizInteraction(interaction: PendingToolInteractionSnapshot): void {
+    if (!this.isVoiceMode || this.isRecording) {
+      return
+    }
+    const isQuiz = interaction.toolId === MATH_QUIZ_TOOL_ID ||
+      interaction.toolId === ENGLISH_QUIZ_TOOL_ID
+    if (!isQuiz) {
+      return
+    }
+    // 避免 this.lastAutoTtsQuizToolCallId 与 interaction.id 重复触发
+    if (this.lastAutoTtsQuizToolCallId === interaction.id) {
+      return
+    }
+    this.lastAutoTtsQuizToolCallId = interaction.id
+
+    const ttsText = this.buildQuizTtsText(interaction)
+    if (ttsText === '') {
+      return
+    }
+
+    // 延迟 800ms 等待流式内容最终化
+    const capturedId = interaction.id
+    setTimeout(() => {
+      if (this.lastAutoTtsQuizToolCallId !== capturedId) {
+        return
+      }
+      const lastMsg = this.findLastAssistantMessage()
+      const msgId = lastMsg !== null ? lastMsg.id : ''
+      // 记录当前消息 content 长度及消息 ID，后续 onSendingCompleted 仅朗读新增的验证内容
+      if (lastMsg !== null) {
+        this.lastAutoTtsQuizMessageId = lastMsg.id
+        this.lastAutoTtsQuizMessageContentLength = lastMsg.content.length
+      }
+      this.handleTTS(msgId, ttsText)
+    }, 800)
+  }
+
+  // 构造 quiz 工具的 TTS 朗读文本：AI 消息正文 + 题目内容
+  private buildQuizTtsText(interaction: PendingToolInteractionSnapshot): string {
+    let aiText = ''
+    const lastMsg = this.findLastAssistantMessage()
+    if (lastMsg !== null) {
+      // 该消息已经做过 quiz TTS(可能是一轮多次调用 quiz 工具的上一道题,或
+      // onSendingCompleted 已经把整段 AI 文本读过了),AI 正文已读,跳过避免重复朗读。
+      // 新增的正文若超出 lastAutoTtsQuizMessageContentLength,会由
+      // 下一次 onSendingCompleted 单独朗读,不会丢失。
+      const alreadyReadForThisMessage =
+        this.lastAutoTtsQuizMessageContentLength > 0 &&
+        this.lastAutoTtsQuizMessageId === lastMsg.id
+      if (!alreadyReadForThisMessage) {
+        for (let i = 0; i < lastMsg.parts.length; i++) {
+          const part = lastMsg.parts[i]
+          if (part.kind === MessagePartKind.TEXT && part.text.trim() !== '') {
+            aiText += part.text.trim() + ' '
+          }
+        }
+        if (aiText === '' && lastMsg.content.trim() !== '') {
+          aiText = lastMsg.content.trim()
+        }
+      }
+    }
+
+    let quizText = ''
+    try {
+      const parsed = JSON.parse(interaction.argumentsJson) as Record<string, Object>
+      if (interaction.toolId === MATH_QUIZ_TOOL_ID) {
+        quizText = (parsed['question'] as string) ?? ''
+        const expression = (parsed['expression'] as string) ?? ''
+        if (expression !== '') {
+          quizText += ' ' + expression + ' 等于几？'
+        }
+      } else if (interaction.toolId === ENGLISH_QUIZ_TOOL_ID) {
+        const questionType = (parsed['question_type'] as string) ?? 'word'
+        let question = (parsed['question'] as string) ?? ''
+        if (question === '') {
+          // 兼容旧格式
+          if (questionType === 'sentence') {
+            question = (parsed['sentence'] as string) ?? ''
+          } else {
+            question = (parsed['word'] as string) ?? ''
+          }
+        }
+        if (question !== '') {
+          quizText = questionType === 'sentence' ? ('请说出英语句子: ' + question) : ('请说出英语单词: ' + question)
+        }
+      }
+    } catch (_e) {}
+
+    return (aiText.trim() + ' ' + quizText.trim()).trim()
   }
 
   // 提供给 SnackBar action 调用: 用户主动展开折叠的待确认工具调用。
@@ -4347,12 +4897,12 @@ export struct ChatPage {
   private handleTTS(messageId: string, content: string): void {
     // 如果正在朗读其他消息，先停止
     if (this.speakingMessageId !== '') {
-      this.ttsService.stop()
+      ServiceRegistry.tts().stop()
     }
 
     this.setSpeakingMessageId(messageId)
 
-    this.ttsService.speak(content, {
+    ServiceRegistry.tts().speak(content, {
       onStart: () => {
         // 朗读开始
       },
@@ -4369,7 +4919,7 @@ export struct ChatPage {
 
   // 处理停止TTS朗读
   private handleTTSStop(): void {
-    this.ttsService.stop()
+    ServiceRegistry.tts().stop()
     this.setSpeakingMessageId('')
   }
 

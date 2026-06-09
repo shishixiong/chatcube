@@ -69,6 +69,50 @@
       "value": "新建对话"
     },
     {
+      "name": "today_star_dashboard",
+      "value": "今日小明星"
+    },
+    {
+      "name": "star_calendar_view_today",
+      "value": "今日"
+    },
+    {
+      "name": "star_calendar_view_calendar",
+      "value": "日历"
+    },
+    {
+      "name": "star_calendar_cumulative_label",
+      "value": "累计获得"
+    },
+    {
+      "name": "star_calendar_month_total_label",
+      "value": "本月获得"
+    },
+    {
+      "name": "star_calendar_prev_month",
+      "value": "上一月"
+    },
+    {
+      "name": "star_calendar_next_month",
+      "value": "下一月"
+    },
+    {
+      "name": "star_calendar_today_marker",
+      "value": "今天"
+    },
+    {
+      "name": "star_calendar_empty_day",
+      "value": "这天没有记录"
+    },
+    {
+      "name": "star_calendar_day_detail_header",
+      "value": "%s · 共 %d 条"
+    },
+    {
+      "name": "star_calendar_close_day_detail",
+      "value": "收起"
+    },
+    {
       "name": "no_sessions",
       "value": "暂无对话记录"
     },
@@ -2217,6 +2261,10 @@
       "value": "只对这个助手生效的指令"
     },
     {
+      "name": "assistant_prompt_locked",
+      "value": "（系统锁定）"
+    },
+    {
       "name": "assistant_default_model",
       "value": "默认模型"
     },
@@ -2801,6 +2849,30 @@
       "value": "自动"
     },
     {
+      "name": "image_generation_prompt_optimizer",
+      "value": "自动优化提示词"
+    },
+    {
+      "name": "image_generation_seed",
+      "value": "随机种子"
+    },
+    {
+      "name": "image_generation_seed_placeholder",
+      "value": "留空使用随机种子"
+    },
+    {
+      "name": "image_generation_style",
+      "value": "风格控制"
+    },
+    {
+      "name": "image_generation_style_placeholder",
+      "value": "描述你想要的风格..."
+    },
+    {
+      "name": "image_generation_style_weight",
+      "value": "风格权重"
+    },
+    {
       "name": "image_generation_add_reference",
       "value": "添加参考图"
     },
@@ -3023,6 +3095,50 @@
     {
       "name": "default_model_select_image_model",
       "value": "选择图像生成模型"
+    },
+    {
+      "name": "voice_hold_to_speak",
+      "value": "按住说话"
+    },
+    {
+      "name": "voice_release_to_send",
+      "value": "松开发送"
+    },
+    {
+      "name": "voice_slide_up_cancel",
+      "value": "上滑取消"
+    },
+    {
+      "name": "voice_release_cancel",
+      "value": "松开取消"
+    },
+    {
+      "name": "voice_permission_denied",
+      "value": "需要麦克风权限才能使用语音输入"
+    },
+    {
+      "name": "voice_too_short",
+      "value": "说话时间太短"
+    },
+    {
+      "name": "voice_empty_result",
+      "value": "未识别到语音内容"
+    },
+    {
+      "name": "voice_network_error",
+      "value": "语音识别失败，请检查网络"
+    },
+    {
+      "name": "voice_recognizing",
+      "value": "正在识别..."
+    },
+    {
+      "name": "voice_speaking",
+      "value": "朗读中..."
+    },
+    {
+      "name": "microphone_permission_reason",
+      "value": "用于语音输入功能，将您的语音转换为文字发送。"
     }
   ]
 }
