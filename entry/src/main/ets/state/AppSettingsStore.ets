@@ -38,6 +38,8 @@ import { MigrationContext } from './migrations/MigrationContext'
 import { runProviderMigrations } from './migrations/ProviderMigrations'
 import { applyDerivedModelDefaults } from '../utils/ModelCapabilityDeriver'
 
+const TTS_ENGINE_ID_KEY = 'tts_engine_id'
+
 /**
  * 模型 JSON 中的扩展字段（跟 ProviderViewModel 里原先的 ModelData 同构）
  */
@@ -94,6 +96,7 @@ export class AppSettingsStore {
   private assistantsInitPromise: Promise<void> | null = null
   private defaultModelsInitPromise: Promise<void> | null = null
   private promptsInitPromise: Promise<void> | null = null
+  private ttsEngineInitPromise: Promise<void> | null = null
 
   private constructor() {
     this.db = getDatabaseService()
@@ -965,6 +968,42 @@ export class AppSettingsStore {
       s.defaultImageModel = config
     }
     s.defaultModelsVersion = s.defaultModelsVersion + 1
+  }
+
+  // ============================================================================
+  // TTS 引擎配置
+  // ============================================================================
+
+  async ensureTtsEngineInitialized(): Promise<void> {
+    if (getAppSettingsState().ttsEngineInitialized) {
+      return
+    }
+    if (this.ttsEngineInitPromise !== null) {
+      await this.ttsEngineInitPromise
+      return
+    }
+    this.ttsEngineInitPromise = (async (): Promise<void> => {
+      const stored = await this.preferences.getString(TTS_ENGINE_ID_KEY, '')
+      const s = getAppSettingsState()
+      // TODO(Task 4): replace hardcoded 'system' with TTS_FALLBACK_ENGINE_ID from '../config/TtsConfig'
+      // once Task 4 introduces that export. Per design spec §3.3 the fallback value is 'system'.
+      s.ttsEngineId = stored !== '' ? stored : 'system'
+      s.ttsEngineInitialized = true
+      s.ttsEngineVersion++
+    })()
+    await this.ttsEngineInitPromise
+    this.ttsEngineInitPromise = null
+  }
+
+  getTtsEngineId(): string {
+    return getAppSettingsState().ttsEngineId
+  }
+
+  async setTtsEngineId(id: string): Promise<void> {
+    await this.preferences.setString(TTS_ENGINE_ID_KEY, id)
+    const s = getAppSettingsState()
+    s.ttsEngineId = id
+    s.ttsEngineVersion++
   }
 
   private preferenceKeysFor(role: ModelRole): DefaultModelPreferenceKeys | null {
