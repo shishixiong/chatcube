@@ -18,6 +18,7 @@ import {
 } from '../models/ChatModels'
 import { Assistant, DEFAULT_ASSISTANT_ID } from '../models/AssistantModels'
 import { DefaultPrompts } from '../config/DefaultPrompts'
+import { TTS_FALLBACK_ENGINE_ID } from '../config/TtsConfig'
 import {
   getPresetProviderIconPath,
   isPresetProvider,
@@ -985,9 +986,7 @@ export class AppSettingsStore {
     this.ttsEngineInitPromise = (async (): Promise<void> => {
       const stored = await this.preferences.getString(TTS_ENGINE_ID_KEY, '')
       const s = getAppSettingsState()
-      // TODO(Task 4): replace hardcoded 'system' with TTS_FALLBACK_ENGINE_ID from '../config/TtsConfig'
-      // once Task 4 introduces that export. Per design spec §3.3 the fallback value is 'system'.
-      s.ttsEngineId = stored !== '' ? stored : 'system'
+      s.ttsEngineId = stored !== '' ? stored : TTS_FALLBACK_ENGINE_ID
       s.ttsEngineInitialized = true
       s.ttsEngineVersion++
     })()

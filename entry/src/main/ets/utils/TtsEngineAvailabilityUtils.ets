@@ -1,9 +1,6 @@
 import { TtsEngineProfile, TtsEngineAvailability } from '../models/TtsEngineProfile'
 import { ModelProvider } from '../models/ChatModels'
-
-// TODO: Task 4 will replace 'minimax' with `import { MIMO_TTS_PROVIDER_ID } from '../config/TtsConfig'`
-// 当前 Task 1 阶段 TtsConfig 还未导出该常量, 用字面量保持纯函数可同步测试
-const MIMO_TTS_PROVIDER_ID = 'minimax'
+import { MIMO_TTS_PROVIDER_ID } from '../config/TtsConfig'
 
 // 纯函数: 给一个 profile + 当前 providers, 评估运行时可用性
 export function evaluateTtsEngineAvailability(
