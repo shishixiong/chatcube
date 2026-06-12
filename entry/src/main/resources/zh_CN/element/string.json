@@ -1709,6 +1709,14 @@
       "value": "请先添加并启用服务商"
     },
     {
+      "name": "no_reasoning_model_title",
+      "value": "暂无可用推理模型"
+    },
+    {
+      "name": "no_reasoning_model_hint",
+      "value": "请到服务商设置中启用具有推理能力的模型"
+    },
+    {
       "name": "default_model_clear_selection",
       "value": "清除选择"
     },

@@ -1709,6 +1709,14 @@
       "value": "Please add and enable a provider first"
     },
     {
+      "name": "no_reasoning_model_title",
+      "value": "No reasoning models available"
+    },
+    {
+      "name": "no_reasoning_model_hint",
+      "value": "Enable a model with reasoning capability in provider settings"
+    },
+    {
       "name": "default_model_clear_selection",
       "value": "Clear selection"
     },
