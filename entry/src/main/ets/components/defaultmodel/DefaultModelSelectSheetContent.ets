@@ -70,8 +70,9 @@ export struct DefaultModelSelectSheetContent {
           emptyStateMode: 'default',
           hasOutputModeFilter: this.hasOutputModeFilter,
           outputModeFilter: this.outputModeFilter,
-          emptyTitle: this.emptyTitle,
-          emptyDescription: this.emptyDescription,
+          reasoningOnly: true,
+          emptyTitle: $r('app.string.no_reasoning_model_title'),
+          emptyDescription: $r('app.string.no_reasoning_model_hint'),
           onSelectModel: (providerId: string, modelId: string, modelName: string): void => {
             this.onSelectModel(providerId, modelId, modelName)
           },
