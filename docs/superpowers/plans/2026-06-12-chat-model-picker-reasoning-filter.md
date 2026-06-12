@@ -95,10 +95,11 @@ export default function reasoningModelFilterTest() {
         makeProvider('p1', [m1, m2]),
         makeProvider('p2', [m3])
       ]
-      const result: ReasoningModelPick | null = filterReasoningModels(providers)
+      const result = filterReasoningModels(providers)
       expect(result).assertNotNull()
-      expect(result!.provider.id).assertEqual('p1')
-      expect(result!.reasoningModel.id).assertEqual('m2')
+      const pick = result as ReasoningModelPick
+      expect(pick.provider.id).assertEqual('p1')
+      expect(pick.reasoningModel.id).assertEqual('m2')
     })
 
     it('skips disabled models and returns the next enabled + reasoning one', 0, () => {
@@ -110,7 +111,8 @@ export default function reasoningModelFilterTest() {
       ]
       const result = filterReasoningModels(providers)
       expect(result).assertNotNull()
-      expect(result!.reasoningModel.id).assertEqual('m3')
+      const pick = result as ReasoningModelPick
+      expect(pick.reasoningModel.id).assertEqual('m3')
     })
 
     it('honors capabilitiesUserModified override when supportsReasoning is set true', 0, () => {
@@ -121,7 +123,8 @@ export default function reasoningModelFilterTest() {
       expect(m.capabilitiesUserModified).assertTrue()
       const result = filterReasoningModels([makeProvider('p1', [m])])
       expect(result).assertNotNull()
-      expect(result!.reasoningModel.id).assertEqual('user-override')
+      const pick = result as ReasoningModelPick
+      expect(pick.reasoningModel.id).assertEqual('user-override')
     })
   })
 }
