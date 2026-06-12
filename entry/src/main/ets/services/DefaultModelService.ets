@@ -39,6 +39,7 @@ export class DefaultModelService {
     await this.store.ensureDefaultModelsInitialized()
     await this.store.ensurePromptsInitialized()
     await this.store.ensureTtsEngineInitialized()
+    await this.store.loadTtsVoicesFromPreferences()
   }
 
   // ============================================================================
@@ -63,6 +64,18 @@ export class DefaultModelService {
 
   async setTtsEngineId(id: string): Promise<void> {
     await this.store.setTtsEngineId(id)
+  }
+
+  // ============================================================================
+  // TTS 引擎音色（按引擎 id 持久化）
+  // ============================================================================
+
+  getTtsVoiceId(engineId: string): string {
+    return this.store.getTtsVoiceId(engineId)
+  }
+
+  async setTtsVoiceId(engineId: string, voiceId: string): Promise<void> {
+    await this.store.setTtsVoiceId(engineId, voiceId)
   }
 
   // ============================================================================

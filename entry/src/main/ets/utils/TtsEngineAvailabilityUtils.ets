@@ -11,9 +11,9 @@ export function evaluateTtsEngineAvailability(
     return { profile, isEnabled: true, unavailableReason: '' }
   }
 
-  // 当前唯一需要 key 的引擎是 mimo, 复用 MiniMax provider
+  // mimo 与 minimax 都复用 MiniMax provider
   // 未来若需绑其他 provider, 在这里加 case
-  if (profile.id === 'mimo') {
+  if (profile.id === 'mimo' || profile.id === 'minimax') {
     const matched = providers.find(
       (p) => p.id === MIMO_TTS_PROVIDER_ID && p.apiKey !== ''
     )

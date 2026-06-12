@@ -3255,6 +3255,42 @@
     {
       "name": "tts_engine_unavailable_tag",
       "value": "不可用"
+    },
+    {
+      "name": "tts_voice_role",
+      "value": "音色"
+    },
+    {
+      "name": "tts_voice_desc",
+      "value": "当前引擎使用的语音音色"
+    },
+    {
+      "name": "tts_voice_select_title",
+      "value": "选择音色"
+    },
+    {
+      "name": "tts_voice_empty",
+      "value": "此引擎暂不支持切换音色"
+    },
+    {
+      "name": "tts_voice_default_tag",
+      "value": "默认"
+    },
+    {
+      "name": "tts_voice_lang_chinese",
+      "value": "中文"
+    },
+    {
+      "name": "tts_voice_lang_english",
+      "value": "英文"
+    },
+    {
+      "name": "tts_voice_lang_cantonese",
+      "value": "粤语"
+    },
+    {
+      "name": "tts_voice_lang_other",
+      "value": "其他"
     }
   ]
 }

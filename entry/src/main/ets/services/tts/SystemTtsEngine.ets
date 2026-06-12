@@ -80,14 +80,15 @@ export class SystemTtsEngine implements ITtsEngine {
 
     if (!this.engine) {
       console.error('TTS engine not initialized');
-      if (this.currentCallback?.onError) {
-        this.currentCallback.onError('TTS引擎未初始化');
+      if (callback?.onError) {
+        callback.onError('TTS引擎未初始化');
       }
       return;
     }
 
     try {
       this.speaking = true;
+      this.currentCallback = callback;
       this.currentRequestId = Date.now().toString(36) + Math.random().toString(36).substring(2);
       console.info('Speaking: %{public}s', text.substring(0, 50));
 
@@ -111,7 +112,7 @@ export class SystemTtsEngine implements ITtsEngine {
           this.speaking = false;
           this.currentRequestId = '';
           if (this.currentCallback?.onComplete) {
-            this.currentCallback?.onComplete;
+            this.currentCallback.onComplete();
           }
         },
         onError: (requestId: string, errorCode: number, errorMessage: string) => {
@@ -140,6 +141,9 @@ export class SystemTtsEngine implements ITtsEngine {
         extraParams: extraParam
       };
 
+      // 必须在 speak() 之前调用 setListener()，否则 SpeakListener 不会触发
+      // 参考 HarmonyOS API 文档："the setListener method must be invoked first"
+      this.engine.setListener(speakListener);
       this.engine.speak(text, speakParams);
     } catch (err) {
       const error: BusinessError = err as BusinessError;

@@ -3443,6 +3443,42 @@
     {
       "name": "tts_engine_unavailable_tag",
       "value": "Unavailable"
+    },
+    {
+      "name": "tts_voice_role",
+      "value": "Voice"
+    },
+    {
+      "name": "tts_voice_desc",
+      "value": "Voice character for this engine"
+    },
+    {
+      "name": "tts_voice_select_title",
+      "value": "Select Voice"
+    },
+    {
+      "name": "tts_voice_empty",
+      "value": "This engine has no configurable voices"
+    },
+    {
+      "name": "tts_voice_default_tag",
+      "value": "Default"
+    },
+    {
+      "name": "tts_voice_lang_chinese",
+      "value": "Chinese"
+    },
+    {
+      "name": "tts_voice_lang_english",
+      "value": "English"
+    },
+    {
+      "name": "tts_voice_lang_cantonese",
+      "value": "Cantonese"
+    },
+    {
+      "name": "tts_voice_lang_other",
+      "value": "Other"
     }
   ]
 }

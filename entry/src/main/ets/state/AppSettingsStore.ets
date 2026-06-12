@@ -40,6 +40,7 @@ import { runProviderMigrations } from './migrations/ProviderMigrations'
 import { applyDerivedModelDefaults } from '../utils/ModelCapabilityDeriver'
 
 const TTS_ENGINE_ID_KEY = 'tts_engine_id'
+const TTS_VOICE_BY_ENGINE_KEY = 'tts_voice_by_engine_json'
 
 /**
  * 模型 JSON 中的扩展字段（跟 ProviderViewModel 里原先的 ModelData 同构）
@@ -98,6 +99,7 @@ export class AppSettingsStore {
   private defaultModelsInitPromise: Promise<void> | null = null
   private promptsInitPromise: Promise<void> | null = null
   private ttsEngineInitPromise: Promise<void> | null = null
+  private ttsVoicesLoadPromise: Promise<void> | null = null
 
   private constructor() {
     this.db = getDatabaseService()
@@ -996,6 +998,51 @@ export class AppSettingsStore {
 
   getTtsEngineId(): string {
     return getAppSettingsState().ttsEngineId
+  }
+
+  // 读取指定引擎的 voice 配置: 未配置返回空串
+  getTtsVoiceId(engineId: string): string {
+    const map = getAppSettingsState().ttsVoiceByEngine
+    return map[engineId] ?? ''
+  }
+
+  async setTtsVoiceId(engineId: string, voiceId: string): Promise<void> {
+    const s = getAppSettingsState()
+    if (s.ttsVoiceByEngine[engineId] === voiceId) {
+      return
+    }
+    s.ttsVoiceByEngine[engineId] = voiceId
+    s.ttsEngineVersion++
+    // 持久化整张 map 为 JSON 字符串
+    await this.preferences.setString(TTS_VOICE_BY_ENGINE_KEY, JSON.stringify(s.ttsVoiceByEngine))
+  }
+
+  // 从 preferences 还原 voice map (启动时调用一次, 共享 ensureTtsEngineInitialized 的 guard)
+  async loadTtsVoicesFromPreferences(): Promise<void> {
+    const s = getAppSettingsState()
+    if (s.ttsVoicesLoaded) {
+      return
+    }
+    if (this.ttsVoicesLoadPromise !== null) {
+      await this.ttsVoicesLoadPromise
+      return
+    }
+    this.ttsVoicesLoadPromise = (async (): Promise<void> => {
+      const json = await this.preferences.getString(TTS_VOICE_BY_ENGINE_KEY, '')
+      if (json !== '') {
+        try {
+          const parsed: Record<string, string> = JSON.parse(json) as Record<string, string>
+          s.ttsVoiceByEngine = parsed
+        } catch (_e) {
+          s.ttsVoiceByEngine = {}
+        }
+      } else {
+        s.ttsVoiceByEngine = {}
+      }
+      s.ttsVoicesLoaded = true
+    })()
+    await this.ttsVoicesLoadPromise
+    this.ttsVoicesLoadPromise = null
   }
 
   async setTtsEngineId(id: string): Promise<void> {

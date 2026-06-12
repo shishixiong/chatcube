@@ -40,6 +40,10 @@ export class AppSettingsState {
   @Trace ttsEngineInitialized: boolean = false
   @Trace ttsEngineVersion: number = 0
 
+  // ===== TTS 引擎音色选择（按引擎 id 持久化）=====
+  @Trace ttsVoiceByEngine: Record<string, string> = {}
+  @Trace ttsVoicesLoaded: boolean = false
+
   // ===== 生成类 Prompt 模板（标题 / 翻译）=====
   @Trace titlePromptTemplate: string = ''
   @Trace translatePromptTemplate: string = ''
@@ -98,6 +102,10 @@ function resolveAppSettingsStatePath(path: string): string {
       return 'ttsEngineInitialized'
     case 'ttsEngineVersion':
       return 'ttsEngineVersion'
+    case 'ttsVoiceByEngine':
+      return 'ttsVoiceByEngine'
+    case 'ttsVoicesLoaded':
+      return 'ttsVoicesLoaded'
     case 'titlePromptTemplate':
       return 'titlePromptTemplate'
     case 'translatePromptTemplate':

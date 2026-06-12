@@ -18,8 +18,9 @@ import {
   getHdsStatusBarContentColor
 } from '../utils/HdsVisualEffectUtil'
 import { listTtsEngines } from '../services/registry/TtsEngineRegistry'
-import { TtsEngineAvailability } from '../models/TtsEngineProfile'
+import { TtsEngineAvailability, TtsVoice } from '../models/TtsEngineProfile'
 import { TtsEnginePickerSheetContent } from '../components/defaultmodel/TtsEnginePickerSheetContent'
+import { TtsVoicePickerSheetContent } from '../components/defaultmodel/TtsVoicePickerSheetContent'
 
 let defaultModelPagePathStack: NavPathStack | null = null
 
@@ -67,6 +68,10 @@ struct DefaultModelPage {
   @Local ttsEngineId: string = ''
   @Local ttsEngineOptions: TtsEngineAvailability[] = []
   @Local showTtsSheet: boolean = false
+  @Local ttsVoiceId: string = ''
+  @Local ttsVoiceList: TtsVoice[] = []
+  @Local ttsVoiceDefaultId: string = ''
+  @Local showTtsVoiceSheet: boolean = false
   private defaultModelService: DefaultModelService = ServiceRegistry.defaultModel()
   private providerViewModel: ProviderViewModel = ServiceRegistry.provider()
   private compactScroller: Scroller = new Scroller()
@@ -129,7 +134,21 @@ struct DefaultModelPage {
   async loadTtsEngine(): Promise<void> {
     this.ttsEngineId = this.defaultModelService.getTtsEngineId()
     this.ttsEngineOptions = listTtsEngines()
-    console.info(`[DefaultModelPage] Loaded TTS engine: ${this.ttsEngineId}`)
+    this.refreshVoiceStateForCurrentEngine()
+    console.info(`[DefaultModelPage] Loaded TTS engine: ${this.ttsEngineId}, voice: ${this.ttsVoiceId}`)
+  }
+
+  // 引擎切换 / 初始加载后, 重新同步当前引擎的 voice 列表 + 已选 voice
+  private refreshVoiceStateForCurrentEngine(): void {
+    const hit = this.ttsEngineOptions.find((e: TtsEngineAvailability) => e.profile.id === this.ttsEngineId)
+    if (hit !== undefined) {
+      this.ttsVoiceList = hit.profile.voices
+      this.ttsVoiceDefaultId = hit.profile.defaultVoiceId
+    } else {
+      this.ttsVoiceList = []
+      this.ttsVoiceDefaultId = ''
+    }
+    this.ttsVoiceId = this.defaultModelService.getTtsVoiceId(this.ttsEngineId)
   }
 
   @Builder
@@ -249,6 +268,16 @@ struct DefaultModelPage {
           dragBar: true,
           showClose: true,
           title: { title: $r('app.string.tts_engine_select_title') }
+        })
+
+      Column()
+        .width(0)
+        .height(0)
+        .bindSheet($$this.showTtsVoiceSheet, this.TtsVoiceSelectSheet(), {
+          height: SheetSize.LARGE,
+          dragBar: true,
+          showClose: true,
+          title: { title: $r('app.string.tts_voice_select_title') }
         })
     }
     .width('100%')
@@ -418,12 +447,33 @@ struct DefaultModelPage {
         displayName: this.ttsEngineId !== '' ? this.getTtsEngineDisplayName() : '',
         onCardClick: () => {
           this.ttsEngineOptions = listTtsEngines()
+          this.refreshVoiceStateForCurrentEngine()
           this.showModelSheet = false
           this.showPromptSheet = false
+          this.showTtsVoiceSheet = false
           this.showTtsSheet = true
         },
         onPromptClick: () => {}
       })
+      // 仅当当前引擎有可配置音色时, 展示音色选择卡片
+      if (this.ttsVoiceList.length > 0) {
+        ModelConfigCard({
+          roleName: $r('app.string.tts_voice_role'),
+          description: $r('app.string.tts_voice_desc'),
+          showPromptEdit: false,
+          isDefaultPrompt: true,
+          isConfigured: this.getCurrentVoiceDisplayName() !== '',
+          displayName: this.getCurrentVoiceDisplayName(),
+          onCardClick: () => {
+            this.refreshVoiceStateForCurrentEngine()
+            this.showModelSheet = false
+            this.showPromptSheet = false
+            this.showTtsSheet = false
+            this.showTtsVoiceSheet = true
+          },
+          onPromptClick: () => {}
+        })
+      }
     }
     .width('100%')
   }
@@ -437,11 +487,32 @@ struct DefaultModelPage {
     try {
       await this.defaultModelService.setTtsEngineId(id)
       this.ttsEngineId = id
+      this.refreshVoiceStateForCurrentEngine()
     } catch (err) {
       console.error('[DefaultModelPage] setTtsEngineId failed:', JSON.stringify(err))
     } finally {
       this.showTtsSheet = false
     }
+  }
+
+  private async selectTtsVoice(voiceId: string): Promise<void> {
+    try {
+      await this.defaultModelService.setTtsVoiceId(this.ttsEngineId, voiceId)
+      this.ttsVoiceId = voiceId
+    } catch (err) {
+      console.error('[DefaultModelPage] setTtsVoiceId failed:', JSON.stringify(err))
+    } finally {
+      this.showTtsVoiceSheet = false
+    }
+  }
+
+  private getCurrentVoiceDisplayName(): string {
+    const effectiveId = this.ttsVoiceId !== '' ? this.ttsVoiceId : this.ttsVoiceDefaultId
+    if (effectiveId === '') {
+      return ''
+    }
+    const hit = this.ttsVoiceList.find((v: TtsVoice): boolean => v.id === effectiveId)
+    return hit !== undefined ? hit.name : effectiveId
   }
 
   @Builder
@@ -451,6 +522,18 @@ struct DefaultModelPage {
       engines: this.ttsEngineOptions,
       onSelectEngine: (id: string): void => {
         this.selectTtsEngine(id)
+      }
+    })
+  }
+
+  @Builder
+  TtsVoiceSelectSheet() {
+    TtsVoicePickerSheetContent({
+      currentVoiceId: this.ttsVoiceId,
+      defaultVoiceId: this.ttsVoiceDefaultId,
+      voices: this.ttsVoiceList,
+      onSelectVoice: (voiceId: string): void => {
+        this.selectTtsVoice(voiceId)
       }
     })
   }

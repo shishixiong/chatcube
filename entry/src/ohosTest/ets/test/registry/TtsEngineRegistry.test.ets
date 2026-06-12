@@ -22,7 +22,9 @@ function makeRegistration(id: string, displayName: string) {
       displayName,
       description: '...',
       requiresApiKey: false,
-      iconSymbol: 'sys.symbol.speaker_wave_2_fill'
+      iconSymbol: 'sys.symbol.speaker_wave_2_fill',
+      voices: [],
+      defaultVoiceId: ''
     },
     factory: (): ITtsEngine => new StubEngine()
   }

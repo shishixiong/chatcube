@@ -14,7 +14,13 @@ import { setAppUiStateValue } from '../state/AppUiState';
 import { registerTtsEngine } from '../services/registry/TtsEngineRegistry';
 import { SystemTtsEngine } from '../services/tts/SystemTtsEngine';
 import { MiMoTtsEngine } from '../services/tts/MiMoTtsEngine';
-import { MIMO_TTS_CONFIG } from '../config/TtsConfig';
+import { MiniMaxTtsEngine } from '../services/tts/MiniMaxTtsEngine';
+import {
+  MIMO_TTS_CONFIG,
+  MINIMAX_TTS_CONFIG,
+  MIMO_TTS_VOICES,
+  MINIMAX_TTS_VOICES
+} from '../config/TtsConfig';
 
 const DOMAIN = 0x0000;
 
@@ -153,7 +159,9 @@ export default class EntryAbility extends UIAbility {
           displayName: '系统朗读',
           description: 'HarmonyOS 系统内置 TTS 引擎，无需联网，离线可用',
           requiresApiKey: false,
-          iconSymbol: 'sys.symbol.speaker_wave_2_fill'
+          iconSymbol: 'sys.symbol.speaker_wave_2_fill',
+          voices: [],
+          defaultVoiceId: ''
         },
         factory: () => new SystemTtsEngine()
       });
@@ -163,9 +171,23 @@ export default class EntryAbility extends UIAbility {
           displayName: 'MiMo 语音',
           description: `小米 MiMo TTS (${MIMO_TTS_CONFIG.voice})，复用 MiniMax API Key，需要联网`,
           requiresApiKey: true,
-          iconSymbol: 'sys.symbol.waveform'
+          iconSymbol: 'sys.symbol.waveform',
+          voices: MIMO_TTS_VOICES,
+          defaultVoiceId: '冰糖'
         },
         factory: () => new MiMoTtsEngine()
+      });
+      registerTtsEngine({
+        profile: {
+          id: 'minimax',
+          displayName: 'MiniMax 语音',
+          description: `MiniMax T2A v2 (${MINIMAX_TTS_CONFIG.model}, ${MINIMAX_TTS_CONFIG.voice})，复用 MiniMax API Key，需要联网`,
+          requiresApiKey: true,
+          iconSymbol: 'sys.symbol.speaker_wave_3_fill',
+          voices: MINIMAX_TTS_VOICES,
+          defaultVoiceId: 'cartoon_pig'
+        },
+        factory: () => new MiniMaxTtsEngine()
       });
       hilog.info(DOMAIN, 'testTag', 'TTS engines registered successfully');
 

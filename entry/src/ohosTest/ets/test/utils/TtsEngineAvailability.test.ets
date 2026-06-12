@@ -8,14 +8,27 @@ const systemProfile: TtsEngineProfile = {
   displayName: '系统朗读',
   description: '使用 HarmonyOS 系统自带的 TTS 能力朗读',
   requiresApiKey: false,
-  iconSymbol: 'sys.symbol.speaker_wave_2_fill'
+  iconSymbol: 'sys.symbol.speaker_wave_2_fill',
+  voices: [],
+  defaultVoiceId: ''
 }
 const mimoProfile: TtsEngineProfile = {
   id: 'mimo',
   displayName: 'MiMo 语音',
   description: '使用 MiniMax MiMo 在线 TTS 朗读',
   requiresApiKey: true,
-  iconSymbol: 'sys.symbol.waveform'
+  iconSymbol: 'sys.symbol.waveform',
+  voices: [],
+  defaultVoiceId: '冰糖'
+}
+const minimaxProfile: TtsEngineProfile = {
+  id: 'minimax',
+  displayName: 'MiniMax 语音',
+  description: '使用 MiniMax T2A v2 在线 TTS 朗读',
+  requiresApiKey: true,
+  iconSymbol: 'sys.symbol.speaker_wave_3_fill',
+  voices: [],
+  defaultVoiceId: 'cartoon_pig'
 }
 
 function makeProvider(id: string, apiKey: string): ModelProvider {
@@ -53,6 +66,30 @@ export default function ttsEngineAvailabilityTest() {
     it('mimo is disabled when only other providers have apiKey', 0, () => {
       const result = evaluateTtsEngineAvailability(
         mimoProfile, [makeProvider('openai', 'sk-ooo')]
+      )
+      expect(result.isEnabled).assertFalse()
+    })
+
+    it('minimax is disabled when no providers configured', 0, () => {
+      const result = evaluateTtsEngineAvailability(minimaxProfile, [])
+      expect(result.isEnabled).assertFalse()
+      expect(result.unavailableReason).assertContain('MiniMax')
+    })
+
+    it('minimax is disabled when MiniMax exists but no apiKey', 0, () => {
+      const result = evaluateTtsEngineAvailability(minimaxProfile, [makeProvider('minimax', '')])
+      expect(result.isEnabled).assertFalse()
+    })
+
+    it('minimax is enabled when MiniMax has apiKey', 0, () => {
+      const result = evaluateTtsEngineAvailability(minimaxProfile, [makeProvider('minimax', 'sk-xxx')])
+      expect(result.isEnabled).assertTrue()
+      expect(result.unavailableReason).assertEqual('')
+    })
+
+    it('minimax is disabled when only other providers have apiKey', 0, () => {
+      const result = evaluateTtsEngineAvailability(
+        minimaxProfile, [makeProvider('openai', 'sk-ooo')]
       )
       expect(result.isEnabled).assertFalse()
     })

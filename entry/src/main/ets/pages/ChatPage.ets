@@ -115,7 +115,15 @@ import { applyModelDraft } from '../utils/ModelDraftUtils'
 import { ToolPreviewEntry, buildToolArgumentsPreview } from '../utils/ToolPayloadSummaryUtils'
 import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
-import { getSearchToolIds, isSearchToolId, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID } from '../utils/SearchToolIdentityUtils'
+import {
+  getSearchToolIds,
+  isSearchToolId,
+  MATH_QUIZ_TOOL_ID,
+  ENGLISH_QUIZ_TOOL_ID,
+  HUARONGDAO_TOOL_ID,
+  HANDWRITING_PRACTICE_TOOL_ID,
+  CATEGORIZATION_TOOL_ID
+} from '../utils/SearchToolIdentityUtils'
 import { MessagePartKind } from '../models/MessageParts'
 import { normalizeAssistantAvatarValue } from '../components/AssistantAvatar'
 import {
@@ -205,8 +213,8 @@ export struct ChatPage {
   @Local multiSelectToolbarHeightVp: number = 0
   // 输入框是否处于焦点状态（用于控制预览气泡显示）
   @Local isInputFocused: boolean = false
-  // 语音输入模式状态
-  @Local isVoiceMode: boolean = false
+  // 语音输入模式状态（默认开启语音输入）
+  @Local isVoiceMode: boolean = true
   @Local isRecording: boolean = false
   @Local isRecordingCancelZone: boolean = false
   private waveformTimerId: number = -1
@@ -473,6 +481,9 @@ export struct ChatPage {
     if (this.routeParams !== null) {
       this.tryInitWithParams(this.routeParams)
     }
+
+    // 语音模式默认开启；若麦克风未授权，回退到文字模式并提示用户
+    this.ensureInitialVoicePermission()
   }
 
   private tryInitWithParams(params: ChatPageRouteParams | null): void {
@@ -4210,6 +4221,20 @@ export struct ChatPage {
     }
   }
 
+  // 进入页面时的麦克风权限兜底：isVoiceMode 默认 true，若未授权则自动回退并提示
+  private ensureInitialVoicePermission(): void {
+    if (!this.isVoiceMode) {
+      return
+    }
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+    ServiceRegistry.speechRecognition().checkPermission(context).then((granted: boolean) => {
+      if (!granted) {
+        this.isVoiceMode = false
+        this.showChatSnack($r('app.string.voice_permission_denied'), 2000, SnackBarTone.WARNING)
+      }
+    })
+  }
+
   // 开始录音
   handleVoiceRecordStart(): void {
     if (this.isRecording) {
@@ -4560,14 +4585,17 @@ export struct ChatPage {
     this.applyPendingToolExecutionApproval(interaction)
   }
 
-  // 语音模式：quiz 工具（math_quiz / english_quiz）出现 pending 交互时自动朗读题目
+  // 语音模式：互动工具（math_quiz / english_quiz / huarongdao / handwriting_practice / categorization）出现 pending 交互时自动朗读题目
   private tryAutoTtsForQuizInteraction(interaction: PendingToolInteractionSnapshot): void {
     if (!this.isVoiceMode || this.isRecording) {
       return
     }
-    const isQuiz = interaction.toolId === MATH_QUIZ_TOOL_ID ||
-      interaction.toolId === ENGLISH_QUIZ_TOOL_ID
-    if (!isQuiz) {
+    const isAutoTtsTool = interaction.toolId === MATH_QUIZ_TOOL_ID ||
+      interaction.toolId === ENGLISH_QUIZ_TOOL_ID ||
+      interaction.toolId === HUARONGDAO_TOOL_ID ||
+      interaction.toolId === HANDWRITING_PRACTICE_TOOL_ID ||
+      interaction.toolId === CATEGORIZATION_TOOL_ID
+    if (!isAutoTtsTool) {
       return
     }
     // 避免 this.lastAutoTtsQuizToolCallId 与 interaction.id 重复触发
@@ -4645,6 +4673,65 @@ export struct ChatPage {
         }
         if (question !== '') {
           quizText = questionType === 'sentence' ? ('请说出英语句子: ' + question) : ('请说出英语单词: ' + question)
+        }
+      } else if (interaction.toolId === HUARONGDAO_TOOL_ID) {
+        // 数字华容道：按 difficulty 映射到 2-5 阶 gridSize，与 NumberPuzzleCard.ets:113-121 保持一致
+        const rawDifficulty = (parsed['difficulty'] as number) ?? 3
+        let gridSize = 3
+        if (rawDifficulty >= 2 && rawDifficulty <= 5) {
+          gridSize = Math.floor(rawDifficulty)
+        } else if (rawDifficulty === 1) {
+          gridSize = 3
+        }
+        quizText = '我们来玩数字华容道，' + gridSize + ' 乘 ' + gridSize + ' 的格子。'
+      } else if (interaction.toolId === HANDWRITING_PRACTICE_TOOL_ID) {
+        // 学写字：按 type 映射"字母 / 数字 / 汉字"
+        const character = (parsed['character'] as string) ?? ''
+        const writeType = (parsed['type'] as string) ?? 'letter'
+        if (character !== '') {
+          let typeLabel = '字母'
+          if (writeType === 'chinese') {
+            typeLabel = '汉字'
+          } else if (writeType === 'number') {
+            typeLabel = '数字'
+          }
+          quizText = '我们来学写' + typeLabel + '：' + character + '。'
+        }
+      } else if (interaction.toolId === CATEGORIZATION_TOOL_ID) {
+        // 分类小管家：优先用 AI 提供的 instruction，否则用 theme；再追加物品名 + 桶名
+        const theme = ((parsed['theme'] as string) ?? '').trim()
+        const instruction = ((parsed['instruction'] as string) ?? '').trim()
+        if (instruction !== '') {
+          quizText = instruction
+        } else if (theme !== '') {
+          quizText = '我们来玩分类游戏：' + theme + '。'
+        }
+        const itemsRaw = parsed['items'] as Array<Record<string, Object>> | undefined
+        if (itemsRaw !== undefined && itemsRaw.length > 0) {
+          const names: string[] = []
+          const upper = itemsRaw.length < 9 ? itemsRaw.length : 9
+          for (let i = 0; i < upper; i++) {
+            const n = ((itemsRaw[i]['name'] as string) ?? '').trim()
+            if (n !== '') {
+              names.push(n)
+            }
+          }
+          if (names.length > 0) {
+            quizText += ' 有' + names.join('、') + '。'
+          }
+        }
+        const binsRaw = parsed['bins'] as Array<Record<string, Object>> | undefined
+        if (binsRaw !== undefined && binsRaw.length > 0) {
+          const binNames: string[] = []
+          for (let i = 0; i < binsRaw.length; i++) {
+            const n = ((binsRaw[i]['name'] as string) ?? '').trim()
+            if (n !== '') {
+              binNames.push(n)
+            }
+          }
+          if (binNames.length > 0) {
+            quizText += '请把它们放到' + binNames.join('、') + '。'
+          }
         }
       }
     } catch (_e) {}

@@ -5,6 +5,9 @@ import { util } from '@kit.ArkTS'
 import { ITtsEngine, TTSCallback } from './ITtsEngine'
 import { AudioPlayerHelper, AudioPlayerCallback } from './AudioPlayerHelper'
 import { MIMO_TTS_CONFIG } from '../../config/TtsConfig'
+import { getAppSettingsState } from '../../state/AppSettingsState'
+
+const MIMO_ENGINE_ID: string = 'mimo'
 
 export class MiMoTtsEngine implements ITtsEngine {
   private apiKey: string = 'sk-cwidkyxovc7trbn06hbp4y4uvvtembyouazogcrdixm15xke'
@@ -57,7 +60,7 @@ export class MiMoTtsEngine implements ITtsEngine {
         ],
         audio: {
           format: MIMO_TTS_CONFIG.audioFormat,
-          voice: MIMO_TTS_CONFIG.voice
+          voice: this.resolveVoice()
         },
         stream: true
       } as TtsRequestBody)
@@ -339,6 +342,20 @@ export class MiMoTtsEngine implements ITtsEngine {
   private decodeBase64(base64Str: string): Uint8Array {
     const base64 = new util.Base64Helper()
     return base64.decodeSync(base64Str)
+  }
+
+  // 解析当前应使用的音色: 优先读取用户在设置中保存的音色, 未配置则回退到默认配置
+  private resolveVoice(): string {
+    try {
+      const map = getAppSettingsState().ttsVoiceByEngine
+      const saved = map[MIMO_ENGINE_ID]
+      if (saved !== undefined && saved !== '') {
+        return saved
+      }
+    } catch (_e) {
+      // ignore, fall back to default
+    }
+    return MIMO_TTS_CONFIG.voice
   }
 }
 
