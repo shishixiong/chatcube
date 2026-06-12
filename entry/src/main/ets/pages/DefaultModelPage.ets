@@ -17,6 +17,9 @@ import {
   getHdsTopNavigationContentTopPadding,
   getHdsStatusBarContentColor
 } from '../utils/HdsVisualEffectUtil'
+import { listTtsEngines } from '../services/registry/TtsEngineRegistry'
+import { TtsEngineAvailability } from '../models/TtsEngineProfile'
+import { TtsEnginePickerSheetContent } from '../components/defaultmodel/TtsEnginePickerSheetContent'
 
 let defaultModelPagePathStack: NavPathStack | null = null
 
@@ -61,6 +64,9 @@ struct DefaultModelPage {
   @Local showPromptSheet: boolean = false
   @Local currentPromptRole: ModelRole = ModelRole.TITLE
   @Local currentPrompt: string = ''
+  @Local ttsEngineId: string = ''
+  @Local ttsEngineOptions: TtsEngineAvailability[] = []
+  @Local showTtsSheet: boolean = false
   private defaultModelService: DefaultModelService = ServiceRegistry.defaultModel()
   private providerViewModel: ProviderViewModel = ServiceRegistry.provider()
   private compactScroller: Scroller = new Scroller()
@@ -102,6 +108,7 @@ struct DefaultModelPage {
   aboutToAppear(): void {
     this.loadConfig()
     this.loadProviders()
+    this.loadTtsEngine()
   }
 
   async loadConfig(): Promise<void> {
@@ -117,6 +124,12 @@ struct DefaultModelPage {
     this.providers = await this.providerViewModel.loadProviders()
     this.isProvidersLoaded = true
     console.info(`[DefaultModelPage] Loaded ${this.providers.length} enabled providers`)
+  }
+
+  async loadTtsEngine(): Promise<void> {
+    this.ttsEngineId = this.defaultModelService.getTtsEngineId()
+    this.ttsEngineOptions = listTtsEngines()
+    console.info(`[DefaultModelPage] Loaded TTS engine: ${this.ttsEngineId}`)
   }
 
   @Builder
@@ -227,6 +240,16 @@ struct DefaultModelPage {
           dragBar: true,
           showClose: false
         })
+
+      Column()
+        .width(0)
+        .height(0)
+        .bindSheet($$this.showTtsSheet, this.TtsEngineSelectSheet(), {
+          height: SheetSize.MEDIUM,
+          dragBar: true,
+          showClose: true,
+          title: { title: $r('app.string.tts_engine_select_title') }
+        })
     }
     .width('100%')
     .height('100%')
@@ -240,6 +263,7 @@ struct DefaultModelPage {
       this.ImageModelSection()
       this.TitleModelSection()
       this.TranslateModelSection()
+      this.TtsEngineSection()
       Column().height(40)
     }
     .width('100%')
@@ -275,6 +299,8 @@ struct DefaultModelPage {
       }
       .width('100%')
       .alignItems(VerticalAlign.Top)
+
+      this.TtsEngineSection()
 
       Column().height(40)
     }
@@ -377,6 +403,50 @@ struct DefaultModelPage {
       })
     }
     .width('100%')
+  }
+
+  @Builder
+  TtsEngineSection() {
+    Column() {
+      this.SectionTitle($r('app.string.tts_engine_section_title'))
+      ModelConfigCard({
+        roleName: $r('app.string.tts_engine_role'),
+        description: $r('app.string.tts_engine_desc'),
+        showPromptEdit: false,
+        isDefaultPrompt: true,
+        isConfigured: this.ttsEngineId !== '',
+        displayName: this.ttsEngineId !== '' ? this.getTtsEngineDisplayName() : '',
+        onCardClick: () => {
+          this.showModelSheet = false
+          this.showPromptSheet = false
+          this.showTtsSheet = true
+        },
+        onPromptClick: () => {}
+      })
+    }
+    .width('100%')
+  }
+
+  private getTtsEngineDisplayName(): string {
+    const hit = this.ttsEngineOptions.find((e: TtsEngineAvailability) => e.profile.id === this.ttsEngineId)
+    return hit !== undefined ? hit.profile.displayName : this.ttsEngineId
+  }
+
+  private async selectTtsEngine(id: string): Promise<void> {
+    await this.defaultModelService.setTtsEngineId(id)
+    this.ttsEngineId = id
+    this.showTtsSheet = false
+  }
+
+  @Builder
+  TtsEngineSelectSheet() {
+    TtsEnginePickerSheetContent({
+      currentEngineId: this.ttsEngineId,
+      engines: this.ttsEngineOptions,
+      onSelectEngine: (id: string): void => {
+        this.selectTtsEngine(id)
+      }
+    })
   }
 
   @Builder
