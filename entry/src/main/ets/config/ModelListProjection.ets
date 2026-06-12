@@ -1,6 +1,6 @@
 import { ModelInfo, ModelProvider, OutputMode } from '../models/ChatModels'
 import { PickerModelGroup, buildPickerModelGroups } from './ProviderDetailShared'
-import { getEffectiveOutputMode } from '../utils/ModelCapabilityDeriver'
+import { getEffectiveCapabilities, getEffectiveOutputMode } from '../utils/ModelCapabilityDeriver'
 
 export enum ModelRowGroupPosition {
   SINGLE = 'single',
@@ -62,7 +62,8 @@ export function buildModelSelectorRows(
     showFavoritesOnly,
     includeModelIdInSearch,
     false,
-    OutputMode.TEXT
+    OutputMode.TEXT,
+    false
   )
 }
 
@@ -73,7 +74,8 @@ export function buildModelSelectorRowsWithOutputMode(
   showFavoritesOnly: boolean,
   includeModelIdInSearch: boolean,
   hasOutputModeFilter: boolean,
-  outputModeFilter: OutputMode
+  outputModeFilter: OutputMode,
+  reasoningOnly: boolean = false
 ): ModelSelectorBuildResult {
   return buildModelSelectorRowsInternal(
     providers,
@@ -82,7 +84,8 @@ export function buildModelSelectorRowsWithOutputMode(
     showFavoritesOnly,
     includeModelIdInSearch,
     hasOutputModeFilter,
-    outputModeFilter
+    outputModeFilter,
+    reasoningOnly
   )
 }
 
@@ -93,7 +96,8 @@ function buildModelSelectorRowsInternal(
   showFavoritesOnly: boolean,
   includeModelIdInSearch: boolean,
   hasOutputModeFilter: boolean,
-  outputModeFilter: OutputMode
+  outputModeFilter: OutputMode,
+  reasoningOnly: boolean
 ): ModelSelectorBuildResult {
   const rows: ModelSelectorRow[] = []
   const trimmedKeyword = searchKeywords.trim().toLowerCase()
@@ -111,6 +115,9 @@ function buildModelSelectorRowsInternal(
         continue
       }
       if (hasOutputModeFilter && getEffectiveOutputMode(model) !== outputModeFilter) {
+        continue
+      }
+      if (reasoningOnly && !getEffectiveCapabilities(model).supportsReasoning) {
         continue
       }
 
