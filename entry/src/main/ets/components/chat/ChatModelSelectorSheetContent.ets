@@ -10,6 +10,8 @@ export struct ChatModelSelectorSheetContent {
   @Param currentProviderId: string = ''
   @Param activePanel: string = 'selector'
   @Param editingModel: ModelInfo | null = null
+  @Param emptyTitle: string | Resource = ''
+  @Param emptyDescription: string | Resource = ''
   @Event $editingModel: (value: ModelInfo | null) => void = (_value: ModelInfo | null) => {}
   @Event onSelectModel: (providerId: string, modelId: string, modelName: string) => void =
     (_providerId: string, _modelId: string, _modelName: string): void => {}
@@ -69,6 +71,9 @@ export struct ChatModelSelectorSheetContent {
           providers: this.providers,
           currentModelId: this.currentModelId,
           currentProviderId: this.currentProviderId,
+          reasoningOnly: true,
+          emptyTitle: this.emptyTitle,
+          emptyDescription: this.emptyDescription,
           onSelectModel: (providerId: string, modelId: string, modelName: string): void => {
             this.onSelectModel(providerId, modelId, modelName)
           },

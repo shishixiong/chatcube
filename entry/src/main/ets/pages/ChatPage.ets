@@ -3155,6 +3155,8 @@ export struct ChatPage {
       currentProviderId: this.currentProvider?.id ?? '',
       activePanel: this.modelSheetActivePanel,
       editingModel: this.editingModel!!,
+      emptyTitle: $r('app.string.no_reasoning_model_title'),
+      emptyDescription: $r('app.string.no_reasoning_model_hint'),
       onSelectModel: (providerId: string, modelId: string, modelName: string): void => {
         this.handleModelSelect(providerId, modelId, modelName)
         this.isModelSelectorVisible = false
