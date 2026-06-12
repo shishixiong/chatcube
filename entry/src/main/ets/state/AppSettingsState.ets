@@ -35,6 +35,11 @@ export class AppSettingsState {
   @Trace defaultModelsInitialized: boolean = false
   @Trace defaultModelsVersion: number = 0
 
+  // ===== TTS 引擎配置 =====
+  @Trace ttsEngineId: string = ''           // 空串 = 未配置, TTSService 解析时按 'system' 兜底
+  @Trace ttsEngineInitialized: boolean = false
+  @Trace ttsEngineVersion: number = 0
+
   // ===== 生成类 Prompt 模板（标题 / 翻译）=====
   @Trace titlePromptTemplate: string = ''
   @Trace translatePromptTemplate: string = ''
@@ -87,6 +92,12 @@ function resolveAppSettingsStatePath(path: string): string {
       return 'defaultModelsInitialized'
     case 'defaultModelsVersion':
       return 'defaultModelsVersion'
+    case 'ttsEngineId':
+      return 'ttsEngineId'
+    case 'ttsEngineInitialized':
+      return 'ttsEngineInitialized'
+    case 'ttsEngineVersion':
+      return 'ttsEngineVersion'
     case 'titlePromptTemplate':
       return 'titlePromptTemplate'
     case 'translatePromptTemplate':
