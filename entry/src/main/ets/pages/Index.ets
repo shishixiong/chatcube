@@ -4310,6 +4310,9 @@ struct Index {
         showClearSelectionOption: true,
         clearSelectionText: $r('app.string.assistant_model_follow_global'),
         emptyStateMode: 'settings',
+        reasoningOnly: true,
+        emptyTitle: $r('app.string.no_reasoning_model_title'),
+        emptyDescription: $r('app.string.no_reasoning_model_hint'),
         onSelectModel: (providerId: string, modelId: string, modelName: string): void => {
           this.selectAssistantDefaultModel(providerId, modelId, modelName)
         },
