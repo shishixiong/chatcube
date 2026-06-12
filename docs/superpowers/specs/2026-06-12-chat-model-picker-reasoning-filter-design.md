@@ -175,22 +175,18 @@ const result: ModelSelectorBuildResult = buildModelSelectorRowsWithOutputMode(
    - 没命中 → 走原 fallback（第一个 isEnabled 模型，syncGlobalModel 行为不变）
 4. 仍无可用 → 维持原 "currentProvider = null" 路径
 
-**新增私有方法**：
+**新增私有方法**（薄包装，调用 §6.4 的 utils 纯函数做选择 + 自己负责 apply）：
 
 ```typescript
 private async selectFirstReasoningModel(): Promise<boolean> {
-  for (let i = 0; i < this.providers.length; i++) {
-    const provider = this.providers[i]
-    for (let j = 0; j < provider.models.length; j++) {
-      const model = provider.models[j]
-      if (!model.isEnabled) continue
-      if (!getEffectiveCapabilities(model).supportsReasoning) continue
-      await this.applyModelSelection(provider, model, '', false)
-      console.info('ChatPage', `Auto-selected first reasoning model: ${model.name} from ${provider.name}`)
-      return true
-    }
+  const found = filterReasoningModels(this.providers)
+  if (found === null) {
+    return false
   }
-  return false
+  await this.applyModelSelection(found.provider, found.reasoningModel, '', false)
+  console.info('ChatPage',
+    `Auto-selected first reasoning model: ${found.reasoningModel.name} from ${found.provider.name}`)
+  return true
 }
 ```
 
@@ -243,21 +239,45 @@ private async validateAndSetCurrentModel(): Promise<void> {
 
 3 个聊天选择器在 `ModelSelectorContent` 的 `EmptyState` (`ModelSelector.ets:493-512`) 走现有 `getEmptyTitle()` / `getEmptyDescription()` 路径。
 
-调用方传 `emptyTitle` / `emptyDescription` 即可，无需新增 Builder：
+**`ModelSelectorContent` 已有的 `@Param`**（行 32-33）：
+```typescript
+@Param emptyTitle: string | Resource = ''
+@Param emptyDescription: string | Resource = ''
+```
 
-- `ChatModelSelectorSheetContent` / `AssistantModelSheetBuilder` / `DefaultModelSelectSheetContent`（具体哪个传取决于现有 props 是否够用；若不够用，在 `ModelSelectorContent` 加 `noReasoningModels: boolean` 切换，**不**在 `EmptyState` 内嵌判断）
+**`DefaultModelSelectSheetContent`**（行 73-74）**已**透传 `emptyTitle` / `emptyDescription`，本次只把字面量替换成新 string key。
+
+**`ChatModelSelectorSheetContent` 和 `AssistantModelSheetBuilder` 当前未透传这两个 prop**。本次需要：
+
+- `components/chat/ChatModelSelectorSheetContent.ets`：
+  - 加 `@Param emptyTitle: string | Resource = ''` 和 `@Param emptyDescription: string | Resource = ''`
+  - 透传给 `ModelSelectorContent({...})`
+- `pages/Index.ets:4303 AssistantModelSheetBuilder`：
+  - 同上
+
+调用方传值（**3 处一致**）：
+```typescript
+emptyTitle: $r('app.string.no_reasoning_model_title'),
+emptyDescription: $r('app.string.no_reasoning_model_hint')
+```
 
 **简化决策**（spec 锁定）：
-- 复用现有 `emptyTitle` / `emptyDescription` props
-- 在 3 个调用方中**显式**传 `emptyTitle: $r('app.string.no_reasoning_model_title')` / `emptyDescription: $r('app.string.no_reasoning_model_hint')`
-- 即便实际空状态由 `hasEnabledModels=false` 还是 `hasFilteredModels=false` 触发，都用同一对文案——空状态对用户语义等价
+- 复用现有 `emptyTitle` / `emptyDescription` props，**不**在 `EmptyState` 内嵌判断是否由 reasoning 过滤触发
+- 3 个聊天选择器统一用同一对文案——空状态对用户语义等价
+- `ImageGenerationModelSheet` 不动（它有自己的 image-gen 专属文案）
 
-### 4.5 助手默认模型选择器（AssistantModelSheetBuilder）不自动切换
+### 4.5 助手默认模型选择器（AssistantModelSheetBuilder）的行为边界
 
-`AssistantModelSheetBuilder` 是**配置面板**，用户在此显式选 assistant 的默认模型。**不**加自动切换逻辑：
-- 用户选了非推理模型作为 assistant 默认模型是他的选择，**不覆盖**
-- assistant 真正被小星老师使用时，**进入 chat 页面**时仍会走 `validateAndSetCurrentModel` 自动切换
-- 这两阶段分离：assistant 配置面板是"用户意志表达"；chat 进入是"运行时兜底"
+`AssistantModelSheetBuilder` 接受**列表过滤**（§4.2）但**不**接 `validateAndSetCurrentModel` 自动切换（§4.3 是 `ChatPage` 的逻辑）：
+
+- **列表过滤生效**：assistant 配置面板里只看到推理模型，无法再"新选"非推理模型作为 assistant 默认
+- **存量非推理模型保留**：数据库里 assistant 之前已存的非推理 modelId **不**清空；前端仍显示该 assistant 的旧 modelId（直到用户在面板里手动改）
+- **运行时兜底**：assistant 真正被加载进 chat 页面时，**仍**走 `ChatPage.validateAndSetCurrentModel` 的"自动切到首个推理模型"分支——这等价于"assistant 配置层说 A，但 runtime 实际用 B"，session 写 B、全局不变
+- **设计意图**：assistant 配置面板 = 用户对"我想要什么助手"的表达（被新过滤约束）；chat 进入 = runtime 对"现在能用什么模型"的兜底（auto-switch）。两阶段解耦：面板不强行清旧值、不预览切换；runtime 兜底所有 assistant
+
+**澄清常见误解**：
+- 不是"在 assistant 面板里把用户的非推理选择改了"
+- 是"在 runtime 兜底层处理"
 
 ---
 
@@ -316,26 +336,41 @@ node -e "const s=require('fs').readFileSync('entry/src/main/ets/...','utf-8'); .
 抽出 `utils/ReasoningModelFilter.ets`：
 
 ```typescript
+import { ModelInfo, ModelProvider } from '../models/ChatModels'
+import { getEffectiveCapabilities } from './ModelCapabilityDeriver'
+
+export interface ReasoningModelPick {
+  provider: ModelProvider
+  reasoningModel: ModelInfo
+}
+
 export function filterReasoningModels(
   providers: ModelProvider[]
-): { provider: ModelProvider; reasoningModel: ModelInfo } | null {
-  for (const provider of providers) {
-    for (const model of provider.models) {
-      if (model.isEnabled && getEffectiveCapabilities(model).supportsReasoning) {
-        return { provider, reasoningModel: model }
+): ReasoningModelPick | null {
+  for (let i = 0; i < providers.length; i++) {
+    const provider = providers[i]
+    for (let j = 0; j < provider.models.length; j++) {
+      const model = provider.models[j]
+      if (!model.isEnabled) {
+        continue
       }
+      if (!getEffectiveCapabilities(model).supportsReasoning) {
+        continue
+      }
+      return { provider, reasoningModel: model }
     }
   }
   return null
 }
 ```
 
-`ChatPage.selectFirstReasoningModel` 调它；在 `entry/src/ohosTest/ets/test/` 加 `ReasoningModelFilter.test.ets` 覆盖：
-- 空 providers
-- 全是 disabled
+`ChatPage.selectFirstReasoningModel` 调它（§4.3 展示了集成点）；在 `entry/src/ohosTest/ets/test/` 加 `ReasoningModelFilter.test.ets` 覆盖：
+- 空 providers → null
+- 全是 disabled → null
 - 第一个 provider 第一个 model 是 disabled，第二个是 enabled + reasoning → 返回它
-- 全是 enabled 但无 reasoning → 返回 null
-- `capabilitiesUserModified=true` 且 supportsReasoning=true → 命中
+- 全是 enabled 但无 reasoning → null
+- `capabilitiesUserModified=true` 且 `supportsReasoning=true` → 命中
+- provider 顺序：返回的总是**最靠前**的 provider/model 组合
 
 ---
 
