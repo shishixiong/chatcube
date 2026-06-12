@@ -29,6 +29,7 @@ export struct ModelSelectorContent {
   @Param emptyStateMode: string = 'chat'
   @Param hasOutputModeFilter: boolean = false
   @Param outputModeFilter: OutputMode = OutputMode.TEXT
+  @Param reasoningOnly: boolean = false
   @Param emptyTitle: string | Resource = ''
   @Param emptyDescription: string | Resource = ''
   @Local searchKeywords: string = ''
@@ -140,7 +141,8 @@ export struct ModelSelectorContent {
       this.showFavoritesOnly,
       this.includeModelIdInSearch,
       this.hasOutputModeFilter,
-      this.outputModeFilter
+      this.outputModeFilter,
+      this.reasoningOnly
     )
     this.hasEnabledModels = result.hasEnabledModels
     this.hasFavoriteModels = result.hasFavoriteModels
