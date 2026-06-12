@@ -417,6 +417,7 @@ struct DefaultModelPage {
         isConfigured: this.ttsEngineId !== '',
         displayName: this.ttsEngineId !== '' ? this.getTtsEngineDisplayName() : '',
         onCardClick: () => {
+          this.ttsEngineOptions = listTtsEngines()
           this.showModelSheet = false
           this.showPromptSheet = false
           this.showTtsSheet = true
@@ -433,9 +434,14 @@ struct DefaultModelPage {
   }
 
   private async selectTtsEngine(id: string): Promise<void> {
-    await this.defaultModelService.setTtsEngineId(id)
-    this.ttsEngineId = id
-    this.showTtsSheet = false
+    try {
+      await this.defaultModelService.setTtsEngineId(id)
+      this.ttsEngineId = id
+    } catch (err) {
+      console.error('[DefaultModelPage] setTtsEngineId failed:', JSON.stringify(err))
+    } finally {
+      this.showTtsSheet = false
+    }
   }
 
   @Builder

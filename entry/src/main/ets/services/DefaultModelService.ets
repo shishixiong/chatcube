@@ -34,10 +34,11 @@ export class DefaultModelService {
     await this.loadConfig()
   }
 
-  // 加载所有配置（model + prompt 都走 Store）
+  // 加载所有配置（model + prompt + tts 都走 Store）
   async loadConfig(): Promise<void> {
     await this.store.ensureDefaultModelsInitialized()
     await this.store.ensurePromptsInitialized()
+    await this.store.ensureTtsEngineInitialized()
   }
 
   // ============================================================================
