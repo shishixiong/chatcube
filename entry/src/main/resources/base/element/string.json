@@ -3419,6 +3419,30 @@
     {
       "name": "assistant_editor_tools_count_zero",
       "value": "No tool enabled (inherits all)"
+    },
+    {
+      "name": "tts_engine_section_title",
+      "value": "TTS"
+    },
+    {
+      "name": "tts_engine_role",
+      "value": "Voice"
+    },
+    {
+      "name": "tts_engine_desc",
+      "value": "Engine used for voice-mode TTS"
+    },
+    {
+      "name": "tts_engine_select_title",
+      "value": "Select TTS Engine"
+    },
+    {
+      "name": "tts_engine_empty",
+      "value": "No TTS engines available"
+    },
+    {
+      "name": "tts_engine_unavailable_tag",
+      "value": "Unavailable"
     }
   ]
 }
