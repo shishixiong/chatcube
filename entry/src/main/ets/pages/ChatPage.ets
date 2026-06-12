@@ -2186,9 +2186,6 @@ export struct ChatPage {
   }
 
   private getTitleBarDirectMenuCount(): number {
-    if (this.isChatSplitLayout()) {
-      return 1
-    }
     return 2
   }
 
