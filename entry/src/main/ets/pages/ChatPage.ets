@@ -64,6 +64,7 @@ import { inputMethod } from '@kit.IMEKit'
 import { webview } from '@kit.ArkWeb'
 import { dismissActiveSnackBarOnBack, showSnackBar, showToast, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
 import { getEffectiveCapabilities } from '../utils/ModelCapabilityDeriver'
+import { filterReasoningModels } from '../utils/ReasoningModelFilter'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { ChatModelSelectorSheetContent } from '../components/chat/ChatModelSelectorSheetContent'
 import { ChatInputAreaSection } from '../components/chat/ChatInputAreaSection'
@@ -2005,8 +2006,11 @@ export struct ChatPage {
     if (currentSession !== null && currentSession.id === this.sessionId) {
       const sessionSelection = this.findEnabledProviderModelSelection(currentSession.providerId, currentSession.modelId)
       if (sessionSelection !== null) {
-        await this.applyModelSelection(sessionSelection.provider, sessionSelection.model, '', !this.isNewEmptySession)
-        return
+        if (getEffectiveCapabilities(sessionSelection.model).supportsReasoning) {
+          await this.applyModelSelection(sessionSelection.provider, sessionSelection.model, '', !this.isNewEmptySession)
+          return
+        }
+        // session 模型无推理能力 → 落到 saved 校验
       }
     }
 
@@ -2015,8 +2019,11 @@ export struct ChatPage {
       this.appStateManager.getCurrentModelId()
     )
     if (savedSelection !== null) {
-      await this.applyModelSelection(savedSelection.provider, savedSelection.model)
-      return
+      if (getEffectiveCapabilities(savedSelection.model).supportsReasoning) {
+        await this.applyModelSelection(savedSelection.provider, savedSelection.model)
+        return
+      }
+      // saved 也无推理能力 → 落到 selectFirstAvailableModel
     }
 
     await this.selectFirstAvailableModel()
@@ -2024,6 +2031,12 @@ export struct ChatPage {
 
   // 选择第一个可用的模型（优先使用默认聊天模型）
   private async selectFirstAvailableModel(): Promise<void> {
+    // 优先选第一个有推理能力的模型 (auto-switch from non-reasoning current model)
+    const switched = await this.selectFirstReasoningModel()
+    if (switched) {
+      return
+    }
+
     // 先尝试使用默认聊天模型配置
     await this.defaultModelService.initialize()
     const defaultChatModel = this.defaultModelService.getModel(ModelRole.CHAT)
@@ -2067,6 +2080,18 @@ export struct ChatPage {
     this.currentModelId = ''
     this.currentModel = ''
     // 推理级别跟随 assistant, 加载/编辑助手时由 reloadCurrentAssistantRuntimeSnapshot 同步; 此处无需 in-memory 调整
+  }
+
+  // 选第一个有推理能力的模型。仅写 session, 不动全局 currentModelId
+  private async selectFirstReasoningModel(): Promise<boolean> {
+    const found = filterReasoningModels(this.providers)
+    if (found === null) {
+      return false
+    }
+    await this.applyModelSelection(found.provider, found.reasoningModel, '', false)
+    console.info('ChatPage',
+      `Auto-selected first reasoning model: ${found.reasoningModel.name} from ${found.provider.name}`)
+    return true
   }
 
   private async refreshProviders(): Promise<void> {
