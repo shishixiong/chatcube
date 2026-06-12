@@ -11,6 +11,10 @@ import { IconDownloadCache } from '../services/IconDownloadCache';
 import { ModelCapabilityMatcher } from '../services/ModelCapabilityMatcher';
 import { isExpandedLayoutClass, resolveLayoutSizeClass } from '../config/LayoutProfile';
 import { setAppUiStateValue } from '../state/AppUiState';
+import { registerTtsEngine } from '../services/registry/TtsEngineRegistry';
+import { SystemTtsEngine } from '../services/tts/SystemTtsEngine';
+import { MiMoTtsEngine } from '../services/tts/MiMoTtsEngine';
+import { MIMO_TTS_CONFIG } from '../config/TtsConfig';
 
 const DOMAIN = 0x0000;
 
@@ -140,6 +144,30 @@ export default class EntryAbility extends UIAbility {
       // 初始化默认模型服务
       await ServiceRegistry.defaultModel().initialize();
       hilog.info(DOMAIN, 'testTag', 'DefaultModelService initialized successfully');
+
+      // 注册可用的 TTS 引擎到 TtsEngineRegistry
+      // 必须在 TTSService.init() 之前完成（ChatPage 首次打开时触发）
+      registerTtsEngine({
+        profile: {
+          id: 'system',
+          displayName: '系统朗读',
+          description: 'HarmonyOS 系统内置 TTS 引擎，无需联网，离线可用',
+          requiresApiKey: false,
+          iconSymbol: 'sys.symbol.speaker_wave_2_fill'
+        },
+        factory: () => new SystemTtsEngine()
+      });
+      registerTtsEngine({
+        profile: {
+          id: 'mimo',
+          displayName: 'MiMo 语音',
+          description: `小米 MiMo TTS (${MIMO_TTS_CONFIG.voice})，复用 MiniMax API Key，需要联网`,
+          requiresApiKey: true,
+          iconSymbol: 'sys.symbol.waveform'
+        },
+        factory: () => new MiMoTtsEngine()
+      });
+      hilog.info(DOMAIN, 'testTag', 'TTS engines registered successfully');
 
       await ServiceRegistry.assistant().initialize();
       hilog.info(DOMAIN, 'testTag', 'AssistantService initialized successfully');
