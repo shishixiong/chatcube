@@ -1,80 +1,87 @@
 import { common } from '@kit.AbilityKit'
 import { ITtsEngine, TTSCallback } from './tts/ITtsEngine'
-import { SystemTtsEngine } from './tts/SystemTtsEngine'
-import { MiMoTtsEngine } from './tts/MiMoTtsEngine'
-import { TTS_ENGINE, TtsEngineType } from '../config/TtsConfig'
-import { getAppSettingsState } from '../state/AppSettingsState'
-import { ModelProvider } from '../models/ChatModels'
+import { resolveTtsEngine } from './registry/TtsEngineRegistry'
+import { TtsEngineId, TTS_FALLBACK_ENGINE_ID } from '../config/TtsConfig'
+import { getAppSettingsStore } from '../state/AppSettingsStore'
+import { observeAppSettingsState } from '../state/AppSettingsState'
 
 export { TTSCallback } from './tts/ITtsEngine'
 
 export class TTSService {
-  private systemEngine: SystemTtsEngine = new SystemTtsEngine()
-  private mimoEngine: MiMoTtsEngine = new MiMoTtsEngine()
   private currentEngine: ITtsEngine | null = null
+  private currentEngineId: TtsEngineId = TTS_FALLBACK_ENGINE_ID
+  private initContext: common.Context | null = null
+  private unsubscribe: (() => void) | null = null
 
   async init(context: common.Context): Promise<void> {
-    // 初始化系统引擎
-    await this.systemEngine.init(context)
+    this.initContext = context
+    this.resolveAndBindEngine(getAppSettingsStore().getTtsEngineId())
 
-    // 初始化 MiMo 引擎（尝试从现有 MiniMax provider 读取 API key）
-    await this.mimoEngine.init(context)
-
-    this.currentEngine = this.resolveEngine()
-    console.info('TTSService', `引擎选择: ${TTS_ENGINE}`)
+    this.unsubscribe = observeAppSettingsState('ttsEngineVersion', () => {
+      this.resolveAndBindEngine(getAppSettingsStore().getTtsEngineId())
+    })
+    console.info('TTSService', `init done, current engine: ${this.currentEngineId}`)
   }
 
   async speak(text: string, callback: TTSCallback): Promise<void> {
-    if (this.currentEngine === null) {
-      callback.onError('朗读服务未初始化')
-      return
-    }
-
-    // 预处理文本（移除 Markdown 符号、代码块等）
     const processedText = this.preprocessTextForTTS(text)
-
     if (processedText === '') {
       callback.onError('没有可朗读的内容')
       return
     }
-
+    if (this.currentEngine === null) {
+      callback.onError('朗读服务未初始化')
+      return
+    }
     await this.currentEngine.speak(processedText, callback)
   }
 
   stop(): void {
-    if (this.currentEngine !== null) {
-      this.currentEngine.stop()
-    }
+    this.currentEngine?.stop()
   }
 
   isSpeaking(): boolean {
-    if (this.currentEngine !== null) {
-      return this.currentEngine.isSpeaking()
-    }
-    return false
+    return this.currentEngine !== null && this.currentEngine.isSpeaking()
+  }
+
+  getCurrentEngineId(): TtsEngineId {
+    return this.currentEngineId
   }
 
   destroy(): void {
-    this.systemEngine.destroy()
-    this.mimoEngine.destroy()
+    this.currentEngine?.destroy()
     this.currentEngine = null
+    this.unsubscribe?.()
+    this.unsubscribe = null
+    this.initContext = null
   }
 
-  // 运行时切换引擎（后续设置页会用到）
-  switchEngine(engineType: TtsEngineType): void {
+  private resolveAndBindEngine(id: string): void {
+    // 切换前: 如在朗读, 先停
     if (this.currentEngine !== null && this.currentEngine.isSpeaking()) {
       this.currentEngine.stop()
     }
-    this.currentEngine = engineType === 'mimo' ? this.mimoEngine : this.systemEngine
-    console.info('TTSService', `引擎切换为: ${engineType}`)
-  }
+    this.currentEngine?.destroy()
 
-  getCurrentEngineType(): TtsEngineType {
-    return TTS_ENGINE
-  }
-
-  private resolveEngine(): ITtsEngine {
-    return TTS_ENGINE === 'mimo' ? this.mimoEngine : this.systemEngine
+    const engine = resolveTtsEngine(id)
+    if (engine !== null && this.initContext !== null) {
+      try {
+        engine.init(this.initContext)
+        this.currentEngine = engine
+        this.currentEngineId = id as TtsEngineId
+        return
+      } catch (err) {
+        console.error('TTSService',
+          `engine '${id}' init failed: ${JSON.stringify(err)}`)
+      }
+    }
+    // fallback
+    if (id !== TTS_FALLBACK_ENGINE_ID) {
+      this.resolveAndBindEngine(TTS_FALLBACK_ENGINE_ID)
+    } else {
+      this.currentEngine = null
+      this.currentEngineId = TTS_FALLBACK_ENGINE_ID
+    }
   }
 
   // 文本预处理：移除代码块、清理Markdown符号等
