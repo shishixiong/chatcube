@@ -558,6 +558,7 @@ struct DefaultModelPage {
       currentProviderId: this.getCurrentProviderId(),
       hasOutputModeFilter: this.currentEditRole === ModelRole.IMAGE,
       outputModeFilter: OutputMode.IMAGE,
+      reasoningOnly: this.currentEditRole !== ModelRole.IMAGE,
       emptyTitle: this.currentEditRole === ModelRole.IMAGE ? $r('app.string.image_generation_no_available_model') : '',
       emptyDescription: this.currentEditRole === ModelRole.IMAGE ? $r('app.string.image_generation_no_available_model_hint') : '',
       onSelectModel: (providerId: string, modelId: string, modelName: string): void => {

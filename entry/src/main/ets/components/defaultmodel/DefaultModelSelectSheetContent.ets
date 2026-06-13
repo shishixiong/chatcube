@@ -11,6 +11,7 @@ export struct DefaultModelSelectSheetContent {
   @Param currentProviderId: string = ''
   @Param hasOutputModeFilter: boolean = false
   @Param outputModeFilter: OutputMode = OutputMode.TEXT
+  @Param reasoningOnly: boolean = false
   @Param emptyTitle: string | Resource = ''
   @Param emptyDescription: string | Resource = ''
   private get themePrimary(): string {
@@ -70,9 +71,9 @@ export struct DefaultModelSelectSheetContent {
           emptyStateMode: 'default',
           hasOutputModeFilter: this.hasOutputModeFilter,
           outputModeFilter: this.outputModeFilter,
-          reasoningOnly: true,
-          emptyTitle: $r('app.string.no_reasoning_model_title'),
-          emptyDescription: $r('app.string.no_reasoning_model_hint'),
+          reasoningOnly: this.reasoningOnly,
+          emptyTitle: this.reasoningOnly ? $r('app.string.no_reasoning_model_title') : this.emptyTitle,
+          emptyDescription: this.reasoningOnly ? $r('app.string.no_reasoning_model_hint') : this.emptyDescription,
           onSelectModel: (providerId: string, modelId: string, modelName: string): void => {
             this.onSelectModel(providerId, modelId, modelName)
           },
