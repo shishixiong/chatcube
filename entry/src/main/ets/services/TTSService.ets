@@ -12,15 +12,37 @@ export class TTSService {
   private currentEngineId: TtsEngineId = TTS_FALLBACK_ENGINE_ID
   private initContext: common.Context | null = null
   private unsubscribe: (() => void) | null = null
+  // 缓存 in-flight 初始化任务,防止并发重复 init / 重复订阅 ttsEngineVersion
+  private initPromise: Promise<void> | null = null
 
   async init(context: common.Context): Promise<void> {
-    this.initContext = context
-    this.resolveAndBindEngine(getAppSettingsStore().getTtsEngineId())
+    // 幂等 1: 已绑定引擎且 context 未变 → 直接返回
+    if (this.currentEngine !== null && this.initContext === context) {
+      return
+    }
+    // 幂等 2: 已有 in-flight 初始化 → 复用同一 Promise
+    if (this.initPromise !== null) {
+      return this.initPromise
+    }
 
-    this.unsubscribe = observeAppSettingsState('ttsEngineVersion', () => {
-      this.resolveAndBindEngine(getAppSettingsStore().getTtsEngineId())
-    })
-    console.info('TTSService', `init done, current engine: ${this.currentEngineId}`)
+    this.initPromise = (async (): Promise<void> => {
+      try {
+        this.initContext = context
+        this.resolveAndBindEngine(getAppSettingsStore().getTtsEngineId())
+
+        // 仅首次 init 注册引擎切换监听,避免 dispose 前 unsubscribe 被覆盖丢失
+        if (this.unsubscribe === null) {
+          this.unsubscribe = observeAppSettingsState('ttsEngineVersion', () => {
+            this.resolveAndBindEngine(getAppSettingsStore().getTtsEngineId())
+          })
+        }
+        console.info('TTSService', `init done, current engine: ${this.currentEngineId}`)
+      } finally {
+        this.initPromise = null
+      }
+    })()
+
+    return this.initPromise
   }
 
   async speak(text: string, callback: TTSCallback): Promise<void> {
@@ -48,12 +70,16 @@ export class TTSService {
     return this.currentEngineId
   }
 
-  destroy(): void {
+  // 完整释放: 关闭 native 引擎句柄 + 解绑监听 + 清空状态
+  // 仅在 App 真正销毁时调用 (EntryAbility.onDestroy)
+  // 离开 ChatPage 等场景请用 stop() (TTS 引擎句柄长期复用)
+  dispose(): void {
     this.currentEngine?.destroy()
     this.currentEngine = null
     this.unsubscribe?.()
     this.unsubscribe = null
     this.initContext = null
+    this.initPromise = null
   }
 
   private resolveAndBindEngine(id: string): void {

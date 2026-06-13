@@ -474,8 +474,7 @@ export struct ChatPage {
     }
     this.chatViewModel.setTitleCallbacks(titleCallbacks)
 
-    // 初始化TTS服务
-    this.initTTSService()
+    // TTSService 已在 EntryAbility 启动时 eager init（与 ChatPage 生命周期解耦）
 
     // 如果通过 navDestination builder 传入了 routeParams，直接初始化
     // 否则等 onReady 回调设置 routeParams 后再初始化
@@ -590,8 +589,8 @@ export struct ChatPage {
     this.isPageVisible = false
     this.closeActiveChatImagePreview(false)
     this.resetDocumentParseQueue()
-    // 释放TTS资源
-    ServiceRegistry.tts().destroy()
+    // 离开页面停止当前朗读；TTS 引擎句柄保留供下个会话复用（由 EntryAbility.onDestroy 统一释放）
+    ServiceRegistry.tts().stop()
     // 释放语音识别资源
     this.stopWaveformAnimation()
     this.stopRecordingSafetyTimer()
@@ -612,16 +611,6 @@ export struct ChatPage {
     if (this.shouldDeleteEmptySessionOnDisappear()) {
       this.chatViewModel.deleteSession(this.sessionId)
       console.info('ChatPage', '删除空会话: ' + this.sessionId)
-    }
-  }
-
-  // 初始化TTS服务
-  private async initTTSService(): Promise<void> {
-    try {
-      const context = this.getUIContext().getHostContext() as common.UIAbilityContext
-      await ServiceRegistry.tts().init(context)
-    } catch (error) {
-      console.error('ChatPage', 'TTS初始化失败: ' + error)
     }
   }
 

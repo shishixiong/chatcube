@@ -191,6 +191,11 @@ export default class EntryAbility extends UIAbility {
       });
       hilog.info(DOMAIN, 'testTag', 'TTS engines registered successfully');
 
+      // TTS 服务 eager 初始化：与 ChatPage 生命周期解耦
+      // 保证用户在任何路径下调 speak 都立即可用（Pad split 模式必需）
+      await ServiceRegistry.tts().init(this.context);
+      hilog.info(DOMAIN, 'testTag', 'TTSService eagerly initialized');
+
       await ServiceRegistry.assistant().initialize();
       hilog.info(DOMAIN, 'testTag', 'AssistantService initialized successfully');
 
@@ -285,6 +290,8 @@ export default class EntryAbility extends UIAbility {
 
   onDestroy(): void {
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onDestroy');
+    // 释放 TTS 引擎句柄 + 单例状态（App 真正销毁时调用）
+    ServiceRegistry.tts().dispose();
     // 取消注册回调
     if (this.settingsCallback !== null) {
       ServiceRegistry.settings().unregisterCallback(this.settingsCallback);
