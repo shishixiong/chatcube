@@ -17,6 +17,8 @@ export function deriveModelCapabilities(modelId: string): ModelCapabilities {
   cap.supportsVision = result.inputModalities.includes(ModelModality.IMAGE)
   cap.supportsWebSearch = false
   cap.supportsStreaming = true
+  cap.supportsMusicGeneration = result.abilities.includes(ModelAbility.MUSIC_GENERATION)
+  cap.supportsVideoGeneration = result.abilities.includes(ModelAbility.VIDEO_GENERATION)
   return cap
 }
 
@@ -34,6 +36,14 @@ export function deriveModelInputMode(modelId: string): InputMode {
 
 export function deriveModelOutputMode(modelId: string): OutputMode {
   const result = lookupModelAbilities(modelId)
+  // 优先级: 音乐/视频专属能力 > 图像能力 > 文本。
+  // 顺序很重要: 优先识别 MUSIC/VIDEO 这两个具体能力, 再回退到 IMAGE (含 image output modality), 最后 TEXT。
+  if (result.abilities.includes(ModelAbility.MUSIC_GENERATION)) {
+    return OutputMode.MUSIC
+  }
+  if (result.abilities.includes(ModelAbility.VIDEO_GENERATION)) {
+    return OutputMode.VIDEO
+  }
   if (result.abilities.includes(ModelAbility.IMAGE_GENERATION) ||
     result.outputModalities.includes(ModelModality.IMAGE)) {
     return OutputMode.IMAGE
@@ -46,7 +56,12 @@ export function getEffectiveOutputMode(model: ModelInfo): OutputMode {
     return model.outputMode
   }
   const derived = deriveModelOutputMode(model.id)
-  return derived === OutputMode.IMAGE ? OutputMode.IMAGE : model.outputMode
+  // 用户未手动修改时, 若派生 output mode 是 IMAGE/MUSIC/VIDEO 这三种生媒体模式,
+  // 用派生值覆盖默认 TEXT; 否则保持 model.outputMode (通常是 TEXT)。
+  if (derived === OutputMode.IMAGE || derived === OutputMode.MUSIC || derived === OutputMode.VIDEO) {
+    return derived
+  }
+  return model.outputMode
 }
 
 export function applyDerivedModelDefaults(model: ModelInfo): void {
@@ -59,7 +74,9 @@ export function applyDerivedModelDefaults(model: ModelInfo): void {
     model.inputMode = InputMode.VISION
   }
   const derivedOutputMode = deriveModelOutputMode(model.id)
-  if (derivedOutputMode === OutputMode.IMAGE) {
-    model.outputMode = OutputMode.IMAGE
+  if (derivedOutputMode === OutputMode.IMAGE ||
+    derivedOutputMode === OutputMode.MUSIC ||
+    derivedOutputMode === OutputMode.VIDEO) {
+    model.outputMode = derivedOutputMode
   }
 }

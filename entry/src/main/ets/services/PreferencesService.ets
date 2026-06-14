@@ -31,6 +31,14 @@ export class PreferenceKeys {
   static readonly DEFAULT_IMAGE_PROVIDER_ID: string = 'default_image_provider_id'
   static readonly DEFAULT_IMAGE_MODEL_NAME: string = 'default_image_model_name'
   static readonly DEFAULT_IMAGE_PROVIDER_NAME: string = 'default_image_provider_name'
+  static readonly DEFAULT_MUSIC_MODEL_ID: string = 'default_music_model_id'
+  static readonly DEFAULT_MUSIC_PROVIDER_ID: string = 'default_music_model_provider_id'
+  static readonly DEFAULT_MUSIC_MODEL_NAME: string = 'default_music_model_name'
+  static readonly DEFAULT_MUSIC_PROVIDER_NAME: string = 'default_music_model_provider_name'
+  static readonly DEFAULT_VIDEO_MODEL_ID: string = 'default_video_model_id'
+  static readonly DEFAULT_VIDEO_PROVIDER_ID: string = 'default_video_model_provider_id'
+  static readonly DEFAULT_VIDEO_MODEL_NAME: string = 'default_video_model_name'
+  static readonly DEFAULT_VIDEO_PROVIDER_NAME: string = 'default_video_model_provider_name'
 
   // 图像生成提示词库
   static readonly IMAGE_PROMPT_TEMPLATES_JSON: string = 'image_prompt_templates_json'

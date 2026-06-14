@@ -17,7 +17,13 @@ export enum ModelAbility {
   // 对话模型可以在 Responses API 里调用 hosted image_generation tool 中转生图
   // (底层由 OpenAI 服务端代为调用 gpt-image-2 完成实际生图), 例如 gpt-5.x 系列 / gpt-5-codex 系列。
   // 跟 IMAGE_GENERATION 区分: 这是 "对话模型 + 工具", IMAGE_GENERATION 是 "模型本身输出图"
-  IMAGE_GEN_TOOL = 'image_gen_tool'
+  IMAGE_GEN_TOOL = 'image_gen_tool',
+  // 模型本身就是音乐/音频生成模型, 例如 MiniMax music-01 / suno / udio 等。
+  // 走独立生音路由 (MusicGenerationService, 后续实现); 当前 PR 只声明能力, 不接服务。
+  MUSIC_GENERATION = 'music_generation',
+  // 模型本身就是视频生成模型, 例如 MiniMax abab-video / runway / kling / pika / sora 等。
+  // 走独立生视频路由 (VideoGenerationService, 后续实现); 当前 PR 只声明能力, 不接服务。
+  VIDEO_GENERATION = 'video_generation'
 }
 
 export enum ModelModality {
@@ -77,6 +83,8 @@ const TOOL = ModelAbility.TOOL
 const REASON = ModelAbility.REASONING
 const IMAGE_GEN = ModelAbility.IMAGE_GENERATION
 const IMG_TOOL = ModelAbility.IMAGE_GEN_TOOL
+const MUSIC_GEN = ModelAbility.MUSIC_GENERATION
+const VIDEO_GEN = ModelAbility.VIDEO_GENERATION
 
 function def(match: ModelMatchSpec[], abilities: ModelAbility[], input: ModelModality[] = [T],
   output: ModelModality[] = [T]): AbilityDef {

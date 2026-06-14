@@ -417,6 +417,12 @@ export struct ModelSelectorContent {
               if (getEffectiveCapabilities(row.model).supportsWebSearch) {
                 this.CapabilityIcon('sys.symbol.ohos_wifi')
               }
+              if (getEffectiveCapabilities(row.model).supportsMusicGeneration) {
+                this.CapabilityIcon('sys.symbol.waveform')
+              }
+              if (getEffectiveCapabilities(row.model).supportsVideoGeneration) {
+                this.CapabilityIcon('sys.symbol.wand_and_stars')
+              }
             }
             .margin({ top: 4 })
           }

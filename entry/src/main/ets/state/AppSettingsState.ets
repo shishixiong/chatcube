@@ -27,11 +27,13 @@ export class AppSettingsState {
   @Trace assistantsVersion: number = 0
   @Trace currentAssistantId: string = DEFAULT_ASSISTANT_ID
 
-  // ===== default models（chat / title / translate / image 四个 role）=====
+  // ===== default models（chat / title / translate / image / music / video 六个 role）=====
   @Trace defaultChatModel: DefaultModelConfig = new DefaultModelConfig()
   @Trace defaultTitleModel: DefaultModelConfig = new DefaultModelConfig()
   @Trace defaultTranslateModel: DefaultModelConfig = new DefaultModelConfig()
   @Trace defaultImageModel: DefaultModelConfig = new DefaultModelConfig()
+  @Trace defaultMusicModel: DefaultModelConfig = new DefaultModelConfig()
+  @Trace defaultVideoModel: DefaultModelConfig = new DefaultModelConfig()
   @Trace defaultModelsInitialized: boolean = false
   @Trace defaultModelsVersion: number = 0
 
@@ -92,6 +94,10 @@ function resolveAppSettingsStatePath(path: string): string {
       return 'defaultTranslateModel'
     case 'defaultImageModel':
       return 'defaultImageModel'
+    case 'defaultMusicModel':
+      return 'defaultMusicModel'
+    case 'defaultVideoModel':
+      return 'defaultVideoModel'
     case 'defaultModelsInitialized':
       return 'defaultModelsInitialized'
     case 'defaultModelsVersion':

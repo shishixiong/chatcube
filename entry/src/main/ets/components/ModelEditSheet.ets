@@ -28,6 +28,8 @@ export struct ModelEditSheet {
   @Local capSupportsVision: boolean = false
   @Local capSupportsStreaming: boolean = false
   @Local capOutputImage: boolean = false
+  @Local capSupportsMusicGeneration: boolean = false
+  @Local capSupportsVideoGeneration: boolean = false
   // 派生覆盖跟踪
   // userTouched: 本次进入 sheet 后用户是否动过任何开关
   // originalUserModified: 进入 sheet 时 model.capabilitiesUserModified 的快照,用于保护"不改动直接保存"的场景
@@ -53,6 +55,8 @@ export struct ModelEditSheet {
     this.capSupportsVision = effective.supportsVision
     this.capSupportsStreaming = effective.supportsStreaming
     this.capOutputImage = getEffectiveOutputMode(this.model) === OutputMode.IMAGE
+    this.capSupportsMusicGeneration = effective.supportsMusicGeneration
+    this.capSupportsVideoGeneration = effective.supportsVideoGeneration
     this.originalUserModified = this.model.capabilitiesUserModified
     this.userTouched = false
   }
@@ -64,6 +68,8 @@ export struct ModelEditSheet {
     this.capSupportsVision = result.inputModalities.includes(ModelModality.IMAGE)
     this.capOutputImage = result.abilities.includes(ModelAbility.IMAGE_GENERATION) ||
       result.outputModalities.includes(ModelModality.IMAGE)
+    this.capSupportsMusicGeneration = result.abilities.includes(ModelAbility.MUSIC_GENERATION)
+    this.capSupportsVideoGeneration = result.abilities.includes(ModelAbility.VIDEO_GENERATION)
     this.capSupportsWebSearch = false
     this.capSupportsStreaming = true
     // 强制清除覆盖标志:用户主动选择回到派生轨道
@@ -72,6 +78,15 @@ export struct ModelEditSheet {
   }
 
   private buildDraft(): ModelInfoExtendedJson {
+    // outputMode 优先级: music > video > image > text, 与 ModelCapabilityDeriver.deriveModelOutputMode 保持一致。
+    let resolvedOutputMode: OutputMode = OutputMode.TEXT
+    if (this.capSupportsMusicGeneration) {
+      resolvedOutputMode = OutputMode.MUSIC
+    } else if (this.capSupportsVideoGeneration) {
+      resolvedOutputMode = OutputMode.VIDEO
+    } else if (this.capOutputImage) {
+      resolvedOutputMode = OutputMode.IMAGE
+    }
     return {
       id: this.model.id,
       name: this.tempName,
@@ -80,13 +95,15 @@ export struct ModelEditSheet {
       isRecommended: this.model.isRecommended,
       modelType: this.model.modelType,
       inputMode: this.capSupportsVision ? InputMode.VISION : InputMode.TEXT,
-      outputMode: this.capOutputImage ? OutputMode.IMAGE : OutputMode.TEXT,
+      outputMode: resolvedOutputMode,
       capabilities: {
         supportsTools: this.capSupportsTools,
         supportsReasoning: this.capSupportsReasoning,
         supportsWebSearch: this.capSupportsWebSearch,
         supportsVision: this.capSupportsVision,
-        supportsStreaming: this.capSupportsStreaming
+        supportsStreaming: this.capSupportsStreaming,
+        supportsMusicGeneration: this.capSupportsMusicGeneration,
+        supportsVideoGeneration: this.capSupportsVideoGeneration
       },
       capabilitiesUserModified: this.userTouched || this.originalUserModified
     }
@@ -332,6 +349,44 @@ export struct ModelEditSheet {
         .borderRadius(18)
         .onClick(() => {
           this.capOutputImage = !this.capOutputImage
+          this.userTouched = true
+        })
+
+        // 音乐生成
+        Row() {
+          SymbolGlyph($r('sys.symbol.waveform'))
+            .fontSize(16)
+            .fontColor([this.capSupportsMusicGeneration ? this.themePrimary : $r('app.color.text_tertiary')])
+          Text('音乐生成')
+            .fontSize(13)
+            .fontColor(this.capSupportsMusicGeneration ? this.themePrimary : $r('app.color.text_secondary'))
+            .margin({ left: 6 })
+        }
+        .height(36)
+        .padding({ left: 12, right: 14 })
+        .backgroundColor(this.capSupportsMusicGeneration ? this.themePrimaryLight : $r('app.color.divider'))
+        .borderRadius(18)
+        .onClick(() => {
+          this.capSupportsMusicGeneration = !this.capSupportsMusicGeneration
+          this.userTouched = true
+        })
+
+        // 视频生成
+        Row() {
+          SymbolGlyph($r('sys.symbol.wand_and_stars'))
+            .fontSize(16)
+            .fontColor([this.capSupportsVideoGeneration ? this.themePrimary : $r('app.color.text_tertiary')])
+          Text('视频生成')
+            .fontSize(13)
+            .fontColor(this.capSupportsVideoGeneration ? this.themePrimary : $r('app.color.text_secondary'))
+            .margin({ left: 6 })
+        }
+        .height(36)
+        .padding({ left: 12, right: 14 })
+        .backgroundColor(this.capSupportsVideoGeneration ? this.themePrimaryLight : $r('app.color.divider'))
+        .borderRadius(18)
+        .onClick(() => {
+          this.capSupportsVideoGeneration = !this.capSupportsVideoGeneration
           this.userTouched = true
         })
       }

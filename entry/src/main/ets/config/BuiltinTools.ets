@@ -18,6 +18,7 @@ import {
   ASK_USER_TOOL_ID,
   GET_TIME_INFO_TOOL_ID,
   IMAGE_GENERATION_TOOL_ID,
+  MUSIC_GENERATION_TOOL_ID,
   LEGACY_WEB_SEARCH_TOOL_ID,
   SCRAPE_WEB_TOOL_ID,
   SEARCH_WEB_TOOL_ID,
@@ -39,6 +40,16 @@ import {
   ImageGenerationRequest
 } from '../models/ImageGenerationModels'
 import { getImageGenerationService } from '../services/ImageGenerationService'
+import { getMusicGenerationService, hexToBase64 } from '../services/MusicGenerationService'
+import {
+  MusicGenerationAudioSetting,
+  MusicGenerationBitrate,
+  MusicGenerationChannel,
+  MusicGenerationOutputFormat,
+  MusicGenerationRequest,
+  MusicGenerationSampleRate,
+  resolveAudioExtension
+} from '../models/MusicGenerationModels'
 import { getAttachmentStorageService } from '../services/AttachmentStorageService'
 import { getGeneratedMediaRepository } from '../services/GeneratedMediaRepository'
 import { getAppSettingsState } from '../state/AppSettingsState'
@@ -527,6 +538,47 @@ class ImageGenErrorOutput {
   }
 }
 
+// ===== 音乐生成参数/输出 =====
+
+interface MusicGenerationArgs {
+  prompt?: string
+  lyrics?: string
+  audio_format?: string
+  sample_rate?: number
+  bitrate?: number
+  channel?: number
+}
+
+class MusicGenerationOutputItem {
+  filePath: string = ''
+  mimeType: string = ''
+  prompt: string = ''
+  audioLengthMs: number = 0
+
+  constructor(filePath: string, mimeType: string, prompt: string, audioLengthMs: number) {
+    this.filePath = filePath
+    this.mimeType = mimeType
+    this.prompt = prompt
+    this.audioLengthMs = audioLengthMs
+  }
+}
+
+class MusicGenerationOutput {
+  audio: MusicGenerationOutputItem[] = []
+
+  constructor(audio: MusicGenerationOutputItem[]) {
+    this.audio = audio
+  }
+}
+
+class MusicGenErrorOutput {
+  error: string = ''
+
+  constructor(error: string) {
+    this.error = error
+  }
+}
+
 function resolveExtension(mimeType: string): string {
   if (mimeType === 'image/jpeg') {
     return '.jpg'
@@ -725,6 +777,278 @@ function createImageGenerationToolConfig(): ToolConfig {
     ToolSourceType.BUILTIN,
     'builtin',
     IMAGE_GENERATION_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+// ===== 音乐生成 Executor =====
+// 与图片生成执行器同构:
+// 1. 解析 args, 校验 prompt 非空
+// 2. 从默认音乐生成配置中查找 provider/model, 否则扫描所有 provider 兜底
+// 3. 调用 MusicGenerationService.generateMusic
+// 4. hex → base64 → AttachmentStorageService.saveAttachment
+// 5. 返回 MusicGenerationOutput (含文件路径) 或 MusicGenErrorOutput
+
+class MusicGenerationExecutor implements ToolExecutor {
+  async execute(args: string): Promise<string> {
+    try {
+      const params = this.parseArgs(args)
+      if (params.prompt === undefined || params.prompt.trim() === '') {
+        return JSON.stringify(new MusicGenErrorOutput('音乐描述不能为空'))
+      }
+
+      const prompt = params.prompt.trim()
+      const lyrics = params.lyrics !== undefined ? params.lyrics : ''
+
+      // 解析音频参数
+      const audioFormat = this.parseAudioFormat(params.audio_format)
+      const audioSetting = new MusicGenerationAudioSetting()
+      audioSetting.format = audioFormat
+      const parsedSampleRate = this.parseSampleRate(params.sample_rate)
+      if (parsedSampleRate !== null) {
+        audioSetting.sampleRate = parsedSampleRate
+      }
+      const parsedBitrate = this.parseBitrate(params.bitrate)
+      if (parsedBitrate !== null) {
+        audioSetting.bitrate = parsedBitrate
+      }
+      const parsedChannel = this.parseChannel(params.channel)
+      if (parsedChannel !== null) {
+        audioSetting.channel = parsedChannel
+      }
+
+      // 解析音乐生成 provider/model
+      const state = getAppSettingsState()
+      const defaultMusic = state.defaultMusicModel
+      let provider: ModelProvider | null = null
+      let model: ModelInfo | null = null
+
+      if (defaultMusic.providerId !== '' && defaultMusic.modelId !== '') {
+        for (let i = 0; i < state.providers.length; i++) {
+          const p = state.providers[i]
+          if (p.id === defaultMusic.providerId) {
+            for (let j = 0; j < p.models.length; j++) {
+              const m = p.models[j]
+              if (m.id === defaultMusic.modelId && getEffectiveOutputMode(m) === OutputMode.MUSIC) {
+                provider = p
+                model = m
+                break
+              }
+            }
+            break
+          }
+        }
+      }
+
+      // 回退: 扫描所有 provider 找到第一个可用的音乐模型
+      if (provider === null || model === null) {
+        for (let i = 0; i < state.providers.length; i++) {
+          const p = state.providers[i]
+          for (let j = 0; j < p.models.length; j++) {
+            const m = p.models[j]
+            if (m.isEnabled && getEffectiveOutputMode(m) === OutputMode.MUSIC) {
+              provider = p
+              model = m
+              break
+            }
+          }
+          if (provider !== null) {
+            break
+          }
+        }
+      }
+
+      if (provider === null || model === null) {
+        return JSON.stringify(new MusicGenErrorOutput('未找到可用的音乐生成模型, 请先在设置中配置音乐生成服务商'))
+      }
+
+      console.info('MusicGenerationExecutor',
+        `Generating: provider=${provider.id}, model=${model.id}, lyricsLen=${lyrics.length}, format=${audioFormat}`)
+
+      const request = new MusicGenerationRequest()
+      request.providerId = provider.id
+      request.modelId = model.id
+      request.prompt = prompt
+      if (lyrics.trim() !== '') {
+        request.lyrics = lyrics
+      }
+      request.audioSetting = audioSetting
+
+      const result = await getMusicGenerationService().generateMusic(provider, model, request)
+      const outputItems: MusicGenerationOutputItem[] = []
+      const attachmentService = getAttachmentStorageService()
+      const itemPrompt = request.prompt
+
+      for (let i = 0; i < result.items.length; i++) {
+        const item = result.items[i]
+        const id = `music_${Date.now()}_${i}_${Math.floor(Math.random() * 100000)}`
+        const ext = resolveAudioExtension(item.audioFormat)
+        const fileName = `${id}${ext}`
+        let base64Data = ''
+        try {
+          base64Data = hexToBase64(item.hexData)
+        } catch (error) {
+          console.error('MusicGenerationExecutor', `Failed to decode audio hex: ${JSON.stringify(error)}`)
+          continue
+        }
+        const attachment = new MessageAttachment(
+          id,
+          AttachmentType.FILE,
+          fileName,
+          '',
+          item.mimeType,
+          0
+        )
+        attachment.base64Data = base64Data
+        const filePath = await attachmentService.saveAttachment(attachment)
+        attachment.base64Data = ''
+        if (filePath === '') {
+          console.error('MusicGenerationExecutor', `Failed to save audio ${i}`)
+          continue
+        }
+
+        outputItems.push(new MusicGenerationOutputItem(
+          filePath,
+          item.mimeType,
+          itemPrompt,
+          item.audioLengthMs
+        ))
+      }
+
+      if (outputItems.length === 0) {
+        return JSON.stringify(new MusicGenErrorOutput('音乐生成失败, 所有音频保存出错'))
+      }
+
+      return JSON.stringify(new MusicGenerationOutput(outputItems))
+    } catch (error) {
+      console.error('MusicGenerationExecutor', `Music generation error: ${JSON.stringify(error)}`)
+      return JSON.stringify(new MusicGenErrorOutput(`音乐生成失败: ${JSON.stringify(error)}`))
+    }
+  }
+
+  private parseArgs(args: string): MusicGenerationArgs {
+    const parsed = JSON.parse(args) as MusicGenerationArgs
+    return parsed
+  }
+
+  private parseAudioFormat(raw: string | undefined): MusicGenerationOutputFormat {
+    if (raw === undefined) {
+      return MusicGenerationOutputFormat.MP3
+    }
+    const lower = raw.toLowerCase().trim()
+    if (lower === 'wav') {
+      return MusicGenerationOutputFormat.WAV
+    }
+    if (lower === 'flac') {
+      return MusicGenerationOutputFormat.FLAC
+    }
+    if (lower === 'pcm') {
+      return MusicGenerationOutputFormat.PCM
+    }
+    return MusicGenerationOutputFormat.MP3
+  }
+
+  private parseSampleRate(raw: number | undefined): MusicGenerationSampleRate | null {
+    if (raw === undefined) {
+      return null
+    }
+    if (raw === 16000) {
+      return MusicGenerationSampleRate.RATE_16000
+    }
+    if (raw === 24000) {
+      return MusicGenerationSampleRate.RATE_24000
+    }
+    if (raw === 44100) {
+      return MusicGenerationSampleRate.RATE_44100
+    }
+    return MusicGenerationSampleRate.RATE_32000
+  }
+
+  private parseBitrate(raw: number | undefined): MusicGenerationBitrate | null {
+    if (raw === undefined) {
+      return null
+    }
+    if (raw === 64000) {
+      return MusicGenerationBitrate.BITRATE_64000
+    }
+    if (raw === 96000) {
+      return MusicGenerationBitrate.BITRATE_96000
+    }
+    if (raw === 192000) {
+      return MusicGenerationBitrate.BITRATE_192000
+    }
+    if (raw === 256000) {
+      return MusicGenerationBitrate.BITRATE_256000
+    }
+    if (raw === 320000) {
+      return MusicGenerationBitrate.BITRATE_320000
+    }
+    return MusicGenerationBitrate.BITRATE_128000
+  }
+
+  private parseChannel(raw: number | undefined): MusicGenerationChannel | null {
+    if (raw === undefined) {
+      return null
+    }
+    if (raw === 2) {
+      return MusicGenerationChannel.STEREO
+    }
+    if (raw === 1) {
+      return MusicGenerationChannel.MONO
+    }
+    return null
+  }
+}
+
+function createMusicGenerationToolDefinition(): ToolDefinition {
+  const parameters = new ToolParameters()
+  parameters.addProperty('prompt', new ToolParameterProperty(
+    'string',
+    'Detailed description of the music to generate, in the user\'s language. Include style, mood, tempo, instruments, and scene. 20-200 characters.'
+  ))
+  parameters.addProperty('lyrics', new ToolParameterProperty(
+    'string',
+    'Optional song lyrics, with lines separated by \\n. Only used by music-2.6 (ignored by instrumental models like music-cover).'
+  ))
+  parameters.addProperty('audio_format', new ToolParameterProperty(
+    'string',
+    'Output audio format: "mp3", "pcm", "wav", or "flac". Default "mp3".'
+  ))
+  parameters.addProperty('sample_rate', new ToolParameterProperty(
+    'integer',
+    'Audio sample rate in Hz: 16000, 24000, 32000, or 44100. Default 32000.'
+  ))
+  parameters.addProperty('bitrate', new ToolParameterProperty(
+    'integer',
+    'Audio bitrate in bps: 64000, 96000, 128000, 192000, 256000, or 320000. Default 128000.'
+  ))
+  parameters.addProperty('channel', new ToolParameterProperty(
+    'integer',
+    'Audio channel count: 1 for mono, 2 for stereo. Default 1.'
+  ))
+  parameters.addRequired('prompt')
+
+  const func = new ToolFunction(
+    MUSIC_GENERATION_TOOL_ID,
+    'Generate original music (instrumental or with lyrics) from a text prompt. Use this when the user asks you to compose, generate, or create music, songs, background music, or jingles. The generated audio will be saved as a file in the chat. Describe the desired music in detail including style, mood, tempo, instruments, and scene. Do NOT use this for sound effects, voice synthesis, or audio editing.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createMusicGenerationToolConfig(): ToolConfig {
+  return new ToolConfig(
+    MUSIC_GENERATION_TOOL_ID,
+    '生成音乐',
+    '根据文本描述生成音乐/歌曲, 结果作为音频文件保存到对话中。使用已配置的音乐生成服务商(如 MiniMax)。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    MUSIC_GENERATION_TOOL_ID,
     '内置工具',
     ToolPermissionLevel.READ
   )
@@ -1633,6 +1957,17 @@ export function registerBuiltinTools(): void {
       new ImageGenerationExecutor()
     )
     registry.registerTool(imageGenTool)
+    registeredNow += 1
+  }
+
+  if (!registry.isToolRegistered(MUSIC_GENERATION_TOOL_ID)) {
+    const musicGenTool = new RegisteredTool(
+      MUSIC_GENERATION_TOOL_ID,
+      createMusicGenerationToolConfig(),
+      createMusicGenerationToolDefinition(),
+      new MusicGenerationExecutor()
+    )
+    registry.registerTool(musicGenTool)
     registeredNow += 1
   }
 

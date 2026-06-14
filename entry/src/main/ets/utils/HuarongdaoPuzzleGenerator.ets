@@ -11,9 +11,13 @@
  * difficulty 1 默认走 3×3, 与 NumberPuzzleCard (largeSize sheet 视图) 和
  * ChatPage 内联引导文案的 difficulty→gridSize 直映射语义一致。
  *
- * 打乱方式: 模拟从有序棋盘出发做随机反向滑动的算法,
- * 保证生成的棋盘统计上可解 (偶数次滑动, 与还原路径相对应)。
- * 这种"最少步数随机游走"的打乱方式在 NumberPuzzleCard 中已验证可用。
+ * 打乱方式: 从有序棋盘出发,做 N 步"空格反向游走" (每步把空格和相邻 tile
+ * 互换)。每一步都是合法解谜动作,所以生成的棋盘 100% 可解 (15-puzzle 可解
+ * 性定理:任何从 solved 出发经合法 move 到达的状态都 reachable→solvable)。
+ *
+ * 绝对不能用 Fisher-Yates 先打乱再走——Fisher-Yates 产生均匀随机排列,约
+ * 50% 是不可解状态,后续 walk 只能到达同奇偶类状态,无法修复。已修复于
+ * 2026-06-14,见 commit 历史。
  */
 
 export class HuarongdaoPuzzleState {
@@ -57,18 +61,6 @@ function buildSolvedBoard(gridSize: number): number[] {
 }
 
 /**
- * Fisher-Yates 数组打乱.
- */
-function shuffleArray(arr: number[]): void {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    const tmp: number = arr[i]
-    arr[i] = arr[j]
-    arr[j] = tmp
-  }
-}
-
-/**
  * 检查棋盘是否已经是还原状态.
  */
 function isSolved(board: number[], gridSize: number): boolean {
@@ -100,13 +92,8 @@ export function generatePuzzle(difficulty: number): HuarongdaoPuzzleState {
   state.gridSize = gridSize
   state.difficulty = clampedDifficulty
 
-  // 先做一次 Fisher-Yates 大致打乱, 跳出有序初始结构
-  shuffleArray(state.tiles)
-
-  // 然后做"空格反向游走" (以可解性保证):
-  // 每步把空格和相邻 tile 互换, 走出 shuffleSteps 步.
-  // 反向游走 = 从有序棋盘走 shuffleSteps 步, 然后还原时需要同样多步;
-  // 但前一步 Fisher-Yates 已经把空位打散, 所以这里直接 walk.
+  // 从有序状态出发做"空格反向游走", 每步都是合法解谜动作, 100% 可解.
+  // 之前的 Fisher-Yates 起点会让 ~50% 状态不可解, 已删除.
   const total: number = gridSize * gridSize
   let emptyIndex: number = state.tiles.indexOf(0)
   for (let step = 0; step < shuffleSteps; step++) {
@@ -135,12 +122,18 @@ export function generatePuzzle(difficulty: number): HuarongdaoPuzzleState {
     emptyIndex = targetIdx
   }
 
-  // 极低概率 (连续随机命中还原路径) 导致棋盘回到有序, 重新打乱一次
+  // 极低概率 (reverse walk 恰好回到有序) 下做一次额外的合法 move 打破.
+  // 注意:不能简单 swap 任意两块——交换两块可能产生不可解状态 (如 2×2 的
+  // [1,2,3,0] swap 前两块后变 [2,1,3,0], 验证:inv=1奇,空行1奇, XOR=0
+  // 不可解)。这里用合法 move 保证结果仍可解。
   if (isSolved(state.tiles, gridSize)) {
-    // 直接 swap 前两块, 必然破坏有序
-    const a: number = state.tiles[0]
-    state.tiles[0] = state.tiles[1]
-    state.tiles[1] = a
+    const row: number = Math.floor(emptyIndex / gridSize)
+    const col: number = emptyIndex % gridSize
+    // 优先选横向邻居 (corner 时只有 2 个邻居, edge 有 3 个, center 有 4 个)
+    const neighborIdx: number = (col > 0) ? emptyIndex - 1 : emptyIndex + 1
+    const swapped: number = state.tiles[emptyIndex]
+    state.tiles[emptyIndex] = state.tiles[neighborIdx]
+    state.tiles[neighborIdx] = swapped
   }
 
   // 防止 total == 0 这种边界 (gridSize 必须 ≥ 2, 上面已保证)

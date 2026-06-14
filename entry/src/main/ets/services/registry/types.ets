@@ -81,7 +81,12 @@ export const MINIMAX_COMPATIBLE_MODELS: string[] = [
   'MiniMax-M2.5-highspeed',
   'MiniMax-M2.1',
   'MiniMax-M2.1-highspeed',
-  'MiniMax-M2'
+  'MiniMax-M2',
+  // 音乐生成模型 (MiniMax Music Generation API)
+  'music-2.6',
+  'music-cover',
+  'music-2.6-free',
+  'music-cover-free'
 ]
 
 // ============ DSL 数据结构 ============

@@ -57,6 +57,8 @@ struct DefaultModelPage {
   @Local titleModel: DefaultModelConfig = new DefaultModelConfig()
   @Local translateModel: DefaultModelConfig = new DefaultModelConfig()
   @Local imageModel: DefaultModelConfig = new DefaultModelConfig()
+  @Local musicModel: DefaultModelConfig = new DefaultModelConfig()
+  @Local videoModel: DefaultModelConfig = new DefaultModelConfig()
 
   @Local providers: ModelProvider[] = []
   @Local isProvidersLoaded: boolean = false
@@ -122,6 +124,8 @@ struct DefaultModelPage {
     this.titleModel = this.defaultModelService.getModel(ModelRole.TITLE)
     this.translateModel = this.defaultModelService.getModel(ModelRole.TRANSLATE)
     this.imageModel = this.defaultModelService.getModel(ModelRole.IMAGE)
+    this.musicModel = this.defaultModelService.getModel(ModelRole.MUSIC)
+    this.videoModel = this.defaultModelService.getModel(ModelRole.VIDEO)
   }
 
   async loadProviders(): Promise<void> {
@@ -290,6 +294,8 @@ struct DefaultModelPage {
     Column() {
       this.ChatModelSection()
       this.ImageModelSection()
+      this.MusicModelSection()
+      this.VideoModelSection()
       this.TitleModelSection()
       this.TranslateModelSection()
       this.TtsEngineSection()
@@ -323,6 +329,20 @@ struct DefaultModelPage {
 
         Column() {
           this.TranslateModelSection()
+        }
+        .layoutWeight(1)
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Top)
+
+      Row({ space: 16 }) {
+        Column() {
+          this.MusicModelSection()
+        }
+        .layoutWeight(1)
+
+        Column() {
+          this.VideoModelSection()
         }
         .layoutWeight(1)
       }
@@ -399,6 +419,50 @@ struct DefaultModelPage {
         onCardClick: () => {
           this.showPromptSheet = false
           this.currentEditRole = ModelRole.IMAGE
+          this.showModelSheet = true
+        },
+        onPromptClick: () => {}
+      })
+    }
+    .width('100%')
+  }
+
+  @Builder
+  MusicModelSection() {
+    Column() {
+      this.SectionTitle($r('app.string.default_model_role_music_generation'))
+      ModelConfigCard({
+        roleName: $r('app.string.default_model_role_music_generation'),
+        description: $r('app.string.default_model_desc_music_generation'),
+        showPromptEdit: false,
+        isConfigured: this.musicModel.isConfigured(),
+        displayName: this.musicModel.getDisplayName(),
+        isDefaultPrompt: true,
+        onCardClick: () => {
+          this.showPromptSheet = false
+          this.currentEditRole = ModelRole.MUSIC
+          this.showModelSheet = true
+        },
+        onPromptClick: () => {}
+      })
+    }
+    .width('100%')
+  }
+
+  @Builder
+  VideoModelSection() {
+    Column() {
+      this.SectionTitle($r('app.string.default_model_role_video_generation'))
+      ModelConfigCard({
+        roleName: $r('app.string.default_model_role_video_generation'),
+        description: $r('app.string.default_model_desc_video_generation'),
+        showPromptEdit: false,
+        isConfigured: this.videoModel.isConfigured(),
+        displayName: this.videoModel.getDisplayName(),
+        isDefaultPrompt: true,
+        onCardClick: () => {
+          this.showPromptSheet = false
+          this.currentEditRole = ModelRole.VIDEO
           this.showModelSheet = true
         },
         onPromptClick: () => {}
@@ -556,11 +620,11 @@ struct DefaultModelPage {
       providers: this.providers,
       currentModelId: this.getCurrentModelId(),
       currentProviderId: this.getCurrentProviderId(),
-      hasOutputModeFilter: this.currentEditRole === ModelRole.IMAGE,
-      outputModeFilter: OutputMode.IMAGE,
-      reasoningOnly: this.currentEditRole !== ModelRole.IMAGE,
-      emptyTitle: this.currentEditRole === ModelRole.IMAGE ? $r('app.string.image_generation_no_available_model') : '',
-      emptyDescription: this.currentEditRole === ModelRole.IMAGE ? $r('app.string.image_generation_no_available_model_hint') : '',
+      hasOutputModeFilter: this.isMediaGenerationRole(),
+      outputModeFilter: this.getCurrentOutputModeFilter(),
+      reasoningOnly: !this.isMediaGenerationRole(),
+      emptyTitle: this.isMediaGenerationRole() ? this.getMediaEmptyTitle() : '',
+      emptyDescription: this.isMediaGenerationRole() ? this.getMediaEmptyDescription() : '',
       onSelectModel: (providerId: string, modelId: string, modelName: string): void => {
         this.selectModel(providerId, modelId, modelName)
       },
@@ -568,6 +632,49 @@ struct DefaultModelPage {
         this.clearModelSelection()
       }
     })
+  }
+
+  // 当前 role 是否为"生媒体"角色 (IMAGE/MUSIC/VIDEO), 用于控制 picker 是否走 OutputMode 过滤
+  private isMediaGenerationRole(): boolean {
+    return this.currentEditRole === ModelRole.IMAGE ||
+      this.currentEditRole === ModelRole.MUSIC ||
+      this.currentEditRole === ModelRole.VIDEO
+  }
+
+  // 当前 role 对应的 OutputMode; 非生媒体角色返回 TEXT (picker 不会启用过滤)
+  private getCurrentOutputModeFilter(): OutputMode {
+    if (this.currentEditRole === ModelRole.IMAGE) {
+      return OutputMode.IMAGE
+    }
+    if (this.currentEditRole === ModelRole.MUSIC) {
+      return OutputMode.MUSIC
+    }
+    if (this.currentEditRole === ModelRole.VIDEO) {
+      return OutputMode.VIDEO
+    }
+    return OutputMode.TEXT
+  }
+
+  // 生媒体角色 picker 空态的 title; 按 role 选对应的资源 key
+  private getMediaEmptyTitle(): Resource {
+    if (this.currentEditRole === ModelRole.MUSIC) {
+      return $r('app.string.music_generation_no_available_model')
+    }
+    if (this.currentEditRole === ModelRole.VIDEO) {
+      return $r('app.string.video_generation_no_available_model')
+    }
+    return $r('app.string.image_generation_no_available_model')
+  }
+
+  // 生媒体角色 picker 空态的 description
+  private getMediaEmptyDescription(): Resource {
+    if (this.currentEditRole === ModelRole.MUSIC) {
+      return $r('app.string.music_generation_no_available_model_hint')
+    }
+    if (this.currentEditRole === ModelRole.VIDEO) {
+      return $r('app.string.video_generation_no_available_model_hint')
+    }
+    return $r('app.string.image_generation_no_available_model_hint')
   }
 
   @Builder
@@ -679,22 +786,17 @@ struct DefaultModelPage {
       return $r('app.string.default_model_select_title_model')
     } else if (this.currentEditRole === ModelRole.IMAGE) {
       return $r('app.string.default_model_select_image_model')
+    } else if (this.currentEditRole === ModelRole.MUSIC) {
+      return $r('app.string.default_model_select_music_model')
+    } else if (this.currentEditRole === ModelRole.VIDEO) {
+      return $r('app.string.default_model_select_video_model')
     }
     return $r('app.string.default_model_select_translate_model')
   }
 
   // 获取当前选择的模型显示名称
   private getCurrentModelDisplayName(): string | Resource {
-    let config: DefaultModelConfig
-    if (this.currentEditRole === ModelRole.CHAT) {
-      config = this.chatModel
-    } else if (this.currentEditRole === ModelRole.TITLE) {
-      config = this.titleModel
-    } else if (this.currentEditRole === ModelRole.IMAGE) {
-      config = this.imageModel
-    } else {
-      config = this.translateModel
-    }
+    const config = this.getCurrentModelConfig()
 
     if (config.isConfigured()) {
       return config.getDisplayName()
@@ -703,31 +805,31 @@ struct DefaultModelPage {
   }
 
   private getCurrentModelId(): string {
-    let config: DefaultModelConfig
-    if (this.currentEditRole === ModelRole.CHAT) {
-      config = this.chatModel
-    } else if (this.currentEditRole === ModelRole.TITLE) {
-      config = this.titleModel
-    } else if (this.currentEditRole === ModelRole.IMAGE) {
-      config = this.imageModel
-    } else {
-      config = this.translateModel
-    }
-    return config.modelId
+    return this.getCurrentModelConfig().modelId
   }
 
   private getCurrentProviderId(): string {
-    let config: DefaultModelConfig
+    return this.getCurrentModelConfig().providerId
+  }
+
+  // 统一的 role -> DefaultModelConfig 映射, 供 getCurrent* 系列函数使用
+  private getCurrentModelConfig(): DefaultModelConfig {
     if (this.currentEditRole === ModelRole.CHAT) {
-      config = this.chatModel
-    } else if (this.currentEditRole === ModelRole.TITLE) {
-      config = this.titleModel
-    } else if (this.currentEditRole === ModelRole.IMAGE) {
-      config = this.imageModel
-    } else {
-      config = this.translateModel
+      return this.chatModel
     }
-    return config.providerId
+    if (this.currentEditRole === ModelRole.TITLE) {
+      return this.titleModel
+    }
+    if (this.currentEditRole === ModelRole.IMAGE) {
+      return this.imageModel
+    }
+    if (this.currentEditRole === ModelRole.MUSIC) {
+      return this.musicModel
+    }
+    if (this.currentEditRole === ModelRole.VIDEO) {
+      return this.videoModel
+    }
+    return this.translateModel
   }
 
   private getProviderNameById(providerId: string): string {
@@ -754,6 +856,10 @@ struct DefaultModelPage {
       this.titleModel = new DefaultModelConfig(config.modelId, config.providerId, config.modelName, config.providerName)
     } else if (this.currentEditRole === ModelRole.IMAGE) {
       this.imageModel = new DefaultModelConfig(config.modelId, config.providerId, config.modelName, config.providerName)
+    } else if (this.currentEditRole === ModelRole.MUSIC) {
+      this.musicModel = new DefaultModelConfig(config.modelId, config.providerId, config.modelName, config.providerName)
+    } else if (this.currentEditRole === ModelRole.VIDEO) {
+      this.videoModel = new DefaultModelConfig(config.modelId, config.providerId, config.modelName, config.providerName)
     } else {
       this.translateModel = new DefaultModelConfig(config.modelId, config.providerId, config.modelName, config.providerName)
     }
@@ -775,6 +881,10 @@ struct DefaultModelPage {
       this.titleModel = new DefaultModelConfig()
     } else if (this.currentEditRole === ModelRole.IMAGE) {
       this.imageModel = new DefaultModelConfig()
+    } else if (this.currentEditRole === ModelRole.MUSIC) {
+      this.musicModel = new DefaultModelConfig()
+    } else if (this.currentEditRole === ModelRole.VIDEO) {
+      this.videoModel = new DefaultModelConfig()
     } else {
       this.translateModel = new DefaultModelConfig()
     }

@@ -866,6 +866,10 @@ export class AppSettingsStore {
       return s.defaultTranslateModel
     } else if (role === ModelRole.IMAGE) {
       return s.defaultImageModel
+    } else if (role === ModelRole.MUSIC) {
+      return s.defaultMusicModel
+    } else if (role === ModelRole.VIDEO) {
+      return s.defaultVideoModel
     }
     return new DefaultModelConfig()
   }
@@ -928,12 +932,29 @@ export class AppSettingsStore {
       PreferenceKeys.DEFAULT_IMAGE_PROVIDER_NAME,
       '', '', '', ''
     )
+    // 音乐/视频生成默认模型: 当前没有官方默认, 启动时若用户未配置则为空的 DefaultModelConfig (未配置状态)
+    const music = await this.loadDefaultModelFromPreferences(
+      PreferenceKeys.DEFAULT_MUSIC_MODEL_ID,
+      PreferenceKeys.DEFAULT_MUSIC_PROVIDER_ID,
+      PreferenceKeys.DEFAULT_MUSIC_MODEL_NAME,
+      PreferenceKeys.DEFAULT_MUSIC_PROVIDER_NAME,
+      '', '', '', ''
+    )
+    const video = await this.loadDefaultModelFromPreferences(
+      PreferenceKeys.DEFAULT_VIDEO_MODEL_ID,
+      PreferenceKeys.DEFAULT_VIDEO_PROVIDER_ID,
+      PreferenceKeys.DEFAULT_VIDEO_MODEL_NAME,
+      PreferenceKeys.DEFAULT_VIDEO_PROVIDER_NAME,
+      '', '', '', ''
+    )
 
     const s = getAppSettingsState()
     s.defaultChatModel = chat
     s.defaultTitleModel = title
     s.defaultTranslateModel = translate
     s.defaultImageModel = image
+    s.defaultMusicModel = music
+    s.defaultVideoModel = video
     s.defaultModelsVersion = s.defaultModelsVersion + 1
     s.defaultModelsInitialized = true
   }
@@ -969,6 +990,10 @@ export class AppSettingsStore {
       s.defaultTranslateModel = config
     } else if (role === ModelRole.IMAGE) {
       s.defaultImageModel = config
+    } else if (role === ModelRole.MUSIC) {
+      s.defaultMusicModel = config
+    } else if (role === ModelRole.VIDEO) {
+      s.defaultVideoModel = config
     }
     s.defaultModelsVersion = s.defaultModelsVersion + 1
   }
@@ -1080,6 +1105,20 @@ export class AppSettingsStore {
         providerIdKey: PreferenceKeys.DEFAULT_IMAGE_PROVIDER_ID,
         modelNameKey: PreferenceKeys.DEFAULT_IMAGE_MODEL_NAME,
         providerNameKey: PreferenceKeys.DEFAULT_IMAGE_PROVIDER_NAME
+      }
+    } else if (role === ModelRole.MUSIC) {
+      return {
+        modelIdKey: PreferenceKeys.DEFAULT_MUSIC_MODEL_ID,
+        providerIdKey: PreferenceKeys.DEFAULT_MUSIC_PROVIDER_ID,
+        modelNameKey: PreferenceKeys.DEFAULT_MUSIC_MODEL_NAME,
+        providerNameKey: PreferenceKeys.DEFAULT_MUSIC_PROVIDER_NAME
+      }
+    } else if (role === ModelRole.VIDEO) {
+      return {
+        modelIdKey: PreferenceKeys.DEFAULT_VIDEO_MODEL_ID,
+        providerIdKey: PreferenceKeys.DEFAULT_VIDEO_PROVIDER_ID,
+        modelNameKey: PreferenceKeys.DEFAULT_VIDEO_MODEL_NAME,
+        providerNameKey: PreferenceKeys.DEFAULT_VIDEO_PROVIDER_NAME
       }
     }
     return null

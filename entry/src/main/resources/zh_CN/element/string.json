@@ -3105,6 +3105,54 @@
       "value": "选择图像生成模型"
     },
     {
+      "name": "default_model_role_music_generation",
+      "value": "音乐生成"
+    },
+    {
+      "name": "default_model_desc_music_generation",
+      "value": "用于 AI 生成音乐/音频的默认模型"
+    },
+    {
+      "name": "default_model_select_music_model",
+      "value": "选择音乐生成模型"
+    },
+    {
+      "name": "music_generation_no_available_model",
+      "value": "暂无可用的音乐生成模型"
+    },
+    {
+      "name": "music_generation_no_available_model_hint",
+      "value": "选择一个支持音乐输出的模型, AI 才能生成音乐"
+    },
+    {
+      "name": "default_model_role_video_generation",
+      "value": "视频生成"
+    },
+    {
+      "name": "default_model_desc_video_generation",
+      "value": "用于 AI 生成视频的默认模型"
+    },
+    {
+      "name": "default_model_select_video_model",
+      "value": "选择视频生成模型"
+    },
+    {
+      "name": "video_generation_no_available_model",
+      "value": "暂无可用的视频生成模型"
+    },
+    {
+      "name": "video_generation_no_available_model_hint",
+      "value": "选择一个支持视频输出的模型, AI 才能生成视频"
+    },
+    {
+      "name": "default_model_capability_music",
+      "value": "音乐生成"
+    },
+    {
+      "name": "default_model_capability_video",
+      "value": "视频生成"
+    },
+    {
       "name": "voice_hold_to_speak",
       "value": "按住说话"
     },

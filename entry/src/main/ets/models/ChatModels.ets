@@ -266,7 +266,9 @@ export enum ModelRole {
   CHAT = 'chat',
   TITLE = 'title',
   TRANSLATE = 'translate',
-  IMAGE = 'image'
+  IMAGE = 'image',
+  MUSIC = 'music',
+  VIDEO = 'video'
 }
 
 // 推理级别枚举
@@ -326,30 +328,38 @@ export enum InputMode {
 // 输出模式
 export enum OutputMode {
   TEXT = 'text',   // 文本输出
-  IMAGE = 'image'  // 图片生成
+  IMAGE = 'image', // 图片生成
+  MUSIC = 'music', // 音乐/音频生成
+  VIDEO = 'video'  // 视频生成
 }
 
 // ============ 模型能力配置 ============
 @ObservedV2
 export class ModelCapabilities {
-  @Trace supportsTools: boolean      // 支持工具调用/Function Calling
-  @Trace supportsReasoning: boolean  // 支持推理/思维链（如 o1, DeepSeek R1）
-  @Trace supportsWebSearch: boolean  // 支持模型原生/内置联网搜索
-  @Trace supportsVision: boolean     // 支持图片输入
-  @Trace supportsStreaming: boolean  // 支持流式输出
+  @Trace supportsTools: boolean              // 支持工具调用/Function Calling
+  @Trace supportsReasoning: boolean          // 支持推理/思维链（如 o1, DeepSeek R1）
+  @Trace supportsWebSearch: boolean          // 支持模型原生/内置联网搜索
+  @Trace supportsVision: boolean             // 支持图片输入
+  @Trace supportsStreaming: boolean          // 支持流式输出
+  @Trace supportsMusicGeneration: boolean    // 支持音乐/音频生成（模型本身可输出音频）
+  @Trace supportsVideoGeneration: boolean    // 支持视频生成（模型本身可输出视频）
 
   constructor(
     supportsTools: boolean = false,
     supportsReasoning: boolean = false,
     supportsWebSearch: boolean = false,
     supportsVision: boolean = false,
-    supportsStreaming: boolean = true
+    supportsStreaming: boolean = true,
+    supportsMusicGeneration: boolean = false,
+    supportsVideoGeneration: boolean = false
   ) {
     this.supportsTools = supportsTools
     this.supportsReasoning = supportsReasoning
     this.supportsWebSearch = supportsWebSearch
     this.supportsVision = supportsVision
     this.supportsStreaming = supportsStreaming
+    this.supportsMusicGeneration = supportsMusicGeneration
+    this.supportsVideoGeneration = supportsVideoGeneration
   }
 
   // 从 JSON 对象创建
@@ -359,7 +369,9 @@ export class ModelCapabilities {
       json.supportsReasoning,
       json.supportsWebSearch,
       json.supportsVision,
-      json.supportsStreaming
+      json.supportsStreaming,
+      json.supportsMusicGeneration,
+      json.supportsVideoGeneration
     )
   }
 
@@ -370,7 +382,9 @@ export class ModelCapabilities {
       supportsReasoning: this.supportsReasoning,
       supportsWebSearch: this.supportsWebSearch,
       supportsVision: this.supportsVision,
-      supportsStreaming: this.supportsStreaming
+      supportsStreaming: this.supportsStreaming,
+      supportsMusicGeneration: this.supportsMusicGeneration,
+      supportsVideoGeneration: this.supportsVideoGeneration
     }
     return json
   }
@@ -383,6 +397,8 @@ export interface ModelCapabilitiesJson {
   supportsWebSearch: boolean
   supportsVision: boolean
   supportsStreaming: boolean
+  supportsMusicGeneration: boolean
+  supportsVideoGeneration: boolean
 }
 
 // ============ 模型默认参数(已废弃) ============
