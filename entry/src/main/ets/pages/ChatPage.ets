@@ -4476,6 +4476,13 @@ export struct ChatPage {
       const activeSearchMode: ChatSearchMode = this.resolveEffectiveSearchModeForCurrentProvider(this.searchMode)
       const activeBuiltinImageGen = this.getActiveComposerBuiltinImageGenEnabled() &&
         this.isOpenAIBuiltinImageGenAvailableForCurrentProvider()
+      // 教学助手(默认小星老师)在新会话首轮强制 tool_choice="required",
+      // 强制 AI 先调 child_profile read 读取孩子画像,后续出题才有人设参考依据。
+      // 非首轮不强制,避免每轮都干扰 AI 的自然回答。
+      const functionToolChoice: string | undefined =
+        (this.messages.length === 0 && this.currentAssistantId === DEFAULT_ASSISTANT_ID)
+          ? 'required'
+          : undefined
       await this.getSendFlow().executeSend(
         messageContent,
         currentProvider,
@@ -4486,7 +4493,8 @@ export struct ChatPage {
         forcedToolIds,
         this.currentModelId,
         activeSearchMode,
-        activeBuiltinImageGen
+        activeBuiltinImageGen,
+        functionToolChoice
       )
       this.forcedToolIdsOnce = []
     } catch (error) {

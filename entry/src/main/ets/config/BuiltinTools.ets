@@ -1036,7 +1036,7 @@ function createMathVerifyToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     MATH_VERIFY_TOOL_ID,
-    'Verify the child\'s answer to a math problem. Submit the arithmetic expression and the child\'s answer. Returns whether the answer is correct and the correct answer. Use this AFTER the child answers a math_quiz question or a verbal math question.',
+    'Verify the child\'s answer to a math problem. Submit the arithmetic expression and the child\'s answer. Returns whether the answer is correct and the correct answer. Use this INSTEAD of computing math answers yourself in plain text — this tool returns a structured correctness signal that the child profile updater reads; computing in plain text leaves skill levels stale. Use this AFTER the child answers a math_quiz question or a verbal math question.',
     parameters
   )
 
@@ -1063,11 +1063,16 @@ function createMathVerifyToolConfig(): ToolConfig {
 // 数学游戏工具：让小星老师以互动卡片形式出数学题, 小朋友在屏幕上点选答案。
 
 interface MathQuizArgs {
+  type?: 'arithmetic' | 'shape' | 'comparison' | 'time'
   question: string
-  expression: string
-  correct_answer: number
-  options: number[]
+  expression?: string
+  correct_answer: string | number
+  options: Array<string | number>
   skill_key?: string
+  // comparison 专用
+  left_value?: number
+  right_value?: number
+  operator_options?: string[]
 }
 
 class MathQuizResult {
@@ -1075,11 +1080,11 @@ class MathQuizResult {
   child_answer: number = 0
   child_answer_valid: boolean = false
   correct: boolean = false
-  correct_answer: number = 0
+  correct_answer: string | number = 0
   expression: string = ''
 
   constructor(answered: boolean, childAnswer: number, childAnswerValid: boolean,
-    correct: boolean, correctAnswer: number, expression: string) {
+    correct: boolean, correctAnswer: string | number, expression: string) {
     this.answered = answered
     this.child_answer = childAnswer
     this.child_answer_valid = childAnswerValid
@@ -1096,8 +1101,14 @@ class MathQuizExecutor implements ToolExecutor {
     // 如果工具被直接调用(没有前端交互), 返回提示信息。
     try {
       const params = JSON.parse(_args) as MathQuizArgs
+      // arithmetic 类型 correct_answer 期望 number; 其他 3 种 type 期望 string.
+      // 后端只透传, 真实答案由前端 onAnswer 提交, 不做语义校验。
+      const correct: string | number =
+        (params.type ?? 'arithmetic') === 'arithmetic'
+          ? Number(params.correct_answer ?? 0)
+          : String(params.correct_answer ?? '')
       return JSON.stringify(new MathQuizResult(
-        false, 0, false, false, params.correct_answer ?? 0, params.expression ?? ''
+        false, 0, false, false, correct, params.expression ?? ''
       ))
     } catch (error) {
       return JSON.stringify(new ErrorOutput(`math_quiz error: ${JSON.stringify(error)}`))
@@ -1109,29 +1120,47 @@ function createMathQuizToolDefinition(): ToolDefinition {
   const rawSchemaJson: string = `{
     "type": "object",
     "properties": {
+      "type": {
+        "type": "string",
+        "enum": ["arithmetic", "shape", "comparison", "time"],
+        "description": "题目类型. arithmetic=算术(add/sub/mul/div/counting), shape=图形认知, comparison=大小比较, time=时间认知. 缺省视为 arithmetic."
+      },
       "question": {
         "type": "string",
-        "description": "The quiz question in natural spoken language, e.g. '桌上有 3 个苹果, 再放 2 个, 一共几个呀'."
+        "description": "The quiz question in natural spoken language, e.g. 「桌上有 3 个苹果, 再放 2 个, 一共几个呀」."
       },
       "expression": {
         "type": "string",
-        "description": "The arithmetic expression, e.g. '3 + 2'. Will be displayed as '3 + 2 = ?'."
+        "description": "arithmetic 专用: 算式字符串, e.g. 「3 + 2」. 显示为 「3 + 2 = ?」. 其他 type 不用填."
       },
       "correct_answer": {
-        "type": "number",
-        "description": "The correct answer to the expression."
+        "type": ["string", "number"],
+        "description": "正确答案. arithmetic=数字 e.g. 5. shape=英文形状名 e.g. circle / square / triangle. comparison=比较运算符 e.g. 「>」. time=数字时钟字符串 e.g. 3:30."
       },
       "options": {
         "type": "array",
-        "items": { "type": "number" },
-        "description": "3-4 answer options as numbers. Must include the correct answer. Shuffle the order."
+        "items": { "type": ["string", "number"] },
+        "description": "3-4 个选项. arithmetic 用数字; shape 用英文形状名; time 用数字时钟字符串. comparison 一般留空, 用 operator_options 替代. 必须包含正确答案, 打乱顺序."
       },
       "skill_key": {
         "type": "string",
-        "description": "Optional. The child profile skill dimension key this quiz targets, e.g. 'math_addition'. Used for updating the child's profile after answering."
+        "description": "Optional. 教学目标维度 key, e.g. math_addition / math_shapes / math_comparison / math_time. Used for updating the child's profile after answering."
+      },
+      "left_value": {
+        "type": "number",
+        "description": "comparison 专用: 左侧数字, e.g. 5."
+      },
+      "right_value": {
+        "type": "number",
+        "description": "comparison 专用: 右侧数字, e.g. 3."
+      },
+      "operator_options": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "comparison 专用: 提供的运算符按钮, e.g. [>,<,=]. 缺省给三个全选."
       }
     },
-    "required": ["question", "expression", "correct_answer", "options"]
+    "required": ["question", "options"]
   }`
 
   const parameters = new ToolParameters()
@@ -1139,7 +1168,7 @@ function createMathQuizToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     MATH_QUIZ_TOOL_ID,
-    'Present a math quiz to the child as an interactive game card on screen. Use this INSTEAD of writing math problems in plain text. The child will see the question, the expression, and clickable number buttons to select their answer. Provide 3-4 options including the correct answer.',
+    'Present a math quiz to the child as an interactive game card on screen. Use this INSTEAD of writing math problems in plain text. Set the type field: arithmetic=加减乘除算术题, shape=图形认知, comparison=大小比较, time=时间认知. Provide 3-4 options including the correct answer. For comparison, fill left_value/right_value and operator_options, leave options empty.',
     parameters
   )
 
@@ -1242,7 +1271,7 @@ function createEnglishQuizToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     ENGLISH_QUIZ_TOOL_ID,
-    'Present an English vocabulary quiz to the child with an image. The child sees a picture and speaks or types the English word/sentence. Use this to teach English vocabulary through visual association. Provide a child-friendly image_prompt that clearly depicts the concept. Set difficulty based on the child\'s english_vocab/english_sentence level from child_profile. Alternate between word and sentence types.',
+    'Present an English vocabulary quiz to the child with an image. The child sees a picture and speaks or types the English word/sentence. Use this INSTEAD of writing English questions in plain text — plain text questions cannot grade the child\'s answer or record stars/skill progress, only this tool can. Provide a child-friendly image_prompt that clearly depicts the concept. Set difficulty based on the child\'s english_vocab/english_sentence level from child_profile. Alternate between word and sentence types.',
     parameters
   )
 
@@ -1314,7 +1343,7 @@ function createHuarongdaoToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     HUARONGDAO_TOOL_ID,
-    'Present a number sliding puzzle (数字华容道) to the child as an interactive game. A grid of numbered tiles is shuffled, and the child slides tiles into the empty space to arrange them in order. Difficulty 1-2 uses 3×3 (8 numbers), difficulty 3-5 uses 4×4 (15 numbers). Use difficulty based on the child\'s logic_thinking and observation levels from child_profile. After completion or giving up, you receive result (moves, time, completed). Then call child_profile update to record logic_thinking, observation, and spatial_reasoning based on performance.',
+    'Present a number sliding puzzle (数字华容道) to the child as an interactive game. A grid of numbered tiles is shuffled, and the child slides tiles into the empty space to arrange them in order. Difficulty directly maps to grid size: 1=3×3 (fallback, 8 numbers), 2=2×2 (toddler, 3 numbers), 3=3×3 (easy, 8 numbers), 4=4×4 (intermediate, 15 numbers), 5=5×5 (challenging, 24 numbers). Use difficulty based on the child\'s logic_thinking and observation levels from child_profile. After completion or giving up, you receive result (moves, time, completed). Then call child_profile update to record logic_thinking, observation, and spatial_reasoning based on performance.',
     parameters
   )
 
@@ -1512,7 +1541,7 @@ function createCategorizationToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     CATEGORIZATION_TOOL_ID,
-    '让孩子把物品拖拽/点击到对应的分类桶里，训练分类归纳能力。',
+    'Present an interactive categorization game to the child. Use this INSTEAD of describing sorting exercises in plain text — plain-text sorting cannot grade answers or update the child\'s categorization skill level, only this tool can. Provide a theme (2-12 Chinese characters), 2-3 bins each with a name (and optional emoji), and items each with a name (and optional emoji) and bin_index pointing to the correct bin. Difficulty 1=4 items 2 bins (beginner), 2=6 items 3 bins (easy), 3=9 items 3 bins (advanced).',
     parameters
   )
 

@@ -7,23 +7,37 @@
 
 import { evaluateMathExpression } from './MathExpressionParser'
 
+// 题型联合: 4 种 math_quiz 子题型
+// - arithmetic  算术(add/sub/mul/div/counting)
+// - shape       图形认知(math_shapes)
+// - comparison  大小比较(math_comparison)
+// - time        时间认知(math_time)
+export type QuizType = 'arithmetic' | 'shape' | 'comparison' | 'time'
+
 export interface MathQuizQuestion {
+  type: QuizType
   question: string
   expression: string
-  correctAnswer: number
-  options: number[]
+  correctAnswer: string | number
+  options: Array<string | number>
   skillKey: string
+  // comparison 专用; 其他 type 默认 0
+  leftValue: number
+  rightValue: number
+  // comparison 专用; 默认 ['>', '<', '=']
+  operatorOptions: string[]
 }
 
 export interface MathQuizAnswerPayload {
   answered: boolean
-  child_answer: number
+  child_answer: string | number
   child_answer_valid: boolean
   correct: boolean
-  correct_answer: number
+  correct_answer: string | number
   expression: string
   question: string
   skill_key: string
+  quiz_type: QuizType
 }
 
 export interface ExpressionToken {
@@ -41,35 +55,99 @@ const MATH_OP_CHARS: string = '+-*/()×÷'
  */
 export function parseMathQuiz(argsJson: string): MathQuizQuestion {
   const result: MathQuizQuestion = {
+    type: 'arithmetic',
     question: '',
     expression: '',
     correctAnswer: 0,
     options: [],
-    skillKey: ''
+    skillKey: '',
+    leftValue: 0,
+    rightValue: 0,
+    operatorOptions: []
   }
   try {
     const parsed = JSON.parse(argsJson) as Record<string, Object>
+    result.type = normalizeQuizType((parsed['type'] as string) ?? 'arithmetic')
     result.question = (parsed['question'] as string) ?? ''
-    result.expression = (parsed['expression'] as string) ?? ''
-    result.correctAnswer = (parsed['correct_answer'] as number) ?? 0
     result.skillKey = (parsed['skill_key'] as string) ?? ''
 
-    const rawOptions = parsed['options']
-    if (Array.isArray(rawOptions)) {
-      const arr = rawOptions as Object[]
-      for (let i = 0; i < arr.length; i++) {
-        const val = arr[i]
-        if (typeof val === 'number') {
-          result.options.push(val as number)
+    if (result.type === 'arithmetic') {
+      // 算术题型: 维持原行为
+      result.expression = (parsed['expression'] as string) ?? ''
+      const rawCorrect = parsed['correct_answer']
+      result.correctAnswer = typeof rawCorrect === 'number' ? (rawCorrect as number) : 0
+      const rawOptions = parsed['options']
+      if (Array.isArray(rawOptions)) {
+        const arr = rawOptions as Object[]
+        for (let i = 0; i < arr.length; i++) {
+          const val = arr[i]
+          if (typeof val === 'number') {
+            result.options.push(val as number)
+          }
         }
       }
-    }
-
-    if (result.correctAnswer === 0 && result.expression !== '') {
-      try {
-        result.correctAnswer = evaluateMathExpression(result.expression)
-      } catch (_e) {
-        // 无法计算, 保持 0
+      if (result.correctAnswer === 0 && result.expression !== '') {
+        try {
+          result.correctAnswer = evaluateMathExpression(result.expression)
+        } catch (_e) {
+          // 无法计算, 保持 0
+        }
+      }
+    } else if (result.type === 'shape') {
+      // 图形认知: correct_answer / options 都是英文形状名
+      const rawCorrect = parsed['correct_answer']
+      result.correctAnswer = normalizeShapeName(typeof rawCorrect === 'string' ? rawCorrect : String(rawCorrect ?? ''))
+      const rawOptions = parsed['options']
+      if (Array.isArray(rawOptions)) {
+        const arr = rawOptions as Object[]
+        for (let i = 0; i < arr.length; i++) {
+          const val = arr[i]
+          if (typeof val === 'string') {
+            const n = normalizeShapeName(val)
+            if (n !== '') {
+              result.options.push(n)
+            }
+          }
+        }
+      }
+    } else if (result.type === 'comparison') {
+      // 大小比较: left/right_value + operator
+      const rawCorrect = parsed['correct_answer']
+      result.correctAnswer = normalizeOperator(typeof rawCorrect === 'string' ? rawCorrect : String(rawCorrect ?? ''))
+      result.leftValue = (parsed['left_value'] as number) ?? 0
+      result.rightValue = (parsed['right_value'] as number) ?? 0
+      const ops = parsed['operator_options']
+      if (Array.isArray(ops)) {
+        const arr = ops as Object[]
+        for (let i = 0; i < arr.length; i++) {
+          const v = arr[i]
+          if (typeof v === 'string') {
+            const n = normalizeOperator(v)
+            if (n !== '') {
+              result.operatorOptions.push(n)
+            }
+          }
+        }
+      }
+      if (result.operatorOptions.length === 0) {
+        result.operatorOptions = ['>', '<', '=']
+      }
+    } else if (result.type === 'time') {
+      // 时间认知: correct_answer / options 都是 H:MM 字符串
+      const rawCorrect = parsed['correct_answer']
+      result.correctAnswer = normalizeTimeString(typeof rawCorrect === 'string' ? rawCorrect : String(rawCorrect ?? ''))
+      const rawOptions = parsed['options']
+      if (Array.isArray(rawOptions)) {
+        const arr = rawOptions as Object[]
+        for (let i = 0; i < arr.length; i++) {
+          const val = arr[i]
+          if (typeof val === 'string') {
+            const n = normalizeTimeString(val)
+            if (n !== '') {
+              result.options.push(n)
+            }
+          }
+        }
       }
     }
   } catch (_e) {}
@@ -125,8 +203,49 @@ export function getOpDisplay(op: string): string {
 }
 
 /**
- * 判定选项是否等于正确答案。选项都是 number, 直接 === 即可。
+ * 判定选项是否等于正确答案。
+ * arithmetic 用 number, shape/comparison/time 用 string;
+ * 跨类型直接 false(避免 '5' === 5 这种 silent true)。
  */
-export function isCorrectAnswer(selected: number, correct: number): boolean {
+export function isCorrectAnswer(selected: string | number, correct: string | number): boolean {
+  if (typeof selected !== typeof correct) {
+    return false
+  }
   return selected === correct
+}
+
+// ---------- normalize 纯函数 (LLM 幻觉防御) ----------
+
+const SHAPE_WHITELIST: string[] =
+  ['circle', 'square', 'triangle', 'rectangle', 'pentagon', 'star', 'heart']
+
+export function normalizeQuizType(raw: string): QuizType {
+  if (raw === 'shape' || raw === 'comparison' || raw === 'time') {
+    return raw
+  }
+  return 'arithmetic'
+}
+
+export function normalizeShapeName(raw: string): string {
+  return SHAPE_WHITELIST.includes(raw) ? raw : ''
+}
+
+export function normalizeOperator(raw: string): string {
+  if (raw === '>' || raw === '<' || raw === '=') {
+    return raw
+  }
+  return ''
+}
+
+// 接受 H:MM 或 HH:MM; 03:30 → 3:30 归一化
+export function normalizeTimeString(raw: string): string {
+  const m = raw.match(/^(\d{1,2}):(\d{2})$/)
+  if (m === null) {
+    return ''
+  }
+  const h = parseInt(m[1], 10)
+  if (h < 0 || h > 23) {
+    return ''
+  }
+  return `${h}:${m[2]}`
 }

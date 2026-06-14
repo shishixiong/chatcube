@@ -33,11 +33,15 @@ export struct MathQuizCard {
   @Param answeredPayload: string = ''
   @Event onAnswer: (toolCallId: string, answerJson: string) => void = () => {}
 
-  @Local quiz: MathQuizQuestion = { question: '', expression: '', correctAnswer: 0, options: [], skillKey: '' }
-  @Local selectedOption: number = -1
+  @Local quiz: MathQuizQuestion = {
+    type: 'arithmetic', question: '', expression: '', correctAnswer: 0,
+    options: [], skillKey: '', leftValue: 0, rightValue: 0, operatorOptions: []
+  }
+  // arithmetic 用 number 选项; shape/comparison/time 用 string 选项
+  @Local selectedOption: string | number = -1
   @Local showResult: boolean = false
   @Local isCorrect: boolean = false
-  @Local correctAnswerValue: number = 0
+  @Local correctAnswerValue: string | number = 0
   // 连胜状态: 持久化在 PreferencesService, 按 skill_key 区分
   @Local currentStreak: number = 0
   @Local bestStreak: number = 0
@@ -73,7 +77,7 @@ export struct MathQuizCard {
     this.loadStreak(this.quiz.skillKey)
   }
 
-  private handleSelectOption(option: number): void {
+  private handleSelectOption(option: string | number): void {
     if (this.isAnswered || this.showResult) {
       return
     }
@@ -82,14 +86,16 @@ export struct MathQuizCard {
   }
 
   private handleConfirm(): void {
-    if (this.selectedOption < 0 || this.isAnswered || this.showResult) {
+    // 哨兵 -1 同时覆盖 number 和 string | number (number -1 永远 < 0)
+    const sentinel = this.selectedOption === -1
+    if (sentinel || this.isAnswered || this.showResult) {
       return
     }
     this.handleSubmit()
   }
 
   private handleSubmit(): void {
-    if (this.selectedOption < 0 || this.isAnswered) {
+    if (this.selectedOption === -1 || this.isAnswered) {
       return
     }
 
@@ -110,7 +116,8 @@ export struct MathQuizCard {
       correct_answer: quiz.correctAnswer,
       expression: quiz.expression,
       question: quiz.question,
-      skill_key: quiz.skillKey
+      skill_key: quiz.skillKey,
+      quiz_type: quiz.type
     }
 
     this.onAnswer(this.toolCall.id, JSON.stringify(payload))
@@ -189,7 +196,7 @@ export struct MathQuizCard {
     await this.saveStreak(skillKey, newCurrent, this.bestStreak)
   }
 
-  private getOptionState(opt: number): string {
+  private getOptionState(opt: string | number): string {
     if (!this.showResult && !this.isAnswered) {
       return this.selectedOption === opt ? 'selected' : 'default'
     }
@@ -202,7 +209,7 @@ export struct MathQuizCard {
     return 'default'
   }
 
-  private getOptionGradient(opt: number, index: number): LinearGradient {
+  private getOptionGradient(opt: string | number, index: number): LinearGradient {
     const state = this.getOptionState(opt)
     if (state === 'correct' || state === 'revealed') {
       return { angle: 180, colors: [['#22C55E', 0.0], [this.shadeHex('#22C55E', 0.7), 1.0]] }
@@ -224,7 +231,7 @@ export struct MathQuizCard {
     return { angle: 180, colors: [['#F59E0B', 0.0], ['#92400E', 1.0]] }
   }
 
-  private getOptionBorderColor(opt: number, index: number): ResourceColor {
+  private getOptionBorderColor(opt: string | number, index: number): ResourceColor {
     const state = this.getOptionState(opt)
     if (state === 'correct' || state === 'revealed') {
       return '#16A34A'
@@ -244,14 +251,14 @@ export struct MathQuizCard {
     return '#92400E'
   }
 
-  private getOptionBorderWidth(opt: number): number {
+  private getOptionBorderWidth(opt: string | number): number {
     const state = this.getOptionState(opt)
     if (state === 'selected') return 2.5
     if (state === 'correct' || state === 'revealed' || state === 'wrong') return 2
     return 1.5
   }
 
-  private getOptionShadow(opt: number): ShadowOptions {
+  private getOptionShadow(opt: string | number): ShadowOptions {
     const state = this.getOptionState(opt)
     if (state === 'selected') {
       return { radius: 12, color: '#1F000000', offsetY: 4 }
@@ -329,7 +336,7 @@ export struct MathQuizCard {
   }
 
   @Builder
-  OptionButton(opt: number, index: number) {
+  OptionButton(opt: string | number, index: number) {
     Stack({ alignContent: Alignment.TopEnd }) {
       Column() {
         Text(`${opt}`)
@@ -406,6 +413,20 @@ export struct MathQuizCard {
 
   @Builder
   QuizContent() {
+    // 4 种题型分发: arithmetic (原算术) / shape (图形) / comparison (比较) / time (时间)
+    if (this.quiz.type === 'shape') {
+      this.ShapeContent()
+    } else if (this.quiz.type === 'comparison') {
+      this.ComparisonContent()
+    } else if (this.quiz.type === 'time') {
+      this.TimeContent()
+    } else {
+      this.ArithmeticContent()
+    }
+  }
+
+  @Builder
+  ArithmeticContent() {
     Column({ space: 10 }) {
       ForEach([this.quiz], (quiz: MathQuizQuestion) => {
         // 题目文字
@@ -463,13 +484,248 @@ export struct MathQuizCard {
             .width('100%')
 
             // 确认按钮: 选中后才出现
-            if (this.selectedOption >= 0 && !this.showResult && !this.isAnswered) {
+            if (this.selectedOption !== -1 && !this.showResult && !this.isAnswered) {
               this.ConfirmButton()
             }
           }
           .width('100%')
         }
       }, (_: MathQuizQuestion) => 'quiz')
+    }
+    .width('100%')
+    .padding(12)
+    .backgroundColor(this.getCardBackgroundColor())
+    .borderRadius(10)
+  }
+
+  // ---- 图形认知 (math_shapes) ----
+
+  @Builder
+  ShapePrimitive(shape: string) {
+    // 圆/方/长方形用 ArkUI 原生; 其余用文字符号
+    if (shape === 'circle') {
+      Circle().width(48).height(48).fill(Color.White)
+    } else if (shape === 'square') {
+      Rect().width(48).height(48).fill(Color.White).radius(4)
+    } else if (shape === 'rectangle') {
+      Rect().width(64).height(36).fill(Color.White).radius(3)
+    } else if (shape === 'triangle') {
+      Text('△')
+        .fontSize(46)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(Color.White)
+    } else if (shape === 'pentagon') {
+      Text('⬠')
+        .fontSize(44)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(Color.White)
+    } else if (shape === 'star') {
+      Text('★')
+        .fontSize(46)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(Color.White)
+    } else if (shape === 'heart') {
+      Text('♥')
+        .fontSize(44)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(Color.White)
+    } else {
+      // 未知名 (LLM 幻觉) — 不渲染, 按钮仍可点
+      Text('?')
+        .fontSize(28)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(Color.White)
+    }
+  }
+
+  @Builder
+  ShapeOptionButton(shape: string, index: number) {
+    Stack({ alignContent: Alignment.Center }) {
+      this.ShapePrimitive(shape)
+    }
+    .width('100%')
+    .height(72)
+    .linearGradient(this.getOptionGradient(shape, index))
+    .borderRadius(14)
+    .border({
+      width: this.getOptionBorderWidth(shape),
+      color: this.getOptionBorderColor(shape, index)
+    })
+    .shadow(this.getOptionShadow(shape))
+    .onClick(() => {
+      this.handleSelectOption(shape)
+    })
+    .animation({ duration: 150, curve: Curve.EaseOut })
+  }
+
+  @Builder
+  ShapeContent() {
+    Column({ space: 10 }) {
+      if (this.quiz.question !== '') {
+        Text(this.quiz.question)
+          .fontSize(15)
+          .fontColor($r('app.color.text_primary'))
+          .width('100%')
+      }
+
+      if (this.quiz.options.length > 0) {
+        Column({ space: 10 }) {
+          Grid() {
+            ForEach(this.quiz.options, (opt: string | number, idx: number) => {
+              GridItem() {
+                this.ShapeOptionButton(String(opt), idx)
+              }
+            }, (opt: string | number, idx: number) => `shape_${idx}_${opt}`)
+          }
+          .columnsTemplate('1fr 1fr')
+          .columnsGap(10)
+          .rowsGap(10)
+          .width('100%')
+
+          if (this.selectedOption !== -1 && !this.showResult && !this.isAnswered) {
+            this.ConfirmButton()
+          }
+        }
+        .width('100%')
+      }
+    }
+    .width('100%')
+    .padding(12)
+    .backgroundColor(this.getCardBackgroundColor())
+    .borderRadius(10)
+  }
+
+  // ---- 大小比较 (math_comparison) ----
+
+  @Builder
+  OperatorButton(op: string) {
+    Row() {
+      Text(op)
+        .fontSize(36)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(Color.White)
+        .shadow({ radius: 1, color: '#40000000', offsetY: 1 })
+    }
+    .layoutWeight(1)
+    .height(64)
+    .justifyContent(FlexAlign.Center)
+    .linearGradient(this.getOptionGradient(op, 0))
+    .borderRadius(14)
+    .border({
+      width: this.getOptionBorderWidth(op),
+      color: this.getOptionBorderColor(op, 0)
+    })
+    .shadow(this.getOptionShadow(op))
+    .onClick(() => {
+      this.handleSelectOption(op)
+    })
+    .animation({ duration: 150, curve: Curve.EaseOut })
+  }
+
+  @Builder
+  ComparisonContent() {
+    Column({ space: 12 }) {
+      if (this.quiz.question !== '') {
+        Text(this.quiz.question)
+          .fontSize(15)
+          .fontColor($r('app.color.text_primary'))
+          .width('100%')
+      }
+
+      // 中间表达式行: 左侧数字  〇  右侧数字
+      Row({ space: 10 }) {
+        Text(`${this.quiz.leftValue}`)
+          .fontSize(42)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.themePrimary)
+        Text(this.selectedOption !== -1 ? String(this.selectedOption) : '○')
+          .fontSize(42)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.themePrimary)
+        Text(`${this.quiz.rightValue}`)
+          .fontSize(42)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.themePrimary)
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+
+      // 运算符按钮行
+      if (this.quiz.operatorOptions.length > 0) {
+        Row({ space: 10 }) {
+          ForEach(this.quiz.operatorOptions, (op: string | number) => {
+            this.OperatorButton(String(op))
+          }, (op: string | number) => `op_${op}`)
+        }
+        .width('100%')
+
+        if (this.selectedOption !== -1 && !this.showResult && !this.isAnswered) {
+          this.ConfirmButton()
+        }
+      }
+    }
+    .width('100%')
+    .padding(12)
+    .backgroundColor(this.getCardBackgroundColor())
+    .borderRadius(10)
+  }
+
+  // ---- 时间认知 (math_time) ----
+
+  @Builder
+  TimeOptionButton(timeStr: string, index: number) {
+    Stack({ alignContent: Alignment.Center }) {
+      Text(timeStr)
+        .fontSize(28)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(Color.White)
+        .shadow({ radius: 1, color: '#40000000', offsetY: 1 })
+    }
+    .width('100%')
+    .height(64)
+    .linearGradient(this.getOptionGradient(timeStr, index))
+    .borderRadius(14)
+    .border({
+      width: this.getOptionBorderWidth(timeStr),
+      color: this.getOptionBorderColor(timeStr, index)
+    })
+    .shadow(this.getOptionShadow(timeStr))
+    .onClick(() => {
+      this.handleSelectOption(timeStr)
+    })
+    .animation({ duration: 150, curve: Curve.EaseOut })
+  }
+
+  @Builder
+  TimeContent() {
+    Column({ space: 10 }) {
+      if (this.quiz.question !== '') {
+        Text(this.quiz.question)
+          .fontSize(15)
+          .fontColor($r('app.color.text_primary'))
+          .width('100%')
+      }
+
+      if (this.quiz.options.length > 0) {
+        Column({ space: 10 }) {
+          Grid() {
+            ForEach(this.quiz.options, (opt: string | number, idx: number) => {
+              GridItem() {
+                this.TimeOptionButton(String(opt), idx)
+              }
+            }, (opt: string | number, idx: number) => `time_${idx}_${opt}`)
+          }
+          .columnsTemplate('1fr 1fr')
+          .columnsGap(10)
+          .rowsGap(10)
+          .width('100%')
+
+          if (this.selectedOption !== -1 && !this.showResult && !this.isAnswered) {
+            this.ConfirmButton()
+          }
+        }
+        .width('100%')
+      }
     }
     .width('100%')
     .padding(12)

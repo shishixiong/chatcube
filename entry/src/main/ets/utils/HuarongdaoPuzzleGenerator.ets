@@ -2,8 +2,14 @@
  * HuarongdaoPuzzleGenerator - 数字华容道谜题生成器
  *
  * 根据难度生成打乱后的数字华容道棋盘。
- * - difficulty 1-2 → 3×3 棋盘 (8 数字 + 1 空位)
- * - difficulty 3-5 → 4×4 棋盘 (15 数字 + 1 空位)
+ * - difficulty 1 → 3×3 棋盘 (fallback, 与 NumberPuzzleCard 对齐)
+ * - difficulty 2 → 2×2 棋盘 (3 数字 + 1 空位, 幼儿)
+ * - difficulty 3 → 3×3 棋盘 (8 数字 + 1 空位, 简单)
+ * - difficulty 4 → 4×4 棋盘 (15 数字 + 1 空位, 进阶)
+ * - difficulty 5 → 5×5 棋盘 (24 数字 + 1 空位, 挑战)
+ *
+ * difficulty 1 默认走 3×3, 与 NumberPuzzleCard (largeSize sheet 视图) 和
+ * ChatPage 内联引导文案的 difficulty→gridSize 直映射语义一致。
  *
  * 打乱方式: 模拟从有序棋盘出发做随机反向滑动的算法,
  * 保证生成的棋盘统计上可解 (偶数次滑动, 与还原路径相对应)。
@@ -17,14 +23,24 @@ export class HuarongdaoPuzzleState {
 }
 
 /**
- * 将 difficulty 映射到 gridSize.
- * 1-2 → 3×3, 3-5 → 4×4.
+ * 将 difficulty 映射到 gridSize (与 NumberPuzzleCard 档位语义一致).
+ * 1 → 3×3 (fallback, 与 ChatPage.ets:4704-4705 一致);
+ * 2 → 2×2 (幼儿); 3 → 3×3 (简单); 4 → 4×4 (进阶); 5 → 5×5 (挑战).
  */
 export function gridSizeForDifficulty(difficulty: number): number {
-  if (difficulty <= 2) {
+  if (difficulty <= 1) {
     return 3
   }
-  return 4
+  if (difficulty === 2) {
+    return 2
+  }
+  if (difficulty === 3) {
+    return 3
+  }
+  if (difficulty === 4) {
+    return 4
+  }
+  return 5
 }
 
 /**

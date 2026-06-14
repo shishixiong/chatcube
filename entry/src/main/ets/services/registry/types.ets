@@ -76,6 +76,7 @@ export const DEFAULT_PROFILE: ProviderCompatibilityProfile = {
 }
 
 export const MINIMAX_COMPATIBLE_MODELS: string[] = [
+  'MiniMax-M3',
   'MiniMax-M2.5',
   'MiniMax-M2.5-highspeed',
   'MiniMax-M2.1',

@@ -49,19 +49,25 @@ class ChatExecutionPlan {
   // OpenAI Responses 内置工具 (web_search / image_generation), 仅在 transport=responses 时下发
   builtInResponsesTools: BuiltInResponsesToolSpec[]
   builtInResponsesToolChoice?: OpenAIResponsesToolChoice
+  // 函数调用工具的 tool_choice (Chat Completions / Responses API 均支持 string 形式),
+  // 例: "required" = 强制至少一个函数调用。设 undefined 时走默认 auto。
+  // 与 builtInResponsesToolChoice 互斥使用 (前者管函数工具, 后者管 hosted 工具), 由 ChatViewModel 合并。
+  functionToolChoice?: string
 
   constructor(
     kind: ChatExecutionPlanKind,
     enabledToolIds: string[] = [],
     learnToolsOnSuccess: boolean = false,
     builtInResponsesTools: BuiltInResponsesToolSpec[] = [],
-    builtInResponsesToolChoice?: OpenAIResponsesToolChoice
+    builtInResponsesToolChoice?: OpenAIResponsesToolChoice,
+    functionToolChoice?: string
   ) {
     this.kind = kind
     this.enabledToolIds = enabledToolIds
     this.learnToolsOnSuccess = learnToolsOnSuccess
     this.builtInResponsesTools = builtInResponsesTools
     this.builtInResponsesToolChoice = builtInResponsesToolChoice
+    this.functionToolChoice = functionToolChoice
   }
 }
 
@@ -176,7 +182,10 @@ export class ChatSendFlow {
     // 联网模式: external_engine 走本地 search_web 工具; openai_builtin 走 Responses hosted web_search
     searchMode: ChatSearchMode = ChatSearchMode.EXTERNAL_ENGINE,
     // OpenAI Responses 内置生图开关 (hosted image_generation tool)
-    builtinImageGenEnabled: boolean = false
+    builtinImageGenEnabled: boolean = false,
+    // 函数调用 tool_choice: undefined = 默认 auto; "required" = 强制至少一个函数调用。
+    // 调用方按"是否首轮 + 是否教学助手"判定;非教学助手传 undefined 行为完全不变。
+    functionToolChoice?: string
   ): Promise<void> {
     const plan = await this.buildExecutionPlan(
       currentProvider,
@@ -185,7 +194,8 @@ export class ChatSendFlow {
       forcedToolIds,
       currentModelId,
       searchMode,
-      builtinImageGenEnabled
+      builtinImageGenEnabled,
+      functionToolChoice
     )
     console.info(
       'ChatSendFlow',
@@ -201,7 +211,8 @@ export class ChatSendFlow {
         plan.enabledToolIds,
         plan.learnToolsOnSuccess,
         plan.builtInResponsesTools,
-        plan.builtInResponsesToolChoice
+        plan.builtInResponsesToolChoice,
+        plan.functionToolChoice
       )
       return
     }
@@ -307,7 +318,11 @@ export class ChatSendFlow {
     forcedToolIds: string[],
     currentModelId: string,
     searchMode: ChatSearchMode,
-    builtinImageGenEnabled: boolean
+    builtinImageGenEnabled: boolean,
+    // 函数调用 tool_choice: undefined = 走默认 auto;
+    // "required" = 强制至少一个函数调用 (OpenAI Chat Completions / Responses 均支持)。
+    // 与 builtinImageGenEnabled 路径互斥 (hosted 工具已走 builtInResponsesToolChoice)。
+    functionToolChoice?: string
   ): Promise<ChatExecutionPlan> {
     const searchEnabled = this.shouldEnableWebSearch(webSearchConversationEnabled, forcedToolIds)
     const enabledToolIds = this.buildEnabledToolIds(
@@ -370,7 +385,8 @@ export class ChatSendFlow {
         enabledToolIds,
         false,
         builtInResponsesTools,
-        builtInResponsesToolChoice
+        builtInResponsesToolChoice,
+        functionToolChoice
       )
     }
 
@@ -380,7 +396,8 @@ export class ChatSendFlow {
         enabledToolIds,
         false,
         builtInResponsesTools,
-        builtInResponsesToolChoice
+        builtInResponsesToolChoice,
+        functionToolChoice
       )
     }
 
@@ -392,7 +409,8 @@ export class ChatSendFlow {
         enabledToolIds,
         true,
         builtInResponsesTools,
-        builtInResponsesToolChoice
+        builtInResponsesToolChoice,
+        functionToolChoice
       )
     }
 
@@ -401,7 +419,8 @@ export class ChatSendFlow {
       enabledToolIds,
       false,
       builtInResponsesTools,
-      builtInResponsesToolChoice
+      builtInResponsesToolChoice,
+      functionToolChoice
     )
   }
 
@@ -679,7 +698,10 @@ export class ChatSendFlow {
     enabledToolIds: string[] = [],
     learnToolsOnSuccess: boolean = false,
     builtInResponsesTools: BuiltInResponsesToolSpec[] = [],
-    builtInResponsesToolChoice?: OpenAIResponsesToolChoice
+    builtInResponsesToolChoice?: OpenAIResponsesToolChoice,
+    // 函数调用 tool_choice: undefined = 默认 auto; "required" = 强制至少一个函数调用。
+    // 由 ChatViewModel 在 executeToolCallLoop 内合并到 aiApiService.streamChatRequestWithTools 的 toolChoice 参数。
+    functionToolChoice?: string
   ): Promise<void> {
     const taskId = this.startTaskOrFail(messageContent)
     if (taskId === '') {
@@ -763,7 +785,8 @@ export class ChatSendFlow {
         currentProvider.customHeadersJson || undefined,
         currentProvider.openaiTransport,
         builtInResponsesTools.length > 0 ? builtInResponsesTools : undefined,
-        builtInResponsesToolChoice
+        builtInResponsesToolChoice,
+        functionToolChoice
       )
       if (completedSuccessfully && learnToolsOnSuccess && !fallbackStarted) {
         await this.deps.onConfirmModelSupportsTools(currentProvider.id, modelId)

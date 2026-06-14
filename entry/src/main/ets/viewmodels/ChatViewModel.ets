@@ -2405,7 +2405,11 @@ ${limitedSearchContext}
     openaiTransport?: OpenAITransport,
     // OpenAI Responses 内置工具 (web_search / image_generation), 与 function tools 可并存
     builtInResponsesTools?: BuiltInResponsesToolSpec[],
-    builtInResponsesToolChoice?: OpenAIResponsesToolChoice
+    builtInResponsesToolChoice?: OpenAIResponsesToolChoice,
+    // 函数调用 tool_choice: undefined = 默认 auto; "required" = 强制至少一个函数调用。
+    // 与 builtInResponsesToolChoice 互斥: 前者管本地 function tools, 后者管 hosted 工具。
+    // 在 executeToolCallLoop 内合并后传给 aiApiService.streamChatRequestWithTools。
+    functionToolChoice?: string
   ): Promise<void> {
     const cancelSnapshot = this.cancelToken
     // 首次发送消息时，先持久化待处理的会话
@@ -2486,16 +2490,17 @@ ${limitedSearchContext}
     // 工具特定的细节（如 search_web 怎么用关键词、scrape_web URL 原样传入、引用 Markdown 链接）
     // 都已经写在 BuiltinTools.ets 的 ToolFunction.description 里，模型在 function calling 时直接看到，
     // 不需要在 system 中再复述一遍，避免与 description 冲突或重复消耗 token。
+    // 注意: 不要在这里列出”数学/写作/翻译等纯生成任务不要调用工具”——这会与教学助手 prompt 中
+    // “必须使用 math_quiz / english_quiz 等工具” 的强规则冲突。具体能否调用、何时调用由 assistant prompt 决定。
     const toolUsageSystemPrompt = `当前时间: ${currentTime}
 
-你的首要任务是直接完成用户请求，只在确实需要访问外部信息或外部系统时才调用工具。
+你的首要任务是直接完成用户请求。
 
-工具使用规则(非常重要):
-- 绝大多数普通问答不需要调用工具，请优先用自身知识直接回答。
-- 只有在用户请求明确依赖外部实时信息、外部文档、外部仓库、外部笔记或其他外部系统状态时才调用工具。
-- 对外部系统有副作用的工具（例如创建、修改、删除、提交、上传）必须先确认用户意图与目标对象，不要擅自操作。
-- 编程、写作、翻译、数学、创意等纯生成任务，若不依赖外部状态，绝对不要调用任何工具。
-- 若用户提到“今天/昨天/明天/现在/最新”等相对时间，请以当前时间为基准理解，不要编造不一致的绝对日期。
+工具使用规则:
+- 当且仅当用户请求需要访问外部信息（实时数据、文档、笔记、网页）或对外部系统有副作用（创建、修改、删除、上传）时才调用工具。
+- 工具的具体使用方式由所选助手的系统提示词与工具描述决定 —— 严格遵守 assistant prompt 中的规则，不要凭直觉跳过工具。
+- 对外部系统有副作用的工具必须先确认用户意图与目标对象，不要擅自操作。
+- 若用户提到”今天/昨天/明天/现在/最新”等相对时间，请以当前时间为基准理解，不要编造不一致的绝对日期。
 - 工具返回后必须给出最终回答，不要在没有必要的情况下重复调用工具。`
     const finalToolUsageSystemPrompt = await this.buildRequestSystemPrompt(toolUsageSystemPrompt)
     requestMessages.push(new RequestMessage('system', finalToolUsageSystemPrompt))
@@ -2599,7 +2604,8 @@ ${limitedSearchContext}
       localContentThrottle,
       localReasoningThrottle,
       builtInResponsesTools,
-      builtInResponsesToolChoice
+      builtInResponsesToolChoice,
+      functionToolChoice
     )
   }
 
@@ -3443,7 +3449,10 @@ ${limitedSearchContext}
     localContentThrottle: StreamFlusher,
     localReasoningThrottle: StreamFlusher,
     builtInResponsesTools?: BuiltInResponsesToolSpec[],
-    builtInResponsesToolChoice?: OpenAIResponsesToolChoice
+    builtInResponsesToolChoice?: OpenAIResponsesToolChoice,
+    // 函数调用 tool_choice: undefined = 默认 auto; "required" = 强制至少一个函数调用。
+    // 与 builtInResponsesToolChoice 互斥, 在此处合并后传给 aiApiService.streamChatRequestWithTools。
+    functionToolChoice?: string
   ): Promise<void> {
     let toolStepIndex = initialToolStepIndex
     const pendingImageSaves: Promise<void>[] = []
@@ -3656,7 +3665,11 @@ ${limitedSearchContext}
           },
           reasoningLevel,
           toolsEnabledInThisRound ? tools : undefined,
-          builtInResponsesToolChoice,
+          // functionToolChoice (string) 优先于 builtInResponsesToolChoice (object):
+          // 二者互斥, 但类型不同 (string vs object), 在此合并为一个 OpenAIResponsesToolChoice 值
+          // 传给 streamChatRequestWithTools。AIApiService.buildRequestBody 已正确分发到
+          // Chat Completions 或 Responses 路径 (AIApiService.ets:2994-3002, 3200-3206)。
+          functionToolChoice ?? builtInResponsesToolChoice,
           (toolCallDeltas: ToolCallDelta[]) => {
             if (isCancelledFn() || !toolsEnabledInThisRound || toolCallDeltas.length <= 0) {
               return
