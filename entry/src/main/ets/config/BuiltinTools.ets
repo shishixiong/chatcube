@@ -1302,7 +1302,7 @@ function createHuarongdaoToolDefinition(): ToolDefinition {
     "properties": {
       "difficulty": {
         "type": "number",
-        "description": "难度等级 1-5。1-2使用3×3棋盘(8数字), 3-5使用4×4棋盘(15数字)。根据 child_profile 中 logic_thinking 和 observation 的 level 选择合适难度。",
+        "description": "难度等级 1-5。1使用2×2棋盘(3数字)，2-3使用3×3棋盘(8数字), 4-5使用4×4棋盘(15数字)。根据 child_profile 中 logic_thinking 和 observation 的 level 选择合适难度。",
         "enum": [1, 2, 3, 4, 5]
       }
     },

@@ -7,6 +7,10 @@ import { ITtsEngine, TTSCallback } from './ITtsEngine'
 export class SystemTtsEngine implements ITtsEngine {
   private engine: textToSpeech.TextToSpeechEngine | null = null
   private isInitDone: boolean = false
+  // 缓存 in-flight init 任务: textToSpeech.createEngine 是 callback 异步 API,
+  // 必须用 Promise 包裹才能对外表现为 await 完成后引擎就绪。
+  // 并发 init() 复用同一 Promise,避免重复 createEngine。
+  private initPromise: Promise<void> | null = null
   private speaking: boolean = false
   private currentCallback: TTSCallback | null = null
   private currentRequestId: string = '';
@@ -15,61 +19,46 @@ export class SystemTtsEngine implements ITtsEngine {
     if (this.isInitDone) {
       return
     }
+    // 幂等: 已有 in-flight 初始化 → 复用同一 Promise
+    if (this.initPromise !== null) {
+      return this.initPromise
+    }
+
+    this.initPromise = new Promise<void>((resolve: () => void, reject: (err: Error) => void) => {
+      try {
+        const params: textToSpeech.CreateEngineParams = {
+          language: 'zh-CN',  // 设置语言为中文
+          person: 0,          // 设置发音人（0为默认发音人）
+          online: 1           // 设置为在线模式（1为在线，0为离线）
+        }
+
+        textToSpeech.createEngine(params, (err: BusinessError, engine: textToSpeech.TextToSpeechEngine) => {
+          if (err) {
+            console.error('SystemTtsEngine',
+              `createEngine failed: code=${err.code}, message=${err.message}`)
+            // 失败时不置 isInitDone, 下次 init() 可重试
+            // (callback 内抛错不会冒泡,必须显式 reject)
+            reject(new Error(`系统朗读引擎初始化失败: code=${err.code}, message=${err.message}`))
+            return
+          }
+          this.engine = engine
+          this.isInitDone = true
+          console.info('SystemTtsEngine', 'initialized')
+          resolve()
+        })
+      } catch (error) {
+        // createEngine 同步抛异常的兜底（如参数非法、设备能力不支持）
+        const err = error as BusinessError
+        console.error('SystemTtsEngine',
+          `init threw synchronously: code=${err.code}, message=${err.message}`)
+        reject(new Error(`系统朗读引擎初始化失败: code=${err.code}, message=${err.message}`))
+      }
+    })
 
     try {
-      const params: textToSpeech.CreateEngineParams = {
-        language: 'zh-CN',  // 设置语言为中文
-        person: 0,          // 设置发音人（0为默认发音人）
-        online: 1           // 设置为在线模式（1为在线，0为离线）
-      }
-
-      textToSpeech.createEngine(params, (err: BusinessError, engine: textToSpeech.TextToSpeechEngine) => {
-        if (!err) {
-          console.info('Succeeded in creating engine.');
-          // 获得引擎实例
-          this.engine = engine;
-        } else {
-          console.error(`Failed to create engine. Code: ${err.code}, message: ${err.message}.`);
-        }
-      })
-
-      // // 监听播放开始
-      // this.engine.('speakStart', () => {
-      //   console.info('SystemTtsEngine', 'speakStart')
-      //   this.speaking = true
-      //   if (this.currentCallback !== null) {
-      //     this.currentCallback.onStart()
-      //   }
-      // })
-      //
-      // // 监听播放结束
-      // this.engine.on('speakFinish', () => {
-      //   console.info('SystemTtsEngine', 'speakFinish')
-      //   this.speaking = false
-      //   const cb = this.currentCallback
-      //   this.currentCallback = null
-      //   if (cb !== null) {
-      //     cb.onComplete()
-      //   }
-      // })
-      //
-      // // 监听错误
-      // this.engine.on('error', (err: BusinessError) => {
-      //   console.error('SystemTtsEngine', `error: ${err.code}, ${err.message}`)
-      //   this.speaking = false
-      //   const cb = this.currentCallback
-      //   this.currentCallback = null
-      //   if (cb !== null) {
-      //     cb.onError(`朗读失败: ${err.message}`)
-      //   }
-      // })
-
-      this.isInitDone = true
-      console.info('SystemTtsEngine', 'initialized')
-    } catch (error) {
-      const err = error as BusinessError
-      console.error('SystemTtsEngine', `init failed: ${err.code}, ${err.message}`)
-      throw new Error(`系统朗读引擎初始化失败: ${err.message}`)
+      await this.initPromise
+    } finally {
+      this.initPromise = null
     }
   }
 
