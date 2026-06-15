@@ -630,48 +630,55 @@ export class ToolExecutionService {
     toolCall.approvalState = 'pending'
 
     // 2. 后台解析图片: 缓存查询 + API 生成, 完成后注入 image_path
+    //    phonics_choice 题型不需要图片 (字母音 + 字母选项即可), 跳过整个管线
     try {
       const parsed = JSON.parse(toolCall.arguments) as Record<string, Object>
       const questionType = (parsed['question_type'] as string) ?? 'word'
-      const question = (parsed['question'] as string) ?? ''
-      const answer = (parsed['correct_answer'] as string) ?? ''
-      let word = ''
-      let sentence = ''
-      if (questionType === 'sentence') {
-        sentence = answer
+
+      if (questionType === 'phonics_choice') {
+        console.info('ToolExecutionService',
+          `english_quiz phonics_choice: skip image pipeline, letter_options=${JSON.stringify(parsed['letter_options'] ?? [])}, sound_text="${(parsed['sound_text'] as string) ?? ''}"`)
       } else {
-        word = answer
-      }
-      const imagePrompt = (parsed['image_prompt'] as string) ?? ''
-
-      console.info('ToolExecutionService',
-        `english_quiz image resolution start: question="${question}", questionType="${questionType}", answer="${answer}", imagePrompt="${imagePrompt.substring(0, 80)}..."`)
-
-      const imageIndex = getEnglishQuizImageIndex()
-      let imagePath = ''
-
-      const cached = await imageIndex.lookup(word, sentence)
-      if (cached !== null && cached.filePath !== '') {
-        imagePath = cached.filePath
-        console.info('ToolExecutionService', `english_quiz cache HIT: key="${EnglishQuizImageIndex.buildKey(word, sentence)}"`)
-      } else if (imagePrompt !== '') {
-        console.info('ToolExecutionService', 'english_quiz cache miss, starting API generation...')
-        const generated = await imageIndex.generate(word, sentence, imagePrompt)
-        if (generated !== null) {
-          imagePath = generated.filePath
-          console.info('ToolExecutionService', `english_quiz generation SUCCESS: path="${imagePath}"`)
+        const question = (parsed['question'] as string) ?? ''
+        const answer = (parsed['correct_answer'] as string) ?? ''
+        let word = ''
+        let sentence = ''
+        if (questionType === 'sentence') {
+          sentence = answer
         } else {
-          console.error('ToolExecutionService', 'english_quiz generation FAILED: generate() returned null')
+          word = answer
         }
-      } else {
-        console.warn('ToolExecutionService', 'english_quiz: no cache hit and imagePrompt is empty, cannot generate')
-      }
+        const imagePrompt = (parsed['image_prompt'] as string) ?? ''
 
-      if (imagePath !== '') {
-        parsed['image_path'] = imagePath as Object
-        toolCall.arguments = JSON.stringify(parsed)
-      } else {
-        console.warn('ToolExecutionService', 'english_quiz: imagePath still empty after resolution, card will show loading')
+        console.info('ToolExecutionService',
+          `english_quiz image resolution start: question="${question}", questionType="${questionType}", answer="${answer}", imagePrompt="${imagePrompt.substring(0, 80)}..."`)
+
+        const imageIndex = getEnglishQuizImageIndex()
+        let imagePath = ''
+
+        const cached = await imageIndex.lookup(word, sentence)
+        if (cached !== null && cached.filePath !== '') {
+          imagePath = cached.filePath
+          console.info('ToolExecutionService', `english_quiz cache HIT: key="${EnglishQuizImageIndex.buildKey(word, sentence)}"`)
+        } else if (imagePrompt !== '') {
+          console.info('ToolExecutionService', 'english_quiz cache miss, starting API generation...')
+          const generated = await imageIndex.generate(word, sentence, imagePrompt)
+          if (generated !== null) {
+            imagePath = generated.filePath
+            console.info('ToolExecutionService', `english_quiz generation SUCCESS: path="${imagePath}"`)
+          } else {
+            console.error('ToolExecutionService', 'english_quiz generation FAILED: generate() returned null')
+          }
+        } else {
+          console.warn('ToolExecutionService', 'english_quiz: no cache hit and imagePrompt is empty, cannot generate')
+        }
+
+        if (imagePath !== '') {
+          parsed['image_path'] = imagePath as Object
+          toolCall.arguments = JSON.stringify(parsed)
+        } else {
+          console.warn('ToolExecutionService', 'english_quiz: imagePath still empty after resolution, card will show loading')
+        }
       }
     } catch (error) {
       console.error('ToolExecutionService', `english_quiz image resolution exception: ${JSON.stringify(error)}`)

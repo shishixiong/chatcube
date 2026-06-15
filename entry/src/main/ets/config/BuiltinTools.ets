@@ -1579,12 +1579,14 @@ interface EnglishQuizArgs {
   question_type: string
   difficulty: number
   skill_key: string
+  letter_options?: string[]   // 仅 phonics_choice 用: 3-4 个字母选项 (含 correct_answer)
+  sound_text?: string          // 仅 phonics_choice 用: TTS 朗读的自然拼读音 (如 "kuh")
 }
 
 class EnglishQuizExecutor implements ToolExecutor {
   async execute(_args: string): Promise<string> {
     // english_quiz 工具的交互由前端 EnglishQuizCard 组件处理。
-    // 后端由 ToolExecutionService.handleEnglishQuiz 拦截处理图片生成/缓存逻辑。
+    // 后台由 ToolExecutionService.handleEnglishQuiz 拦截处理图片生成/缓存逻辑。
     // 如果工具被直接调用（没有前端交互），返回提示信息。
     try {
       const params = JSON.parse(_args) as EnglishQuizArgs
@@ -1592,8 +1594,11 @@ class EnglishQuizExecutor implements ToolExecutor {
       const answer = params.correct_answer ?? ''
       let word = ''
       let sentence = ''
+      let letter = ''
       if (questionType === 'sentence') {
         sentence = answer
+      } else if (questionType === 'phonics_choice') {
+        letter = answer
       } else {
         word = answer
       }
@@ -1601,7 +1606,10 @@ class EnglishQuizExecutor implements ToolExecutor {
         answered: false,
         correct_answer: params.correct_answer ?? '',
         word: word,
-        sentence: sentence
+        sentence: sentence,
+        letter: letter,
+        letter_options: params.letter_options ?? [],
+        sound_text: params.sound_text ?? ''
       })
     } catch (error) {
       return JSON.stringify(new ErrorOutput(`english_quiz error: ${JSON.stringify(error)}`))
@@ -1627,8 +1635,8 @@ function createEnglishQuizToolDefinition(): ToolDefinition {
       },
       "question_type": {
         "type": "string",
-        "enum": ["word", "sentence"],
-        "description": "Type of quiz: 'word' for single word, 'sentence' for full sentence"
+        "enum": ["word", "sentence", "phonics_choice"],
+        "description": "Type of quiz: 'word' for single word, 'sentence' for full sentence, 'phonics_choice' for letter sound recognition (TTS plays sound_text, child taps correct letter)."
       },
       "difficulty": {
         "type": "number",
@@ -1637,6 +1645,15 @@ function createEnglishQuizToolDefinition(): ToolDefinition {
       "skill_key": {
         "type": "string",
         "description": "The child profile skill dimension this quiz targets: 'english_vocab' for words, 'english_sentence' for sentences, 'english_phonics' for phonics-related."
+      },
+      "letter_options": {
+        "type": "array",
+        "items": { "type": "string", "minLength": 1, "maxLength": 3 },
+        "description": "仅 phonics_choice 必填: 3-4 个字母选项 (字符串数组), 必须包含 correct_answer。例如 ['k', 'c', 's', 'p']。distractor 选取同类或相近音的字母 (k/c/g, b/d/p/q, m/n)。"
+      },
+      "sound_text": {
+        "type": "string",
+        "description": "仅 phonics_choice 必填: TTS 可读的自然拼读音拼写 (不是 IPA 也不是字母名)。例如 /k/ 写作「kuh」、/ae/ 写作「aah」、/t/ 写作「tuh」。长度不超过 10 个字符, 单个短音节或单词。"
       }
     },
     "required": ["correct_answer", "question_type", "image_prompt", "question"]

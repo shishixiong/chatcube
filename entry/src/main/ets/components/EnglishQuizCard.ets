@@ -27,6 +27,8 @@ interface EnglishQuizQuestion {
   questionType: string
   difficulty: number
   skillKey: string
+  letterOptions: string[]    // phonics_choice 用: 3-4 个字母选项
+  soundText: string           // phonics_choice 用: TTS 要朗读的字母音
 }
 
 interface EnglishQuizAnswerPayload {
@@ -38,6 +40,8 @@ interface EnglishQuizAnswerPayload {
   sentence: string
   question_type: string
   skill_key: string
+  letter_options?: string[]
+  sound_text?: string
 }
 
 @ComponentV2
@@ -63,6 +67,11 @@ export struct EnglishQuizCard {
   @Local displayImagePath: string = ''
   @Local isImageLoading: boolean = false
   @Local imageLoadFailed: boolean = false
+  // ===== phonics_choice 题型专用状态 =====
+  @Local letterOptions: string[] = []
+  @Local soundText: string = ''
+  @Local selectedLetter: string = ''         // 用户点击的字母, 用于反馈展示
+  @Local isPlayingSound: boolean = false    // TTS 播放中
   private imageLoadTimer: number = -1
 
   private get themePrimary(): string {
@@ -86,7 +95,20 @@ export struct EnglishQuizCard {
         this.showResult = true
         this.isCorrect = prev.correct
         this.correctAnswerText = prev.correct_answer
+        // phonics_choice: 恢复孩子选的字母
+        if (prev.question_type === 'phonics_choice') {
+          this.selectedLetter = prev.child_answer
+        }
       }
+    }
+
+    // 读取 phonics_choice 题型字段 (letter_options / sound_text)
+    const quiz = this.parseQuiz()
+    if (quiz.questionType === 'phonics_choice') {
+      this.letterOptions = quiz.letterOptions
+      this.soundText = quiz.soundText
+      // phonics_choice 不需要图片, 直接跳过整个 image 解析管线
+      return
     }
 
     // 异步解析图片: 优先从 arguments 中已有的 image_path 读取,
@@ -119,6 +141,13 @@ export struct EnglishQuizCard {
     if (this.imageLoadTimer >= 0) {
       clearTimeout(this.imageLoadTimer)
       this.imageLoadTimer = -1
+    }
+    // 停止 TTS 朗读, 避免离开卡片后还在播
+    if (this.isPlayingSound) {
+      try {
+        ServiceRegistry.tts().stop()
+      } catch (_e) {}
+      this.isPlayingSound = false
     }
   }
 
@@ -247,7 +276,9 @@ export struct EnglishQuizCard {
       correctAnswer: '',
       questionType: 'word',
       difficulty: 1,
-      skillKey: 'english_vocab'
+      skillKey: 'english_vocab',
+      letterOptions: [],
+      soundText: ''
     }
     try {
       const parsed = JSON.parse(this.toolCall.arguments) as Record<string, Object>
@@ -256,6 +287,9 @@ export struct EnglishQuizCard {
       if (answer !== '') {
         if (questionType === 'sentence') {
           result.sentence = answer
+        } else if (questionType === 'phonics_choice') {
+          // phonics_choice: correct_answer 是单个字母
+          result.word = answer
         } else {
           result.word = answer
         }
@@ -270,6 +304,8 @@ export struct EnglishQuizCard {
       result.questionType = (parsed['question_type'] as string) ?? 'word'
       result.difficulty = (parsed['difficulty'] as number) ?? 1
       result.skillKey = (parsed['skill_key'] as string) ?? 'english_vocab'
+      result.letterOptions = (parsed['letter_options'] as string[]) ?? []
+      result.soundText = (parsed['sound_text'] as string) ?? ''
     } catch (_e) {}
     return result
   }
@@ -298,6 +334,11 @@ export struct EnglishQuizCard {
 
     if (child === '' || correct === '') {
       return false
+    }
+
+    if (questionType === 'phonics_choice') {
+      // 单字母点选: 忽略大小写完全匹配即可, 无需编辑距离
+      return child === correct
     }
 
     if (questionType === 'word') {
@@ -430,6 +471,65 @@ export struct EnglishQuizCard {
     this.isCorrect = false
     this.inputText = ''
     this.recognitionPreview = ''
+    this.selectedLetter = ''
+  }
+
+  /**
+   * phonics_choice: 用户点击字母按钮
+   */
+  private handleLetterSelect(letter: string): void {
+    if (this.isAnswered || this.showResult) {
+      return
+    }
+    const quiz = this.parseQuiz()
+    if (quiz.questionType !== 'phonics_choice') {
+      return
+    }
+
+    const correct = this.checkAnswer(letter, quiz.correctAnswer, quiz.questionType)
+
+    this.selectedLetter = letter
+    this.showResult = true
+    this.isCorrect = correct
+    this.correctAnswerText = quiz.correctAnswer
+
+    const payload: EnglishQuizAnswerPayload = {
+      answered: true,
+      child_answer: letter.trim(),
+      correct: correct,
+      correct_answer: quiz.correctAnswer,
+      word: '',
+      sentence: '',
+      question_type: quiz.questionType,
+      skill_key: quiz.skillKey,
+      letter_options: this.letterOptions,
+      sound_text: this.soundText
+    }
+
+    this.onAnswer(this.toolCall.id, JSON.stringify(payload))
+  }
+
+  /**
+   * phonics_choice: 播放字母音
+   */
+  private handlePlaySound(): void {
+    if (this.soundText === '' || this.isPlayingSound) {
+      return
+    }
+    this.isPlayingSound = true
+    ServiceRegistry.tts().speak(this.soundText, {
+      onStart: () => {},
+      onComplete: () => {
+        this.isPlayingSound = false
+      },
+      onError: (error: string) => {
+        this.isPlayingSound = false
+        console.error('EnglishQuizCard', `TTS error: ${error}`)
+      }
+    }).catch((e: Error) => {
+      this.isPlayingSound = false
+      console.error('EnglishQuizCard', `TTS speak failed: ${e.message}`)
+    })
   }
 
   private handleVoiceRecordStart(): void {
@@ -508,7 +608,7 @@ export struct EnglishQuizCard {
         SymbolGlyph($r('sys.symbol.square_and_pencil'))
           .fontSize(14)
           .fontColor([this.themePrimary])
-        Text('英语小游戏')
+        Text(this.parseQuiz().questionType === 'phonics_choice' ? '自然拼读' : '英语小游戏')
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.text_primary'))
@@ -525,17 +625,32 @@ export struct EnglishQuizCard {
       }
       .width('100%')
 
-      // 题目内容
-      this.QuizContent()
+      if (this.parseQuiz().questionType === 'phonics_choice') {
+        // phonics_choice: 听音 + 字母选项
+        this.PhonicsContent()
 
-      // 输入区域（未回答时）
-      if (!this.isAnswered && !this.showResult) {
-        this.InputArea()
-      }
+        // 字母选项网格 (未回答时)
+        if (!this.isAnswered && !this.showResult) {
+          this.LetterOptionsGrid()
+        }
 
-      // 结果反馈
-      if (this.showResult || this.isAnswered) {
-        this.ResultFeedback()
+        // 结果反馈
+        if (this.showResult || this.isAnswered) {
+          this.ResultFeedback()
+        }
+      } else {
+        // 现有 word / sentence 题型
+        this.QuizContent()
+
+        // 输入区域（未回答时）
+        if (!this.isAnswered && !this.showResult) {
+          this.InputArea()
+        }
+
+        // 结果反馈
+        if (this.showResult || this.isAnswered) {
+          this.ResultFeedback()
+        }
       }
     }
     .width('100%')
@@ -792,6 +907,68 @@ export struct EnglishQuizCard {
         }, (_: EnglishQuizAnswerPayload | null) => 'result')
       }
     }
+    .width('100%')
+  }
+
+  @Builder
+  PhonicsContent() {
+    Column({ space: 10 }) {
+      // 🔊 大听音按钮: 孩子点一下就读字母音
+      Button() {
+        Row({ space: 8 }) {
+          SymbolGlyph($r('sys.symbol.speaker_wave_2_fill'))
+            .fontSize(20)
+            .fontColor([Color.White])
+          Text(this.isPlayingSound ? '播放中...' : '听一听')
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(Color.White)
+        }
+      }
+      .type(ButtonType.Normal)
+      .width('100%')
+      .height(56)
+      .backgroundColor(this.isPlayingSound ? '#FF9F43' : this.themePrimary)
+      .borderRadius(28)
+      .enabled(!this.isPlayingSound)
+      .onClick(() => {
+        this.handlePlaySound()
+      })
+
+      Text('听一听, 选出正确的字母')
+        .fontSize(13)
+        .fontColor($r('app.color.text_secondary'))
+        .width('100%')
+        .textAlign(TextAlign.Center)
+    }
+    .width('100%')
+    .padding(12)
+    .backgroundColor(this.getCardBackgroundColor())
+    .borderRadius(10)
+  }
+
+  @Builder
+  LetterOptionsGrid() {
+    Grid() {
+      ForEach(this.letterOptions, (letter: string, idx: number) => {
+        GridItem() {
+          Button(letter.toUpperCase())
+            .fontSize(28)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+            .width('100%')
+            .height(64)
+            .backgroundColor(this.themePrimary)
+            .borderRadius(12)
+            .onClick(() => {
+              this.handleLetterSelect(letter)
+            })
+        }
+      }, (letter: string, idx: number) => `letter_${idx}_${letter}`)
+    }
+    .columnsTemplate('1fr 1fr')
+    .columnsGap(10)
+    .rowsGap(10)
     .width('100%')
   }
 }
