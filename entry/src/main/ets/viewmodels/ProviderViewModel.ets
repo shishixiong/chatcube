@@ -286,24 +286,24 @@ export class ProviderViewModel {
   getDefaultProviders(): ModelProvider[] {
     const providers: ModelProvider[] = []
 
-    const siliconflow = new ModelProvider(
-      'siliconflow',
-      '硅基流动',
-      ProviderType.CUSTOM,
+    const deepseek = new ModelProvider(
+      'deepseek',
+      'DeepSeek',
+      ProviderType.DEEPSEEK,
       'message',
       $r('app.color.brand_custom'),
-      'https://api.siliconflow.cn/v1',
+      'https://api.deepseek.com/v1',
       ApiStyle.OPENAI
     )
-    siliconflow.apiKey = ''
-    siliconflow.requiresApiKey = isPresetProviderApiKeyRequired(siliconflow.id)
-    siliconflow.isConnected = true
-    siliconflow.isPreset = true
-    siliconflow.iconPath = ''
-    siliconflow.apiPath = ''
-    siliconflow.openaiTransport = OpenAITransport.CHAT_COMPLETIONS
-    applyPresetIconDefaults(siliconflow, siliconflow.id)
-    providers.push(siliconflow)
+    deepseek.apiKey = ''
+    deepseek.requiresApiKey = isPresetProviderApiKeyRequired(deepseek.id)
+    deepseek.isConnected = true
+    deepseek.isPreset = true
+    deepseek.iconPath = ''
+    deepseek.apiPath = ''
+    deepseek.openaiTransport = OpenAITransport.CHAT_COMPLETIONS
+    applyPresetIconDefaults(deepseek, deepseek.id)
+    providers.push(deepseek)
 
     return providers
   }

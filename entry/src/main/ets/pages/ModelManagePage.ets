@@ -1142,29 +1142,16 @@ struct ProviderCardItem {
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.text_tertiary'))
 
-          // 系统服务标签
-          if (this.provider.id === 'siliconflow') {
-            Text($r('app.string.system_service'))
-              .fontSize(11)
-              .fontColor(this.themePrimary)
-              .backgroundColor(this.themePrimarySubtleBackground)
-              .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-              .borderRadius(4)
-              .margin({ left: 8 })
-          }
-
           Blank()
 
-          // Toggle 开关（siliconflow 不显示）
-          if (this.provider.id !== 'siliconflow') {
-            Toggle({ type: ToggleType.Switch, isOn: this.provider.isConnected })
-              .selectedColor(this.themePrimary)
-              .onChange((isOn: boolean) => {
-                if (this.provider.isConnected !== isOn) {
-                  this.onToggleEnabled()
-                }
-              })
-          }
+          Toggle({ type: ToggleType.Switch, isOn: this.provider.isConnected })
+            .selectedColor(this.themePrimary)
+            .onChange((isOn: boolean) => {
+              if (this.provider.isConnected !== isOn) {
+                this.onToggleEnabled()
+              }
+            })
+
 
           // 状态圆点：绿色=启用，灰色=停用
           Column()
