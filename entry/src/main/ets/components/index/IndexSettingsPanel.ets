@@ -240,33 +240,6 @@ export struct IndexSettingsPanel {
             title: $r('app.string.settings_replay_onboarding'),
             subtitle: $r('app.string.settings_replay_onboarding_desc'),
             action: (): void => { this.onOpenReplayOnboarding() }
-          } as SettingsListItemModel,
-          {
-            key: SettingsRouteName.ABOUT,
-            icon: $r('sys.symbol.info_circle'),
-            title: $r('app.string.settings_about_chatcube'),
-            subtitle: `v${this.versionName}`,
-            action: (): void => { this.onOpenAbout() }
-          } as SettingsListItemModel,
-          {
-            key: SettingsRouteName.INVITATION,
-            icon: $r('sys.symbol.qrcode'),
-            title: $r('app.string.settings_invitation'),
-            subtitle: $r('app.string.settings_invitation_desc'),
-            action: (): void => { this.onOpenInvitation() }
-          } as SettingsListItemModel,
-          {
-            key: SettingsRouteName.PRIVACY_POLICY,
-            icon: $r('sys.symbol.doc_text'),
-            title: $r('app.string.settings_privacy_policy'),
-            action: (): void => { this.onOpenPrivacy() }
-          } as SettingsListItemModel,
-          {
-            key: SettingsRouteName.SUPPORT_DEVELOPMENT,
-            icon: $r('sys.symbol.flower'),
-            title: $r('app.string.settings_support_development'),
-            subtitle: $r('app.string.settings_support_development_desc'),
-            action: (): void => { this.onOpenSupportDevelopment() }
           } as SettingsListItemModel
         ]
       } as SettingsGroupModel

@@ -42,6 +42,49 @@ export type PresetProviderConfig = PresetProviderDef
 // 预设供应商列表（主流厂商，不可删除）
 const PRESET_PROVIDERS: PresetProviderDef[] = [
   {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    type: ProviderType.DEEPSEEK,
+    apiStyle: ApiStyle.OPENAI,
+    openaiTransport: OpenAITransport.CHAT_COMPLETIONS,
+    baseUrl: 'https://api.deepseek.com/v1',
+    iconPath: '',
+    brandColorHex: '#4D6BFE',
+    textIcon: 'DS',
+    textIconBgColor: '#4D6BFE',
+    logoProviderKey: 'deepseek',
+    balance: {
+      apiPath: '/user/balance',
+      resultPath: 'balance_infos[0].total_balance',
+      currency: 'CNY'
+    }
+  },
+  {
+    id: 'minimax',
+    name: 'MiniMax',
+    type: ProviderType.CUSTOM,
+    apiStyle: ApiStyle.OPENAI,
+    baseUrl: 'https://api.minimaxi.com/v1',
+    iconPath: '',
+    brandColorHex: '#00A876',
+    textIcon: 'M',
+    textIconBgColor: '#00A876',
+    logoProviderKey: 'minimax'
+  },
+  {
+    id: 'mimo',
+    name: 'MiMo',
+    type: ProviderType.CUSTOM,
+    apiStyle: ApiStyle.OPENAI,
+    openaiTransport: OpenAITransport.CHAT_COMPLETIONS,
+    baseUrl: 'https://api.xiaomimimo.com/v1',
+    iconPath: '',
+    brandColorHex: '#FF6900',
+    textIcon: 'Mi',
+    textIconBgColor: '#FF6900',
+    logoProviderKey: 'xiaomi'
+  },
+  {
     id: 'openai',
     name: 'OpenAI',
     type: ProviderType.OPENAI,
@@ -66,24 +109,6 @@ const PRESET_PROVIDERS: PresetProviderDef[] = [
     textIcon: 'C',
     textIconBgColor: '#C45C3A',
     logoProviderKey: 'anthropic'
-  },
-  {
-    id: 'deepseek',
-    name: 'DeepSeek',
-    type: ProviderType.DEEPSEEK,
-    apiStyle: ApiStyle.OPENAI,
-    openaiTransport: OpenAITransport.CHAT_COMPLETIONS,
-    baseUrl: 'https://api.deepseek.com/v1',
-    iconPath: '',
-    brandColorHex: '#4D6BFE',
-    textIcon: 'DS',
-    textIconBgColor: '#4D6BFE',
-    logoProviderKey: 'deepseek',
-    balance: {
-      apiPath: '/user/balance',
-      resultPath: 'balance_infos[0].total_balance',
-      currency: 'CNY'
-    }
   },
   {
     id: 'gemini',
@@ -186,18 +211,6 @@ const PRESET_PROVIDERS: PresetProviderDef[] = [
     textIconBgColor: '#3370FF'
   },
   {
-    id: 'minimax',
-    name: 'MiniMax',
-    type: ProviderType.CUSTOM,
-    apiStyle: ApiStyle.OPENAI,
-    baseUrl: 'https://api.minimaxi.com/v1',
-    iconPath: '',
-    brandColorHex: '#00A876',
-    textIcon: 'M',
-    textIconBgColor: '#00A876',
-    logoProviderKey: 'minimax'
-  },
-  {
     id: 'aihubmix',
     name: 'AiHubMix',
     type: ProviderType.CUSTOM,
@@ -232,19 +245,6 @@ const PRESET_PROVIDERS: PresetProviderDef[] = [
     textIcon: 'AP',
     textIconBgColor: '#6C5CE7',
     autoInstall: false
-  },
-  {
-    id: 'mimo',
-    name: 'MiMo',
-    type: ProviderType.CUSTOM,
-    apiStyle: ApiStyle.OPENAI,
-    openaiTransport: OpenAITransport.CHAT_COMPLETIONS,
-    baseUrl: 'https://api.xiaomimimo.com/v1',
-    iconPath: '',
-    brandColorHex: '#FF6900',
-    textIcon: 'Mi',
-    textIconBgColor: '#FF6900',
-    logoProviderKey: 'xiaomi'
   },
   {
     id: 'ollama',
