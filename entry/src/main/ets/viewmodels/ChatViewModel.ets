@@ -2,6 +2,7 @@ import { getDatabaseService, DatabaseService } from '../services/DatabaseService
 import { MessagePart, MessagePartKind, ToolPartStatus } from '../models/MessageParts'
 import { createToolPart, ensureMessageParts } from '../utils/ChatMessagePartsHelper'
 import { getEffectiveCapabilities } from '../utils/ModelCapabilityDeriver'
+import { getCurrentModelVisionSupport } from '../utils/VisionCompat'
 import {
   getAIApiService,
   AIApiService,
@@ -456,10 +457,11 @@ export class ChatViewModel {
 
   private cloneAttachmentsForRequestHistory(
     attachments: MessageAttachment[],
-    includeAttachmentPayloads: boolean
+    includeAttachmentPayloads: boolean,
+    visionAware: boolean = true
   ): MessageAttachment[] {
     const cloned = this.cloneAttachments(attachments)
-    if (includeAttachmentPayloads) {
+    if (includeAttachmentPayloads && visionAware) {
       return cloned
     }
     for (let i = 0; i < cloned.length; i++) {
@@ -1079,12 +1081,13 @@ export class ChatViewModel {
   private appendFlatRequestHistoryMessage(
     historyMessages: RequestMessage[],
     msg: ChatMessage,
-    includeAttachmentPayloads: boolean
+    includeAttachmentPayloads: boolean,
+    visionAware: boolean = true
   ): void {
     const requestMessage = new RequestMessage(
       msg.role,
       msg.content,
-      this.cloneAttachmentsForRequestHistory(msg.attachments, includeAttachmentPayloads)
+      this.cloneAttachmentsForRequestHistory(msg.attachments, includeAttachmentPayloads, visionAware)
     )
     requestMessage.reasoningContent = msg.reasoningContent
     requestMessage.reasoningSignatureBlob = msg.reasoningSignatureBlob
@@ -1186,7 +1189,8 @@ export class ChatViewModel {
     contextStartIndex: number,
     preserveToolPartOrder: boolean = false,
     includeAttachmentPayloads: boolean = true,
-    maxHistoryMessages: number = MAX_HISTORY_MESSAGES_FOR_REQUEST
+    maxHistoryMessages: number = MAX_HISTORY_MESSAGES_FOR_REQUEST,
+    visionAware: boolean = true
   ): RequestMessage[] {
     const historyMessages: RequestMessage[] = []
     for (let i = contextStartIndex; i < messages.length; i++) {
@@ -1197,7 +1201,7 @@ export class ChatViewModel {
       if (preserveToolPartOrder && this.appendPartsRequestHistory(historyMessages, msg)) {
         continue
       }
-      this.appendFlatRequestHistoryMessage(historyMessages, msg, includeAttachmentPayloads)
+      this.appendFlatRequestHistoryMessage(historyMessages, msg, includeAttachmentPayloads, visionAware)
     }
     // 截断到最近 maxHistoryMessages 条。maxHistoryMessages<=0 表示不截断
     if (maxHistoryMessages > 0 && historyMessages.length > maxHistoryMessages) {
@@ -1488,12 +1492,15 @@ export class ChatViewModel {
     const snapshotSessionId = this.currentSession?.id ?? ''
     const snapshotSession = this.currentSession
     const shouldAutoGenerateTitle = this.isFirstRoundSession(snapshotSession)
-    const includeHistoryAttachmentPayloads = attachments.length === 0
+    const visionAware = this.resolveModelVisionSupport(providerId, modelId)
+    const includeHistoryAttachmentPayloads = attachments.length === 0 && visionAware
     const historyMessages = this.buildConversationRequestHistory(
       messages,
       contextStartIndex,
       false,
-      includeHistoryAttachmentPayloads
+      includeHistoryAttachmentPayloads,
+      MAX_HISTORY_MESSAGES_FOR_REQUEST,
+      visionAware
     )
     const requestAttachments = await this.prepareOutgoingAttachments(attachments)
     if (this.isCancelled(cancelSnapshot)) {
@@ -1815,12 +1822,15 @@ export class ChatViewModel {
     const snapshotSessionId = this.currentSession?.id ?? ''
     const snapshotSession = this.currentSession
     const shouldAutoGenerateTitle = this.isFirstRoundSession(snapshotSession)
-    const includeHistoryAttachmentPayloads = attachments.length === 0
+    const visionAware = this.resolveModelVisionSupport(providerId, modelId)
+    const includeHistoryAttachmentPayloads = attachments.length === 0 && visionAware
     const historyMessages = this.buildConversationRequestHistory(
       messages,
       contextStartIndex,
       false,
-      includeHistoryAttachmentPayloads
+      includeHistoryAttachmentPayloads,
+      MAX_HISTORY_MESSAGES_FOR_REQUEST,
+      visionAware
     )
     const requestAttachments = await this.prepareOutgoingAttachments(attachments)
     if (this.isCancelled(cancelSnapshot)) {
@@ -2101,12 +2111,15 @@ ${webContext.content}
     const snapshotSessionId = this.currentSession?.id ?? ''
     const snapshotSession = this.currentSession
     const shouldAutoGenerateTitle = this.isFirstRoundSession(snapshotSession)
-    const includeHistoryAttachmentPayloads = attachments.length === 0
+    const visionAware = this.resolveModelVisionSupport(providerId, modelId)
+    const includeHistoryAttachmentPayloads = attachments.length === 0 && visionAware
     const historyMessages = this.buildConversationRequestHistory(
       messages,
       contextStartIndex,
       false,
-      includeHistoryAttachmentPayloads
+      includeHistoryAttachmentPayloads,
+      MAX_HISTORY_MESSAGES_FOR_REQUEST,
+      visionAware
     )
     const requestAttachments = await this.prepareOutgoingAttachments(attachments)
     if (this.isCancelled(cancelSnapshot)) {
@@ -2431,12 +2444,15 @@ ${limitedSearchContext}
     const snapshotSessionId = this.currentSession?.id ?? ''
     const snapshotSession = this.currentSession
     const shouldAutoGenerateTitle = this.isFirstRoundSession(snapshotSession)
-    const includeHistoryAttachmentPayloads = attachments.length === 0
+    const visionAware = this.resolveModelVisionSupport(providerId, modelId)
+    const includeHistoryAttachmentPayloads = attachments.length === 0 && visionAware
     const historyMessages = this.buildConversationRequestHistory(
       messages,
       contextStartIndex,
       true,
-      includeHistoryAttachmentPayloads
+      includeHistoryAttachmentPayloads,
+      MAX_HISTORY_MESSAGES_FOR_REQUEST,
+      visionAware
     )
     const requestAttachments = await this.prepareOutgoingAttachments(attachments)
     if (this.isCancelled(cancelSnapshot)) {
@@ -4490,6 +4506,19 @@ ${limitedSearchContext}
     }
 
     return false
+  }
+
+  // 解析当前 (providerId, modelId) 的视觉能力, 用于历史图片附件的请求体过滤。
+  // 返回 true = 模型支持视觉 (历史图片 base64 可以保留); false = 不支持 (历史图片 base64 在请求体里清空)。
+  private resolveModelVisionSupport(providerId: string, modelId: string): boolean {
+    if (providerId === '' || modelId === '') {
+      return false
+    }
+    const provider = this.providerViewModel.getProviderById(providerId)
+    if (provider === null) {
+      return false
+    }
+    return getCurrentModelVisionSupport(provider, modelId)
   }
 
   private async prepareRequestHistoryAttachmentsIfNeeded(

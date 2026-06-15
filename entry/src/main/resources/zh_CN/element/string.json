@@ -1313,6 +1313,14 @@
       "value": "请先配置 API Key"
     },
     {
+      "name": "chat_vision_unsupported_block",
+      "value": "当前模型不支持图片，请移除图片或切换到支持视觉的模型后再发送"
+    },
+    {
+      "name": "chat_vision_fallback_success",
+      "value": "图片无法识别，已重新发送（仅文字）"
+    },
+    {
       "name": "back_press_exit_hint",
       "value": "再按一次退出应用"
     },

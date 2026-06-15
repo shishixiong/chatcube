@@ -1313,6 +1313,14 @@
       "value": "Please configure API Key first"
     },
     {
+      "name": "chat_vision_unsupported_block",
+      "value": "The current model does not support images. Please remove the image or switch to a vision-capable model."
+    },
+    {
+      "name": "chat_vision_fallback_success",
+      "value": "Image not recognized. Resent as text only."
+    },
+    {
       "name": "back_press_exit_hint",
       "value": "Press back again to exit"
     },

@@ -1,5 +1,6 @@
 import {
   ApiStyle,
+  AttachmentType,
   ChatMessage,
   ChatSearchMode,
   MessageAttachment,
@@ -22,6 +23,11 @@ import { appendUniqueToolId } from './ChatToolIdHelper'
 import { syncChatMessageFromSource } from './ChatMessageActionHelper'
 import { validateProviderConfig } from '../../utils/ProviderValidationUtils'
 import { getEffectiveCapabilities } from '../../utils/ModelCapabilityDeriver'
+import {
+  getCurrentModelVisionSupport,
+  hasImageAttachment,
+  isImageCapabilityError
+} from '../../utils/VisionCompat'
 import {
   LEGACY_WEB_SEARCH_TOOL_ID,
   SCRAPE_WEB_TOOL_ID,
@@ -187,6 +193,14 @@ export class ChatSendFlow {
     // 调用方按"是否首轮 + 是否教学助手"判定;非教学助手传 undefined 行为完全不变。
     functionToolChoice?: string
   ): Promise<void> {
+    // Pre-send 守门: 当 pending 附件含图片且当前模型不支持视觉时, 阻断发送并提示。
+    // 解决"用户给非视觉模型发图→API 400→图片残留历史→后续轮持续 400"的循环错误。
+    if (hasImageAttachment(attachmentsToSend) &&
+      !getCurrentModelVisionSupport(currentProvider, currentModelId)) {
+      this.deps.onShowError($r('app.string.chat_vision_unsupported_block'))
+      this.deps.onMarkAutoTaskFailed('当前模型不支持图片')
+      return
+    }
     const plan = await this.buildExecutionPlan(
       currentProvider,
       webSearchConversationEnabled,
@@ -629,6 +643,38 @@ export class ChatSendFlow {
     )
   }
 
+  // Post-error 兜底: 当 API 返回图片能力错误（pre-send 漏过）时, 剥离本轮图片附件并重试。
+  // 仅剥离 IMAGE 类型, 保留 FILE (PDF/Word), 因为部分模型对文档输入的支持独立于视觉。
+  private async fallbackAfterImageCapabilityError(
+    taskId: string,
+    senderSessionId: string,
+    messageIds: string[],
+    messageContent: string,
+    currentProvider: ModelProvider,
+    effectiveApiKey: string,
+    attachmentsToSend: MessageAttachment[],
+    error: string
+  ): Promise<void> {
+    console.warn('ChatSendFlow', `[Vision] image capability error, stripping images and retrying: ${error}`)
+    this.completeTaskForFallback(taskId, senderSessionId)
+    await this.removeProbeMessages(messageIds, senderSessionId)
+    const stripped: MessageAttachment[] = []
+    for (let i = 0; i < attachmentsToSend.length; i++) {
+      if (attachmentsToSend[i].type !== AttachmentType.IMAGE) {
+        stripped.push(attachmentsToSend[i])
+      }
+    }
+    if (this.deps.getSessionId() === senderSessionId) {
+      this.deps.onShowToast($r('app.string.chat_vision_fallback_success'))
+    }
+    await this.sendPlainMessage(
+      messageContent,
+      currentProvider,
+      effectiveApiKey,
+      stripped
+    )
+  }
+
   async sendPlainMessage(
     messageContent: string,
     currentProvider: ModelProvider,
@@ -648,6 +694,8 @@ export class ChatSendFlow {
     const maxOutputTokens = await this.deps.chatViewModel.getMaxOutputTokens()
     const messages = this.deps.getMessages()
     const contextStartIndex = contextMessageCount > 0 ? Math.max(0, messages.length - contextMessageCount) : 0
+    const createdMessageIds: string[] = []
+    let imageFallbackStarted = false
 
     try {
       await this.deps.chatViewModel.sendMessage(
@@ -661,9 +709,11 @@ export class ChatSendFlow {
         this.deps.getCurrentModelName(),
         messages,
         (userMessage: ChatMessage): void => {
+          this.appendUniqueMessageId(createdMessageIds, userMessage.id)
           this.handleUserMessageAdded(userMessage, senderSessionId)
         },
         (aiMessage: ChatMessage): void => {
+          this.appendUniqueMessageId(createdMessageIds, aiMessage.id)
           this.handleAIMessageAdded(aiMessage, senderSessionId)
         },
         (aiMessage: ChatMessage): void => {
@@ -672,7 +722,23 @@ export class ChatSendFlow {
         (): void => {
           this.handleTaskCompleted(taskId, senderSessionId)
         },
-        (error: string): void => {
+        async (error: string): Promise<void> => {
+          // Post-error 兜底: 仅当首轮 send 失败 (completedSuccessfully 未置 true) 时进入。
+          // imageFallbackStarted 守卫避免"剥离后还报图像错"时无限重试。
+          if (!imageFallbackStarted && isImageCapabilityError(error)) {
+            imageFallbackStarted = true
+            await this.fallbackAfterImageCapabilityError(
+              taskId,
+              senderSessionId,
+              createdMessageIds,
+              messageContent,
+              currentProvider,
+              effectiveApiKey,
+              attachmentsToSend,
+              error
+            )
+            return
+          }
           this.handleTaskFailed(taskId, error, true, senderSessionId)
         },
         attachmentsToSend,
@@ -715,6 +781,7 @@ export class ChatSendFlow {
     const createdMessageIds: string[] = []
     let completedSuccessfully = false
     let fallbackStarted = false
+    let imageFallbackStarted = false
 
     console.info('ChatSendFlow', `[Function Calling] 启用工具: ${enabledToolIds.join(', ')}`)
 
@@ -760,6 +827,22 @@ export class ChatSendFlow {
           this.handleTaskCompleted(taskId, senderSessionId)
         },
         async (error: string): Promise<void> => {
+          // Post-error 兜底: 图片能力错误优先级高于工具调用错误 (避免先误判为 tool 错误)。
+          // 同样用 imageFallbackStarted 守卫, 不嵌套重试。
+          if (!imageFallbackStarted && isImageCapabilityError(error)) {
+            imageFallbackStarted = true
+            await this.fallbackAfterImageCapabilityError(
+              taskId,
+              senderSessionId,
+              createdMessageIds,
+              messageContent,
+              currentProvider,
+              effectiveApiKey,
+              attachmentsToSend,
+              error
+            )
+            return
+          }
           if (this.isToolCapabilityError(error) && !this.hasBuiltInImageGenerationTool(builtInResponsesTools)) {
             fallbackStarted = true
             await this.fallbackToPlainMessageAfterToolFailure(
