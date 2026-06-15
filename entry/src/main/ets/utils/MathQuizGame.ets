@@ -26,6 +26,10 @@ export interface MathQuizQuestion {
   rightValue: number
   // comparison 专用; 默认 ['>', '<', '=']
   operatorOptions: string[]
+  // time 专用; 其他 type 默认 0
+  // hour ∈ [1, 12] (12 小时制), minute ∈ {0,5,10,...,55} (5 分钟步长)
+  clockHour: number
+  clockMinute: number
 }
 
 export interface MathQuizAnswerPayload {
@@ -63,7 +67,9 @@ export function parseMathQuiz(argsJson: string): MathQuizQuestion {
     skillKey: '',
     leftValue: 0,
     rightValue: 0,
-    operatorOptions: []
+    operatorOptions: [],
+    clockHour: 0,
+    clockMinute: 0
   }
   try {
     const parsed = JSON.parse(argsJson) as Record<string, Object>
@@ -133,9 +139,15 @@ export function parseMathQuiz(argsJson: string): MathQuizQuestion {
         result.operatorOptions = ['>', '<', '=']
       }
     } else if (result.type === 'time') {
-      // 时间认知: correct_answer / options 都是 H:MM 字符串
-      const rawCorrect = parsed['correct_answer']
-      result.correctAnswer = normalizeTimeString(typeof rawCorrect === 'string' ? rawCorrect : String(rawCorrect ?? ''))
+      // 时间认知: clock_hour/clock_minute → 钟面指针; correct_answer/options 是 H:MM 字符串
+      const rawHour = parsed['clock_hour']
+      const rawMinute = parsed['clock_minute']
+      const hour = normalizeClockHour(typeof rawHour === 'number' ? rawHour : Number(rawHour ?? 0))
+      const minute = normalizeClockMinute(typeof rawMinute === 'number' ? rawMinute : Number(rawMinute ?? 0))
+      result.clockHour = hour
+      result.clockMinute = minute
+      // 用归一化后的 hour/minute 覆写 correct_answer 字符串, 保证钟面指针与文字答案永远一致
+      result.correctAnswer = formatClockTime(hour, minute)
       const rawOptions = parsed['options']
       if (Array.isArray(rawOptions)) {
         const arr = rawOptions as Object[]
@@ -148,6 +160,10 @@ export function parseMathQuiz(argsJson: string): MathQuizQuestion {
             }
           }
         }
+      }
+      // 兜底: AI 可能漏掉正确项; 若 options < 4 自动补上
+      if (result.options.indexOf(result.correctAnswer as string) === -1 && result.options.length < 4) {
+        result.options.push(result.correctAnswer as string)
       }
     }
   } catch (_e) {}
@@ -248,4 +264,35 @@ export function normalizeTimeString(raw: string): string {
     return ''
   }
   return `${h}:${m[2]}`
+}
+
+// hour ∈ [1, 12]; 0 视为 12; 13-23 视为 1-11; NaN/负数 fallback 12
+export function normalizeClockHour(raw: number): number {
+  if (!Number.isFinite(raw)) {
+    return 12
+  }
+  const h = Math.floor(raw)
+  if (h <= 0) {
+    return 12
+  }
+  if (h > 12) {
+    return ((h - 1) % 12) + 1
+  }
+  return h
+}
+
+// minute 必须是 5 的倍数; round 到最近 5 倍数, 范围 0..55
+export function normalizeClockMinute(raw: number): number {
+  if (!Number.isFinite(raw)) {
+    return 0
+  }
+  const m = Math.floor(raw)
+  const wrapped = ((m % 60) + 60) % 60
+  const rounded = Math.round(wrapped / 5) * 5
+  return rounded === 60 ? 0 : rounded
+}
+
+// 3:05 / 3:30 / 12:00 格式; caller 应先用 normalizeClockHour/Minute 归一化
+export function formatClockTime(hour: number, minute: number): string {
+  return `${hour}:${minute < 10 ? '0' + minute : minute}`
 }

@@ -1397,6 +1397,9 @@ interface MathQuizArgs {
   left_value?: number
   right_value?: number
   operator_options?: string[]
+  // time 专用
+  clock_hour?: number
+  clock_minute?: number
 }
 
 class MathQuizResult {
@@ -1447,7 +1450,7 @@ function createMathQuizToolDefinition(): ToolDefinition {
       "type": {
         "type": "string",
         "enum": ["arithmetic", "shape", "comparison", "time"],
-        "description": "题目类型. arithmetic=算术(add/sub/mul/div/counting), shape=图形认知, comparison=大小比较, time=时间认知. 缺省视为 arithmetic."
+        "description": "题目类型. arithmetic=算术(add/sub/mul/div/counting), shape=图形认知, comparison=大小比较, time=时间认知 (必须同时传 clock_hour 和 clock_minute). 缺省视为 arithmetic."
       },
       "question": {
         "type": "string",
@@ -1457,14 +1460,27 @@ function createMathQuizToolDefinition(): ToolDefinition {
         "type": "string",
         "description": "arithmetic 专用: 算式字符串, e.g. 「3 + 2」. 显示为 「3 + 2 = ?」. 其他 type 不用填."
       },
+      "clock_hour": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 12,
+        "description": "time 专用: 钟面上的小时数 (1-12 整数, 12 小时制). 整 1 点填 1, 整 12 点填 12. 不要填 0 也不要填 13 以上."
+      },
+      "clock_minute": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 55,
+        "multipleOf": 5,
+        "description": "time 专用: 钟面上的分钟数 (5 分钟步长, 只能填 0/5/10/15/20/25/30/35/40/45/50/55). 整点填 0, 半点填 30."
+      },
       "correct_answer": {
         "type": ["string", "number"],
-        "description": "正确答案. arithmetic=数字 e.g. 5. shape=英文形状名 e.g. circle / square / triangle. comparison=比较运算符 e.g. 「>」. time=数字时钟字符串 e.g. 3:30."
+        "description": "正确答案. arithmetic=数字 e.g. 5. shape=英文形状名 e.g. circle / square / triangle. comparison=比较运算符 e.g. 「>」. time=数字时钟字符串 e.g. 「3:30」 或 「12:00」, 必须与 clock_hour/clock_minute 一致, 5 分钟步长."
       },
       "options": {
         "type": "array",
         "items": { "type": ["string", "number"] },
-        "description": "3-4 个选项. arithmetic 用数字; shape 用英文形状名; time 用数字时钟字符串. comparison 一般留空, 用 operator_options 替代. 必须包含正确答案, 打乱顺序."
+        "description": "3-4 个选项. arithmetic 用数字; shape 用英文形状名; time 用数字时钟字符串 (H:MM, 5 分钟步长). comparison 一般留空, 用 operator_options 替代. 必须包含正确答案, 打乱顺序."
       },
       "skill_key": {
         "type": "string",
@@ -1492,7 +1508,7 @@ function createMathQuizToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     MATH_QUIZ_TOOL_ID,
-    'Present a math quiz to the child as an interactive game card on screen. Use this INSTEAD of writing math problems in plain text. Set the type field: arithmetic=加减乘除算术题, shape=图形认知, comparison=大小比较, time=时间认知. Provide 3-4 options including the correct answer. For comparison, fill left_value/right_value and operator_options, leave options empty.',
+    'Present a math quiz to the child as an interactive game card on screen. Use this INSTEAD of writing math problems in plain text. Set the type field: arithmetic=加减乘除算术题, shape=图形认知, comparison=大小比较, time=时间认知. Provide 3-4 options including the correct answer. For comparison, fill left_value/right_value and operator_options, leave options empty. For time questions, also fill clock_hour (1-12) and clock_minute (5-minute step: 0/5/.../55) so the card can render an analog clock face.',
     parameters
   )
 

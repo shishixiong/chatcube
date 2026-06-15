@@ -25,6 +25,7 @@ import { CubeSpinnerBubble, CubeSpinnerLight } from './loading/CubeSpinner'
 import { AssistantAvatarView } from './AssistantAvatar'
 import { AdaptiveImageThumbnail } from './AdaptiveImageThumbnail'
 import { ImageGenerationToolResult } from './chat/ImageGenerationToolResult'
+import { MusicGenerationToolResult } from './chat/MusicGenerationToolResult'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { SymbolGlyphModifier } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
@@ -36,7 +37,7 @@ import {
   getMarkdownTitleSizes
 } from '../utils/MarkdownTypographyUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isEnglishQuizFunctionName, isHuarongdaoFunctionName, isHandwritingPracticeFunctionName, isCategorizationFunctionName } from '../utils/SearchToolIdentityUtils'
+import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isEnglishQuizFunctionName, isHuarongdaoFunctionName, isHandwritingPracticeFunctionName, isCategorizationFunctionName, isMusicGenerationFunctionName } from '../utils/SearchToolIdentityUtils'
 import { MessagePart, MessagePartKind, ToolPartStatus } from '../models/MessageParts'
 import {
   ensureMessageParts,
@@ -2567,6 +2568,9 @@ export struct MessageBubble {
     if (isImageGenerationFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
+    if (isMusicGenerationFunctionName(part.toolName)) {
+      return this.isSuccessfulToolStep(part)
+    }
     if (isScrapeWebFunctionName(part.toolName)) {
       // 抓取类只要能取到 url 就可点
       return this.extractToolStepUrl(part) !== '' || this.firstRefUrl(part) !== ''
@@ -2612,7 +2616,7 @@ export struct MessageBubble {
       return true
     }
     // 默认行为: 图片生成/数学游戏/英语看图说话 成功后默认展开查看结果
-    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName)) {
+    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
     return false
@@ -2622,7 +2626,7 @@ export struct MessageBubble {
     const key = this.getToolStepKey(part)
     // 默认展开的工具类型: 图片生成、数学游戏、英语看图说话、数字华容道
     const isDefaultExpanded = this.isSuccessfulToolStep(part) &&
-      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName))
+      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName))
     const next: string[] = []
     let found = false
     let foundCollapsed = false
@@ -3542,6 +3546,40 @@ export struct MessageBubble {
             onImageClick: (images: Array<string>, index: number): void => {
               this.onImageClick(images, index, [])
             }
+          })
+            .width('100%')
+            .margin({ top: 8 })
+            .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
+        }
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+    } else if (isMusicGenerationFunctionName(step.toolName) && this.isToolStepClickable(step)) {
+      // 音乐生成: 折叠/展开, 在下方直接展示音频播放器
+      Column() {
+        Row({ space: 6 }) {
+          this.ToolStepStatusIndicator(step)
+
+          Text(this.buildToolStepTitle(step))
+            .fontSize(13)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.text_primary'))
+            .layoutWeight(1)
+
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(12)
+            .fontColor([$r('app.color.text_tertiary')])
+            .rotate({ angle: this.isToolStepExpanded(step) ? 0 : -90 })
+            .animation({ duration: 200, curve: Curve.EaseOut })
+        }
+        .width('100%')
+        .onClick(() => {
+          this.toggleToolStep(step)
+        })
+
+        if (this.isToolStepExpanded(step) && step.toolResult !== '') {
+          MusicGenerationToolResult({
+            toolResult: step.toolResult
           })
             .width('100%')
             .margin({ top: 8 })

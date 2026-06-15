@@ -16,7 +16,17 @@ function toInputMode(raw?: string): InputMode {
 }
 
 function toOutputMode(raw?: string): OutputMode {
-  return raw === OutputMode.IMAGE ? OutputMode.IMAGE : OutputMode.TEXT
+  switch (raw) {
+    case OutputMode.IMAGE:
+      return OutputMode.IMAGE
+    case OutputMode.MUSIC:
+      return OutputMode.MUSIC
+    case OutputMode.VIDEO:
+      return OutputMode.VIDEO
+    case OutputMode.TEXT:
+    default:
+      return OutputMode.TEXT
+  }
 }
 
 export function applyModelDraft(target: ModelInfo, draft: ModelInfoExtendedJson): void {

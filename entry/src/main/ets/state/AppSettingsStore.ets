@@ -575,7 +575,19 @@ export class AppSettingsStore {
             modelInfo.inputMode = modelObj.inputMode === 'vision' ? InputMode.VISION : InputMode.TEXT
           }
           if (modelObj.outputMode !== undefined) {
-            modelInfo.outputMode = modelObj.outputMode === 'image' ? OutputMode.IMAGE : OutputMode.TEXT
+            switch (modelObj.outputMode) {
+              case 'image':
+                modelInfo.outputMode = OutputMode.IMAGE
+                break
+              case 'music':
+                modelInfo.outputMode = OutputMode.MUSIC
+                break
+              case 'video':
+                modelInfo.outputMode = OutputMode.VIDEO
+                break
+              default:
+                modelInfo.outputMode = OutputMode.TEXT
+            }
           }
           if (modelObj.capabilities !== undefined) {
             modelInfo.capabilities = ModelCapabilities.fromJson(modelObj.capabilities)

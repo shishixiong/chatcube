@@ -26,6 +26,19 @@ import {
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import { PreferenceKeys } from '../services/PreferencesService'
 
+// 钟面数字 1-12 的绝对定位 (200vp 钟面圆心 100,100, 半径 78vp)
+interface ClockNumberPos {
+  label: number
+  x: number
+  y: number
+}
+
+// 12 个分钟刻度小竖线的旋转角度
+interface ClockTickPos {
+  index: number
+  angle: number
+}
+
 @ComponentV2
 export struct MathQuizCard {
   @Param toolCall: ToolCall = new ToolCall()
@@ -35,7 +48,8 @@ export struct MathQuizCard {
 
   @Local quiz: MathQuizQuestion = {
     type: 'arithmetic', question: '', expression: '', correctAnswer: 0,
-    options: [], skillKey: '', leftValue: 0, rightValue: 0, operatorOptions: []
+    options: [], skillKey: '', leftValue: 0, rightValue: 0, operatorOptions: [],
+    clockHour: 0, clockMinute: 0
   }
   // arithmetic 用 number 选项; shape/comparison/time 用 string 选项
   @Local selectedOption: string | number = -1
@@ -285,6 +299,49 @@ export struct MathQuizCard {
 
   private getCardBackgroundColor(): string {
     return this.isDarkMode ? withColorAlpha(this.themePrimary, '18') : withColorAlpha(this.themePrimary, '12')
+  }
+
+  // ---- 钟面几何 (200vp 钟面, 圆心 100,100) ----
+  // 用 named-interface push 避免 arr.map(p => ({...})) 触发的 10605038
+  private getClockNumberPositions(): ClockNumberPos[] {
+    const positions: ClockNumberPos[] = []
+    // 2-9 在标准圆周位置, 半径 78vp; i → (i*30 - 90)°
+    const r: number = 78
+    const cx: number = 100
+    const cy: number = 100
+    for (let i: number = 1; i <= 12; i++) {
+      const angleRad: number = (i * 30 - 90) * Math.PI / 180
+      const pos: ClockNumberPos = {
+        label: i,
+        x: cx + r * Math.cos(angleRad) - 10,
+        y: cy + r * Math.sin(angleRad) - 12
+      }
+      positions.push(pos)
+    }
+    return positions
+  }
+
+  // 12 个分钟刻度小竖线的旋转角度 (0°, 30°, 60°, ..., 330°)
+  private getMinuteTickPositions(): ClockTickPos[] {
+    const ticks: ClockTickPos[] = []
+    for (let i: number = 0; i < 12; i++) {
+      const tick: ClockTickPos = { index: i, angle: i * 30 }
+      ticks.push(tick)
+    }
+    return ticks
+  }
+
+  // 时针角度: ArkUI 中 height>width 的 Column 初始垂直朝上, 绕 (100,100) 旋转 angle=0 即指向 12 点;
+  // angle=90 顺时针到 3 点; h12 = hour % 12, 12 → 0
+  // 直接 h12 * 30 + minute * 0.5 (不要加 -90 偏置, 会让整点指针偏离正确位置)
+  private getHourAngle(hour: number, minute: number): number {
+    const h12: number = (hour % 12 + 12) % 12
+    return h12 * 30 + minute * 0.5
+  }
+
+  // 分针角度: minute * 6 (60 分钟走一圈 360°)
+  private getMinuteAngle(minute: number): number {
+    return minute * 6
   }
 
   build() {
@@ -697,13 +754,90 @@ export struct MathQuizCard {
   }
 
   @Builder
+  ClockFace(hour: number, minute: number) {
+    Stack({ alignContent: Alignment.Center }) {
+      // 1) 钟面背景圆
+      Circle()
+        .width(200).height(200)
+        .fill(this.isDarkMode ? '#1C1C1E' : Color.White)
+        .stroke(this.isDarkMode ? withColorAlpha(this.themePrimary, '40') : '#E5E7EB')
+        .strokeWidth(1.5)
+        .shadow({ radius: 12, color: '#1F000000', offsetY: 4 })
+
+      // 2) 12 个分钟刻度小竖线 (在数字之下层, 先画)
+      // 竖线长 8vp, 顶部锚到 (99, 8), 绕 (100, 100) 旋转
+      ForEach(this.getMinuteTickPositions(), (t: ClockTickPos) => {
+        Column()
+          .width(2).height(8)
+          .borderRadius(1)
+          .backgroundColor(this.isDarkMode ? withColorAlpha(this.themePrimary, '50') : '#9CA3AF')
+          .position({ x: 99, y: 8 })
+          .rotate({ angle: t.angle, centerX: 100, centerY: 100 })
+      }, (t: ClockTickPos) => `tick_${t.index}`)
+
+      // 3) 12 个数字 (1..12), 绝对定位, 不旋转保持正立可读
+      ForEach(this.getClockNumberPositions(), (p: ClockNumberPos) => {
+        Text(`${p.label}`)
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.isDarkMode ? $r('app.color.text_primary') : '#374151')
+          .width(24).height(24)
+          .textAlign(TextAlign.Center)
+          .position({ x: p.x, y: p.y })
+      }, (p: ClockNumberPos) => `num_${p.label}`)
+
+      // 4) 时针 (短粗): 宽 6vp 高 55vp, 底部锚到圆心 (100,100)
+      // 旋转支点用 '50%' / '100%' (相对 Column 自身尺寸), 明确表示底部中心
+      Column()
+        .width(6).height(55)
+        .borderRadius(3)
+        .backgroundColor(this.isDarkMode ? withColorAlpha(this.themePrimary, '90') : '#1F2937')
+        .position({ x: 97, y: 45 })
+        .rotate({
+          angle: this.getHourAngle(hour, minute),
+          centerX: '50%',
+          centerY: '100%'
+        })
+        .shadow({ radius: 3, color: '#1F000000', offsetY: 1 })
+
+      // 5) 分针 (长细): 宽 4vp 高 80vp, 主题色, 加阴影增强浮起感
+      Column()
+        .width(4).height(80)
+        .borderRadius(2)
+        .backgroundColor(this.themePrimary)
+        .position({ x: 98, y: 20 })
+        .rotate({
+          angle: this.getMinuteAngle(minute),
+          centerX: '50%',
+          centerY: '100%'
+        })
+        .shadow({ radius: 3, color: '#1F000000', offsetY: 1 })
+
+      // 6) 中心圆点
+      Circle()
+        .width(10).height(10)
+        .fill(this.themePrimary)
+        .stroke(Color.White)
+        .strokeWidth(1.5)
+    }
+    .width(200).height(200)
+  }
+
+  @Builder
   TimeContent() {
-    Column({ space: 10 }) {
-      if (this.quiz.question !== '') {
-        Text(this.quiz.question)
-          .fontSize(15)
-          .fontColor($r('app.color.text_primary'))
-          .width('100%')
+    Column({ space: 12 }) {
+      Text(this.quiz.question !== '' ? this.quiz.question : '现在是几点呀?')
+        .fontSize(15)
+        .fontColor($r('app.color.text_primary'))
+        .width('100%')
+
+      // 钟面: 仅当 AI 传了有效 hour/minute 时渲染; 缺字段时退化到纯文字 question
+      if (this.quiz.clockHour > 0) {
+        Row() {
+          this.ClockFace(this.quiz.clockHour, this.quiz.clockMinute)
+        }
+        .width('100%')
+        .justifyContent(FlexAlign.Center)
       }
 
       if (this.quiz.options.length > 0) {

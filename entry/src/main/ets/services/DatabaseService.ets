@@ -7,7 +7,8 @@ import {
   ModelProvider,
   MessageAttachment,
   AttachmentType,
-  SearchReference
+  SearchReference,
+  ReasoningLevel
 } from '../models/ChatModels'
 import { Assistant, DEFAULT_ASSISTANT_ID, createDefaultAssistant, DEFAULT_ASSISTANT_SYSTEM_PROMPT, DEFAULT_ASSISTANT_LOCKED_TOOL_IDS } from '../models/AssistantModels'
 import { GeneratedMedia } from '../models/ImageGenerationModels'
@@ -76,6 +77,8 @@ interface CapabilitiesJsonData {
   supportsWebSearch: boolean
   supportsVision: boolean
   supportsStreaming: boolean
+  supportsMusicGeneration: boolean
+  supportsVideoGeneration: boolean
 }
 
 // 参数配置 JSON 数据(已废弃,2026/05 后所有采样参数已移到助手层,新写入不再带 parameters 字段)
@@ -877,6 +880,29 @@ export class DatabaseService {
     }
   }
 
+  // 把 DB 里读出的字符串规范化为 ReasoningLevel 枚举。空串/未知值回落到 OFF。
+  // 与 AssistantService.normalizeReasoningLevelString 行为一致; 放 DB 层独立维护,
+  // 避免反向依赖 services 包。
+  private normalizeReasoningLevelString(value: string): ReasoningLevel {
+    const lower = value.trim().toLowerCase()
+    if (lower === ReasoningLevel.AUTO) {
+      return ReasoningLevel.AUTO
+    }
+    if (lower === ReasoningLevel.LOW) {
+      return ReasoningLevel.LOW
+    }
+    if (lower === ReasoningLevel.MEDIUM) {
+      return ReasoningLevel.MEDIUM
+    }
+    if (lower === ReasoningLevel.HIGH) {
+      return ReasoningLevel.HIGH
+    }
+    if (lower === ReasoningLevel.XHIGH) {
+      return ReasoningLevel.XHIGH
+    }
+    return ReasoningLevel.OFF
+  }
+
 	  private assistantToValueBucket(assistant: Assistant, includeId: boolean = true): relationalStore.ValuesBucket {
 	    const now = Date.now()
 	    if (assistant.updatedAt <= 0) {
@@ -901,6 +927,7 @@ export class DatabaseService {
 	      presence_penalty: assistant.presencePenalty,
 	      frequency_penalty_enabled: assistant.frequencyPenaltyEnabled ? 1 : 0,
 	      frequency_penalty: assistant.frequencyPenalty,
+	      reasoning_level_preference: assistant.reasoningLevel,
 	      enabled_tool_ids_json: JSON.stringify(assistant.enabledToolIds || []),
 	      context_message_count: assistant.contextMessageCount || 0,
 	      max_output_tokens: assistant.maxOutputTokens || 0,
@@ -977,6 +1004,13 @@ export class DatabaseService {
 	      }
 	    } catch (error) {
 	      assistant.enabledToolIds = []
+	    }
+	    try {
+	      // 旧库可能没有 reasoning_level_preference 列(老版本未迁移), 容错回 OFF。
+	      const rawLevel = this.safeGetString(resultSet, 'reasoning_level_preference')
+	      assistant.reasoningLevel = this.normalizeReasoningLevelString(rawLevel)
+	    } catch (error) {
+	      assistant.reasoningLevel = ReasoningLevel.OFF
 	    }
 	    try {
 	      assistant.contextMessageCount = resultSet.getLong(resultSet.getColumnIndex('context_message_count'))
@@ -2518,7 +2552,9 @@ export class DatabaseService {
         supportsReasoning: model.capabilities.supportsReasoning,
         supportsWebSearch: model.capabilities.supportsWebSearch,
         supportsVision: model.capabilities.supportsVision,
-        supportsStreaming: model.capabilities.supportsStreaming
+        supportsStreaming: model.capabilities.supportsStreaming,
+        supportsMusicGeneration: model.capabilities.supportsMusicGeneration,
+        supportsVideoGeneration: model.capabilities.supportsVideoGeneration
       }
 
       // 构建模型数据对象

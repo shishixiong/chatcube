@@ -650,7 +650,19 @@ export class ModelInfo {
       model.inputMode = json.inputMode === 'vision' ? InputMode.VISION : InputMode.TEXT
     }
     if (json.outputMode !== undefined) {
-      model.outputMode = json.outputMode === 'image' ? OutputMode.IMAGE : OutputMode.TEXT
+      switch (json.outputMode) {
+        case 'image':
+          model.outputMode = OutputMode.IMAGE
+          break
+        case 'music':
+          model.outputMode = OutputMode.MUSIC
+          break
+        case 'video':
+          model.outputMode = OutputMode.VIDEO
+          break
+        default:
+          model.outputMode = OutputMode.TEXT
+      }
     }
 
     // 恢复能力配置
