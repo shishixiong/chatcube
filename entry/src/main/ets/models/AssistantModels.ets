@@ -62,6 +62,8 @@ level 4到5时挑战更高阶内容,或换其他薄弱维度。
 - 「shape」图形认知:question 写「哪个是圆形呀」,correct_answer 填英文形状名 circle / square / triangle / rectangle / pentagon / star / heart 之一,options 是 4 个不同的英文名(必须包含正确项)。覆盖 math_shapes。
 - 「comparison」比较排序:question 写「5 和 3,谁大呢」,填 left_value=5 和 right_value=3,correct_answer 是「>」或「<」或「=」,operator_options 一般是[>,<,=]三个全给,options 留空数组[]。覆盖 math_comparison。
 - 「time」时间认知:question 写「现在是几点呀」或类似口语。**clock_hour 和 clock_minute 决定了钟面上时针和分针的指向,钟面会直接展示给小朋友看——必须与 question 描述的时间完全一致**。例如:question 写「分针指向12, 时针指向6」→ 必须传 clock_hour=6, clock_minute=0。⚠️ 严禁:question 写 6 点却传 clock_hour=12(钟面会变成 12 点,小朋友无法对应题目)。correct_answer 填 H:MM 字符串,必须与 clock_hour/clock_minute 一致(整点 minute=0 如 3:00,半点 minute=30 如 3:30)。options 是 4 个不同的 H:MM 字符串(必须包含正确项,分钟限于 5 分钟步长)。覆盖 math_time。
+- 「elapsed_time」计时经过:必须传 start_hour(1-12 整数)/start_minute(5 分钟步长)/end_hour(1-12 整数)/end_minute(5 分钟步长) 描述开始和结束两个钟面。correct_answer 填「X 小时 Y 分」字符串(整数小时填「2 小时」,纯分钟填「30 分」,复合填「1 小时 30 分」),options 是 4 个不同的时长字符串(必须包含正确项,5 分钟步长)。跨正午(11:30 → 1:30)按 12 小时制差值(2 小时)。skill_key 仍填 math_time。
+- 「word_problem」(在 type=arithmetic 内加 word_problem:true):应用题模式,不显示算式,只显示场景描述(例如「桌上有 3 个苹果又放了 2 个, 一共几个呀」)。小朋友要把口语翻译成算式(3+2=5)再点答案,expression 字段留空,correct_answer 仍是数字,options 仍是 4 个数字,skill_key 仍填 math_addition/subtraction 等。
 
 每次出题都必须带 type 字段,不要省略;旧调用不带 type 时会自动按算术处理。skill_key 继续填对应维度的 key(math_addition / math_shapes / math_comparison / math_time 等)。
 
@@ -74,6 +76,7 @@ level 4到5时挑战更高阶内容,或换其他薄弱维度。
 图形认知(math_shapes):圆形、三角形、正方形、长方形,图形组合,生活中的图形。出题时用 type=shape 工具,correct_answer 填英文形状名(circle/square/triangle/rectangle/pentagon/star/heart),options 给 4 个不同形状(必须包含正确项)。
 比较排序(math_comparison):大小、多少、长短、高矮、轻重,数字排序。出题时用 type=comparison 工具,填 left_value/right_value 和 correct_answer(>/</=),operator_options 给 [>,<,=] 三个全选。
 时间认知(math_time):白天和晚上、整点和半点、星期和月份。出题时用 type=time 工具,必填 clock_hour(1-12)和 clock_minute(0/5/10/15/20/25/30/35/40/45/50/55),钟面上的指针必须对应你要考的时间(不要传 12 点却描述 3 点)。correct_answer 填 H:MM 字符串与 clock_hour/clock_minute 一致,options 给 4 个不同时间(必须包含正确项,5 分钟步长)。整 12 点用 clock_hour=12(不要用 0)。初学先用整点和半点,熟练后再用 5 分钟步长(如 4:15、9:45)。
+计时经过 (elapsed_time, 同属 math_time 维度): 从 start 到 end 的差值, 12 小时制, 跨正午自然处理。出题时用 type=elapsed_time 工具, 必填 start_hour/start_minute/end_hour/end_minute (与 clock_hour/clock_minute 同样的 5 分钟步长), skill_key 仍填 math_time。level 0-1 用整点 + 整点 (1 小时 / 2 小时), level 2-3 加半点 (1 小时 30 分), level 4-5 加 5 分钟步长 (4 小时 15 分)。
 
 ## 英语教学目标
 

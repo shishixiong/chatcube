@@ -39,6 +39,34 @@ interface ClockTickPos {
   angle: number
 }
 
+// 钟面渲染所需的所有缩放后尺寸/坐标 (@Builder 体内不能写 const, 抽到 helper 方法)
+interface ClockFaceMetrics {
+  size: number
+  cx: number
+  tickX: number
+  tickY: number
+  tickLen: number
+  tickW: number
+  handHourW: number
+  handHourH: number
+  handHourX: number
+  handHourY: number
+  handMinW: number
+  handMinH: number
+  handMinX: number
+  handMinY: number
+  dotSize: number
+  numFontSize: number
+  numW: number
+  numH: number
+  shadowR: number
+  handShadowR: number
+  tickRadius: number
+  handHourRadius: number
+  handMinRadius: number
+  dotStrokeW: number
+}
+
 @ComponentV2
 export struct MathQuizCard {
   @Param toolCall: ToolCall = new ToolCall()
@@ -48,8 +76,9 @@ export struct MathQuizCard {
 
   @Local quiz: MathQuizQuestion = {
     type: 'arithmetic', question: '', expression: '', correctAnswer: 0,
-    options: [], skillKey: '', leftValue: 0, rightValue: 0, operatorOptions: [],
-    clockHour: 0, clockMinute: 0
+    options: [], skillKey: '', wordProblem: false, leftValue: 0, rightValue: 0, operatorOptions: [],
+    clockHour: 0, clockMinute: 0,
+    startHour: 0, startMinute: 0, endHour: 0, endMinute: 0
   }
   // arithmetic 用 number 选项; shape/comparison/time 用 string 选项
   @Local selectedOption: string | number = -1
@@ -301,20 +330,56 @@ export struct MathQuizCard {
     return this.isDarkMode ? withColorAlpha(this.themePrimary, '18') : withColorAlpha(this.themePrimary, '12')
   }
 
-  // ---- 钟面几何 (200vp 钟面, 圆心 100,100) ----
+  // ---- 钟面几何 (默认 200vp 钟面, 圆心 100,100; 可缩放) ----
   // 用 named-interface push 避免 arr.map(p => ({...})) 触发的 10605038
-  private getClockNumberPositions(): ClockNumberPos[] {
+  // helper 方法返回所有缩放后的尺寸/坐标, @Builder 体内不能写 const (10905209)
+  private getClockFaceMetrics(size: number): ClockFaceMetrics {
+    const s: number = size / 200
+    const cx: number = size / 2
+    const m: ClockFaceMetrics = {
+      size: size,
+      cx: cx,
+      tickX: cx - 1 * s,
+      tickY: 8 * s,
+      tickLen: 8 * s,
+      tickW: Math.max(1, 2 * s),
+      handHourW: Math.max(2, 6 * s),
+      handHourH: 55 * s,
+      handHourX: cx - Math.max(2, 6 * s) / 2,
+      handHourY: cx - 55 * s,
+      handMinW: Math.max(1, 4 * s),
+      handMinH: 80 * s,
+      handMinX: cx - Math.max(1, 4 * s) / 2,
+      handMinY: cx - 80 * s,
+      dotSize: 10 * s,
+      numFontSize: 18 * s,
+      numW: 24 * s,
+      numH: 24 * s,
+      shadowR: 12 * s,
+      handShadowR: 3 * s,
+      tickRadius: Math.max(0.5, 1 * s),
+      handHourRadius: Math.max(1, 3 * s),
+      handMinRadius: Math.max(0.5, 2 * s),
+      dotStrokeW: 1.5 * s
+    }
+    return m
+  }
+
+  private getClockNumberPositions(size: number = 200): ClockNumberPos[] {
     const positions: ClockNumberPos[] = []
-    // 2-9 在标准圆周位置, 半径 78vp; i → (i*30 - 90)°
-    const r: number = 78
-    const cx: number = 100
-    const cy: number = 100
+    // 半径 78vp (size=200 时); 按比例缩放. i → (i*30 - 90)° (12 点朝上)
+    const s: number = size / 200
+    const r: number = 78 * s
+    const cx: number = size / 2
+    const cy: number = size / 2
+    const textOffsetX: number = 10 * s
+    const textOffsetY: number = 12 * s
     for (let i: number = 1; i <= 12; i++) {
       const angleRad: number = (i * 30 - 90) * Math.PI / 180
       const pos: ClockNumberPos = {
         label: i,
-        x: cx + r * Math.cos(angleRad) - 10,
-        y: cy + r * Math.sin(angleRad) - 12
+        x: cx + r * Math.cos(angleRad) - textOffsetX,
+        y: cy + r * Math.sin(angleRad) - textOffsetY
       }
       positions.push(pos)
     }
@@ -470,13 +535,15 @@ export struct MathQuizCard {
 
   @Builder
   QuizContent() {
-    // 4 种题型分发: arithmetic (原算术) / shape (图形) / comparison (比较) / time (时间)
+    // 5 种题型分发: arithmetic (原算术+应用题) / shape (图形) / comparison (比较) / time (时间-读) / elapsed_time (时间-经过)
     if (this.quiz.type === 'shape') {
       this.ShapeContent()
     } else if (this.quiz.type === 'comparison') {
       this.ComparisonContent()
     } else if (this.quiz.type === 'time') {
       this.TimeContent()
+    } else if (this.quiz.type === 'elapsed_time') {
+      this.ElapsedTimeContent()
     } else {
       this.ArithmeticContent()
     }
@@ -486,16 +553,20 @@ export struct MathQuizCard {
   ArithmeticContent() {
     Column({ space: 10 }) {
       ForEach([this.quiz], (quiz: MathQuizQuestion) => {
-        // 题目文字
+        // 题目文字; 应用题模式下字号加大、加粗, 让小朋友看清楚场景描述
         if (quiz.question !== '') {
           Text(quiz.question)
-            .fontSize(15)
+            .fontSize(quiz.wordProblem ? 17 : 15)
+            .fontWeight(quiz.wordProblem ? FontWeight.Medium : FontWeight.Normal)
+            .lineHeight(quiz.wordProblem ? 24 : 22)
             .fontColor($r('app.color.text_primary'))
             .width('100%')
+            .padding(quiz.wordProblem ? { top: 4, bottom: 6 } : { bottom: 2 })
         }
 
-        // 算式: 拆成 number/op token, 数字大、运算符小, 视觉上更像算式而不是字符串
-        if (quiz.expression !== '') {
+        // 算式: 应用题模式下隐藏 (只渲染场景描述, 让小朋友把语言翻译成算式)
+        // 拆成 number/op token, 数字大、运算符小, 视觉上更像算式而不是字符串
+        if (quiz.expression !== '' && !quiz.wordProblem) {
           Row({ space: 4 }) {
             ForEach(tokenizeExpression(quiz.expression), (token: ExpressionToken) => {
               if (token.type === 'op') {
@@ -733,7 +804,7 @@ export struct MathQuizCard {
   TimeOptionButton(timeStr: string, index: number) {
     Stack({ alignContent: Alignment.Center }) {
       Text(timeStr)
-        .fontSize(28)
+        .fontSize(24)
         .fontWeight(FontWeight.Bold)
         .fontColor(Color.White)
         .shadow({ radius: 1, color: '#40000000', offsetY: 1 })
@@ -754,73 +825,78 @@ export struct MathQuizCard {
   }
 
   @Builder
-  ClockFace(hour: number, minute: number) {
+  ClockFace(hour: number, minute: number, size: number = 200) {
+    // size=200 (默认) 维持原 time 题型外观; size=100 给 elapsed_time 两钟面
+    // @Builder 体内不能写 const 声明 (10905209), 把 metrics 计算结果直接传入子 Builder
+    this.ClockFaceContent(hour, minute, this.getClockFaceMetrics(size))
+  }
+
+  @Builder
+  ClockFaceContent(hour: number, minute: number, m: ClockFaceMetrics) {
     Stack({ alignContent: Alignment.Center }) {
       // 1) 钟面背景圆
       Circle()
-        .width(200).height(200)
+        .width(m.size).height(m.size)
         .fill(this.isDarkMode ? '#1C1C1E' : Color.White)
         .stroke(this.isDarkMode ? withColorAlpha(this.themePrimary, '40') : '#E5E7EB')
         .strokeWidth(1.5)
-        .shadow({ radius: 12, color: '#1F000000', offsetY: 4 })
+        .shadow({ radius: m.shadowR, color: '#1F000000', offsetY: 4 })
 
       // 2) 12 个分钟刻度小竖线 (在数字之下层, 先画)
-      // 竖线长 8vp, 顶部锚到 (99, 8), 绕 (100, 100) 旋转
       ForEach(this.getMinuteTickPositions(), (t: ClockTickPos) => {
         Column()
-          .width(2).height(8)
-          .borderRadius(1)
+          .width(m.tickW).height(m.tickLen)
+          .borderRadius(m.tickRadius)
           .backgroundColor(this.isDarkMode ? withColorAlpha(this.themePrimary, '50') : '#9CA3AF')
-          .position({ x: 99, y: 8 })
-          .rotate({ angle: t.angle, centerX: 100, centerY: 100 })
+          .position({ x: m.tickX, y: m.tickY })
+          .rotate({ angle: t.angle, centerX: m.cx, centerY: m.cx })
       }, (t: ClockTickPos) => `tick_${t.index}`)
 
       // 3) 12 个数字 (1..12), 绝对定位, 不旋转保持正立可读
-      ForEach(this.getClockNumberPositions(), (p: ClockNumberPos) => {
+      ForEach(this.getClockNumberPositions(m.size), (p: ClockNumberPos) => {
         Text(`${p.label}`)
-          .fontSize(18)
+          .fontSize(m.numFontSize)
           .fontWeight(FontWeight.Bold)
           .fontColor(this.isDarkMode ? $r('app.color.text_primary') : '#374151')
-          .width(24).height(24)
+          .width(m.numW).height(m.numH)
           .textAlign(TextAlign.Center)
           .position({ x: p.x, y: p.y })
       }, (p: ClockNumberPos) => `num_${p.label}`)
 
-      // 4) 时针 (短粗): 宽 6vp 高 55vp, 底部锚到圆心 (100,100)
-      // 旋转支点用 '50%' / '100%' (相对 Column 自身尺寸), 明确表示底部中心
+      // 4) 时针 (短粗): 旋转支点用 '50%' / '100%' (相对 Column 自身尺寸)
       Column()
-        .width(6).height(55)
-        .borderRadius(3)
+        .width(m.handHourW).height(m.handHourH)
+        .borderRadius(m.handHourRadius)
         .backgroundColor(this.isDarkMode ? withColorAlpha(this.themePrimary, '90') : '#1F2937')
-        .position({ x: 97, y: 45 })
+        .position({ x: m.handHourX, y: m.handHourY })
         .rotate({
           angle: this.getHourAngle(hour, minute),
           centerX: '50%',
           centerY: '100%'
         })
-        .shadow({ radius: 3, color: '#1F000000', offsetY: 1 })
+        .shadow({ radius: m.handShadowR, color: '#1F000000', offsetY: 1 })
 
-      // 5) 分针 (长细): 宽 4vp 高 80vp, 主题色, 加阴影增强浮起感
+      // 5) 分针 (长细): 主题色, 加阴影增强浮起感
       Column()
-        .width(4).height(80)
-        .borderRadius(2)
+        .width(m.handMinW).height(m.handMinH)
+        .borderRadius(m.handMinRadius)
         .backgroundColor(this.themePrimary)
-        .position({ x: 98, y: 20 })
+        .position({ x: m.handMinX, y: m.handMinY })
         .rotate({
           angle: this.getMinuteAngle(minute),
           centerX: '50%',
           centerY: '100%'
         })
-        .shadow({ radius: 3, color: '#1F000000', offsetY: 1 })
+        .shadow({ radius: m.handShadowR, color: '#1F000000', offsetY: 1 })
 
       // 6) 中心圆点
       Circle()
-        .width(10).height(10)
+        .width(m.dotSize).height(m.dotSize)
         .fill(this.themePrimary)
         .stroke(Color.White)
-        .strokeWidth(1.5)
+        .strokeWidth(m.dotStrokeW)
     }
-    .width(200).height(200)
+    .width(m.size).height(m.size)
   }
 
   @Builder
@@ -848,6 +924,77 @@ export struct MathQuizCard {
                 this.TimeOptionButton(String(opt), idx)
               }
             }, (opt: string | number, idx: number) => `time_${idx}_${opt}`)
+          }
+          .columnsTemplate('1fr 1fr')
+          .columnsGap(10)
+          .rowsGap(10)
+          .width('100%')
+
+          if (this.selectedOption !== -1 && !this.showResult && !this.isAnswered) {
+            this.ConfirmButton()
+          }
+        }
+        .width('100%')
+      }
+    }
+    .width('100%')
+    .padding(12)
+    .backgroundColor(this.getCardBackgroundColor())
+    .borderRadius(10)
+  }
+
+  // ---- 计时经过 (math_time, elapsed_time 子类型) ----
+  // 复用 ClockFace (size=100) + TimeOptionButton: 两个钟面上下排列 + 中间箭头, 4 个时长按钮选项
+  // 上下排列: 适配窄 bubble 宽度 (水平并排放不下 2 个 100vp+ 钟面)
+
+  @Builder
+  ElapsedTimeContent() {
+    Column({ space: 10 }) {
+      Text(this.quiz.question !== '' ? this.quiz.question : '从开始到结束, 经过多久呀?')
+        .fontSize(15)
+        .fontColor($r('app.color.text_primary'))
+        .width('100%')
+
+      // 两个钟面上下排列 + 中间 ↓ 箭头; 任意一个钟面有效即渲染
+      if (this.quiz.startHour > 0 || this.quiz.endHour > 0) {
+        // 开始钟面
+        Column({ space: 4 }) {
+          Text('开始')
+            .fontSize(11)
+            .fontColor($r('app.color.text_tertiary'))
+          this.ClockFace(this.quiz.startHour, this.quiz.startMinute, 100)
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Center)
+
+        // 中间 ↓ 箭头 (上下钟面视觉连接)
+        Text('↓')
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.themePrimary)
+          .width('100%')
+          .textAlign(TextAlign.Center)
+
+        // 结束钟面
+        Column({ space: 4 }) {
+          Text('结束')
+            .fontSize(11)
+            .fontColor($r('app.color.text_tertiary'))
+          this.ClockFace(this.quiz.endHour, this.quiz.endMinute, 100)
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Center)
+      }
+
+      // 时长选项 (4 个按钮, 沿用 TimeOptionButton 渲染 "X 小时 Y 分" 字符串)
+      if (this.quiz.options.length > 0) {
+        Column({ space: 10 }) {
+          Grid() {
+            ForEach(this.quiz.options, (opt: string | number, idx: number) => {
+              GridItem() {
+                this.TimeOptionButton(String(opt), idx)
+              }
+            }, (opt: string | number, idx: number) => `elapsed_${idx}_${opt}`)
           }
           .columnsTemplate('1fr 1fr')
           .columnsGap(10)

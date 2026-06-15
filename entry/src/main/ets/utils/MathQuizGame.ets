@@ -7,12 +7,13 @@
 
 import { evaluateMathExpression } from './MathExpressionParser'
 
-// 题型联合: 4 种 math_quiz 子题型
-// - arithmetic  算术(add/sub/mul/div/counting)
-// - shape       图形认知(math_shapes)
-// - comparison  大小比较(math_comparison)
-// - time        时间认知(math_time)
-export type QuizType = 'arithmetic' | 'shape' | 'comparison' | 'time'
+// 题型联合: 5 种 math_quiz 子题型
+// - arithmetic     算术(add/sub/mul/div/counting/word_problem)
+// - shape          图形认知(math_shapes)
+// - comparison     大小比较(math_comparison)
+// - time           时间认知-读时间(math_time)
+// - elapsed_time   时间认知-计时经过(math_time)
+export type QuizType = 'arithmetic' | 'shape' | 'comparison' | 'time' | 'elapsed_time'
 
 export interface MathQuizQuestion {
   type: QuizType
@@ -21,6 +22,8 @@ export interface MathQuizQuestion {
   correctAnswer: string | number
   options: Array<string | number>
   skillKey: string
+  // arithmetic 专用; true = 应用题模式（只渲染 question 文字, 不显示算式）
+  wordProblem: boolean
   // comparison 专用; 其他 type 默认 0
   leftValue: number
   rightValue: number
@@ -30,6 +33,11 @@ export interface MathQuizQuestion {
   // hour ∈ [1, 12] (12 小时制), minute ∈ {0,5,10,...,55} (5 分钟步长)
   clockHour: number
   clockMinute: number
+  // elapsed_time 专用; 其他 type 默认 0/0/0/0
+  startHour: number
+  startMinute: number
+  endHour: number
+  endMinute: number
 }
 
 export interface MathQuizAnswerPayload {
@@ -65,11 +73,16 @@ export function parseMathQuiz(argsJson: string): MathQuizQuestion {
     correctAnswer: 0,
     options: [],
     skillKey: '',
+    wordProblem: false,
     leftValue: 0,
     rightValue: 0,
     operatorOptions: [],
     clockHour: 0,
-    clockMinute: 0
+    clockMinute: 0,
+    startHour: 0,
+    startMinute: 0,
+    endHour: 0,
+    endMinute: 0
   }
   try {
     const parsed = JSON.parse(argsJson) as Record<string, Object>
@@ -82,6 +95,9 @@ export function parseMathQuiz(argsJson: string): MathQuizQuestion {
       result.expression = (parsed['expression'] as string) ?? ''
       const rawCorrect = parsed['correct_answer']
       result.correctAnswer = typeof rawCorrect === 'number' ? (rawCorrect as number) : 0
+      // 应用题旗标: AI 显式传 word_problem=true 时启用 (只渲染 question, 隐藏算式)
+      const wp = parsed['word_problem']
+      result.wordProblem = (wp === true || wp === 'true')
       const rawOptions = parsed['options']
       if (Array.isArray(rawOptions)) {
         const arr = rawOptions as Object[]
@@ -165,6 +181,40 @@ export function parseMathQuiz(argsJson: string): MathQuizQuestion {
       if (result.options.indexOf(result.correctAnswer as string) === -1 && result.options.length < 4) {
         result.options.push(result.correctAnswer as string)
       }
+    } else if (result.type === 'elapsed_time') {
+      // 计时经过: 两个钟面 (start → end), correct_answer/options 是时长字符串
+      const rawStartHour = parsed['start_hour']
+      const rawStartMin = parsed['start_minute']
+      const rawEndHour = parsed['end_hour']
+      const rawEndMin = parsed['end_minute']
+      const sh = normalizeClockHour(typeof rawStartHour === 'number' ? rawStartHour : Number(rawStartHour ?? 0))
+      const sm = normalizeClockMinute(typeof rawStartMin === 'number' ? rawStartMin : Number(rawStartMin ?? 0))
+      const eh = normalizeClockHour(typeof rawEndHour === 'number' ? rawEndHour : Number(rawEndHour ?? 0))
+      const em = normalizeClockMinute(typeof rawEndMin === 'number' ? rawEndMin : Number(rawEndMin ?? 0))
+      result.startHour = sh
+      result.startMinute = sm
+      result.endHour = eh
+      result.endMinute = em
+      // 用归一化后的钟面数据重新计算正确时长, 保证选项与钟面永远一致
+      const dur = computeElapsedDuration(sh, sm, eh, em)
+      result.correctAnswer = formatDuration(dur.hours, dur.minutes)
+      const rawOptions = parsed['options']
+      if (Array.isArray(rawOptions)) {
+        const arr = rawOptions as Object[]
+        for (let i = 0; i < arr.length; i++) {
+          const val = arr[i]
+          if (typeof val === 'string') {
+            const n = normalizeDurationString(val)
+            if (n !== '') {
+              result.options.push(n)
+            }
+          }
+        }
+      }
+      // 兜底: AI 漏掉正确项时自动补
+      if (result.options.indexOf(result.correctAnswer as string) === -1 && result.options.length < 4) {
+        result.options.push(result.correctAnswer as string)
+      }
     }
   } catch (_e) {}
   return result
@@ -236,7 +286,7 @@ const SHAPE_WHITELIST: string[] =
   ['circle', 'square', 'triangle', 'rectangle', 'pentagon', 'star', 'heart']
 
 export function normalizeQuizType(raw: string): QuizType {
-  if (raw === 'shape' || raw === 'comparison' || raw === 'time') {
+  if (raw === 'shape' || raw === 'comparison' || raw === 'time' || raw === 'elapsed_time') {
     return raw
   }
   return 'arithmetic'
@@ -295,4 +345,65 @@ export function normalizeClockMinute(raw: number): number {
 // 3:05 / 3:30 / 12:00 格式; caller 应先用 normalizeClockHour/Minute 归一化
 export function formatClockTime(hour: number, minute: number): string {
   return `${hour}:${minute < 10 ? '0' + minute : minute}`
+}
+
+// elapsed_time 专用: 时长结果接口 (避免 10605040 inline-object-literal 错误)
+interface ElapsedDuration {
+  hours: number
+  minutes: number
+}
+
+// 12 小时制差值: end - start, 范围 [0, 12*60)
+// 跨正午 (11:30 → 1:30 = 2 小时) 自然处理
+export function computeElapsedDuration(startHour: number, startMinute: number,
+                                       endHour: number, endMinute: number): ElapsedDuration {
+  const startTotal = startHour * 60 + startMinute
+  const endTotal = endHour * 60 + endMinute
+  let diff = endTotal - startTotal
+  if (diff < 0) {
+    diff += 12 * 60  // 跨正午
+  }
+  if (diff > 12 * 60) {
+    diff -= 12 * 60  // 防御 AI 传反序
+  }
+  const hours = Math.floor(diff / 60)
+  const minutes = diff % 60
+  const result: ElapsedDuration = { hours: hours, minutes: minutes }
+  return result
+}
+
+// "1 小时 30 分" / "30 分" / "2 小时" / "0 分" 格式
+export function formatDuration(hours: number, minutes: number): string {
+  const parts: string[] = []
+  if (hours > 0) {
+    parts.push(`${hours} 小时`)
+  }
+  if (minutes > 0 || parts.length === 0) {
+    parts.push(`${minutes} 分`)
+  }
+  return parts.join(' ')
+}
+
+// "1 小时 30 分" / "30 分" 解析; 非数字前缀拒绝
+export function normalizeDurationString(raw: string): string {
+  let hours = 0
+  let minutes = 0
+  const hMatch = raw.match(/(\d+)\s*小时/)
+  if (hMatch !== null) {
+    hours = parseInt(hMatch[1], 10)
+  }
+  const mMatch = raw.match(/(\d+)\s*分/)
+  if (mMatch !== null) {
+    minutes = parseInt(mMatch[1], 10)
+  }
+  // 既没匹配到小时也没匹配到分钟 = 拒绝 (避免 AI 乱写 "1.5 小时")
+  if (hMatch === null && mMatch === null) {
+    return ''
+  }
+  return formatDuration(hours, minutes)
+}
+
+// arithmetic 应用题旗标归一化: 接受 boolean true 或字符串 "true", 其他一律 false
+export function normalizeWordProblemFlag(raw: Object | undefined): boolean {
+  return raw === true || raw === 'true'
 }

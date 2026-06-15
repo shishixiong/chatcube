@@ -1387,12 +1387,14 @@ function createMathVerifyToolConfig(): ToolConfig {
 // 数学游戏工具：让小星老师以互动卡片形式出数学题, 小朋友在屏幕上点选答案。
 
 interface MathQuizArgs {
-  type?: 'arithmetic' | 'shape' | 'comparison' | 'time'
+  type?: 'arithmetic' | 'shape' | 'comparison' | 'time' | 'elapsed_time'
   question: string
   expression?: string
   correct_answer: string | number
   options: Array<string | number>
   skill_key?: string
+  // arithmetic 专用; true = 应用题模式 (隐藏算式, 只显示 question 场景描述)
+  word_problem?: boolean
   // comparison 专用
   left_value?: number
   right_value?: number
@@ -1400,6 +1402,11 @@ interface MathQuizArgs {
   // time 专用
   clock_hour?: number
   clock_minute?: number
+  // elapsed_time 专用
+  start_hour?: number
+  start_minute?: number
+  end_hour?: number
+  end_minute?: number
 }
 
 class MathQuizResult {
@@ -1428,12 +1435,11 @@ class MathQuizExecutor implements ToolExecutor {
     // 如果工具被直接调用(没有前端交互), 返回提示信息。
     try {
       const params = JSON.parse(_args) as MathQuizArgs
-      // arithmetic 类型 correct_answer 期望 number; 其他 3 种 type 期望 string.
+      // arithmetic 类型 correct_answer 期望 number; 其他 4 种 type 期望 string.
       // 后端只透传, 真实答案由前端 onAnswer 提交, 不做语义校验。
+      const isArithmetic = (params.type ?? 'arithmetic') === 'arithmetic'
       const correct: string | number =
-        (params.type ?? 'arithmetic') === 'arithmetic'
-          ? Number(params.correct_answer ?? 0)
-          : String(params.correct_answer ?? '')
+        isArithmetic ? Number(params.correct_answer ?? 0) : String(params.correct_answer ?? '')
       return JSON.stringify(new MathQuizResult(
         false, 0, false, false, correct, params.expression ?? ''
       ))
@@ -1449,8 +1455,8 @@ function createMathQuizToolDefinition(): ToolDefinition {
     "properties": {
       "type": {
         "type": "string",
-        "enum": ["arithmetic", "shape", "comparison", "time"],
-        "description": "题目类型. arithmetic=算术(add/sub/mul/div/counting), shape=图形认知, comparison=大小比较, time=时间认知 (必须同时传 clock_hour 和 clock_minute). 缺省视为 arithmetic."
+        "enum": ["arithmetic", "shape", "comparison", "time", "elapsed_time"],
+        "description": "题目类型. arithmetic=算术(add/sub/mul/div/counting/word_problem), shape=图形认知, comparison=大小比较, time=时间认知-读时间 (必须同时传 clock_hour 和 clock_minute), elapsed_time=时间认知-计时经过 (必须同时传 start_hour/start_minute/end_hour/end_minute, correct_answer 是时长字符串 e.g. 「1 小时 30 分」). 缺省视为 arithmetic."
       },
       "question": {
         "type": "string",
@@ -1458,7 +1464,11 @@ function createMathQuizToolDefinition(): ToolDefinition {
       },
       "expression": {
         "type": "string",
-        "description": "arithmetic 专用: 算式字符串, e.g. 「3 + 2」. 显示为 「3 + 2 = ?」. 其他 type 不用填."
+        "description": "arithmetic 专用: 算式字符串, e.g. 「3 + 2」. 显示为 「3 + 2 = ?」. 应用题模式 (word_problem=true) 时 expression 留空. 其他 type 不用填."
+      },
+      "word_problem": {
+        "type": "boolean",
+        "description": "arithmetic 专用: true=应用题模式, 只渲染 question 场景描述 (如「桌上有 3 个苹果又放 2 个」), 隐藏算式. 小朋友需要把语言翻译成算式再点答案. 缺省 false=普通算式题."
       },
       "clock_hour": {
         "type": "integer",
@@ -1473,14 +1483,40 @@ function createMathQuizToolDefinition(): ToolDefinition {
         "multipleOf": 5,
         "description": "time 专用: 钟面上的分钟数 (5 分钟步长, 只能填 0/5/10/15/20/25/30/35/40/45/50/55). 整点填 0, 半点填 30."
       },
+      "start_hour": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 12,
+        "description": "elapsed_time 专用: 开始钟面的小时数 (1-12 整数, 12 小时制). 必须与 start_minute 配合, 不能单独使用."
+      },
+      "start_minute": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 55,
+        "multipleOf": 5,
+        "description": "elapsed_time 专用: 开始钟面的分钟数 (5 分钟步长, 0/5/10/15/20/25/30/35/40/45/50/55)."
+      },
+      "end_hour": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 12,
+        "description": "elapsed_time 专用: 结束钟面的小时数 (1-12 整数, 12 小时制). 必须与 end_minute 配合, 不能单独使用."
+      },
+      "end_minute": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 55,
+        "multipleOf": 5,
+        "description": "elapsed_time 专用: 结束钟面的分钟数 (5 分钟步长, 0/5/10/15/20/25/30/35/40/45/50/55)."
+      },
       "correct_answer": {
         "type": ["string", "number"],
-        "description": "正确答案. arithmetic=数字 e.g. 5. shape=英文形状名 e.g. circle / square / triangle. comparison=比较运算符 e.g. 「>」. time=数字时钟字符串 e.g. 「3:30」 或 「12:00」, 必须与 clock_hour/clock_minute 一致, 5 分钟步长."
+        "description": "正确答案. arithmetic=数字 e.g. 5. shape=英文形状名 e.g. circle / square / triangle. comparison=比较运算符 e.g. 「>」. time=数字时钟字符串 e.g. 「3:30」 或 「12:00」, 必须与 clock_hour/clock_minute 一致, 5 分钟步长. elapsed_time=时长字符串 e.g. 「1 小时 30 分」 或 「30 分」, 必须与 start_hour/start_minute/end_hour/end_minute 计算结果一致."
       },
       "options": {
         "type": "array",
         "items": { "type": ["string", "number"] },
-        "description": "3-4 个选项. arithmetic 用数字; shape 用英文形状名; time 用数字时钟字符串 (H:MM, 5 分钟步长). comparison 一般留空, 用 operator_options 替代. 必须包含正确答案, 打乱顺序."
+        "description": "3-4 个选项. arithmetic 用数字; shape 用英文形状名; time 用数字时钟字符串 (H:MM, 5 分钟步长); elapsed_time 用时长字符串 (X 小时 Y 分 格式). comparison 一般留空, 用 operator_options 替代. 必须包含正确答案, 打乱顺序."
       },
       "skill_key": {
         "type": "string",
@@ -1508,7 +1544,7 @@ function createMathQuizToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     MATH_QUIZ_TOOL_ID,
-    'Present a math quiz to the child as an interactive game card on screen. Use this INSTEAD of writing math problems in plain text. Set the type field: arithmetic=加减乘除算术题, shape=图形认知, comparison=大小比较, time=时间认知. Provide 3-4 options including the correct answer. For comparison, fill left_value/right_value and operator_options, leave options empty. For time questions, also fill clock_hour (1-12) and clock_minute (5-minute step: 0/5/.../55) so the card can render an analog clock face.',
+    'Present a math quiz to the child as an interactive game card on screen. Use this INSTEAD of writing math problems in plain text. Set the type field: arithmetic=加减乘除算术题 (含应用题), shape=图形认知, comparison=大小比较, time=时间认知-读时间, elapsed_time=时间认知-计时经过. Provide 3-4 options including the correct answer. For comparison, fill left_value/right_value and operator_options, leave options empty. For time questions, also fill clock_hour (1-12) and clock_minute (5-minute step: 0/5/.../55) so the card can render an analog clock face. For arithmetic word problems, set word_problem=true and write the scenario in question (e.g. 「桌上有 3 个苹果, 再放 2 个, 一共几个呀」); leave expression empty. For elapsed_time questions, set type=elapsed_time and fill start_hour (1-12), start_minute (5-min step), end_hour (1-12), end_minute (5-min step). The correct_answer and options are duration strings like 「1 小时 30 分」,「30 分」,「2 小时」.',
     parameters
   )
 
