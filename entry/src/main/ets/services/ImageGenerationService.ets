@@ -158,6 +158,13 @@ interface MinimaxImageStyle {
   style_weight: number
 }
 
+// MiniMax image-01 style_type 白名单。来源: minimaxi 公开 API 文档。
+// LLM 经常自由发挥(如 "children illustration"), API 端会直接拒掉整个请求;
+// 在此处做白名单校验, 不在列表里的值直接丢弃 style 块(仍可正常出图)。
+const MINIMAX_VALID_STYLES: Set<string> = new Set<string>([
+  '漫画', '元气', '中世纪', '水彩'
+])
+
 interface MinimaxImageGenerationBody {
   model: string
   prompt: string
@@ -443,10 +450,10 @@ export class ImageGenerationService {
     if (request.seed >= 0) {
       body.seed = request.seed
     }
-    if (request.styleType.trim() !== '') {
+    if (request.styleType.trim() !== '' && model.id == 'image-01-live') {
       const style: MinimaxImageStyle = {
         style_type: request.styleType.trim(),
-        style_weight: request.styleWeight > 0 ? request.styleWeight : 50
+        style_weight: request.styleWeight > 0 ? request.styleWeight : 0.5
       }
       body.style = style
     }
@@ -488,11 +495,17 @@ export class ImageGenerationService {
       body.seed = request.seed
     }
     if (request.styleType.trim() !== '') {
-      const style: MinimaxImageStyle = {
-        style_type: request.styleType.trim(),
-        style_weight: request.styleWeight > 0 ? request.styleWeight : 50
+      const styleType = request.styleType.trim()
+      if (MINIMAX_VALID_STYLES.has(styleType)) {
+        const style: MinimaxImageStyle = {
+          style_type: styleType,
+          style_weight: request.styleWeight > 0 ? request.styleWeight : 50
+        }
+        body.style = style
+      } else {
+        console.warn('ImageGenerationService',
+          `editMinimax: dropping unsupported style_type: "${styleType}"`)
       }
-      body.style = style
     }
     const response = await this.rcpClient.postJson(
       this.buildOpenAIImageUrl(provider, '/image_generation'),

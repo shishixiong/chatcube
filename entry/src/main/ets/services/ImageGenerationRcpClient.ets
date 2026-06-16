@@ -1,5 +1,6 @@
 import { rcp } from '@kit.RemoteCommunicationKit'
 import { BusinessError } from '@kit.BasicServicesKit'
+import { util } from '@kit.ArkTS'
 import { HttpRequestController, HttpResponse } from './HttpService'
 
 const IMAGE_GEN_CONNECT_TIMEOUT_MS = 15000
@@ -183,9 +184,16 @@ export class ImageGenerationRcpClient {
   private toHttpResponse(response: rcp.Response): HttpResponse {
     let data = ''
     try {
-      const text = response.toString()
-      data = text !== null ? text : ''
-    } catch (_error) {
+      // rcp.Response.body 是 ArrayBuffer | undefined。response.toString() 不会返回 body 文本,
+      // 会触发本侧 try/catch 吞掉异常,导致 data='';下游 JSON.parse('') 抛
+      // "Unexpected end of JSON input",最终被 JSON.stringify(error) 吞成 "{}" 看不到原因。
+      const body = response.body
+      if (body !== undefined && body !== null) {
+        data = new util.TextDecoder('utf-8').decodeToString(new Uint8Array(body))
+      }
+    } catch (error) {
+      const err = error as BusinessError
+      console.error('ImageGenRcp', `toHttpResponse decode failed: ${err.message ?? String(error)}`)
       data = ''
     }
     const success = response.statusCode >= 200 && response.statusCode < 300

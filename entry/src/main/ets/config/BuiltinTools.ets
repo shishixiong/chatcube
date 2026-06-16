@@ -726,8 +726,10 @@ class ImageGenerationExecutor implements ToolExecutor {
 
       return JSON.stringify(new ImageGenerationOutput(outputItems))
     } catch (error) {
-      console.error('ImageGenerationExecutor', `Image generation error: ${JSON.stringify(error)}`)
-      return JSON.stringify(new ImageGenErrorOutput(`图片生成失败: ${JSON.stringify(error)}`))
+      const err = error as BusinessError
+      const detail = err.message !== undefined && err.message !== '' ? err.message : String(error)
+      console.error('ImageGenerationExecutor', `Image generation error: ${detail}`)
+      return JSON.stringify(new ImageGenErrorOutput(`图片生成失败: ${detail}`))
     }
   }
 }
@@ -752,7 +754,7 @@ function createImageGenerationToolDefinition(): ToolDefinition {
   ))
   parameters.addProperty('style', new ToolParameterProperty(
     'string',
-    'Optional style description for the image, e.g. "photorealistic", "oil painting", "anime", "watercolor".'
+    'Optional image style. Must be one of the MiniMax-supported Chinese values: 漫画, 元气, 中世纪, 水彩. If omitted or unknown, the image is generated without a style hint.'
   ))
   parameters.addRequired('prompt')
 
@@ -1723,7 +1725,7 @@ function createHuarongdaoToolDefinition(): ToolDefinition {
     "properties": {
       "difficulty": {
         "type": "number",
-        "description": "难度等级 1-5。1使用2×2棋盘(3数字)，2-3使用3×3棋盘(8数字), 4-5使用4×4棋盘(15数字)。根据 child_profile 中 logic_thinking 和 observation 的 level 选择合适难度。",
+        "description": "难度等级 2-5 推荐使用(1 为兜底,实际映射到 3×3)。2 = 幼儿 · 2×2(3 数字), 3 = 简单 · 3×3(8 数字), 4 = 进阶 · 4×4(15 数字), 5 = 挑战 · 5×5(24 数字)。根据 child_profile 中 logic_thinking 和 observation 的 level 选择合适难度。",
         "enum": [1, 2, 3, 4, 5]
       }
     },
@@ -1735,7 +1737,7 @@ function createHuarongdaoToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     HUARONGDAO_TOOL_ID,
-    'Present a number sliding puzzle (数字华容道) to the child as an interactive game. A grid of numbered tiles is shuffled, and the child slides tiles into the empty space to arrange them in order. Difficulty directly maps to grid size: 1=3×3 (fallback, 8 numbers), 2=2×2 (toddler, 3 numbers), 3=3×3 (easy, 8 numbers), 4=4×4 (intermediate, 15 numbers), 5=5×5 (challenging, 24 numbers). Use difficulty based on the child\'s logic_thinking and observation levels from child_profile. After completion or giving up, you receive result (moves, time, completed). Then call child_profile update to record logic_thinking, observation, and spatial_reasoning based on performance.',
+    'Present a number sliding puzzle (数字华容道) to the child as an interactive game. A grid of numbered tiles is shuffled, and the child slides tiles into the empty space to arrange them in order. Difficulty directly maps to grid size: 1=3×3 (fallback, 8 numbers), 2=2×2 (toddler, 3 numbers), 3=3×3 (easy, 8 numbers), 4=4×4 (intermediate, 15 numbers), 5=5×5 (challenging, 24 numbers). Prefer difficulty 2-5 based on the child\'s logic_thinking and observation levels from child_profile. After completion or giving up, you receive result (moves, time, completed). Then call child_profile update to record logic_thinking, observation, and spatial_reasoning based on performance.',
     parameters
   )
 
