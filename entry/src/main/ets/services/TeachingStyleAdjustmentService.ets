@@ -27,6 +27,7 @@ import {
 import { getDatabaseService } from './DatabaseService'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
+import { SHARED_OVERRIDE_HEADER } from '../utils/SharedPromptFragments'
 
 // 默认有效期：14 天
 const DEFAULT_EXPIRES_DAYS = 14
@@ -205,6 +206,7 @@ export class TeachingStyleAdjustmentService {
     const lines: string[] = []
     lines.push(`## 今日教学风格 (评估于 ${adj.effectiveDate})`)
     lines.push('')
+    lines.push(SHARED_OVERRIDE_HEADER)
     lines.push(`- 出题难度: ${this.difficultyLabel(adj.difficultyTendency)} (${adj.difficultyRationale})`)
     lines.push(`- 反馈语气: ${this.feedbackToneLabel(adj.feedbackTone)} (${adj.feedbackRationale})`)
     lines.push(`- 弱强比重: ${this.balanceLabel(adj.weakStrongBalance)} (${adj.balanceRationale})`)

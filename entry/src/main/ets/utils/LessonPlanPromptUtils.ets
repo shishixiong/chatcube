@@ -17,6 +17,7 @@ import {
   LessonPlanWritingItem,
   LessonPlanGeneralItem
 } from '../models/LessonPlanModels'
+import { SHARED_OVERRIDE_HEADER } from './SharedPromptFragments'
 
 /**
  * 备课老师 system prompt。
@@ -127,6 +128,7 @@ export function renderDailyPlanSection(plan: LessonPlan, planDate: string, weekd
   const lines: string[] = []
   lines.push(`## 今日教学目标 (${planDate}, 星期${weekday})`)
   lines.push('')
+  lines.push(SHARED_OVERRIDE_HEADER)
   if (plan.themeTitle !== '') {
     lines.push(`主题: ${plan.themeTitle}`)
   }
@@ -193,6 +195,7 @@ export function renderYesterdaySummarySection(plan: LessonPlan, planDate: string
   const lines: string[] = []
   lines.push(`## 昨日 (${planDate}) 教学小结`)
   lines.push('')
+  lines.push(SHARED_OVERRIDE_HEADER)
   if (plan.themeTitle !== '') {
     lines.push(`主题: ${plan.themeTitle}`)
   }
