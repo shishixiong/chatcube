@@ -30,7 +30,8 @@ import {
 } from '../utils/SearchToolIdentityUtils'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
-import { getEnglishQuizImageIndex, EnglishQuizImageIndex } from './EnglishQuizImageIndex'
+import { getImageIndexService, ImageIndexService } from './ImageIndexService'
+import { ImageSource } from '../models/ImageIndexModels'
 import { generatePuzzle } from '../utils/HuarongdaoPuzzleGenerator'
 import { ServiceRegistry } from './ServiceRegistry'
 import { modelSupportsVision } from './registry/ModelAbilityRegistry'
@@ -653,24 +654,59 @@ export class ToolExecutionService {
         console.info('ToolExecutionService',
           `english_quiz image resolution start: question="${question}", questionType="${questionType}", answer="${answer}", imagePrompt="${imagePrompt.substring(0, 80)}..."`)
 
-        const imageIndex = getEnglishQuizImageIndex()
+        // 三层查找：英语题本地缓存 → 备课预生成图 → 现生图
+        const imageIndex = getImageIndexService()
+        const quizKey = ImageIndexService.buildEnglishQuizKey(word, sentence)
         let imagePath = ''
 
-        const cached = await imageIndex.lookup(word, sentence)
-        if (cached !== null && cached.filePath !== '') {
-          imagePath = cached.filePath
-          console.info('ToolExecutionService', `english_quiz cache HIT: key="${EnglishQuizImageIndex.buildKey(word, sentence)}"`)
-        } else if (imagePrompt !== '') {
-          console.info('ToolExecutionService', 'english_quiz cache miss, starting API generation...')
-          const generated = await imageIndex.generate(word, sentence, imagePrompt)
+        // Tier 1: 英语题本地缓存（包含过去的现生图 + 写回后的备课图）
+        const quizHit = await imageIndex.findByKey(ImageSource.ENGLISH_QUIZ, quizKey)
+        if (quizHit !== null && quizHit.filePath !== '') {
+          imagePath = quizHit.filePath
+          console.info('ToolExecutionService',
+            `english_quiz tier1 quizCache HIT: key="${quizKey}"`)
+        } else if (questionType !== 'sentence' && word !== '' && imagePrompt !== '') {
+          // Tier 2: 备课预生成图（仅单词题有干净映射；句子题走 Tier 3 兜底）
+          const topicKey = `vocab.${word.toLowerCase().trim()}`
+          console.info('ToolExecutionService',
+            `english_quiz tier1 miss, checking lesson_plan: topicKey="${topicKey}"`)
+          try {
+            const planHit = await imageIndex.findByKey(ImageSource.LESSON_PLAN, topicKey)
+            if (planHit !== null && planHit.filePath !== '') {
+              imagePath = planHit.filePath
+              // 写回 Tier 1，下次同词秒开
+              await imageIndex.putEntry(ImageSource.ENGLISH_QUIZ, quizKey, planHit.filePath,
+                planHit.prompt !== '' ? planHit.prompt : imagePrompt,
+                planHit.mimeType,
+                { revisedPrompt: planHit.revisedPrompt })
+              await imageIndex.markConsumed(planHit.id)
+              console.info('ToolExecutionService',
+                `english_quiz tier2 lessonPlan HIT: topicKey="${topicKey}", id="${planHit.id}"`)
+            } else {
+              console.info('ToolExecutionService',
+                `english_quiz tier2 lessonPlan MISS: topicKey="${topicKey}"`)
+            }
+          } catch (e) {
+            console.error('ToolExecutionService',
+              `english_quiz tier2 error: ${JSON.stringify(e)}`)
+          }
+        }
+
+        // Tier 3: 现生图（兜底）
+        if (imagePath === '' && imagePrompt !== '') {
+          console.info('ToolExecutionService',
+            `english_quiz tiers 1+2 miss, generating: key="${quizKey}"`)
+          const generated = await imageIndex.generateAndStore(ImageSource.ENGLISH_QUIZ, quizKey, imagePrompt)
           if (generated !== null) {
             imagePath = generated.filePath
-            console.info('ToolExecutionService', `english_quiz generation SUCCESS: path="${imagePath}"`)
+            console.info('ToolExecutionService',
+              `english_quiz tier3 generation SUCCESS: path="${imagePath}"`)
           } else {
-            console.error('ToolExecutionService', 'english_quiz generation FAILED: generate() returned null')
+            console.error('ToolExecutionService', 'english_quiz tier3 generation FAILED')
           }
-        } else {
-          console.warn('ToolExecutionService', 'english_quiz: no cache hit and imagePrompt is empty, cannot generate')
+        } else if (imagePath === '' && imagePrompt === '') {
+          console.warn('ToolExecutionService',
+            'english_quiz: no cache hit and imagePrompt empty, cannot generate')
         }
 
         if (imagePath !== '') {

@@ -15,7 +15,8 @@ import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { SpeechRecognitionCallback } from '../services/SpeechRecognitionService'
 import { ServiceRegistry } from '../services/ServiceRegistry'
-import { getEnglishQuizImageIndex } from '../services/EnglishQuizImageIndex'
+import { getImageIndexService, ImageIndexService } from '../services/ImageIndexService'
+import { ImageSource } from '../models/ImageIndexModels'
 import { common } from '@kit.AbilityKit'
 
 interface EnglishQuizQuestion {
@@ -167,15 +168,17 @@ export struct EnglishQuizCard {
 
   /**
    * 异步解析图片路径:
-   * 1. 先从 toolCall.arguments 的 image_path 读取 (handleEnglishQuiz 可能已注入)
-   * 2. 没有则通过 EnglishQuizImageIndex 查缓存
-   * 3. 缓存未命中则延迟 3s 后自行调用 generate (给 handleEnglishQuiz 优先权)
-   * 4. 30s 超时兜底
+   * 1. 先从 toolCall.arguments 的 image_path 读取 (handleEnglishQuiz 同步注入)
+   * 2. 没有则走 ImageIndexService（统一数据访问层）：
+   *    - Tier 1: 查 ENGLISH_QUIZ 缓存
+   *    - Tier 2: 查 LESSON_PLAN 备课图（仅单词题）+ 写回 ENGLISH_QUIZ 缓存
+   *    - Tier 3: 调 generateAndStore 现生图 + 落库
+   * 3. 120s 超时兜底（防御性保留；正常路径 handler 已同步注入）
    */
   private resolveImage(): void {
     const quiz = this.parseQuiz()
 
-    // 已有 image_path (由 handleEnglishQuiz 注入或缓存命中)
+    // 已有 image_path (由 handleEnglishQuiz 注入)
     if (quiz.imagePath !== '') {
       this.resolvedImagePath = quiz.imagePath
       this.displayImagePath = quiz.imagePath
@@ -183,88 +186,103 @@ export struct EnglishQuizCard {
       return
     }
 
-    // 无需加载图片的场景 (没有 word/sentence 也没 imagePrompt)
+    // 无需加载图片的场景
     if (quiz.word === '' && quiz.sentence === '' && quiz.imagePrompt === '') {
       console.warn('EnglishQuizCard', 'No word, sentence, or imagePrompt in quiz data')
       return
     }
 
-    // 开始异步加载: 先查缓存
+    // 走 ImageIndexService
     this.isImageLoading = true
     const word = quiz.word
     const sentence = quiz.sentence
     const imagePrompt = quiz.imagePrompt
 
     console.info('EnglishQuizCard',
-      `Starting cache lookup: word="${word}", sentence="${sentence}", imagePrompt="${imagePrompt.substring(0, 60)}..."`)
+      `Starting image resolution: word="${word}", sentence="${sentence}", imagePrompt="${imagePrompt.substring(0, 60)}..."`)
 
-    getEnglishQuizImageIndex().lookup(word, sentence).then((cached) => {
-      if (cached !== null && cached.filePath !== '') {
-        this.resolvedImagePath = cached.filePath
-        this.displayImagePath = cached.filePath
+    // 启动 120s 超时定时器（防御性兜底；正常路径 handler 已同步注入）
+    this.imageLoadTimer = setTimeout(() => {
+      if (this.isImageLoading && this.resolvedImagePath === '') {
+        const finalQuiz = this.parseQuiz()
+        if (finalQuiz.imagePath === '') {
+          console.error('EnglishQuizCard', 'Image load timed out after 120s - showing error state')
+          this.isImageLoading = false
+          this.imageLoadFailed = true
+        } else {
+          this.resolvedImagePath = finalQuiz.imagePath
+          this.displayImagePath = finalQuiz.imagePath
+          this.isImageLoading = false
+          console.info('EnglishQuizCard', `Image resolved at timeout check: ${finalQuiz.imagePath}`)
+        }
+      }
+    }, 120000)
+
+    const imageIndex = getImageIndexService()
+    const quizKey = ImageIndexService.buildEnglishQuizKey(word, sentence)
+
+    const finishWith = (filePath: string, source: string): void => {
+      if (this.resolvedImagePath === '' && filePath !== '') {
+        this.resolvedImagePath = filePath
+        this.displayImagePath = filePath
         this.isImageLoading = false
-        console.info('EnglishQuizCard', `Cache HIT: ${cached.filePath}`)
+        console.info('EnglishQuizCard',
+          `Image resolved via ${source}: ${filePath}`)
+      }
+    }
+
+    const handleError = (e: Error, phase: string): void => {
+      console.error('EnglishQuizCard', `Image resolution ${phase} exception: ${e.message}`)
+    }
+
+    // Tier 1: ENGLISH_QUIZ 缓存
+    imageIndex.findByKey(ImageSource.ENGLISH_QUIZ, quizKey).then((hit) => {
+      if (hit !== null && hit.filePath !== '') {
+        finishWith(hit.filePath, 'Tier1 quizCache')
         return
       }
-      // 缓存未命中: 等待 3s 给 handleEnglishQuiz 优先权, 然后自行生成
-      console.info('EnglishQuizCard', 'Cache miss, will try generation in 3s as fallback')
-      setTimeout(() => {
-        // 检查 handleEnglishQuiz 是否已经解决了图片
-        const currentQuiz = this.parseQuiz()
-        if (currentQuiz.imagePath !== '') {
-          this.resolvedImagePath = currentQuiz.imagePath
-          this.displayImagePath = currentQuiz.imagePath
-          this.isImageLoading = false
-          console.info('EnglishQuizCard', `Image already injected by handleEnglishQuiz: ${currentQuiz.imagePath}`)
-          return
-        }
-        if (this.resolvedImagePath !== '') {
-          // 已经通过其他方式解决了
-          this.isImageLoading = false
-          return
-        }
-        // 自行生成
-        if (imagePrompt !== '') {
-          console.info('EnglishQuizCard', 'Starting fallback generation...')
-          getEnglishQuizImageIndex().generate(word, sentence, imagePrompt).then((generated) => {
-            if (generated !== null && generated.filePath !== '') {
-              this.resolvedImagePath = generated.filePath
-              this.displayImagePath = generated.filePath
-              this.isImageLoading = false
-              console.info('EnglishQuizCard', `Fallback generation SUCCESS: ${generated.filePath}`)
-            } else {
-              console.error('EnglishQuizCard', 'Fallback generation FAILED: generate() returned null')
-              // 不立即设置 error, 给 handleEnglishQuiz 更多时间 (由 30s 超时处理)
-            }
-          }).catch((err: Error) => {
-            console.error('EnglishQuizCard', `Fallback generation exception: ${err.message}`)
-          })
-        } else {
-          console.warn('EnglishQuizCard', 'No imagePrompt available for generation')
-        }
-      }, 3000)
-
-      // 启动 30s 超时定时器
-      this.imageLoadTimer = setTimeout(() => {
-        if (this.isImageLoading && this.resolvedImagePath === '') {
-          const finalQuiz = this.parseQuiz()
-          if (finalQuiz.imagePath === '') {
-            console.error('EnglishQuizCard', 'Image load timed out after 30s - showing error state')
-            this.isImageLoading = false
-            this.imageLoadFailed = true
-          } else {
-            // handleEnglishQuiz 最终注入了路径
-            this.resolvedImagePath = finalQuiz.imagePath
-            this.displayImagePath = finalQuiz.imagePath
-            this.isImageLoading = false
-            console.info('EnglishQuizCard', `Image resolved at timeout check: ${finalQuiz.imagePath}`)
+      // Tier 2: LESSON_PLAN 备课图（仅单词题）+ 写回 ENGLISH_QUIZ
+      const isWordQuiz = sentence === '' && word !== ''
+      if (isWordQuiz && imagePrompt !== '') {
+        const topicKey = `vocab.${word.toLowerCase().trim()}`
+        imageIndex.findByKey(ImageSource.LESSON_PLAN, topicKey).then((planHit) => {
+          if (planHit !== null && planHit.filePath !== '') {
+            finishWith(planHit.filePath, `Tier2 lessonPlan(${topicKey})`)
+            // 写回 + 标记消费（best-effort；失败不影响主流程）
+            imageIndex.putEntry(ImageSource.ENGLISH_QUIZ, quizKey, planHit.filePath,
+              planHit.prompt !== '' ? planHit.prompt : imagePrompt,
+              planHit.mimeType,
+              { revisedPrompt: planHit.revisedPrompt })
+              .then(() => imageIndex.markConsumed(planHit.id))
+              .catch((e: Error) => handleError(e, 'Tier2 markConsumed'))
+            return
           }
-        }
-      }, 120000)
-    }).catch((error: Error) => {
-      console.error('EnglishQuizCard', `Cache lookup exception: ${error.message}`)
-      // 不清除 isImageLoading, 给 handleEnglishQuiz 和 fallback generation 机会
-    })
+          // Tier 3: 现生图
+          if (imagePrompt !== '') {
+            imageIndex.generateAndStore(ImageSource.ENGLISH_QUIZ, quizKey, imagePrompt)
+              .then((gen) => {
+                if (gen !== null) {
+                  finishWith(gen.filePath, 'Tier3 generate')
+                } else {
+                  console.error('EnglishQuizCard', 'Tier3 generation returned null')
+                }
+              })
+              .catch((e: Error) => handleError(e, 'Tier3 generate'))
+          }
+        }).catch((e: Error) => handleError(e, 'Tier2 lookup'))
+      } else if (imagePrompt !== '') {
+        // sentence 题或无 word：直接走 Tier 3
+        imageIndex.generateAndStore(ImageSource.ENGLISH_QUIZ, quizKey, imagePrompt)
+          .then((gen) => {
+            if (gen !== null) {
+              finishWith(gen.filePath, 'Tier3 generate (no lesson plan path)')
+            } else {
+              console.error('EnglishQuizCard', 'Tier3 generation returned null')
+            }
+          })
+          .catch((e: Error) => handleError(e, 'Tier3 generate'))
+      }
+    }).catch((e: Error) => handleError(e, 'Tier1 lookup'))
   }
 
   private parseQuiz(): EnglishQuizQuestion {

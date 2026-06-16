@@ -56,7 +56,6 @@ import { getAppSettingsState } from '../state/AppSettingsState'
 import { getEffectiveOutputMode } from '../utils/ModelCapabilityDeriver'
 import { getChildProfileService, ChildProfileService, ChildKnowledgeProfile } from '../services/ChildProfileService'
 import { evaluateMathExpression } from '../utils/MathExpressionParser'
-import { getEnglishQuizImageIndex } from '../services/EnglishQuizImageIndex'
 import { generatePuzzle, HuarongdaoPuzzleState } from '../utils/HuarongdaoPuzzleGenerator'
 
 
@@ -1569,8 +1568,8 @@ function createMathQuizToolConfig(): ToolConfig {
 
 // ===== english_quiz 工具 =====
 // 英语看图说话工具：让 AI 出示图片，小朋友通过语音或文字说出对应的英语单词/句子。
-// 图片优先从本地缓存加载（EnglishQuizImageIndex），缓存未命中时调用图片生成 API。
-// 交互由前端 EnglishQuizCard 组件处理，与 math_quiz 模式类似。
+// 图片优先从本地缓存加载（ImageIndexService 统一数据访问层：ENGLISH_QUIZ + LESSON_PLAN 双源），
+// 缓存未命中时调用图片生成 API。交互由前端 EnglishQuizCard 组件处理，与 math_quiz 模式类似。
 
 interface EnglishQuizArgs {
   question: string

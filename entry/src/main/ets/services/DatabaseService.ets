@@ -14,6 +14,7 @@ import { Assistant, DEFAULT_ASSISTANT_ID, createDefaultAssistant, DEFAULT_ASSIST
 import { GeneratedMedia } from '../models/ImageGenerationModels'
 import { StarEventInsert, StarEventRow } from '../models/StarEventModels'
 import { DailyLessonPlanRow, PreparedMediaRow, PlannerStats } from '../models/LessonPlanModels'
+import { ImageIndexRow } from '../models/ImageIndexModels'
 import { deserializeMessageParts, serializeMessageParts } from '../models/MessageParts'
 import { ensureMessageParts, buildMessagePartsFromLegacy } from '../utils/ChatMessagePartsHelper'
 import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
@@ -22,12 +23,79 @@ import { isPresetProvider, getPresetProviderById } from '../config/PresetProvide
 import { AppError, AppErrorCode, toErrorDetail } from '../models/AppError'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
+import { getPreferencesService } from './PreferencesService'
 
 // 数据库配置
 const DB_CONFIG: relationalStore.StoreConfig = {
   name: 'chatbox.db',
   securityLevel: relationalStore.SecurityLevel.S1
 }
+
+// =================== image_index 迁移辅助类型 ===================
+
+/**
+ * 老 EnglishQuizImageIndex Preferences JSON 的单条 entry 结构。
+ * 旧实现是 `Record<key, entry>` 持久化（详见 services/EnglishQuizImageIndex.ets:232-247）。
+ * 注意：旧结构没有 modelId/modelName/providerId/providerName 字段，迁移时这些列留空。
+ */
+interface QuizIndexEntryShape {
+  word: string
+  sentence: string
+  prompt: string
+  filePath: string
+  mimeType: string
+  createdAt: number
+}
+
+/**
+ * 解析老的 EnglishQuizImageIndex JSON。
+ * 返回 null 表示 JSON 格式不可识别（非 Record 或 entry 缺关键字段）。
+ */
+function parseQuizIndexJson(json: string): QuizIndexStoreShape | null {
+  try {
+    const parsed = JSON.parse(json) as Object
+    const record = parsed as Record<string, Object>
+    if (record === null || typeof record !== 'object' || Array.isArray(record)) {
+      return null
+    }
+    const entries: QuizIndexEntryShape[] = []
+    const keys = Object.keys(record)
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i]
+      const entryObj = record[key] as Record<string, Object>
+      if (entryObj === null || typeof entryObj !== 'object') {
+        continue
+      }
+      const entry: QuizIndexEntryShape = {
+        word: (entryObj['word'] as string) ?? '',
+        sentence: (entryObj['sentence'] as string) ?? '',
+        prompt: (entryObj['prompt'] as string) ?? '',
+        filePath: (entryObj['filePath'] as string) ?? '',
+        mimeType: (entryObj['mimeType'] as string) ?? 'image/png',
+        createdAt: (entryObj['createdAt'] as number) ?? 0
+      }
+      entries.push(entry)
+    }
+    return { entries }
+  } catch (e) {
+    console.warn('DatabaseService', `parseQuizIndexJson failed: ${JSON.stringify(e)}`)
+    return null
+  }
+}
+
+interface QuizIndexStoreShape {
+  entries: QuizIndexEntryShape[]
+}
+
+/** runImageIndexMigration 返回值。明确命名类型避免 ArkTS 10605040。 */
+interface ImageIndexMigrationResult {
+  source: number
+  quiz: number
+  deleted: boolean
+}
+
+/** image_index 迁移的空结果常量（避免多处重复内联对象字面量触发 10605038）。 */
+const EMPTY_MIGRATION_RESULT: ImageIndexMigrationResult = { source: 0, quiz: 0, deleted: false }
 
 // 表名常量
 export class TableNames {
@@ -42,6 +110,7 @@ export class TableNames {
   static readonly STAR_EVENTS: string = 'star_events'
   static readonly DAILY_LESSON_PLANS: string = 'daily_lesson_plans'
   static readonly PREPARED_MEDIA: string = 'prepared_media'
+  static readonly IMAGE_INDEX: string = 'image_index'
 	}
 
 // 拼图记录数据接口
@@ -145,6 +214,12 @@ export class DatabaseService {
       this.rdbStore = await relationalStore.getRdbStore(context, DB_CONFIG)
       await this.createTables()
       this.isInitialized = true
+      // 一次性迁移 prepared_media + EnglishQuizImageIndex Preferences → image_index。
+      // fire-and-forget：失败兜底由 runImageIndexMigration 内部 try/catch 兜住，
+      // 不阻塞数据库初始化本身。
+      this.runImageIndexMigration().catch((e: Object) => {
+        console.error('DatabaseService', `runImageIndexMigration crashed: ${JSON.stringify(e)}`)
+      })
     } catch (error) {
       console.error('DatabaseService', `Failed to initialize database: ${JSON.stringify(error)}`)
       throw new AppError(
@@ -409,6 +484,33 @@ export class DatabaseService {
       )
     `
 
+    // 统一图片索引表：替代 EnglishQuizImageIndex Preferences + prepared_media
+    // 两套并行存储。详见 plan: /Users/mac/.claude/plans/adaptive-stirring-feigenbaum.md
+    const createImageIndexTable = `
+      CREATE TABLE IF NOT EXISTS ${TableNames.IMAGE_INDEX} (
+        id TEXT PRIMARY KEY,
+        source TEXT NOT NULL,
+        key TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        prompt TEXT NOT NULL DEFAULT '',
+        revised_prompt TEXT NOT NULL DEFAULT '',
+        provider_id TEXT NOT NULL DEFAULT '',
+        provider_name TEXT NOT NULL DEFAULT '',
+        model_id TEXT NOT NULL DEFAULT '',
+        model_name TEXT NOT NULL DEFAULT '',
+        mime_type TEXT NOT NULL DEFAULT 'image/png',
+        aspect_ratio TEXT NOT NULL DEFAULT 'square',
+        status TEXT NOT NULL DEFAULT 'ready',
+        error_message TEXT NOT NULL DEFAULT '',
+        consumed_count INTEGER NOT NULL DEFAULT 0,
+        last_consumed_at INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL DEFAULT 0,
+        plan_id TEXT,
+        FOREIGN KEY (plan_id) REFERENCES ${TableNames.DAILY_LESSON_PLANS}(id) ON DELETE CASCADE
+      )
+    `
+
     try {
       await this.rdbStore.executeSql(createSessionsTable)
 	      await this.rdbStore.executeSql(createMessagesTable)
@@ -421,6 +523,7 @@ export class DatabaseService {
       await this.rdbStore.executeSql(createStarEventsTable)
       await this.rdbStore.executeSql(createDailyLessonPlansTable)
       await this.rdbStore.executeSql(createPreparedMediaTable)
+      await this.rdbStore.executeSql(createImageIndexTable)
       await this.rdbStore.executeSql(
         `CREATE INDEX IF NOT EXISTS idx_generated_media_created_at ON ${TableNames.GENERATED_MEDIA}(created_at DESC)`
       )
@@ -441,6 +544,15 @@ export class DatabaseService {
       )
       await this.rdbStore.executeSql(
         `CREATE INDEX IF NOT EXISTS idx_prepared_media_expires_at ON ${TableNames.PREPARED_MEDIA}(expires_at)`
+      )
+      await this.rdbStore.executeSql(
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_image_index_source_key ON ${TableNames.IMAGE_INDEX}(source, key)`
+      )
+      await this.rdbStore.executeSql(
+        `CREATE INDEX IF NOT EXISTS idx_image_index_expires_at ON ${TableNames.IMAGE_INDEX}(expires_at)`
+      )
+      await this.rdbStore.executeSql(
+        `CREATE INDEX IF NOT EXISTS idx_image_index_status ON ${TableNames.IMAGE_INDEX}(status)`
       )
       // 尝试添加 sort_order 字段（如果表已存在但没有该字段）
       await this.addSortOrderColumnIfNeeded()
@@ -3877,6 +3989,403 @@ export class DatabaseService {
     row.lastConsumedAt = this.safeGetLong(rs, 'last_consumed_at', 0)
     row.createdAt = this.safeGetLong(rs, 'created_at', 0)
     row.expiresAt = this.safeGetLong(rs, 'expires_at', 0)
+    return row
+  }
+
+  // =================== image_index CRUD ===================
+  //
+  // 统一图片索引：替代 EnglishQuizImageIndex Preferences 缓存 + prepared_media 表的双轨存储。
+  // 详见 plan: /Users/mac/.claude/plans/adaptive-stirring-feigenbaum.md
+
+  /**
+   * 插入或更新 image_index 行。
+   * 唯一约束：(source, key) — 命中已有行时 update，不存在时 insert。
+   * 返回 false 表示写失败或参数非法。
+   */
+  async upsertImageIndex(row: ImageIndexRow): Promise<boolean> {
+    if (this.rdbStore === null) {
+      return false
+    }
+    try {
+      const valueBucket: relationalStore.ValuesBucket = {
+        id: row.id,
+        source: row.source,
+        key: row.key,
+        file_path: row.filePath,
+        prompt: row.prompt,
+        revised_prompt: row.revisedPrompt,
+        provider_id: row.providerId,
+        provider_name: row.providerName,
+        model_id: row.modelId,
+        model_name: row.modelName,
+        mime_type: row.mimeType,
+        aspect_ratio: row.aspectRatio,
+        status: row.status,
+        error_message: row.errorMessage,
+        consumed_count: row.consumedCount,
+        last_consumed_at: row.lastConsumedAt,
+        created_at: row.createdAt,
+        expires_at: row.expiresAt,
+        plan_id: row.planId
+      }
+      const predicates = new relationalStore.RdbPredicates(TableNames.IMAGE_INDEX)
+      predicates.equalTo('id', row.id)
+      const updated = await this.rdbStore.update(valueBucket, predicates)
+      if (updated === 0) {
+        await this.rdbStore.insert(TableNames.IMAGE_INDEX, valueBucket)
+      }
+      return true
+    } catch (error) {
+      console.error('DatabaseService', `Failed to upsert image index: ${JSON.stringify(error)}`)
+      return false
+    }
+  }
+
+  /**
+   * 按 (source, key) 查找最近一张未过期的 ready 行。
+   * 匹配规则：status='ready' AND (expires_at=0 OR expires_at>nowMs)，按 created_at DESC 取最近一条。
+   * 未命中返回 null。
+   */
+  async findImageIndexByKey(source: string, key: string, nowMs: number): Promise<ImageIndexRow | null> {
+    if (this.rdbStore === null || source === '' || key === '') {
+      return null
+    }
+    try {
+      // RdbPredicates 不直接支持 OR 拆解；用两条分查，内存合并取最近一条
+      // 路径 A：expires_at = 0 永不过期
+      const predA = new relationalStore.RdbPredicates(TableNames.IMAGE_INDEX)
+      predA.equalTo('source', source)
+      predA.equalTo('key', key)
+      predA.equalTo('status', 'ready')
+      predA.equalTo('expires_at', 0)
+      predA.orderByDesc('created_at')
+      predA.limitAs(1)
+      const rsA = await this.rdbStore.query(predA)
+      try {
+        if (rsA.goToFirstRow()) {
+          return this.buildImageIndexRowFromResultSet(rsA)
+        }
+      } finally {
+        rsA.close()
+      }
+
+      // 路径 B：expires_at > nowMs 仍有效
+      const predB = new relationalStore.RdbPredicates(TableNames.IMAGE_INDEX)
+      predB.equalTo('source', source)
+      predB.equalTo('key', key)
+      predB.equalTo('status', 'ready')
+      predB.greaterThan('expires_at', nowMs)
+      predB.orderByDesc('created_at')
+      predB.limitAs(1)
+      const rsB = await this.rdbStore.query(predB)
+      try {
+        if (rsB.goToFirstRow()) {
+          return this.buildImageIndexRowFromResultSet(rsB)
+        }
+      } finally {
+        rsB.close()
+      }
+    } catch (error) {
+      console.error('DatabaseService', `Failed to find image index by key: ${JSON.stringify(error)}`)
+    }
+    return null
+  }
+
+  /**
+   * 命中一次 image_index 行：递增 consumed_count + 更新 last_consumed_at。
+   * 行不存在时静默返回（best-effort）。
+   */
+  async markImageIndexConsumed(id: string, nowMs: number): Promise<void> {
+    if (this.rdbStore === null || id === '') {
+      return
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.IMAGE_INDEX)
+      predicates.equalTo('id', id)
+      const current = await this.findImageIndexById(id)
+      const nextCount = (current?.consumedCount ?? 0) + 1
+      const valueBucket: relationalStore.ValuesBucket = {
+        consumed_count: nextCount,
+        last_consumed_at: nowMs
+      }
+      await this.rdbStore.update(valueBucket, predicates)
+    } catch (error) {
+      console.error('DatabaseService', `Failed to mark image index consumed: ${JSON.stringify(error)}`)
+    }
+  }
+
+  private async findImageIndexById(id: string): Promise<ImageIndexRow | null> {
+    if (this.rdbStore === null) {
+      return null
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.IMAGE_INDEX)
+      predicates.equalTo('id', id)
+      const resultSet = await this.rdbStore.query(predicates)
+      try {
+        if (resultSet.goToFirstRow()) {
+          return this.buildImageIndexRowFromResultSet(resultSet)
+        }
+      } finally {
+        resultSet.close()
+      }
+    } catch (_e) {
+      return null
+    }
+    return null
+  }
+
+  /**
+   * 列出已过期的 image_index 行（expires_at > 0 AND expires_at < nowMs），
+   * 调用方可先删文件再调 deleteExpiredImageIndex 删行。
+   */
+  async listExpiredImageIndex(nowMs: number): Promise<ImageIndexRow[]> {
+    const result: ImageIndexRow[] = []
+    if (this.rdbStore === null) {
+      return result
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.IMAGE_INDEX)
+      predicates.greaterThan('expires_at', 0)
+      predicates.lessThan('expires_at', nowMs)
+      const resultSet = await this.rdbStore.query(predicates)
+      try {
+        while (resultSet.goToNextRow()) {
+          result.push(this.buildImageIndexRowFromResultSet(resultSet))
+        }
+      } finally {
+        resultSet.close()
+      }
+    } catch (error) {
+      console.error('DatabaseService', `Failed to list expired image index: ${JSON.stringify(error)}`)
+    }
+    return result
+  }
+
+  /** 删除已过期的 image_index 行（expires_at > 0 AND expires_at < nowMs）。返回删除条数。 */
+  async deleteExpiredImageIndex(nowMs: number): Promise<number> {
+    if (this.rdbStore === null) {
+      return 0
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.IMAGE_INDEX)
+      predicates.greaterThan('expires_at', 0)
+      predicates.lessThan('expires_at', nowMs)
+      return await this.rdbStore.delete(predicates)
+    } catch (error) {
+      console.error('DatabaseService', `Failed to delete expired image index: ${JSON.stringify(error)}`)
+      return 0
+    }
+  }
+
+  /** 按 source 列出最近的 image_index 行（按 created_at DESC），limit 截断。 */
+  async listImageIndexBySource(source: string, limit: number): Promise<ImageIndexRow[]> {
+    const result: ImageIndexRow[] = []
+    if (this.rdbStore === null || source === '') {
+      return result
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.IMAGE_INDEX)
+      predicates.equalTo('source', source)
+      predicates.orderByDesc('created_at')
+      predicates.limitAs(limit)
+      const resultSet = await this.rdbStore.query(predicates)
+      try {
+        while (resultSet.goToNextRow()) {
+          result.push(this.buildImageIndexRowFromResultSet(resultSet))
+        }
+      } finally {
+        resultSet.close()
+      }
+    } catch (error) {
+      console.error('DatabaseService', `Failed to list image index by source: ${JSON.stringify(error)}`)
+    }
+    return result
+  }
+
+  /** 按 (source, key) 删除 image_index 行。返回是否删除了至少一条。 */
+  async deleteImageIndexByKey(source: string, key: string): Promise<boolean> {
+    if (this.rdbStore === null || source === '' || key === '') {
+      return false
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.IMAGE_INDEX)
+      predicates.equalTo('source', source)
+      predicates.equalTo('key', key)
+      const deleted = await this.rdbStore.delete(predicates)
+      return deleted > 0
+    } catch (error) {
+      console.error('DatabaseService', `Failed to delete image index by key: ${JSON.stringify(error)}`)
+      return false
+    }
+  }
+
+  /**
+   * 一次性迁移：将老 prepared_media 表 + EnglishQuizImageIndex Preferences
+   * 合并到新的 image_index 表。详见 plan。
+   *
+   * 触发位置：DatabaseService.doInitialize 末尾（fire-and-forget）。
+   * 幂等：依赖 Preferences 标志 IMAGE_INDEX_MIGRATION_DONE。
+   * 失败兜底：单行失败不阻塞后续；最终写标志避免反复重试。
+   */
+  async runImageIndexMigration(): Promise<ImageIndexMigrationResult> {
+    if (this.rdbStore === null) {
+      return EMPTY_MIGRATION_RESULT
+    }
+    // PreferencesService 不依赖 DatabaseService（无循环引用），可直接 import
+    const preferencesService = getPreferencesService()
+
+    const doneKey = 'IMAGE_INDEX_MIGRATION_DONE'
+    const quizKey = 'ENGLISH_QUIZ_IMAGE_INDEX_JSON'
+    try {
+      const alreadyDone: boolean = await preferencesService.getBoolean(doneKey, false)
+      if (alreadyDone) {
+        return EMPTY_MIGRATION_RESULT
+      }
+    } catch (_e) {
+      // 取不到视为未做，继续尝试
+    }
+
+    let sourceCount = 0
+    let quizCount = 0
+
+    // 1) prepared_media → image_index (source='lesson_plan', key=topic_key)
+    try {
+      const preparedRows: PreparedMediaRow[] = []
+      const predA = new relationalStore.RdbPredicates(TableNames.PREPARED_MEDIA)
+      predA.orderByDesc('created_at')
+      const rsA = await this.rdbStore.query(predA)
+      try {
+        while (rsA.goToNextRow()) {
+          preparedRows.push(this.buildPreparedMediaRowFromResultSet(rsA))
+        }
+      } finally {
+        rsA.close()
+      }
+      for (const r of preparedRows) {
+        if (r.topicKey === '' || r.filePath === '') {
+          continue
+        }
+        const newRow = new ImageIndexRow()
+        newRow.id = r.id  // 沿用 prepared_media 的 id（格式 pm_xxx）
+        newRow.source = 'lesson_plan'
+        newRow.key = r.topicKey
+        newRow.filePath = r.filePath
+        newRow.prompt = r.prompt
+        newRow.revisedPrompt = r.revisedPrompt
+        newRow.providerId = r.providerId
+        newRow.providerName = r.providerName
+        newRow.modelId = r.modelId
+        newRow.modelName = r.modelName
+        newRow.mimeType = r.mimeType
+        newRow.aspectRatio = r.aspectRatio
+        newRow.status = r.status
+        newRow.errorMessage = r.errorMessage
+        newRow.consumedCount = r.consumedCount
+        newRow.lastConsumedAt = r.lastConsumedAt
+        newRow.createdAt = r.createdAt
+        newRow.expiresAt = r.expiresAt
+        newRow.planId = r.planId
+        try {
+          await this.upsertImageIndex(newRow)
+          sourceCount += 1
+        } catch (e) {
+          console.warn('DatabaseService', `migration: skip prepared row ${r.id}: ${JSON.stringify(e)}`)
+        }
+      }
+    } catch (e) {
+      console.error('DatabaseService', `runImageIndexMigration prepared phase failed: ${JSON.stringify(e)}`)
+    }
+
+    // 2) EnglishQuizImageIndex Preferences JSON → image_index (source='english_quiz', key=entry.key)
+    try {
+      const jsonStr: string = await preferencesService.getString(quizKey, '')
+      if (jsonStr !== '') {
+        // 老 JSON 是 Record<key, entry> 格式；parseQuizIndexJson 把它展平成 entries 数组
+        // （每条 entry 缺 modelId/modelName/providerId/providerName，留空）
+        const parsed: QuizIndexStoreShape | null = parseQuizIndexJson(jsonStr)
+        if (parsed !== null && Array.isArray(parsed.entries) && parsed.entries.length > 0) {
+          const record = JSON.parse(jsonStr) as Record<string, Object>
+          const oldKeys = Object.keys(record)
+          for (let i = 0; i < oldKeys.length; i++) {
+            const oldKey = oldKeys[i]
+            const e = parsed.entries[i]
+            if (e.filePath === '' || e.createdAt === 0) {
+              continue
+            }
+            const newRow = new ImageIndexRow()
+            // 生成新 id（eq_<createdAt>_<key>），保证唯一且与 lesson_plan 命名空间不冲突
+            const safeKey = oldKey.replace(/[^a-z0-9_]/gi, '_').substring(0, 60)
+            newRow.id = `eq_${e.createdAt}_${safeKey}`
+            newRow.source = 'english_quiz'
+            newRow.key = oldKey
+            newRow.filePath = e.filePath
+            newRow.prompt = e.prompt
+            newRow.mimeType = e.mimeType
+            // e.word / e.sentence 仅供调试参考，不写入 image_index（key 已含 w:/s: 前缀）
+            newRow.status = 'ready'
+            newRow.createdAt = e.createdAt
+            newRow.expiresAt = 0  // 永不过期
+            try {
+              await this.upsertImageIndex(newRow)
+              quizCount += 1
+            } catch (innerE) {
+              console.warn('DatabaseService', `migration: skip quiz entry ${oldKey}: ${JSON.stringify(innerE)}`)
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error('DatabaseService', `runImageIndexMigration quiz phase failed: ${JSON.stringify(e)}`)
+    }
+
+    // 3) 写迁移完成标志
+    try {
+      await preferencesService.setBoolean(doneKey, true)
+    } catch (e) {
+      console.error('DatabaseService', `runImageIndexMigration: failed to set done flag: ${JSON.stringify(e)}`)
+    }
+
+    // 4) 删除老的 Preferences JSON（节省空间；与新表重复了）
+    let deleted = false
+    try {
+      await preferencesService.remove(quizKey)
+      deleted = true
+    } catch (e) {
+      console.warn('DatabaseService', `runImageIndexMigration: failed to remove quiz pref: ${JSON.stringify(e)}`)
+    }
+
+    console.info('DatabaseService',
+      `runImageIndexMigration done: lesson_plan=${sourceCount}, english_quiz=${quizCount}, prefRemoved=${deleted}`)
+    const result: ImageIndexMigrationResult = {
+      source: sourceCount,
+      quiz: quizCount,
+      deleted
+    }
+    return result
+  }
+
+  private buildImageIndexRowFromResultSet(rs: relationalStore.ResultSet): ImageIndexRow {
+    const row = new ImageIndexRow()
+    row.id = this.safeGetString(rs, 'id')
+    row.source = this.safeGetString(rs, 'source', 'english_quiz')
+    row.key = this.safeGetString(rs, 'key')
+    row.filePath = this.safeGetString(rs, 'file_path')
+    row.prompt = this.safeGetString(rs, 'prompt')
+    row.revisedPrompt = this.safeGetString(rs, 'revised_prompt')
+    row.providerId = this.safeGetString(rs, 'provider_id')
+    row.providerName = this.safeGetString(rs, 'provider_name')
+    row.modelId = this.safeGetString(rs, 'model_id')
+    row.modelName = this.safeGetString(rs, 'model_name')
+    row.mimeType = this.safeGetString(rs, 'mime_type', 'image/png')
+    row.aspectRatio = this.safeGetString(rs, 'aspect_ratio', 'square')
+    row.status = this.safeGetString(rs, 'status', 'ready')
+    row.errorMessage = this.safeGetString(rs, 'error_message')
+    row.consumedCount = this.safeGetLong(rs, 'consumed_count', 0)
+    row.lastConsumedAt = this.safeGetLong(rs, 'last_consumed_at', 0)
+    row.createdAt = this.safeGetLong(rs, 'created_at', 0)
+    row.expiresAt = this.safeGetLong(rs, 'expires_at', 0)
+    row.planId = this.safeGetString(rs, 'plan_id')
     return row
   }
 }

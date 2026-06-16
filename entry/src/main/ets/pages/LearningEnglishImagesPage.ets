@@ -10,9 +10,9 @@ import {
   getHdsStatusBarContentColor
 } from '../utils/HdsVisualEffectUtil'
 import { AdaptiveImageThumbnail } from '../components/AdaptiveImageThumbnail'
-import { getEnglishQuizImageIndex, EnglishQuizImageEntry } from '../services/EnglishQuizImageIndex'
+import { getImageIndexService } from '../services/ImageIndexService'
 import { getDatabaseService } from '../services/DatabaseService'
-import { PreparedMediaRow } from '../models/LessonPlanModels'
+import { ImageIndexRow, ImageSource } from '../models/ImageIndexModels'
 
 const TAG = 'LearningEnglishImagesPage'
 const GRID_LIMIT: number = 200
@@ -138,14 +138,51 @@ struct LearningEnglishImagesPage {
     this.loadToken = token
     this.isLoading = true
     try {
-      const quizPromise = getEnglishQuizImageIndex().getAllEntries()
-      const planPromise = getDatabaseService().listReadyPreparedMediaByModule('vocab', GRID_LIMIT, Date.now())
-      const quizEntries: EnglishQuizImageEntry[] = await quizPromise
-      const planRows: PreparedMediaRow[] = await planPromise
+      // 统一从 image_index 表取，限 GRID_LIMIT 条；EnglishQuiz 命中后写回的备课图会出现在 quizRows 里
+      const imageIndexService = getImageIndexService()
+      const now = Date.now()
+      const quizRows: ImageIndexRow[] = await imageIndexService
+        .getBySource(ImageSource.ENGLISH_QUIZ, GRID_LIMIT)
+      const planRowsRaw: ImageIndexRow[] = await imageIndexService
+        .getBySource(ImageSource.LESSON_PLAN, GRID_LIMIT)
+      // 老 prepared_media 表里还有历史 row（迁移窗口期），也取一份做兼容
+      let legacyPlanRows: ImageIndexRow[] = []
+      try {
+        const legacy = await getDatabaseService().listReadyPreparedMediaByModule('vocab', GRID_LIMIT, now)
+        // 转换成 ImageIndexRow 形态以便 merge
+        legacyPlanRows = legacy.map((r) => {
+          const row = new ImageIndexRow()
+          row.id = r.id
+          row.source = ImageSource.LESSON_PLAN
+          row.key = r.topicKey
+          row.filePath = r.filePath
+          row.mimeType = r.mimeType
+          row.createdAt = r.createdAt
+          row.expiresAt = r.expiresAt
+          return row
+        })
+      } catch (_e) {
+        // 老表不存在或读失败 → 静默忽略
+      }
       if (token !== this.loadToken) {
         return
       }
-      this.items = this.mergeSources(quizEntries, planRows)
+      // 合并新表 + 老表的 plan rows（去重）
+      const planMap: Map<string, ImageIndexRow> = new Map()
+      for (let i = 0; i < planRowsRaw.length; i++) {
+        const r = planRowsRaw[i]
+        if (r.key.startsWith('vocab.')) {
+          planMap.set(r.filePath, r)
+        }
+      }
+      for (let i = 0; i < legacyPlanRows.length; i++) {
+        const r = legacyPlanRows[i]
+        if (!planMap.has(r.filePath)) {
+          planMap.set(r.filePath, r)
+        }
+      }
+      const planRows: ImageIndexRow[] = Array.from(planMap.values())
+      this.items = this.mergeSources(quizRows, planRows)
     } catch (error) {
       console.error(TAG, `Failed to load images: ${JSON.stringify(error)}`)
       this.items = []
@@ -156,33 +193,36 @@ struct LearningEnglishImagesPage {
     }
   }
 
-  private mergeSources(quizEntries: EnglishQuizImageEntry[], planRows: PreparedMediaRow[]): EnglishImageGalleryItem[] {
+  private mergeSources(quizRows: ImageIndexRow[], planRows: ImageIndexRow[]): EnglishImageGalleryItem[] {
     const merged: EnglishImageGalleryItem[] = []
     const seenFilePaths: Map<string, boolean> = new Map()
 
-    for (let i = 0; i < quizEntries.length; i++) {
-      const e = quizEntries[i]
-      if (e.filePath === '') {
+    for (let i = 0; i < quizRows.length; i++) {
+      const r = quizRows[i]
+      if (r.filePath === '') {
         continue
       }
-      if (seenFilePaths.has(e.filePath)) {
+      if (seenFilePaths.has(r.filePath)) {
         continue
       }
-      seenFilePaths.set(e.filePath, true)
-      const isSentence = e.sentence !== ''
+      seenFilePaths.set(r.filePath, true)
+      // image_index 的 key 形如 'w:apple' / 's:i_like_apples'，从这里反推 word/sentence
+      const isSentence = r.key.startsWith('s:')
+      const word = isSentence ? '' : r.key.substring(2)
+      const sentence = isSentence ? r.key.substring(2).replace(/_/g, ' ') : ''
       const item: EnglishImageGalleryItem = {
-        id: `q_${e.key}`,
+        id: `q_${r.id}`,
         source: isSentence ? EnglishImageSource.QUIZ_SENTENCE : EnglishImageSource.QUIZ_WORD,
-        word: e.word,
-        sentence: e.sentence,
-        filePath: e.filePath,
-        mimeType: e.mimeType,
-        createdAt: e.createdAt,
+        word,
+        sentence,
+        filePath: r.filePath,
+        mimeType: r.mimeType,
+        createdAt: r.createdAt,
         topicKey: '',
         sourceLabel: isSentence
           ? $r('app.string.learning_image_source_quiz_sentence')
           : $r('app.string.learning_image_source_quiz_word'),
-        displayLabel: e.word !== '' ? e.word : e.sentence
+        displayLabel: word !== '' ? word : sentence
       }
       merged.push(item)
     }
@@ -204,9 +244,9 @@ struct LearningEnglishImagesPage {
         filePath: r.filePath,
         mimeType: r.mimeType,
         createdAt: r.createdAt,
-        topicKey: r.topicKey,
+        topicKey: r.key,
         sourceLabel: $r('app.string.learning_image_source_plan'),
-        displayLabel: r.topicKey
+        displayLabel: r.key
       }
       merged.push(item)
     }

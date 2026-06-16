@@ -53,6 +53,8 @@ import { ReasoningRequestStrategy } from './registry/CompatibilityResolver'
 import { getEffectiveApiKey } from '../config/PresetProviders'
 import { getEffectiveCapabilities, getEffectiveOutputMode } from '../utils/ModelCapabilityDeriver'
 import { getAppSettingsState } from '../state/AppSettingsState'
+import { getImageIndexService, ImageIndexService } from './ImageIndexService'
+import { ImageIndexMetadata, ImageSource } from '../models/ImageIndexModels'
 import {
   ChildSnapshot,
   DailyLessonPlan,
@@ -61,7 +63,6 @@ import {
   LessonPlanItemBase,
   LessonPlanStatus,
   PlannerStats,
-  PreparedMediaRow,
   PreparedMediaStatus,
   formatLocalYMD,
   formatLocalYMDCompact,
@@ -235,28 +236,9 @@ export class LessonPlanningService {
 
   private async onInitialized(): Promise<void> {
     try {
-      // 清理过期 prepared_media：先列过期行 → 删沙箱文件 → 删行（避免孤儿文件）
-      const now = Date.now()
-      const expired = await this.databaseService.listExpiredPreparedMedia(now)
-      let fileDeleted = 0
-      for (let i = 0; i < expired.length; i++) {
-        const row = expired[i]
-        if (row.filePath === '') {
-          continue
-        }
-        try {
-          await this.attachmentStorageService.deleteAttachment(row.filePath)
-          fileDeleted += 1
-        } catch (error) {
-          console.warn('LessonPlanningService',
-            `Failed to delete expired file ${row.filePath}: ${JSON.stringify(error)}`)
-        }
-      }
-      const rowDeleted = await this.databaseService.deleteExpiredPreparedMedia(now)
-      if (rowDeleted > 0 || fileDeleted > 0) {
-        console.info('LessonPlanningService',
-          `Expired cleanup: files=${fileDeleted}, rows=${rowDeleted}`)
-      }
+      // 清理过期 image_index：统一在 ImageIndexService.cleanupExpired 里
+      // 串联"列过期行 → 删沙箱文件 → 删行"，避免老 prepared_media 残留孤儿文件。
+      await getImageIndexService().cleanupExpired()
       // 启动补跑：交给 WorkScheduler 也可，但用户首次启动可能未注册
       await this.triggerPlanningForToday(false, 'appStart')
     } catch (error) {
@@ -404,45 +386,20 @@ export class LessonPlanningService {
   // ============================================================
 
   /**
-   * 尝试从预生成图池中"命中"一张与 prompt 关联的图片。
-   *
-   * 策略（按顺序）：
-   * 1. 从 prompt 中提取 `<topic_key>...</topic_key>` 标记，精确匹配
-   * 2. 未命中 → 返回 null（让调用方走实时生成）
-   *
-   * 注意：本方法**不**递增 consumed_count（不在命中处直接持久化）。
-   * 调用方（ImageGenerationExecutor）在确认复用预生成图后，自己
-   * 调用 `markPreparedMediaConsumed(id, now)` 做统计。
-   */
-  async tryConsumePreparedMedia(prompt: string): Promise<PreparedMediaRow | null> {
-    const topicKey = this.extractTopicKeyFromPrompt(prompt)
-    if (topicKey === '') {
-      return null
-    }
-    return await this.findPreparedMediaByTopicKey(topicKey)
-  }
-
-  /**
-   * 按 topicKey 查询最近一张未过期的 ready 预生成图。
-   * - expires_at > now
-   * - 多次命中取最近 created_at
-   */
-  async findPreparedMediaByTopicKey(topicKey: string): Promise<PreparedMediaRow | null> {
-    if (topicKey === '') {
-      return null
-    }
-    return await this.databaseService.findReadyPreparedMediaByTopicKey(topicKey, Date.now())
-  }
-
-  /**
    * 命中一张预生成图后调用：递增 consumed_count + 更新 last_consumed_at。
    * 由 ImageGenerationExecutor 在确认复用预生成图后调用。
+   *
+   * 现已统一走 image_index 表：内部转调 imageIndexService.markConsumed。
+   * 老 prepared_media 表保留仅作 getPlannerStats 兜底统计用，不再接受外部 mark。
+   *
+   * （说明：tryConsumePreparedMedia / findPreparedMediaByTopicKey 已废弃；
+   * image_generation 工具 executor 未来 PR 会直接调 imageIndexService.findByKey）
    */
   async markPreparedMediaConsumed(id: string): Promise<void> {
     if (id === '') {
       return
     }
-    await this.databaseService.markPreparedMediaConsumed(id, Date.now())
+    await getImageIndexService().markConsumed(id)
   }
 
   // ============================================================
@@ -995,7 +952,7 @@ export class LessonPlanningService {
     // 幂等：跳过已存在的 topic_key
     const filtered: PrefetchRequest[] = []
     for (let i = 0; i < requests.length; i++) {
-      const existing = await this.findPreparedMediaByTopicKey(requests[i].topicKey)
+      const existing = await getImageIndexService().findByKey(ImageSource.LESSON_PLAN, requests[i].topicKey)
       if (existing === null) {
         filtered.push(requests[i])
       }
@@ -1114,27 +1071,28 @@ export class LessonPlanningService {
 
   private async persistPrefetchResult(req: PrefetchRequest, planId: string,
     result: PrefetchResult, provider: ModelProvider, model: ModelInfo): Promise<void> {
-    const row = new PreparedMediaRow()
-    row.id = `pm_${planId.replace(/^plan_/, '')}_${req.topicKey.replace(/\./g, '_')}`
-    row.planId = planId
-    row.topicKey = req.topicKey
-    row.topicModule = req.topicModule
-    row.prompt = req.prompt
-    row.revisedPrompt = result.revisedPrompt
-    row.providerId = result.providerId !== '' ? result.providerId : provider.id
-    row.providerName = result.providerName !== '' ? result.providerName : provider.name
-    row.modelId = result.modelId !== '' ? result.modelId : model.id
-    row.modelName = result.modelName !== '' ? result.modelName : (model.name !== '' ? model.name : model.id)
-    row.filePath = result.filePath
-    row.mimeType = result.mimeType
-    row.aspectRatio = result.aspectRatio
-    row.status = result.status
-    row.errorMessage = result.errorMessage
-    row.consumedCount = 0
-    row.lastConsumedAt = 0
-    row.createdAt = Date.now()
-    row.expiresAt = row.createdAt + PREFETCH_TTL_MS
-    await this.databaseService.upsertPreparedMedia(row)
+    // 失败时不写索引（image_index 只缓存 ready 行；findByKey 内部就过滤了 status!='ready'）
+    if (result.status !== PreparedMediaStatus.READY || result.filePath === '') {
+      return
+    }
+    // 统一走 image_index 表（ImageSource.LESSON_PLAN）；TTL 由 putEntry 内部按 source 决定（7 天）
+    const metadata: ImageIndexMetadata = {
+      revisedPrompt: result.revisedPrompt,
+      providerId: result.providerId !== '' ? result.providerId : provider.id,
+      providerName: result.providerName !== '' ? result.providerName : provider.name,
+      modelId: result.modelId !== '' ? result.modelId : model.id,
+      modelName: result.modelName !== '' ? result.modelName : (model.name !== '' ? model.name : model.id),
+      aspectRatio: result.aspectRatio,
+      planId
+    }
+    await getImageIndexService().putEntry(
+      ImageSource.LESSON_PLAN,
+      req.topicKey,
+      result.filePath,
+      req.prompt,
+      result.mimeType,
+      metadata
+    )
   }
 
   // ============================================================
