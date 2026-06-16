@@ -233,6 +233,11 @@ export default class EntryAbility extends UIAbility {
 
       // 初始化备课老师服务（启动补跑今日 plan + 清理过期 prepared_media）
       ServiceRegistry.lessonPlanning().initialize(this.context)
+
+      // 初始化周级趋势 + 教学风格调整 + 评估老师 (3 服务配套备课)
+      ServiceRegistry.weeklyTrend().initialize(this.context)
+      ServiceRegistry.teachingStyle().initialize(this.context)
+      ServiceRegistry.evaluation().initialize(this.context)
     } catch (error) {
       if (error instanceof AppError) {
         hilog.error(

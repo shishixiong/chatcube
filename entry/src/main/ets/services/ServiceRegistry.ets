@@ -26,6 +26,9 @@ import { getStarRewardService, StarRewardService } from './StarRewardService'
 import { getProviderViewModel, ProviderViewModel } from '../viewmodels/ProviderViewModel'
 import { createChatViewModel, ChatViewModel } from '../viewmodels/ChatViewModel'
 import { getLessonPlanningService, LessonPlanningService } from './LessonPlanningService'
+import { getWeeklyTrendService, WeeklyTrendService } from './WeeklyTrendService'
+import { getTeachingStyleAdjustmentService, TeachingStyleAdjustmentService } from './TeachingStyleAdjustmentService'
+import { getEvaluationService, EvaluationService } from './EvaluationService'
 
 // 统一服务装配入口（过渡层），降低上层对具体单例实现的直接耦合
 export class ServiceRegistry {
@@ -139,5 +142,17 @@ export class ServiceRegistry {
 
   static lessonPlanning(): LessonPlanningService {
     return getLessonPlanningService()
+  }
+
+  static weeklyTrend(): WeeklyTrendService {
+    return getWeeklyTrendService()
+  }
+
+  static teachingStyle(): TeachingStyleAdjustmentService {
+    return getTeachingStyleAdjustmentService()
+  }
+
+  static evaluation(): EvaluationService {
+    return getEvaluationService()
   }
 }

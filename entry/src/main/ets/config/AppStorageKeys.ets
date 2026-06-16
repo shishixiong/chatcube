@@ -80,4 +80,12 @@ export class AppStorageKeys {
   // 备课老师（每日动态教学）刷新通知
   // plan 更新时 pulse, ChatViewModel buildRequestSystemPrompt 检测到该值变化时重新拉取
   static readonly LESSON_PLAN_REFRESH_TICK: string = 'lesson_plan_refresh_tick'
+
+  // 教学风格调整（评估老师每日产出）刷新通知
+  // tsa 写入时 pulse, ChatViewModel buildRequestSystemPrompt 检测到该值变化时重新拉取
+  static readonly TEACHING_STYLE_ADJUSTMENT_REFRESH_TICK: string = 'teaching_style_adjustment_refresh_tick'
+
+  // 周级趋势（评估老师每日产出）刷新通知
+  // weekly_trends 写入时 pulse
+  static readonly WEEKLY_TREND_REFRESH_TICK: string = 'weekly_trend_refresh_tick'
 }

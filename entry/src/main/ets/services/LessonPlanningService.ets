@@ -79,6 +79,8 @@ import {
   PlannerSessionSummary,
   summarizeSessionForPlanner
 } from '../utils/SessionSummaryUtils'
+import { getTeachingStyleAdjustmentService } from './TeachingStyleAdjustmentService'
+import { TeachingStyleAdjustmentSummary } from '../models/TeachingReflectionModels'
 import { setAppUiStateValue } from '../state/AppUiState'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 
@@ -342,16 +344,14 @@ export class LessonPlanningService {
   // ============================================================
 
   /**
-   * 获取今日"明日"教学计划（即昨天备课老师生成、今天使用的 plan）。
-   * - planDate = formatLocalYMD(tomorrow)
+   * 获取今日教学计划（即昨天 23:00 备课老师生成、今天使用的 plan）。
+   * - 备课老师在 23:00 跑 runPlanningPipeline(planDate=明天), 所以 DB 里 plan_date = 今日
    * - 仅返回 status='done' 的行
    * - 解析后的 LessonPlan 由 plan_json 反序列化
    */
   async getTodayPlan(): Promise<DailyLessonPlan | null> {
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    const tomorrowYMD = formatLocalYMD(tomorrow)
-    return this.getPlanByDate(tomorrowYMD)
+    const todayYMD = formatLocalYMD(new Date())
+    return this.getPlanByDate(todayYMD)
   }
 
   /**
@@ -413,10 +413,8 @@ export class LessonPlanningService {
    */
   async getPlannerStats(): Promise<PlannerStats> {
     const now = Date.now()
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    const tomorrowYMD = formatLocalYMD(tomorrow)
-    return await this.databaseService.getPlannerStats(now, tomorrowYMD)
+    const todayYMD = formatLocalYMD(new Date())
+    return await this.databaseService.getPlannerStats(now, todayYMD)
   }
 
   // ============================================================
@@ -540,10 +538,15 @@ export class LessonPlanningService {
         : ''
 
       // 6. 调用 LLM 生成 plan
+      // 先读当前 tsa (评估老师产出, 可能为 null)
+      const currentAdj = await getTeachingStyleAdjustmentService().getCurrentAdjustment('', Date.now())
+      const currentStyleSummary: TeachingStyleAdjustmentSummary | null =
+        currentAdj !== null ? getTeachingStyleAdjustmentService().toSummary(currentAdj) : null
       const userInput = JSON.stringify({
         todaysSessions: summaries,
         childProfile: this.buildChildProfileForPlanner(profile),
         yesterdayPlan: yesterdayPlanJson === '' ? null : JSON.parse(yesterdayPlanJson),
+        currentStyleAdjustment: currentStyleSummary,
         planDate: planDate,
         sessionCount: sessions.length,
         todayDate: todayYMD

@@ -106,6 +106,12 @@
             "resource": "$profile:form_config"
           }
         ]
+      },
+      {
+        "name": "EntryWorkPlannerAbility",
+        "srcEntry": "./ets/entryworkplannerability/EntryWorkPlannerAbility.ets",
+        "type": "workScheduler",
+        "exported": false
       }
     ]
   }

@@ -146,6 +146,16 @@ export class PreferenceKeys {
   static readonly PLANNER_TRIGGER_TIME: string = 'planner_trigger_time'
   // 备课老师失败计数前缀（按 YYYYMMDD 区分），用于同日重试上限 3 次
   static readonly PLANNER_FAIL_COUNT_PREFIX: string = 'planner_fail_count_'
+
+  // 评估老师（每日 23:00 教学风格评估）配置
+  // 总开关：关闭后 WorkScheduler 取消注册，setInterval 降级也跳过
+  static readonly EVALUATOR_ENABLED: string = 'evaluator_enabled'
+  // 评估老师失败计数前缀（按 YYYYMMDD 区分），同日重试上限 3 次
+  static readonly EVALUATOR_FAIL_COUNT_PREFIX: string = 'evaluator_fail_count_'
+  // 评估老师最后运行日期（YYYYMMDD），用于 setInterval 降级去重
+  static readonly EVALUATOR_LAST_RUN_DATE: string = 'evaluator_last_run_date'
+  // 评估老师当日最后失败时间戳（毫秒，按 YYYYMMDD 区分），用于 failed 行 30min 重试窗口判断
+  static readonly EVALUATOR_LAST_FAILED_AT_PREFIX: string = 'evaluator_last_failed_at_'
 }
 
 // models.dev 默认基址，PreferenceKeys.MODELS_DEV_BASE_URL 未配置时使用

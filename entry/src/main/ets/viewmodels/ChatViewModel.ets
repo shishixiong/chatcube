@@ -23,6 +23,7 @@ import { getProviderViewModel, ProviderViewModel } from './ProviderViewModel'
 import { getAssistantService, AssistantService, AssistantRuntimeConfig } from '../services/AssistantService'
 import { DEFAULT_ASSISTANT_ID } from '../models/AssistantModels'
 import { getLessonPlanningService } from '../services/LessonPlanningService'
+import { getTeachingStyleAdjustmentService } from '../services/TeachingStyleAdjustmentService'
 import {
   renderDailyPlanSection,
   renderYesterdaySummarySection
@@ -312,42 +313,61 @@ export class ChatViewModel {
 	    if (assistantConfig.assistantId !== DEFAULT_ASSISTANT_ID) {
 	      return withExtra
 	    }
-	    return await this.injectDailyPlanSections(withExtra)
+	    return await this.injectTeachingSections(withExtra)
 	  }
 
-	  /**
-	   * 把"今日教学目标"和"昨日小结"section 拼到小星老师 system prompt 末尾。
-	   * - 仅当今日/昨日 plan 存在且 status='done' 时才注入
-	   * - plan 缺失时静默降级,不报错
-	   */
-	  private async injectDailyPlanSections(basePrompt: string): Promise<string> {
-	    try {
-	      const planner = getLessonPlanningService()
-	      const today = await planner.getTodayPlan()
-	      const yesterday = await planner.getYesterdaySummary()
-	      let composed = basePrompt
-	      if (today !== null) {
-	        const planDate = today.plan.planDate
-	        const weekday = this.weekdayLabel(planDate)
-	        const section = renderDailyPlanSection(today.plan, planDate, weekday)
-	        if (section !== '') {
-	          composed = this.assistantService.combineSystemPrompts(composed, section)
-	        }
-	      }
-	      if (yesterday !== null) {
-	        const planDate = yesterday.plan.planDate
-	        const section = renderYesterdaySummarySection(yesterday.plan, planDate)
-	        if (section !== '') {
-	          composed = this.assistantService.combineSystemPrompts(composed, section)
-	        }
-	      }
-	      return composed
-	    } catch (error) {
-	      console.error('ChatViewModel', `injectDailyPlanSections failed: ${JSON.stringify(error)}`)
-	      return basePrompt
-	    }
-	  }
+	    /**
+   * 把"昨日小结" + "教学风格调整" + "今日教学目标"三段拼到小星老师 system prompt 末尾。
+   *
+   * 注入顺序（meta-level 先行 → content-level 跟随）:
+   *   1. 昨日小结 (renderYesterdaySummarySection)
+   *   2. 教学风格调整 (TeachingStyleAdjustmentService.renderForPrompt)
+   *   3. 今日教学目标 (renderDailyPlanSection)
+   *
+   * - 任一段缺失时静默降级,不报错
+   * - tsa 缺失时跳过 style 段（不会让 prompt 出现"无调整"）
+   */
+  private async injectTeachingSections(basePrompt: string): Promise<string> {
+    try {
+      const planner = getLessonPlanningService()
+      const today = await planner.getTodayPlan()
+      const yesterday = await planner.getYesterdaySummary()
+      const styleService = getTeachingStyleAdjustmentService()
+      const styleAdj = await styleService.getCurrentAdjustment()
+      let composed = basePrompt
 
+      // 1. 昨日小结
+      if (yesterday !== null) {
+        const planDate = yesterday.plan.planDate
+        const section = renderYesterdaySummarySection(yesterday.plan, planDate)
+        if (section !== '') {
+          composed = this.assistantService.combineSystemPrompts(composed, section)
+        }
+      }
+
+      // 2. 教学风格调整 (meta-level)
+      if (styleAdj !== null) {
+        const section = styleService.renderForPrompt(styleAdj)
+        if (section !== '') {
+          composed = this.assistantService.combineSystemPrompts(composed, section)
+        }
+      }
+
+      // 3. 今日教学目标 (content-level)
+      if (today !== null) {
+        const planDate = today.plan.planDate
+        const weekday = this.weekdayLabel(planDate)
+        const section = renderDailyPlanSection(today.plan, planDate, weekday)
+        if (section !== '') {
+          composed = this.assistantService.combineSystemPrompts(composed, section)
+        }
+      }
+      return composed
+    } catch (error) {
+      console.error('ChatViewModel', `injectTeachingSections failed: ${JSON.stringify(error)}`)
+      return basePrompt
+    }
+  }
 	  /**
 	   * 把 'YYYY-MM-DD' 转成 "星期X" 标签
 	   */

@@ -31,6 +31,13 @@ JSON 对象,包含:
 - todaysSessions: 今日与小星老师的对话摘要数组,每条含 sessionId, topicSummary, keyExchanges, toolsUsed, skillsObserved
 - childProfile: 小朋友的 17 维技能画像 (数学 8 维 / 英语 4 维 / 常识 3 维 / 思维 2 维),每维含 key, level(0-5), lastAssessed, notes
 - yesterdayPlan: 昨日的计划 JSON (可能为空)
+- currentStyleAdjustment: **今日教学风格调整** (评估老师今晨产出),包含 4 维度:
+  - difficultyTendency: easier | current | harder (出题难度倾向)
+  - feedbackTone: gentle | neutral | playful (反馈语气)
+  - weakStrongBalance: weak_focus | balanced | strong_focus (弱强比重)
+  - learningPace: minimal | standard | extensive (学习节奏)
+  - + 4 个 rationale (具体原因)
+  - 可能为 null (今日无有效 tsa, 用默认值)
 - planDate: 明日日期,格式 YYYY-MM-DD
 
 # 你的任务
@@ -41,15 +48,25 @@ JSON 对象,包含:
 4. **imagePrompt 必须是英文**。描述具体、童趣、安全(无暴力/无成人元素)。例: "a cute red apple with a smile face, cartoon style, white background, soft lighting, children's book illustration"。不要出现 photo / real / realistic 这类词。
 5. **难度匹配**。参考 childProfile 中对应 skill 的 level: 0-1 从最基础开始, 2-3 巩固, 4-5 挑战。
 6. **teacherNotes 写 3-5 句**。给小星老师的人话提示,例: "上午教 2 个词,下午教形状,记得每次都先问孩子昨天学了什么"。
+7. **响应教学风格调整**。若 currentStyleAdjustment 非空,需结合 4 维度调整内容侧重:
+   - difficultyTendency='easier' → 计划中所有 4 模块描述要更简单, 避免"挑战"类措辞, imagePrompt 用更可爱/简化的元素
+   - difficultyTendency='harder' → 计划可加 1-2 个挑战点, imagePrompt 用更丰富的元素
+   - feedbackTone='gentle' → teacherNotes 强调"先鼓励再纠正"
+   - feedbackTone='playful' → teacherNotes 强调"用游戏化方式", themeTitle 更活泼
+   - weakStrongBalance='weak_focus' → 计划 70% 集中在 childProfile.weakAreas
+   - weakStrongBalance='strong_focus' → 计划 70% 集中在 childProfile.strongSkills
+   - learningPace='minimal' → 总共 2-3 个点, 不要超过 3 个
+   - learningPace='extensive' → 可达 5-6 个点, 但每个点的 description 要紧凑
+   - 若 currentStyleAdjustment 为 null, 用默认风格 (current/gentle/balanced/standard)
 
 # 输出格式
 **仅返回合法 JSON**,不要任何解释、不要 markdown 代码块、不要反引号。
 
 **4 个模块数组的强约束 (重要!)**:
-- vocab / math / writing / generalKnowledge **每个数组都必须填入至少 1 个具体教学点**
+- vocab、sentence / math / writing / generalKnowledge **每个数组都必须填入至少 1 个具体教学点**
 - 禁止把内容写在 themeTitle/themeDescription/teacherNotes 里, 然后 4 个数组留空
 - themeTitle 是 1 句话主题, 它**不替代** 4 个模块里的具体内容
-- 典型配比: 1 个 vocab + 1 个 math + 1 个 writing + 1 个 generalKnowledge, 或视主题扩展
+- 典型配比: 1～5 个 vocab/sentence + 3～5 个 math + 1～5 个 writing + 1 个 generalKnowledge, 或视主题扩展
 
 结构必须严格遵守:
 

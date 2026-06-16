@@ -14,6 +14,7 @@ import { Assistant, DEFAULT_ASSISTANT_ID, createDefaultAssistant, DEFAULT_ASSIST
 import { GeneratedMedia } from '../models/ImageGenerationModels'
 import { StarEventInsert, StarEventRow } from '../models/StarEventModels'
 import { DailyLessonPlanRow, PreparedMediaRow, PlannerStats } from '../models/LessonPlanModels'
+import { TeachingStyleAdjustmentRow, WeeklyTrendRow } from '../models/TeachingReflectionModels'
 import { ImageIndexRow } from '../models/ImageIndexModels'
 import { deserializeMessageParts, serializeMessageParts } from '../models/MessageParts'
 import { ensureMessageParts, buildMessagePartsFromLegacy } from '../utils/ChatMessagePartsHelper'
@@ -111,6 +112,9 @@ export class TableNames {
   static readonly DAILY_LESSON_PLANS: string = 'daily_lesson_plans'
   static readonly PREPARED_MEDIA: string = 'prepared_media'
   static readonly IMAGE_INDEX: string = 'image_index'
+  // 教学反思层（评估老师 + 备课老师）新增
+  static readonly TEACHING_STYLE_ADJUSTMENTS: string = 'teaching_style_adjustments'
+  static readonly WEEKLY_TRENDS: string = 'weekly_trends'
 	}
 
 // 拼图记录数据接口
@@ -511,6 +515,46 @@ export class DatabaseService {
       )
     `
 
+    // 教学风格调整表（评估老师每日产出，14 天滚动；注入小星老师 systemPrompt 末尾）
+    const createTeachingStyleAdjustmentsTable = `
+      CREATE TABLE IF NOT EXISTS ${TableNames.TEACHING_STYLE_ADJUSTMENTS} (
+        id TEXT PRIMARY KEY,
+        effective_date TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        source_weekly_trend_id TEXT DEFAULT '',
+        source_session_count INTEGER DEFAULT 0,
+
+        difficulty_tendency TEXT DEFAULT 'current',
+        feedback_tone TEXT DEFAULT 'gentle',
+        weak_strong_balance TEXT DEFAULT 'balanced',
+        learning_pace TEXT DEFAULT 'standard',
+
+        difficulty_rationale TEXT DEFAULT '',
+        feedback_rationale TEXT DEFAULT '',
+        balance_rationale TEXT DEFAULT '',
+        pace_rationale TEXT DEFAULT '',
+
+        evaluator_provider_id TEXT DEFAULT '',
+        evaluator_model_id TEXT DEFAULT '',
+        evaluator_model_name TEXT DEFAULT '',
+        confidence REAL DEFAULT 0,
+        status TEXT DEFAULT 'done',
+        created_at INTEGER NOT NULL
+      )
+    `
+
+    // 周级趋势表（评估老师产出，90 天滚动；4 指标 JSON blob）
+    const createWeeklyTrendsTable = `
+      CREATE TABLE IF NOT EXISTS ${TableNames.WEEKLY_TRENDS} (
+        id TEXT PRIMARY KEY,
+        week_start_ymd TEXT NOT NULL,
+        week_end_ymd TEXT NOT NULL,
+        computed_at INTEGER NOT NULL,
+        source_window_days INTEGER NOT NULL DEFAULT 7,
+        trend_json TEXT NOT NULL
+      )
+    `
+
     try {
       await this.rdbStore.executeSql(createSessionsTable)
 	      await this.rdbStore.executeSql(createMessagesTable)
@@ -524,6 +568,8 @@ export class DatabaseService {
       await this.rdbStore.executeSql(createDailyLessonPlansTable)
       await this.rdbStore.executeSql(createPreparedMediaTable)
       await this.rdbStore.executeSql(createImageIndexTable)
+      await this.rdbStore.executeSql(createTeachingStyleAdjustmentsTable)
+      await this.rdbStore.executeSql(createWeeklyTrendsTable)
       await this.rdbStore.executeSql(
         `CREATE INDEX IF NOT EXISTS idx_generated_media_created_at ON ${TableNames.GENERATED_MEDIA}(created_at DESC)`
       )
@@ -554,6 +600,15 @@ export class DatabaseService {
       await this.rdbStore.executeSql(
         `CREATE INDEX IF NOT EXISTS idx_image_index_status ON ${TableNames.IMAGE_INDEX}(status)`
       )
+      await this.rdbStore.executeSql(
+        `CREATE INDEX IF NOT EXISTS idx_tsa_effective_date ON ${TableNames.TEACHING_STYLE_ADJUSTMENTS}(effective_date DESC)`
+      )
+      await this.rdbStore.executeSql(
+        `CREATE INDEX IF NOT EXISTS idx_tsa_expires_at ON ${TableNames.TEACHING_STYLE_ADJUSTMENTS}(expires_at)`
+      )
+      await this.rdbStore.executeSql(
+        `CREATE INDEX IF NOT EXISTS idx_wt_week_start ON ${TableNames.WEEKLY_TRENDS}(week_start_ymd DESC)`
+      )
       // 尝试添加 sort_order 字段（如果表已存在但没有该字段）
       await this.addSortOrderColumnIfNeeded()
       // 尝试添加 reasoning_content 字段（用于推理模型）
@@ -565,6 +620,8 @@ export class DatabaseService {
       // 尝试添加 is_preset 和 icon_path 字段（用于供应商图标管理）
       await this.addProviderIconColumnsIfNeeded()
       await this.addApiPathColumnIfNeeded()
+      // 尝试添加 status 字段（教学风格调整表：区分 done/failed 行，便于 failed 行 30min 后重试）
+      await this.addTeachingStyleAdjustmentStatusColumnIfNeeded()
       await this.addOpenAITransportColumnIfNeeded()
       await this.addProviderCustomHeadersColumnIfNeeded()
       await this.addProviderRequiresApiKeyColumnIfNeeded()
@@ -602,6 +659,21 @@ export class DatabaseService {
         toErrorDetail(error as Object),
         false
       )
+    }
+  }
+
+  // 添加 status 字段到 teaching_style_adjustments 表（区分 done/failed 行，便于 failed 行 30min 后重试）
+  private async addTeachingStyleAdjustmentStatusColumnIfNeeded(): Promise<void> {
+    if (this.rdbStore === null) {
+      return
+    }
+    try {
+      await this.rdbStore.executeSql(
+        `ALTER TABLE ${TableNames.TEACHING_STYLE_ADJUSTMENTS} ADD COLUMN status TEXT DEFAULT 'done'`
+      )
+    } catch (error) {
+      // 如果字段已存在，会抛出错误，忽略即可
+      console.info('DatabaseService', 'teaching_style_adjustments.status column may already exist')
     }
   }
 
@@ -3376,6 +3448,14 @@ export class DatabaseService {
     }
   }
 
+  private safeGetDouble(resultSet: relationalStore.ResultSet, columnName: string, defaultValue: number = 0): number {
+    try {
+      return resultSet.getDouble(resultSet.getColumnIndex(columnName))
+    } catch (_error) {
+      return defaultValue
+    }
+  }
+
   private applyAttachmentParseFields(resultSet: relationalStore.ResultSet, attachment: MessageAttachment): void {
     attachment.processState = this.safeGetString(resultSet, 'process_state', attachment.processState)
     attachment.parseEngine = this.safeGetString(resultSet, 'parse_engine')
@@ -4218,6 +4298,214 @@ export class DatabaseService {
       console.error('DatabaseService', `Failed to delete image index by key: ${JSON.stringify(error)}`)
       return false
     }
+  }
+
+  // ==================== 教学风格调整 CRUD ====================
+
+  /**
+   * 插入或更新教学风格调整行。
+   * id 相同则覆盖（评估老师每日重跑 → 覆盖当日行）。
+   */
+  async upsertTeachingStyleAdjustment(row: TeachingStyleAdjustmentRow): Promise<boolean> {
+    if (this.rdbStore === null || row.id === '') {
+      return false
+    }
+    try {
+      const valueBucket: relationalStore.ValuesBucket = {
+        id: row.id,
+        effective_date: row.effective_date,
+        expires_at: row.expires_at,
+        source_weekly_trend_id: row.source_weekly_trend_id,
+        source_session_count: row.source_session_count,
+        difficulty_tendency: row.difficulty_tendency,
+        feedback_tone: row.feedback_tone,
+        weak_strong_balance: row.weak_strong_balance,
+        learning_pace: row.learning_pace,
+        difficulty_rationale: row.difficulty_rationale,
+        feedback_rationale: row.feedback_rationale,
+        balance_rationale: row.balance_rationale,
+        pace_rationale: row.pace_rationale,
+        evaluator_provider_id: row.evaluator_provider_id,
+        evaluator_model_id: row.evaluator_model_id,
+        evaluator_model_name: row.evaluator_model_name,
+        confidence: row.confidence,
+        status: row.status,
+        created_at: row.created_at
+      }
+      const predicates = new relationalStore.RdbPredicates(TableNames.TEACHING_STYLE_ADJUSTMENTS)
+      predicates.equalTo('id', row.id)
+      const updated = await this.rdbStore.update(valueBucket, predicates)
+      if (updated === 0) {
+        await this.rdbStore.insert(TableNames.TEACHING_STYLE_ADJUSTMENTS, valueBucket)
+      }
+      return true
+    } catch (error) {
+      console.error('DatabaseService', `Failed to upsert teaching style adjustment: ${JSON.stringify(error)}`)
+      return false
+    }
+  }
+
+  /**
+   * 取当前生效的教学风格调整。
+   * 语义：effective_date <= asOfYMD AND expires_at > nowMs 中 effective_date 最近的一行。
+   * - asOfYMD: 'YYYY-MM-DD'（评估当天），空字符串时取今天
+   * - 返回 null 表示无当前调整（首日 / 评估未跑 / 全部过期）
+   */
+  async getCurrentTeachingStyleAdjustment(asOfYMD: string, nowMs: number): Promise<TeachingStyleAdjustmentRow | null> {
+    if (this.rdbStore === null) {
+      return null
+    }
+    const targetYMD = asOfYMD === '' ? '' : asOfYMD
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.TEACHING_STYLE_ADJUSTMENTS)
+      if (targetYMD !== '') {
+        predicates.lessThanOrEqualTo('effective_date', targetYMD)
+      }
+      predicates.greaterThan('expires_at', nowMs)
+      predicates.orderByDesc('effective_date')
+      predicates.limitAs(1)
+      const resultSet = await this.rdbStore.query(predicates)
+      try {
+        if (resultSet.goToFirstRow()) {
+          return this.buildTeachingStyleAdjustmentRowFromResultSet(resultSet)
+        }
+      } finally {
+        resultSet.close()
+      }
+    } catch (error) {
+      console.error('DatabaseService', `Failed to get current teaching style adjustment: ${JSON.stringify(error)}`)
+    }
+    return null
+  }
+
+  /** 清理过期教学风格调整行（expires_at <= nowMs）。返回删除条数。 */
+  async cleanupExpiredTeachingStyleAdjustments(nowMs: number): Promise<number> {
+    if (this.rdbStore === null) {
+      return 0
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.TEACHING_STYLE_ADJUSTMENTS)
+      predicates.lessThanOrEqualTo('expires_at', nowMs)
+      const deleted = await this.rdbStore.delete(predicates)
+      return deleted
+    } catch (error) {
+      console.error('DatabaseService', `Failed to cleanup expired teaching style adjustments: ${JSON.stringify(error)}`)
+      return 0
+    }
+  }
+
+  private buildTeachingStyleAdjustmentRowFromResultSet(rs: relationalStore.ResultSet): TeachingStyleAdjustmentRow {
+    const row = new TeachingStyleAdjustmentRow()
+    row.id = this.safeGetString(rs, 'id')
+    row.effective_date = this.safeGetString(rs, 'effective_date')
+    row.expires_at = this.safeGetLong(rs, 'expires_at', 0)
+    row.source_weekly_trend_id = this.safeGetString(rs, 'source_weekly_trend_id')
+    row.source_session_count = this.safeGetLong(rs, 'source_session_count', 0)
+    row.difficulty_tendency = this.safeGetString(rs, 'difficulty_tendency', 'current')
+    row.feedback_tone = this.safeGetString(rs, 'feedback_tone', 'gentle')
+    row.weak_strong_balance = this.safeGetString(rs, 'weak_strong_balance', 'balanced')
+    row.learning_pace = this.safeGetString(rs, 'learning_pace', 'standard')
+    row.difficulty_rationale = this.safeGetString(rs, 'difficulty_rationale')
+    row.feedback_rationale = this.safeGetString(rs, 'feedback_rationale')
+    row.balance_rationale = this.safeGetString(rs, 'balance_rationale')
+    row.pace_rationale = this.safeGetString(rs, 'pace_rationale')
+    row.evaluator_provider_id = this.safeGetString(rs, 'evaluator_provider_id')
+    row.evaluator_model_id = this.safeGetString(rs, 'evaluator_model_id')
+    row.evaluator_model_name = this.safeGetString(rs, 'evaluator_model_name')
+    row.confidence = this.safeGetDouble(rs, 'confidence', 0)
+    row.status = this.safeGetString(rs, 'status', 'done')
+    row.created_at = this.safeGetLong(rs, 'created_at', 0)
+    return row
+  }
+
+  // ==================== 周级趋势 CRUD ====================
+
+  /**
+   * 插入或更新周级趋势行。
+   * id 格式 'wt_YYYYMMDD'，由调用方生成；相同 weekStartYMD 的行会被覆盖。
+   */
+  async upsertWeeklyTrend(row: WeeklyTrendRow): Promise<boolean> {
+    if (this.rdbStore === null || row.id === '') {
+      return false
+    }
+    try {
+      const valueBucket: relationalStore.ValuesBucket = {
+        id: row.id,
+        week_start_ymd: row.week_start_ymd,
+        week_end_ymd: row.week_end_ymd,
+        computed_at: row.computed_at,
+        source_window_days: row.source_window_days,
+        trend_json: row.trend_json
+      }
+      const predicates = new relationalStore.RdbPredicates(TableNames.WEEKLY_TRENDS)
+      predicates.equalTo('id', row.id)
+      const updated = await this.rdbStore.update(valueBucket, predicates)
+      if (updated === 0) {
+        await this.rdbStore.insert(TableNames.WEEKLY_TRENDS, valueBucket)
+      }
+      return true
+    } catch (error) {
+      console.error('DatabaseService', `Failed to upsert weekly trend: ${JSON.stringify(error)}`)
+      return false
+    }
+  }
+
+  /** 取最近一周的周级趋势行（按 computed_at DESC） */
+  async getLatestWeeklyTrend(): Promise<WeeklyTrendRow | null> {
+    if (this.rdbStore === null) {
+      return null
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.WEEKLY_TRENDS)
+      predicates.orderByDesc('computed_at')
+      predicates.limitAs(1)
+      const resultSet = await this.rdbStore.query(predicates)
+      try {
+        if (resultSet.goToFirstRow()) {
+          return this.buildWeeklyTrendRowFromResultSet(resultSet)
+        }
+      } finally {
+        resultSet.close()
+      }
+    } catch (error) {
+      console.error('DatabaseService', `Failed to get latest weekly trend: ${JSON.stringify(error)}`)
+    }
+    return null
+  }
+
+  /** 按 weekStartYMD 查找周级趋势行 */
+  async getWeeklyTrendByWeekStart(weekStartYMD: string): Promise<WeeklyTrendRow | null> {
+    if (this.rdbStore === null || weekStartYMD === '') {
+      return null
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.WEEKLY_TRENDS)
+      predicates.equalTo('week_start_ymd', weekStartYMD)
+      predicates.orderByDesc('computed_at')
+      predicates.limitAs(1)
+      const resultSet = await this.rdbStore.query(predicates)
+      try {
+        if (resultSet.goToFirstRow()) {
+          return this.buildWeeklyTrendRowFromResultSet(resultSet)
+        }
+      } finally {
+        resultSet.close()
+      }
+    } catch (error) {
+      console.error('DatabaseService', `Failed to get weekly trend by week start: ${JSON.stringify(error)}`)
+    }
+    return null
+  }
+
+  private buildWeeklyTrendRowFromResultSet(rs: relationalStore.ResultSet): WeeklyTrendRow {
+    const row = new WeeklyTrendRow()
+    row.id = this.safeGetString(rs, 'id')
+    row.week_start_ymd = this.safeGetString(rs, 'week_start_ymd')
+    row.week_end_ymd = this.safeGetString(rs, 'week_end_ymd')
+    row.computed_at = this.safeGetLong(rs, 'computed_at', 0)
+    row.source_window_days = this.safeGetLong(rs, 'source_window_days', 7)
+    row.trend_json = this.safeGetString(rs, 'trend_json')
+    return row
   }
 
   /**
