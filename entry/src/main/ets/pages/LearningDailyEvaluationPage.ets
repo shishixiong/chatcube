@@ -335,10 +335,103 @@ struct LearningDailyEvaluationPage {
   }
 
   @Builder
+  private StatusPill(status: string) {
+    Text(this.getStatusLabel(status))
+      .fontSize(10)
+      .fontWeight(FontWeight.Medium)
+      .fontColor(this.getStatusTextColor(status))
+      .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+      .borderRadius(10)
+      .backgroundColor(this.getStatusBgColor(status))
+  }
+
+  private getStatusLabel(status: string): string {
+    switch (status) {
+      case TeachingStyleAdjustmentStatus.DONE: return '已完成'
+      case TeachingStyleAdjustmentStatus.FAILED: return '失败'
+      case 'pending': return '排队中'
+      case 'running': return '生成中'
+      default: return '未知'
+    }
+  }
+
+  private getStatusBgColor(status: string): string {
+    switch (status) {
+      case TeachingStyleAdjustmentStatus.DONE: return withColorAlpha('#22C55E', '0C')
+      case TeachingStyleAdjustmentStatus.FAILED: return withColorAlpha('#EF4444', '0C')
+      case 'pending': return withColorAlpha('#FF9F43', '0C')
+      case 'running': return withColorAlpha('#3B82F6', '0C')
+      default: return withColorAlpha('#9CA3AF', '0C')
+    }
+  }
+
+  private getStatusTextColor(status: string): string {
+    switch (status) {
+      case TeachingStyleAdjustmentStatus.DONE: return '#22C55E'
+      case TeachingStyleAdjustmentStatus.FAILED: return '#EF4444'
+      case 'pending': return '#FF9F43'
+      case 'running': return '#3B82F6'
+      default: return '#9CA3AF'
+    }
+  }
+
+  @Builder
+  private SummaryCard() {
+    if (this.adjustment === null) {
+      // 占位
+      Column() {}
+    } else {
+      Column({ space: 6 }) {
+        Row() {
+          Row({ space: 8 }) {
+            SymbolGlyph($r('sys.symbol.calendar'))
+              .fontSize(13)
+              .fontColor([getAppUiState().themePrimary])
+            Text(this.formatDateDisplay(this.adjustment.effectiveDate))
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.text_primary'))
+          }
+          .layoutWeight(1)
+
+          this.StatusPill(this.adjustment.status)
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        Text(`生成于 ${formatRelativeTime(this.adjustment.createdAt)} · 来自 ${this.adjustment.sourceSessionCount} 次对话`)
+          .fontSize(12)
+          .fontColor($r('app.color.text_secondary'))
+
+        Text(`置信度 ${this.formatConfidence(this.adjustment.confidence)} · 模型 ${this.adjustment.evaluatorModelName !== '' ? this.adjustment.evaluatorModelName : '—'}`)
+          .fontSize(12)
+          .fontColor($r('app.color.text_tertiary'))
+      }
+      .width('100%')
+      .padding(14)
+      .alignItems(HorizontalAlign.Start)
+      .backgroundColor($r('app.color.surface'))
+      .borderRadius(16)
+      .border({ width: 1, color: $r('app.color.divider') })
+      .visualEffect(buildPointLightBorderEffect())
+    }
+  }
+
+  private formatConfidence(c: number): string {
+    if (c <= 0) {
+      return '—'
+    }
+    return c.toFixed(2)
+  }
+
+  @Builder
   private PageContent() {
     Column({ space: 12 }) {
       this.DatePickerBar()
-      Text('TODO: SummaryCard + 2 个 Block')
+      if (!this.isLoading && this.adjustment !== null) {
+        this.SummaryCard()
+      }
+      Text('TODO: 4 维度 + WeeklyTrend')
         .fontSize(14)
         .fontColor($r('app.color.text_secondary'))
     }
