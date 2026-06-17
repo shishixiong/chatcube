@@ -760,6 +760,79 @@ struct LearningDailyEvaluationPage {
     .alignItems(HorizontalAlign.Start)
   }
 
+  private get isTodaySelected(): boolean {
+    return this.selectedDate === todayYMD()
+  }
+
+  private get isTodayPast21(): boolean {
+    return this.isTodaySelected && new Date().getHours() >= 21
+  }
+
+  private get isSelectedInRange(): boolean {
+    return isWithinHistoryRange(this.selectedDate)
+  }
+
+  @Builder
+  private EmptyState() {
+    Column({ space: 10 }) {
+      SymbolGlyph($r('sys.symbol.calendar'))
+        .fontSize(48)
+        .fontColor([$r('app.color.text_tertiary')])
+        .margin({ bottom: 4 })
+
+      if (this.isTodaySelected && !this.isTodayPast21) {
+        Text($r('app.string.learning_daily_evaluation_empty_today_future_title'))
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_secondary'))
+        Text($r('app.string.learning_daily_evaluation_empty_today_future_desc'))
+          .fontSize(13)
+          .fontColor($r('app.color.text_tertiary'))
+          .textAlign(TextAlign.Center)
+          .padding({ left: 24, right: 24 })
+      } else if (this.isTodaySelected && this.isTodayPast21) {
+        Text($r('app.string.learning_daily_evaluation_empty_today_past_title'))
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_secondary'))
+        Text($r('app.string.learning_daily_evaluation_empty_today_past_desc'))
+          .fontSize(13)
+          .fontColor($r('app.color.text_tertiary'))
+          .textAlign(TextAlign.Center)
+          .padding({ left: 24, right: 24 })
+        Button($r('app.string.learning_daily_evaluation_trigger_now'))
+          .onClick((): void => {
+            this.handleTriggerEvaluation()
+          })
+          .enabled(!this.isTriggering)
+          .margin({ top: 8 })
+      } else if (!this.isSelectedInRange) {
+        Text($r('app.string.learning_daily_evaluation_empty_oob_title'))
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_secondary'))
+        Text($r('app.string.learning_daily_evaluation_empty_oob_desc'))
+          .fontSize(13)
+          .fontColor($r('app.color.text_tertiary'))
+          .textAlign(TextAlign.Center)
+          .padding({ left: 24, right: 24 })
+      } else {
+        Text($r('app.string.learning_daily_evaluation_empty_past_title'))
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_secondary'))
+        Text($r('app.string.learning_daily_evaluation_empty_past_desc'))
+          .fontSize(13)
+          .fontColor($r('app.color.text_tertiary'))
+          .textAlign(TextAlign.Center)
+          .padding({ left: 24, right: 24 })
+      }
+    }
+    .width('100%')
+    .padding({ top: 64, bottom: 64 })
+    .alignItems(HorizontalAlign.Center)
+  }
+
   private formatConfidence(c: number): string {
     if (c <= 0) {
       return '—'
@@ -798,10 +871,8 @@ struct LearningDailyEvaluationPage {
       } else if (this.adjustment !== null && this.adjustment.status === TeachingStyleAdjustmentStatus.FAILED) {
         this.FailedState()
       } else {
-        // null — EmptyState (下个 task 加)
-        Text('TODO: EmptyState')
-          .fontSize(14)
-          .fontColor($r('app.color.text_secondary'))
+        // null
+        this.EmptyState()
       }
     }
     .width('100%')
