@@ -2,7 +2,7 @@ import { HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode } f
 import { SettingsCompactTitleBarContent } from '../components/settings/SettingsCompactPageHeader'
 import { SettingsPagePresentationMode } from '../config/SettingsDetailPresentation'
 import { getSettingsPageContentMaxWidth } from '../utils/SettingsPageLayoutHelper'
-import { getAppUiState, setAppUiStateValue } from '../state/AppUiState'
+import { getAppUiState } from '../state/AppUiState'
 import {
   buildHdsTopNavigationTitleBarOptionsForPage,
   getHdsTopNavigationContentTopPadding,
@@ -28,7 +28,6 @@ import { SkillLevelDots } from '../components/SkillLevelDots'
 import { getSkillLabel } from '../utils/SkillLabelUtils'
 import { formatRelativeTime } from '../utils/TimeFormatUtils'
 import { AppStorageKeys } from '../config/AppStorageKeys'
-import { router } from '@kit.ArkUI'
 
 const RECENT_DAYS: number = 7
 const REFRESH_POLL_INTERVAL_MS: number = 2000
@@ -372,28 +371,6 @@ struct LearningTomorrowPlanPage {
       return true
     }
     return this.isPlanBroken()
-  }
-
-  /**
-   * 点击「开始今日教学」: 直接用 router.pushUrl 跳到 ChatPage, 跳过 observeAppUiState
-   * 观察者链 (实测: setAppUiStateValue + UIUtils.addMonitor 路径在真机不可靠,
-   * 监听器不被触发)。
-   *
-   * ChatPage 的 default assistantId 已是 DEFAULT_ASSISTANT_ID (小星老师), 不需要传参。
-   * url 用 main_pages.json 注册的 pages/ChatPage 形式 (带 pages/ 前缀);
-   * 单纯 'ChatPage' 在 router.pushUrl 下解析不到 (router.pushUrl 只看 main_pages.json,
-   * 不看 router_map.json)。
-   */
-  private handleStartTeaching(): void {
-    console.info(TAG, 'handleStartTeaching via router.pushUrl')
-    try {
-      router.pushUrl({ url: 'pages/ChatPage' })
-    } catch (e) {
-      // 备选: AppStorage 触发, 留给 Index 自己的监听器 (如果某天它修好了)
-      const msg = (e as BusinessError).message ?? String(e)
-      console.error(TAG, `router.pushUrl failed: ${msg}, falling back to AppStorage`)
-      setAppUiStateValue<number>(AppStorageKeys.OPEN_NEW_CHAT, Date.now())
-    }
   }
 
   private getFreeformKeys(plan: LessonPlan): string[] {
@@ -1000,30 +977,6 @@ struct LearningTomorrowPlanPage {
   }
 
   @Builder
-  private StartTeachingButton() {
-    Button({ type: ButtonType.Capsule }) {
-      Row({ space: 6 }) {
-        SymbolGlyph($r('sys.symbol.play_fill'))
-          .fontSize(13)
-          .fontColor([Color.White])
-        Text($r('app.string.learning_plan_start_teaching'))
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(Color.White)
-      }
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-    }
-    .width('100%')
-    .height(44)
-    .backgroundColor(this.themePrimary)
-    .onClick(() => {
-      console.info(TAG, 'StartTeachingButton clicked, status=' + this.status)
-      this.handleStartTeaching()
-    })
-  }
-
-  @Builder
   private EmptyState() {
     Column({ space: 10 }) {
       SymbolGlyph($r('sys.symbol.calendar'))
@@ -1391,16 +1344,6 @@ struct LearningTomorrowPlanPage {
               }
               .width('100%')
               .margin({ top: 14 })
-              .alignItems(HorizontalAlign.Start)
-            }
-
-            // 「开始今日教学」按钮: 仅 done 状态显示, 关闭备课→上课闭环
-            if (this.status === LessonPlanStatus.DONE) {
-              Column() {
-                this.StartTeachingButton()
-              }
-              .width('100%')
-              .margin({ top: 18 })
               .alignItems(HorizontalAlign.Start)
             }
           }
