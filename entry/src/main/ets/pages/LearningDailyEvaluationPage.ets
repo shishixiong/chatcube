@@ -2,13 +2,36 @@ import { HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode } f
 import { SettingsCompactTitleBarContent } from '../components/settings/SettingsCompactPageHeader'
 import { SettingsPagePresentationMode } from '../config/SettingsDetailPresentation'
 import { getSettingsPageContentMaxWidth } from '../utils/SettingsPageLayoutHelper'
-import { getAppUiState } from '../state/AppUiState'
+import { getAppUiState, observeAppUiState } from '../state/AppUiState'
 import {
   buildHdsTopNavigationTitleBarOptionsForPage,
   getHdsTopNavigationContentTopPadding,
   buildPointLightBorderEffect,
   getHdsStatusBarContentColor
 } from '../utils/HdsVisualEffectUtil'
+import {
+  TeachingStyleAdjustment,
+  WeeklyTrend,
+  TeachingStyleAdjustmentStatus
+} from '../models/TeachingReflectionModels'
+import { formatLocalYMD } from '../models/LessonPlanModels'
+import { ServiceRegistry } from '../services/ServiceRegistry'
+import {
+  todayYMD,
+  shiftYMD,
+  canGoBack as utilCanGoBack,
+  canGoForward as utilCanGoForward,
+  isWithinHistoryRange
+} from '../utils/DateRangeUtils'
+import { AppStorageKeys } from '../config/AppStorageKeys'
+import { formatRelativeTime } from '../utils/TimeFormatUtils'
+import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import {
+  getDimensionLabel,
+  computeTrendProgress,
+  getTrendRatingLabel
+} from '../utils/TeachingStyleAdjustmentUtils'
+import { BusinessError } from '@kit.BasicServicesKit'
 
 const TAG = 'LearningDailyEvaluationPage'
 
@@ -42,8 +65,132 @@ struct LearningDailyEvaluationPage {
     return getAppUiState().layoutSizeClass
   }
 
+  @Local adjustment: TeachingStyleAdjustment | null = null
+  @Local trend: WeeklyTrend | null = null
+  @Local selectedDate: string = ''
+  @Local isLoading: boolean = true
+  @Local isTriggering: boolean = false
+  @Local isErrorSheetVisible: boolean = false
+  @Local loadError: string = ''
+
+  private loadToken: number = 0
+  private pollTimerId: number = -1
+  private pollCount: number = 0
+  private readonly POLL_INTERVAL_MS: number = 2000
+  private readonly POLL_MAX_COUNT: number = 60
+  private appStorageDisposer: (() => void) | null = null
+
   private px2vp(px: number): number {
     return px / (this.getUIContext().getHostContext()?.resourceManager.getDeviceCapabilitySync().screenDensity ?? 3) * 160
+  }
+
+  aboutToAppear(): void {
+    this.selectedDate = todayYMD()
+    this.loadPage()
+    this.subscribeRefreshTick()
+  }
+
+  aboutToDisappear(): void {
+    this.stopPolling()
+    if (this.appStorageDisposer !== null) {
+      this.appStorageDisposer()
+      this.appStorageDisposer = null
+    }
+  }
+
+  private async loadPage(): Promise<void> {
+    const token: number = ++this.loadToken
+    this.isLoading = true
+    this.loadError = ''
+    try {
+      const adj: TeachingStyleAdjustment | null =
+        await ServiceRegistry.teachingStyle().getAdjustmentForDate(this.selectedDate)
+      if (token !== this.loadToken) {
+        return
+      }
+      this.adjustment = adj
+      if (adj !== null && adj.sourceWeeklyTrendId !== '') {
+        try {
+          this.trend = await ServiceRegistry.weeklyTrend().getTrendById(adj.sourceWeeklyTrendId)
+        } catch (e) {
+          console.error(TAG, `getTrendById failed: ${(e as BusinessError).message ?? String(e)}`)
+          this.trend = null
+        }
+      } else {
+        this.trend = null
+      }
+    } catch (e) {
+      console.error(TAG, `loadPage failed: ${(e as BusinessError).message ?? String(e)}`)
+      if (token === this.loadToken) {
+        this.loadError = (e as BusinessError).message ?? String(e)
+        this.adjustment = null
+        this.trend = null
+      }
+    } finally {
+      if (token === this.loadToken) {
+        this.isLoading = false
+      }
+    }
+    this.maybeStartPolling()
+  }
+
+  private maybeStartPolling(): void {
+    const status: string = this.adjustment?.status ?? ''
+    if (status !== TeachingStyleAdjustmentStatus.DONE && status !== '' &&
+        status !== TeachingStyleAdjustmentStatus.FAILED) {
+      this.startPolling()
+    } else {
+      this.stopPolling()
+    }
+  }
+
+  private startPolling(): void {
+    if (this.pollTimerId !== -1) {
+      return
+    }
+    this.pollCount = 0
+    this.pollTimerId = setInterval((): void => {
+      this.pollCount++
+      if (this.pollCount > this.POLL_MAX_COUNT) {
+        console.warn(TAG, `polling timeout after ${this.pollCount} ticks`)
+        this.stopPolling()
+        return
+      }
+      this.loadPage()
+    }, this.POLL_INTERVAL_MS)
+  }
+
+  private stopPolling(): void {
+    if (this.pollTimerId !== -1) {
+      clearInterval(this.pollTimerId)
+      this.pollTimerId = -1
+    }
+  }
+
+  private subscribeRefreshTick(): void {
+    if (this.appStorageDisposer !== null) {
+      return
+    }
+    this.appStorageDisposer = observeAppUiState(AppStorageKeys.TEACHING_STYLE_ADJUSTMENT_REFRESH_TICK, (): void => {
+      this.loadPage()
+    })
+  }
+
+  private async handleTriggerEvaluation(): Promise<void> {
+    if (this.isTriggering || this.selectedDate !== todayYMD()) {
+      return
+    }
+    this.isTriggering = true
+    try {
+      await ServiceRegistry.evaluation().triggerEvaluationForToday(true, 'manual')
+    } catch (e) {
+      const msg: string = (e as BusinessError).message ?? String(e)
+      console.error(TAG, `trigger failed: ${msg}`)
+      this.loadError = msg
+      this.isErrorSheetVisible = true
+    } finally {
+      this.isTriggering = false
+    }
   }
 
   private handleBack(): void {

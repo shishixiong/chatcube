@@ -10,28 +10,44 @@ export type TeachingDimension =
   | 'weakStrongBalance'
   | 'learningPace'
 
-const DIMENSION_LABELS: Record<TeachingDimension, Record<string, string>> = {
-  difficultyTendency: {
+interface DimensionLabelMap {
+  difficultyTendency: Record<string, string>
+  feedbackTone: Record<string, string>
+  weakStrongBalance: Record<string, string>
+  learningPace: Record<string, string>
+}
+
+function buildDimensionLabels(): DimensionLabelMap {
+  const m: Record<string, string> = {
     'easier': '偏简单',
     'current': '保持',
     'harder': '偏难'
-  },
-  feedbackTone: {
+  }
+  const f: Record<string, string> = {
     'gentle': '温柔鼓励',
     'neutral': '中性',
     'playful': '活泼'
-  },
-  weakStrongBalance: {
+  }
+  const w: Record<string, string> = {
     'weak_focus': '弱项强化',
     'balanced': '均衡',
     'strong_focus': '强项深化'
-  },
-  learningPace: {
+  }
+  const l: Record<string, string> = {
     'minimal': '精简',
     'standard': '适中',
     'extensive': '拓展'
   }
+  const out: DimensionLabelMap = {
+    difficultyTendency: m,
+    feedbackTone: f,
+    weakStrongBalance: w,
+    learningPace: l
+  }
+  return out
 }
+
+const DIMENSION_LABELS: Record<TeachingDimension, Record<string, string>> = buildDimensionLabels()
 
 /**
  * 把维度 enum 值翻译成中文 label
