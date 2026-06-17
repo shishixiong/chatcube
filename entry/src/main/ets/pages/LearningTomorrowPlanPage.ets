@@ -24,12 +24,21 @@ import {
   formatLocalYMD,
   parseLessonPlan
 } from '../models/LessonPlanModels'
+import { SkillLevelDots } from '../components/SkillLevelDots'
+import { getSkillLabel } from '../utils/SkillLabelUtils'
+import { formatRelativeTime } from '../utils/TimeFormatUtils'
+import { AppStorageKeys } from '../config/AppStorageKeys'
 
 const RECENT_DAYS: number = 7
 const REFRESH_POLL_INTERVAL_MS: number = 2000
 const REFRESH_POLL_TIMEOUT_MS: number = 120000
 
 const TAG = 'LearningTomorrowPlanPage'
+
+interface ImageLookupResult {
+  key: string
+  path: string
+}
 
 let learningTomorrowPlanPagePathStack: NavPathStack | null = null
 
@@ -77,9 +86,16 @@ struct LearningTomorrowPlanPage {
   @Local recentRows: DailyLessonPlanRow[] = []
   @Local isGenerating: boolean = false
   @Local expandedDate: string = ''
+  // 当前 plan 的 DB 行 (用于展示 completedAt / errorMessage)
+  @Local currentRow: DailyLessonPlanRow | null = null
+  // topicKey → 已就绪预生成图 filePath 缓存 (空字符串 = 已查但无)
+  @Local imageCache: Map<string, string> = new Map()
+  // 失败详情 sheet 可见性
+  @Local isErrorSheetVisible: boolean = false
 
   private compactScroller: Scroller = new Scroller()
   private loadToken: number = 0
+  private imageLoadToken: number = 0
   private pollTimerId: number = -1
   private pollStartedAt: number = 0
   private pastPlanCache: Map<string, LessonPlan> = new Map()
@@ -149,6 +165,7 @@ struct LearningTomorrowPlanPage {
         this.plan = result.plan
         this.planDate = result.row.planDate
         this.status = result.row.status
+        this.currentRow = result.row
       } else {
         // 即使 status=pending/running/failed, row 也不为空 (因为昨天可能已写入过今日行);
         // 此时 getPlanByDate 返回 null (因为它只接受 done 状态)。用 getDailyLessonPlanByDate 拿原始行。
@@ -160,11 +177,19 @@ struct LearningTomorrowPlanPage {
           this.plan = parseLessonPlan(rawRow.planJson)
           this.planDate = rawRow.planDate
           this.status = rawRow.status
+          this.currentRow = rawRow
         } else {
           this.plan = new LessonPlan()
           this.planDate = todayYMD
           this.status = ''
+          this.currentRow = null
         }
+      }
+      // 触发图片查询 (done 状态才查, 避免无意义 IO)
+      if (this.status === LessonPlanStatus.DONE) {
+        void this.loadImagesForPlan(this.plan)
+      } else {
+        this.imageCache = new Map()
       }
     } catch (error) {
       console.error(TAG, `Failed to load plan: ${JSON.stringify(error)}`)
@@ -173,6 +198,56 @@ struct LearningTomorrowPlanPage {
         this.isLoading = false
       }
     }
+  }
+
+  /**
+   * 查询 plan 内所有 topicKey 对应的预生成图, 并发读 prepared_media 表。
+   * - 用 imageLoadToken 守卫, 避免旧 loadImages 的查询覆盖新数据 (竞态防护)。
+   * - 查不到的 topicKey 塞空串, 避免重复查询。
+   */
+  private async loadImagesForPlan(plan: LessonPlan): Promise<void> {
+    const token = this.imageLoadToken + 1
+    this.imageLoadToken = token
+    const keys: string[] = []
+    for (const v of plan.vocab) {
+      if (v.topicKey !== '') {
+        keys.push(v.topicKey)
+      }
+    }
+    for (const m of plan.math) {
+      if (m.topicKey !== '') {
+        keys.push(m.topicKey)
+      }
+    }
+    for (const w of plan.writing) {
+      if (w.topicKey !== '') {
+        keys.push(w.topicKey)
+      }
+    }
+    if (keys.length === 0) {
+      return
+    }
+    const now = Date.now()
+    const next: Map<string, string> = new Map()
+    const results: ImageLookupResult[] = []
+    await Promise.all(keys.map(async (k: string): Promise<void> => {
+      try {
+        const row = await getDatabaseService().findReadyPreparedMediaByTopicKey(k, now)
+        const r: ImageLookupResult = { key: k, path: row !== null ? row.filePath : '' }
+        results.push(r)
+      } catch (e) {
+        console.warn(TAG, `image lookup failed for ${k}: ${JSON.stringify(e)}`)
+        const r: ImageLookupResult = { key: k, path: '' }
+        results.push(r)
+      }
+    }))
+    for (const r of results) {
+      next.set(r.key, r.path)
+    }
+    if (token !== this.imageLoadToken) {
+      return  // 旧查询, 丢弃
+    }
+    this.imageCache = next
   }
 
   private async loadRecent(): Promise<void> {
@@ -298,6 +373,72 @@ struct LearningTomorrowPlanPage {
     return this.isPlanBroken()
   }
 
+  /**
+   * 点击「开始今日教学」: 触发 Index OPEN_NEW_CHAT 监听器, 切换到 chat tab 并开新会话。
+   * ChatPage 的 default assistantId 已是 DEFAULT_ASSISTANT_ID (小星老师), 不需要传参。
+   */
+  private handleStartTeaching(): void {
+    AppStorage.setOrCreate<number>(AppStorageKeys.OPEN_NEW_CHAT, Date.now())
+  }
+
+  private getFreeformKeys(plan: LessonPlan): string[] {
+    return Object.keys(plan.freeform)
+  }
+
+  /**
+   * freeform key → 中文小标题. 仅识别常见前缀 (reading / music / science / art),
+   * 其他原样返回。
+   */
+  private getFreeformKeyLabel(key: string): string {
+    const idx = key.indexOf('_')
+    if (idx <= 0) {
+      return key
+    }
+    const prefix = key.substring(0, idx)
+    if (prefix === 'reading') {
+      return '阅读'
+    }
+    if (prefix === 'music') {
+      return '音乐'
+    }
+    if (prefix === 'science') {
+      return '科学'
+    }
+    if (prefix === 'art') {
+      return '美术'
+    }
+    if (prefix === 'story') {
+      return '故事'
+    }
+    if (prefix === 'song') {
+      return '儿歌'
+    }
+    return prefix
+  }
+
+  /**
+   * freeform value → 字符串。字符串/数字/布尔直接渲染, 对象/数组 JSON.stringify。
+   */
+  private getFreeformValueLabel(value: Object): string {
+    if (value === null || value === undefined) {
+      return '—'
+    }
+    if (typeof value === 'string') {
+      return value as string
+    }
+    if (typeof value === 'number') {
+      return String(value as number)
+    }
+    if (typeof value === 'boolean') {
+      return String(value as boolean)
+    }
+    try {
+      return JSON.stringify(value)
+    } catch (_e) {
+      return '—'
+    }
+  }
+
   private getContentMaxWidth(): number {
     return getSettingsPageContentMaxWidth(this.layoutSizeClass, this.windowWidthVp, this.settingsDetailPresentationMode,
       this.windowHeightVp)
@@ -356,9 +497,21 @@ struct LearningTomorrowPlanPage {
         }
       }
       .width('100%')
-      .height(64)
+      .height(40)
       .padding({ left: 24, right: 24 })
       .alignItems(VerticalAlign.Center)
+
+      // 生成时间戳 (done 状态 + completedAt > 0 时显示)
+      if (this.currentRow !== null && this.status === LessonPlanStatus.DONE && this.currentRow.completedAt > 0) {
+        Row() {
+          Text($r('app.string.learning_plan_generated_at', formatRelativeTime(this.currentRow.completedAt)))
+            .fontSize(11)
+            .fontColor($r('app.color.text_tertiary'))
+        }
+        .width('100%')
+        .padding({ left: 24, right: 24, bottom: 8 })
+        .alignItems(VerticalAlign.Center)
+      }
     }
     .width('100%')
     .backgroundColor(this.themeBackground)
@@ -430,7 +583,7 @@ struct LearningTomorrowPlanPage {
       if (snapshot.strongSkills.length > 0 || snapshot.weakSkills.length > 0) {
         Flex({ wrap: FlexWrap.Wrap }) {
           ForEach(snapshot.strongSkills, (key: string, index: number) => {
-            Text(`擅长 · ${key}`)
+            Text(`擅长 · ${getSkillLabel(key, key)}`)
               .fontSize(11)
               .fontColor(this.themePrimary)
               .padding({ left: 8, right: 8, top: 4, bottom: 4 })
@@ -440,7 +593,7 @@ struct LearningTomorrowPlanPage {
           }, (key: string, index: number) => `s_${index}_${key}`)
 
           ForEach(snapshot.weakSkills, (key: string, index: number) => {
-            Text(`薄弱 · ${key}`)
+            Text(`薄弱 · ${getSkillLabel(key, key)}`)
               .fontSize(11)
               .fontColor('#B45309')
               .padding({ left: 8, right: 8, top: 4, bottom: 4 })
@@ -461,67 +614,113 @@ struct LearningTomorrowPlanPage {
     .alignItems(HorizontalAlign.Start)
   }
 
+  /**
+   * 渲染预生成图 (from prepared_media)。命中显示缩略图, 未命中显示文字占位。
+   * - 命中条件: imageCache 里有非空 filePath
+   * - 占位: fallbackText 首字符圆形 (vocab 用首字母, writing 用汉字, math 用描述首字)
+   */
+  @Builder
+  private ItemImage(topicKey: string, fallbackText: string) {
+    if (topicKey !== '' && this.imageCache.get(topicKey) !== undefined && this.imageCache.get(topicKey) !== '') {
+      Image(this.imageCache.get(topicKey))
+        .width(56)
+        .height(56)
+        .borderRadius(8)
+        .objectFit(ImageFit.Cover)
+        .alt(fallbackText)
+    } else {
+      Column() {
+        Text(fallbackText.length > 0 ? fallbackText.charAt(0) : '?')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.themePrimary)
+      }
+      .width(56)
+      .height(56)
+      .borderRadius(8)
+      .backgroundColor(this.themePrimaryLight)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+    }
+  }
+
   @Builder
   private VocabRow(item: LessonPlanVocabItem) {
-    Column({ space: 4 }) {
-      Row({ space: 8 }) {
-        Text(item.word !== '' ? item.word : '—')
-          .fontSize(16)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-        if (item.translation !== '') {
-          Text(item.translation)
-            .fontSize(13)
-            .fontColor($r('app.color.text_secondary'))
+    Row({ space: 10 }) {
+      this.ItemImage(item.topicKey, item.word)
+      Column({ space: 4 }) {
+        Row({ space: 8 }) {
+          Text(item.word !== '' ? item.word : '—')
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.text_primary'))
+          if (item.translation !== '') {
+            Text(item.translation)
+              .fontSize(13)
+              .fontColor($r('app.color.text_secondary'))
+          }
+          Blank()
+          if (item.difficultyHint !== '') {
+            Text(item.difficultyHint)
+              .fontSize(11)
+              .fontColor(this.themePrimary)
+              .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+              .borderRadius(10)
+              .backgroundColor(this.themePrimaryLight)
+          }
         }
-        Blank()
-        if (item.difficultyHint !== '') {
-          Text(item.difficultyHint)
-            .fontSize(11)
-            .fontColor(this.themePrimary)
-            .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-            .borderRadius(10)
-            .backgroundColor(this.themePrimaryLight)
-        }
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
 
-      if (item.exampleSentence !== '') {
-        Text(item.exampleSentence)
-          .fontSize(12)
-          .fontColor($r('app.color.text_tertiary'))
-          .lineHeight(18)
-          .width('100%')
+        if (item.exampleSentence !== '') {
+          Text(item.exampleSentence)
+            .fontSize(12)
+            .fontColor($r('app.color.text_tertiary'))
+            .lineHeight(18)
+            .width('100%')
+        }
       }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
     .padding({ top: 10, bottom: 10, left: 14, right: 14 })
-    .alignItems(HorizontalAlign.Start)
+    .alignItems(VerticalAlign.Top)
   }
 
   @Builder
   private MathRow(item: LessonPlanMathItem) {
-    Column({ space: 4 }) {
-      Text(item.description !== '' ? item.description : '—')
-        .fontSize(13)
-        .fontColor($r('app.color.text_primary'))
-        .lineHeight(20)
-        .width('100%')
-      if (item.dimension !== '') {
-        Text(item.dimension)
-          .fontSize(11)
-          .fontColor($r('app.color.text_tertiary'))
+    Row({ space: 10 }) {
+      this.ItemImage(item.topicKey, item.description)
+      Column({ space: 4 }) {
+        Text(item.description !== '' ? item.description : '—')
+          .fontSize(13)
+          .fontColor($r('app.color.text_primary'))
+          .lineHeight(20)
+          .width('100%')
+        if (item.dimension !== '') {
+          Row({ space: 6 }) {
+            Text(getSkillLabel(item.dimension, item.dimension))
+              .fontSize(11)
+              .fontColor($r('app.color.text_tertiary'))
+            SkillLevelDots({ level: item.targetSkillLevel, dotSize: 6, spacing: 3 })
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
+        }
       }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
     .padding({ top: 10, bottom: 10, left: 14, right: 14 })
-    .alignItems(HorizontalAlign.Start)
+    .alignItems(VerticalAlign.Top)
   }
 
   @Builder
   private WritingRow(item: LessonPlanWritingItem) {
     Row({ space: 10 }) {
+      this.ItemImage(item.topicKey, item.characterOrWord)
       Text(item.characterOrWord !== '' ? item.characterOrWord : '—')
         .fontSize(20)
         .fontWeight(FontWeight.Bold)
@@ -547,7 +746,7 @@ struct LearningTomorrowPlanPage {
         .lineHeight(20)
         .width('100%')
       if (item.dimension !== '') {
-        Text(item.dimension)
+        Text(getSkillLabel(item.dimension, item.dimension))
           .fontSize(11)
           .fontColor($r('app.color.text_tertiary'))
       }
@@ -726,6 +925,88 @@ struct LearningTomorrowPlanPage {
   }
 
   @Builder
+  private FreeformBlock(plan: LessonPlan) {
+    Column({ space: 6 }) {
+      this.SectionTitle($r('app.string.learning_section_freeform'))
+      if (Object.keys(plan.freeform).length === 0) {
+        Column() {
+          Text('—')
+            .fontSize(13)
+            .fontColor($r('app.color.text_tertiary'))
+            .padding(14)
+        }
+        .width('100%')
+        .backgroundColor(this.themeSurface)
+        .borderRadius(16)
+        .clip(true)
+        .border({ width: 1, color: $r('app.color.divider') })
+        .visualEffect(buildPointLightBorderEffect())
+      } else {
+        Column() {
+          ForEach(this.getFreeformKeys(plan), (key: string, index: number) => {
+            Column() {
+              this.FreeformItem(key, plan.freeform[key])
+              if (index < this.getFreeformKeys(plan).length - 1) {
+                Divider()
+                  .color($r('app.color.divider'))
+                  .margin({ left: 14, right: 14 })
+              }
+            }
+          }, (key: string) => `ff_${key}`)
+        }
+        .width('100%')
+        .backgroundColor(this.themeSurface)
+        .borderRadius(16)
+        .clip(true)
+        .border({ width: 1, color: $r('app.color.divider') })
+        .visualEffect(buildPointLightBorderEffect())
+      }
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  private FreeformItem(key: string, value: Object) {
+    Column({ space: 4 }) {
+      Text(this.getFreeformKeyLabel(key))
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_secondary'))
+      Text(this.getFreeformValueLabel(value))
+        .fontSize(13)
+        .fontColor($r('app.color.text_primary'))
+        .lineHeight(20)
+        .width('100%')
+    }
+    .width('100%')
+    .padding({ top: 10, bottom: 10, left: 14, right: 14 })
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  private StartTeachingButton() {
+    Row({ space: 6 }) {
+      SymbolGlyph($r('sys.symbol.play_fill'))
+        .fontSize(13)
+        .fontColor([Color.White])
+      Text($r('app.string.learning_plan_start_teaching'))
+        .fontSize(13)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(Color.White)
+    }
+    .padding({ left: 16, right: 16, top: 10, bottom: 10 })
+    .borderRadius(16)
+    .backgroundColor(this.themePrimary)
+    .width('100%')
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      this.handleStartTeaching()
+    })
+  }
+
+  @Builder
   private EmptyState() {
     Column({ space: 10 }) {
       SymbolGlyph($r('sys.symbol.calendar'))
@@ -754,17 +1035,27 @@ struct LearningTomorrowPlanPage {
         }
         .padding({ top: 4 })
       } else if (this.status === LessonPlanStatus.FAILED) {
-        // 失败: 显示重试按钮
-        Text($r('app.string.learning_plan_generate_failed'))
-          .fontSize(13)
-          .fontColor('#FF9F43')
-          .padding({ left: 14, right: 14, top: 8, bottom: 8 })
-          .borderRadius(14)
-          .backgroundColor('#FEF3C7')
-          .margin({ top: 6 })
-          .onClick(() => {
-            void this.handleRefresh()
-          })
+        // 失败: 重试药丸 + 「查看原因」文字链
+        Row({ space: 10 }) {
+          Text($r('app.string.learning_plan_generate_failed'))
+            .fontSize(13)
+            .fontColor('#FF9F43')
+            .padding({ left: 14, right: 14, top: 8, bottom: 8 })
+            .borderRadius(14)
+            .backgroundColor('#FEF3C7')
+            .onClick(() => {
+              void this.handleRefresh()
+            })
+          Text($r('app.string.learning_plan_error_view_reason'))
+            .fontSize(12)
+            .fontColor($r('app.color.text_tertiary'))
+            .padding({ left: 6, right: 6, top: 8, bottom: 8 })
+            .onClick(() => {
+              this.isErrorSheetVisible = true
+            })
+        }
+        .margin({ top: 6 })
+        .alignItems(VerticalAlign.Center)
       } else if (this.status !== LessonPlanStatus.DONE || this.isPlanBroken()) {
         // 缺计划 / pending / running: 提示用户可以手动触发
         Row({ space: 6 }) {
@@ -787,6 +1078,67 @@ struct LearningTomorrowPlanPage {
     .width('100%')
     .padding({ top: 48, bottom: 32 })
     .alignItems(HorizontalAlign.Center)
+  }
+
+  @Builder
+  private ErrorDetailSheet() {
+    Column({ space: 14 }) {
+      Row({ space: 8 }) {
+        SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
+          .fontSize(16)
+          .fontColor(['#FF9F43'])
+        Text($r('app.string.learning_plan_error_title'))
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      if (this.currentRow !== null && this.currentRow.errorMessage !== '') {
+        Text(this.currentRow.errorMessage)
+          .fontSize(13)
+          .fontColor($r('app.color.text_primary'))
+          .lineHeight(20)
+          .width('100%')
+      } else {
+        Text($r('app.string.learning_plan_error_no_detail'))
+          .fontSize(13)
+          .fontColor($r('app.color.text_tertiary'))
+          .width('100%')
+      }
+
+      Row({ space: 10 }) {
+        Text($r('app.string.learning_plan_error_close'))
+          .fontSize(13)
+          .fontColor($r('app.color.text_secondary'))
+          .padding({ left: 14, right: 14, top: 8, bottom: 8 })
+          .borderRadius(14)
+          .backgroundColor($r('app.color.surface'))
+          .layoutWeight(1)
+          .textAlign(TextAlign.Center)
+          .onClick(() => {
+            this.isErrorSheetVisible = false
+          })
+        Text($r('app.string.learning_plan_error_retry'))
+          .fontSize(13)
+          .fontColor(Color.White)
+          .padding({ left: 14, right: 14, top: 8, bottom: 8 })
+          .borderRadius(14)
+          .backgroundColor(this.themePrimary)
+          .layoutWeight(1)
+          .textAlign(TextAlign.Center)
+          .onClick(() => {
+            this.isErrorSheetVisible = false
+            void this.handleRefresh()
+          })
+      }
+      .width('100%')
+    }
+    .padding(20)
+    .width('100%')
+    .backgroundColor(this.themeBackground)
   }
 
   @Builder
@@ -1014,6 +1366,26 @@ struct LearningTomorrowPlanPage {
             .width('100%')
             .margin({ top: 14 })
             .alignItems(HorizontalAlign.Start)
+
+            // freeform 扩展模块 (阅读/音乐/科学 等, 仅当存在时显示)
+            if (Object.keys(this.plan.freeform).length > 0) {
+              Column() {
+                this.FreeformBlock(this.plan)
+              }
+              .width('100%')
+              .margin({ top: 14 })
+              .alignItems(HorizontalAlign.Start)
+            }
+
+            // 「开始今日教学」按钮: 仅 done 状态显示, 关闭备课→上课闭环
+            if (this.status === LessonPlanStatus.DONE) {
+              Column() {
+                this.StartTeachingButton()
+              }
+              .width('100%')
+              .margin({ top: 18 })
+              .alignItems(HorizontalAlign.Start)
+            }
           }
 
           // 过去 7 天 (始终展示, 独立于今日是否有 plan)
@@ -1070,6 +1442,15 @@ struct LearningTomorrowPlanPage {
     .width('100%')
     .height('100%')
     .backgroundColor(this.themeBackground)
+    .bindSheet($$this.isErrorSheetVisible, this.ErrorDetailSheet(), {
+      height: SheetSize.FIT_CONTENT,
+      dragBar: true,
+      showClose: false,
+      preferType: SheetType.BOTTOM,
+      onDisappear: () => {
+        this.isErrorSheetVisible = false
+      }
+    })
   }
 }
 

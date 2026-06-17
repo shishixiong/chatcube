@@ -14,12 +14,11 @@ import {
   ChildKnowledgeProfile,
   SkillDimension
 } from '../services/ChildProfileService'
+import { SkillLevelDots } from '../components/SkillLevelDots'
+import { formatRelativeTime } from '../utils/TimeFormatUtils'
 
 const TAG = 'LearningProfilePage'
 const TOTAL_LEVELS: number = 5
-const MAX_RELATIVE_MS: number = 60 * 1000
-const MAX_HOUR_MS: number = 60 * MAX_RELATIVE_MS
-const MAX_DAY_MS: number = 24 * MAX_HOUR_MS
 
 let learningProfilePagePathStack: NavPathStack | null = null
 
@@ -81,23 +80,6 @@ const SKILL_GROUPS: LearningSkillGroup[] = [
     ]
   }
 ]
-
-@ComponentV2
-struct SkillLevelDots {
-  @Param level: number = 0
-
-  build() {
-    Row({ space: 4 }) {
-      ForEach([0, 1, 2, 3, 4], (_unused: number, index: number) => {
-        Column()
-          .width(8)
-          .height(8)
-          .borderRadius(4)
-          .backgroundColor(index < this.level ? $r('app.color.text_primary') : $r('app.color.divider'))
-      }, (item: number) => `${item}`)
-    }
-  }
-}
 
 @Entry
 @ComponentV2
@@ -214,24 +196,7 @@ struct LearningProfilePage {
     if (skill === null || skill.lastAssessed <= 0) {
       return ''
     }
-    return this.formatRelativeTime(skill.lastAssessed)
-  }
-
-  private formatRelativeTime(ts: number): string {
-    const delta = Date.now() - ts
-    if (delta < MAX_RELATIVE_MS) {
-      return '刚刚'
-    }
-    if (delta < MAX_HOUR_MS) {
-      const minutes = Math.floor(delta / MAX_RELATIVE_MS)
-      return `${minutes} 分钟前`
-    }
-    if (delta < MAX_DAY_MS) {
-      const hours = Math.floor(delta / MAX_HOUR_MS)
-      return `${hours} 小时前`
-    }
-    const days = Math.floor(delta / MAX_DAY_MS)
-    return `${days} 天前`
+    return formatRelativeTime(skill.lastAssessed)
   }
 
   private getContentMaxWidth(): number {

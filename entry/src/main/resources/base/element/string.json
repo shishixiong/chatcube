@@ -3281,6 +3281,38 @@
       "value": "失败"
     },
     {
+      "name": "learning_plan_generated_at",
+      "value": "生成于 %s"
+    },
+    {
+      "name": "learning_plan_error_title",
+      "value": "生成失败 - 详细信息"
+    },
+    {
+      "name": "learning_plan_error_retry",
+      "value": "重新生成"
+    },
+    {
+      "name": "learning_plan_error_close",
+      "value": "关闭"
+    },
+    {
+      "name": "learning_plan_error_no_detail",
+      "value": "未提供错误详情"
+    },
+    {
+      "name": "learning_plan_error_view_reason",
+      "value": "查看原因"
+    },
+    {
+      "name": "learning_plan_start_teaching",
+      "value": "开始今日教学"
+    },
+    {
+      "name": "learning_section_freeform",
+      "value": "扩展"
+    },
+    {
       "name": "learning_images_empty_title",
       "value": "暂无英语学习图片"
     },
