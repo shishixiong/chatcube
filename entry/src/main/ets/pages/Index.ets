@@ -4903,6 +4903,9 @@ struct Index {
       onOpenLearningEnglishImages: (): void => {
         this.openSettingsDestination(SettingsRouteName.LEARNING_ENGLISH_IMAGES)
       },
+      onOpenLearningDailyEvaluation: (): void => {
+        this.openSettingsDestination(SettingsRouteName.LEARNING_DAILY_EVALUATION)
+      },
       onOpenAbout: (): void => {
         this.openSettingsDestination(SettingsRouteName.ABOUT)
       },

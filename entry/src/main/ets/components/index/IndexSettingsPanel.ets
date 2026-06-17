@@ -53,6 +53,7 @@ export struct IndexSettingsPanel {
   @Event onOpenLearningProfile: () => void = () => {}
   @Event onOpenLearningTomorrowPlan: () => void = () => {}
   @Event onOpenLearningEnglishImages: () => void = () => {}
+  @Event onOpenLearningDailyEvaluation: () => void = () => {}
   @Event onOpenAbout: () => void = () => {}
   @Event onOpenSupportDevelopment: () => void = () => {}
   @Event onOpenPrivacy: () => void = () => {}
@@ -102,6 +103,13 @@ export struct IndexSettingsPanel {
             title: $r('app.string.learning_english_images_title'),
             subtitle: $r('app.string.learning_english_images_desc'),
             action: (): void => { this.onOpenLearningEnglishImages() }
+          } as SettingsListItemModel,
+          {
+            key: SettingsRouteName.LEARNING_DAILY_EVALUATION,
+            icon: $r('sys.symbol.lightbulb_max'),
+            title: $r('app.string.learning_daily_evaluation_title'),
+            subtitle: $r('app.string.learning_daily_evaluation_desc'),
+            action: (): void => { this.onOpenLearningDailyEvaluation() }
           } as SettingsListItemModel
         ]
       } as SettingsGroupModel,
