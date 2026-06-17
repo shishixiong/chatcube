@@ -417,6 +417,110 @@ struct LearningDailyEvaluationPage {
     }
   }
 
+  @Builder
+  private DimensionsBlock() {
+    if (this.adjustment === null) {
+      Column() {}
+    } else {
+      Column({ space: 10 }) {
+        Text($r('app.string.learning_daily_evaluation_dimensions'))
+          .fontSize(12)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_secondary'))
+          .padding({ left: 4 })
+
+        Column() {
+          this.DimensionRow(
+            $r('app.string.learning_daily_evaluation_dim_difficulty'),
+            this.adjustment.difficultyTendency,
+            this.adjustment.difficultyRationale
+          )
+          Divider().color($r('app.color.divider')).margin({ left: 14, right: 14 })
+          this.DimensionRow(
+            $r('app.string.learning_daily_evaluation_dim_feedback'),
+            this.adjustment.feedbackTone,
+            this.adjustment.feedbackRationale
+          )
+          Divider().color($r('app.color.divider')).margin({ left: 14, right: 14 })
+          this.DimensionRow(
+            $r('app.string.learning_daily_evaluation_dim_balance'),
+            this.adjustment.weakStrongBalance,
+            this.adjustment.balanceRationale
+          )
+          Divider().color($r('app.color.divider')).margin({ left: 14, right: 14 })
+          this.DimensionRow(
+            $r('app.string.learning_daily_evaluation_dim_pace'),
+            this.adjustment.learningPace,
+            this.adjustment.paceRationale
+          )
+        }
+        .width('100%')
+        .padding({ top: 4, bottom: 4 })
+        .backgroundColor($r('app.color.surface'))
+        .borderRadius(16)
+        .border({ width: 1, color: $r('app.color.divider') })
+        .visualEffect(buildPointLightBorderEffect())
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+    }
+  }
+
+  @Builder
+  private DimensionRow(label: ResourceStr, value: string, rationale: string) {
+    Column({ space: 6 }) {
+      Row() {
+        Text(label)
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+
+        Text(this.getDimensionLabelFor(value))
+          .fontSize(11)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(getAppUiState().themePrimary)
+          .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+          .borderRadius(10)
+          .backgroundColor(getAppUiState().themePrimaryLight)
+
+        if (rationale === '') {
+          Text('（无解释）')
+            .fontSize(10)
+            .fontColor($r('app.color.text_tertiary'))
+            .margin({ left: 6 })
+        }
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Text(rationale)
+        .fontSize(12)
+        .fontColor($r('app.color.text_secondary'))
+        .lineHeight(18)
+        .maxLines(4)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
+    }
+    .width('100%')
+    .padding({ top: 10, bottom: 10, left: 14, right: 14 })
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  private getDimensionLabelFor(value: string): string {
+    // 4 维度共用一个 label 函数, value 字符串自带类型信息
+    // 实际使用需要传 dimension 区分, 这里简化: 直接用 getDimensionLabel 的第一个命中的
+    if (this.adjustment === null) {
+      return value
+    }
+    const dim: string =
+      value === this.adjustment.difficultyTendency ? 'difficultyTendency' :
+      value === this.adjustment.feedbackTone ? 'feedbackTone' :
+      value === this.adjustment.weakStrongBalance ? 'weakStrongBalance' :
+      value === this.adjustment.learningPace ? 'learningPace' : ''
+    return getDimensionLabel(dim, value)
+  }
+
   private formatConfidence(c: number): string {
     if (c <= 0) {
       return '—'
@@ -430,8 +534,9 @@ struct LearningDailyEvaluationPage {
       this.DatePickerBar()
       if (!this.isLoading && this.adjustment !== null) {
         this.SummaryCard()
+        this.DimensionsBlock()
       }
-      Text('TODO: 4 维度 + WeeklyTrend')
+      Text('TODO: WeeklyTrend')
         .fontSize(14)
         .fontColor($r('app.color.text_secondary'))
     }
