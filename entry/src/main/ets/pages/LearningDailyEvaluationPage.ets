@@ -386,7 +386,7 @@ struct LearningDailyEvaluationPage {
           Row({ space: 8 }) {
             SymbolGlyph($r('sys.symbol.calendar'))
               .fontSize(13)
-              .fontColor([getAppUiState().themePrimary])
+              .fontColor([this.themePrimary])
             Text(this.formatDateDisplay(this.adjustment.effectiveDate))
               .fontSize(14)
               .fontWeight(FontWeight.Medium)
