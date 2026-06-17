@@ -12,7 +12,8 @@ import {
 import {
   TeachingStyleAdjustment,
   WeeklyTrend,
-  TeachingStyleAdjustmentStatus
+  TeachingStyleAdjustmentStatus,
+  EVALUATION_TRIGGER_HOUR
 } from '../models/TeachingReflectionModels'
 import { formatLocalYMD } from '../models/LessonPlanModels'
 import { ServiceRegistry } from '../services/ServiceRegistry'
@@ -765,7 +766,7 @@ struct LearningDailyEvaluationPage {
   }
 
   private get isTodayPast21(): boolean {
-    return this.isTodaySelected && new Date().getHours() >= 21
+    return this.isTodaySelected && new Date().getHours() >= EVALUATION_TRIGGER_HOUR
   }
 
   private get isSelectedInRange(): boolean {

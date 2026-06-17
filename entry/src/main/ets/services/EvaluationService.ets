@@ -43,7 +43,9 @@ import {
   TeachingStyleAdjustmentStatus,
   WeeklyTrend,
   parseWeeklyTrend,
-  hydrateTeachingStyleAdjustmentFromLlm
+  hydrateTeachingStyleAdjustmentFromLlm,
+  EVALUATION_TRIGGER_HOUR,
+  EVALUATION_TRIGGER_WINDOW_MINUTES
 } from '../models/TeachingReflectionModels'
 import { formatLocalYMD, formatLocalYMDCompact } from '../models/LessonPlanModels'
 import {
@@ -200,12 +202,12 @@ export class EvaluationService {
     try {
       const now = new Date()
       const hour = now.getHours()
-      // 只在 21:00~21:30 之间尝试补跑
-      if (hour !== 21) {
+      // 只在 EVALUATION_TRIGGER_HOUR:00 ~ :30 之间尝试补跑（与 TeachingReflectionModels 中的常量同步）
+      if (hour !== EVALUATION_TRIGGER_HOUR) {
         return
       }
       const minute = now.getMinutes()
-      if (minute > 30) {
+      if (minute > EVALUATION_TRIGGER_WINDOW_MINUTES) {
         return
       }
       const todayYMDCompact = formatLocalYMDCompact(now)

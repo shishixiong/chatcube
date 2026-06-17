@@ -27,6 +27,20 @@ export const DEFAULT_FEEDBACK_TONE: FeedbackTone = 'gentle'
 export const DEFAULT_WEAK_STRONG_BALANCE: WeakStrongBalance = 'balanced'
 export const DEFAULT_LEARNING_PACE: LearningPace = 'standard'
 
+/**
+ * 评估老师每日触发时间（24h 本地时区）。
+ * - EvaluationService.startIntervalCheck 降级路径在此小时首分钟起检查；
+ * - LearningDailyEvaluationPage.EmptyState 据此切"今日未到"/"今日已过"子态。
+ * - 改一处必须同步另一处。
+ */
+export const EVALUATION_TRIGGER_HOUR: number = 21
+
+/**
+ * 评估老师触发窗口（分钟），仅用于 setInterval 降级路径的尾段截断。
+ * WorkScheduler 路径（OS 主路径）由系统自行决定时间窗。
+ */
+export const EVALUATION_TRIGGER_WINDOW_MINUTES: number = 30
+
 /** 白名单常量数组（写入前校验用） */
 const DIFFICULTY_TENDENCIES: DifficultyTendency[] = ['easier', 'current', 'harder']
 const FEEDBACK_TONES: FeedbackTone[] = ['gentle', 'neutral', 'playful']
