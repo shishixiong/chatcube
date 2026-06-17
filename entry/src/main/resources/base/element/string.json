@@ -3575,6 +3575,130 @@
     {
       "name": "tts_voice_lang_other",
       "value": "Other"
+    },
+    {
+      "name": "learning_daily_evaluation_title",
+      "value": "每日评估"
+    },
+    {
+      "name": "learning_daily_evaluation_desc",
+      "value": "评估老师每晚 21:00 总结当天学习"
+    },
+    {
+      "name": "learning_daily_evaluation_summary",
+      "value": "评估摘要"
+    },
+    {
+      "name": "learning_daily_evaluation_dimensions",
+      "value": "教学风格调整"
+    },
+    {
+      "name": "learning_daily_evaluation_trend",
+      "value": "本周趋势"
+    },
+    {
+      "name": "learning_daily_evaluation_dim_difficulty",
+      "value": "难度倾向"
+    },
+    {
+      "name": "learning_daily_evaluation_dim_feedback",
+      "value": "反馈语气"
+    },
+    {
+      "name": "learning_daily_evaluation_dim_balance",
+      "value": "强弱侧重"
+    },
+    {
+      "name": "learning_daily_evaluation_dim_pace",
+      "value": "学习节奏"
+    },
+    {
+      "name": "learning_daily_evaluation_pending_title",
+      "value": "评估排队中"
+    },
+    {
+      "name": "learning_daily_evaluation_pending_desc",
+      "value": "评估老师稍后开始处理"
+    },
+    {
+      "name": "learning_daily_evaluation_running_title",
+      "value": "评估生成中"
+    },
+    {
+      "name": "learning_daily_evaluation_running_desc",
+      "value": "正在分析本周学习数据"
+    },
+    {
+      "name": "learning_daily_evaluation_failed_title",
+      "value": "评估生成失败"
+    },
+    {
+      "name": "learning_daily_evaluation_empty_today_future_title",
+      "value": "今日评估即将生成"
+    },
+    {
+      "name": "learning_daily_evaluation_empty_today_future_desc",
+      "value": "评估老师每晚 21:00 总结当天学习"
+    },
+    {
+      "name": "learning_daily_evaluation_empty_today_past_title",
+      "value": "今日评估未生成"
+    },
+    {
+      "name": "learning_daily_evaluation_empty_today_past_desc",
+      "value": "可能评估服务尚未运行, 可手动触发"
+    },
+    {
+      "name": "learning_daily_evaluation_empty_past_title",
+      "value": "该日期暂无评估"
+    },
+    {
+      "name": "learning_daily_evaluation_empty_past_desc",
+      "value": "评估仅保留最近 14 天记录"
+    },
+    {
+      "name": "learning_daily_evaluation_empty_oob_title",
+      "value": "已超出 14 天保留范围"
+    },
+    {
+      "name": "learning_daily_evaluation_empty_oob_desc",
+      "value": "评估数据 14 天滚动, 旧数据已清理"
+    },
+    {
+      "name": "learning_daily_evaluation_trigger_now",
+      "value": "立即生成"
+    },
+    {
+      "name": "learning_daily_evaluation_retry",
+      "value": "重试"
+    },
+    {
+      "name": "learning_daily_evaluation_close",
+      "value": "关闭"
+    },
+    {
+      "name": "learning_daily_evaluation_today_short",
+      "value": "今天"
+    },
+    {
+      "name": "learning_daily_evaluation_status_done",
+      "value": "已完成"
+    },
+    {
+      "name": "learning_daily_evaluation_status_pending",
+      "value": "排队中"
+    },
+    {
+      "name": "learning_daily_evaluation_status_running",
+      "value": "生成中"
+    },
+    {
+      "name": "learning_daily_evaluation_status_failed",
+      "value": "失败"
+    },
+    {
+      "name": "learning_daily_evaluation_rationale_missing",
+      "value": "（无解释）"
     }
   ]
 }
