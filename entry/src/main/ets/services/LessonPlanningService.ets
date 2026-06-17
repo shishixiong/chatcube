@@ -344,8 +344,8 @@ export class LessonPlanningService {
   // ============================================================
 
   /**
-   * 获取今日教学计划（即昨天 23:00 备课老师生成、今天使用的 plan）。
-   * - 备课老师在 23:00 跑 runPlanningPipeline(planDate=明天), 所以 DB 里 plan_date = 今日
+   * 获取今日教学计划（即昨天 21:00 备课老师生成、今天使用的 plan）。
+   * - 备课老师在 21:00 跑 runPlanningPipeline(planDate=明天), 所以 DB 里 plan_date = 今日
    * - 仅返回 status='done' 的行
    * - 解析后的 LessonPlan 由 plan_json 反序列化
    */

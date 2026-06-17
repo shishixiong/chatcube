@@ -174,8 +174,8 @@ export class EvaluationService {
   /**
    * 启动 setInterval 降级 (WorkScheduler 不可用时使用)。
    * - 每 60s 检查一次
-   * - 当日 23:00~23:30 之间首次发现 evaluator_last_run_date !== 今日 → 触发评估
-   * - 23:30 之后即使没跑也不再补 (避免深夜噪声)
+   * - 当日 21:00~21:30 之间首次发现 evaluator_last_run_date !== 今日 → 触发评估
+   * - 21:30 之后即使没跑也不再补 (避免深夜噪声)
    */
   private startIntervalCheck(): void {
     if (this.intervalCheckId !== -1) {
@@ -200,8 +200,8 @@ export class EvaluationService {
     try {
       const now = new Date()
       const hour = now.getHours()
-      // 只在 23:00~23:30 之间尝试补跑
-      if (hour !== 23) {
+      // 只在 21:00~21:30 之间尝试补跑
+      if (hour !== 21) {
         return
       }
       const minute = now.getMinutes()
