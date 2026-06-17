@@ -643,6 +643,113 @@ struct LearningDailyEvaluationPage {
     return computeTrendProgress(0, this.trend.topStruggling.length)
   }
 
+  @Builder
+  private PendingState() {
+    Column({ space: 10 }) {
+      LoadingProgress()
+        .width(32)
+        .height(32)
+        .color(this.themePrimary)
+      Text($r('app.string.learning_daily_evaluation_pending_title'))
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_secondary'))
+      Text($r('app.string.learning_daily_evaluation_pending_desc'))
+        .fontSize(13)
+        .fontColor($r('app.color.text_tertiary'))
+        .textAlign(TextAlign.Center)
+    }
+    .width('100%')
+    .padding({ top: 64, bottom: 64 })
+    .alignItems(HorizontalAlign.Center)
+  }
+
+  @Builder
+  private RunningState() {
+    Column({ space: 10 }) {
+      LoadingProgress()
+        .width(32)
+        .height(32)
+        .color(this.themePrimary)
+      Text($r('app.string.learning_daily_evaluation_running_title'))
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_secondary'))
+      Text($r('app.string.learning_daily_evaluation_running_desc'))
+        .fontSize(13)
+        .fontColor($r('app.color.text_tertiary'))
+        .textAlign(TextAlign.Center)
+    }
+    .width('100%')
+    .padding({ top: 64, bottom: 64 })
+    .alignItems(HorizontalAlign.Center)
+  }
+
+  @Builder
+  private FailedState() {
+    Column({ space: 12 }) {
+      SymbolGlyph($r('sys.symbol.exclamationmark_triangle_fill'))
+        .fontSize(48)
+        .fontColor([$r('app.color.status_error')])
+      Text($r('app.string.learning_daily_evaluation_failed_title'))
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_primary'))
+      Text(this.loadError)
+        .fontSize(12)
+        .fontColor($r('app.color.text_tertiary'))
+        .padding({ left: 24, right: 24 })
+        .textAlign(TextAlign.Center)
+        .maxLines(6)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      if (this.selectedDate === todayYMD()) {
+        Button($r('app.string.learning_daily_evaluation_retry'))
+          .onClick((): void => {
+            this.handleTriggerEvaluation()
+          })
+          .enabled(!this.isTriggering)
+      }
+    }
+    .width('100%')
+    .padding({ top: 64, bottom: 64 })
+    .alignItems(HorizontalAlign.Center)
+  }
+
+  @Builder
+  private ErrorDetailSheet() {
+    Column({ space: 14 }) {
+      Text($r('app.string.learning_daily_evaluation_failed_title'))
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.text_primary'))
+      Text(this.loadError)
+        .fontSize(13)
+        .fontColor($r('app.color.text_secondary'))
+        .lineHeight(20)
+        .width('100%')
+      Row({ space: 10 }) {
+        Button($r('app.string.learning_daily_evaluation_close'))
+          .layoutWeight(1)
+          .onClick((): void => {
+            this.isErrorSheetVisible = false
+          })
+        if (this.selectedDate === todayYMD()) {
+          Button($r('app.string.learning_daily_evaluation_retry'))
+            .layoutWeight(1)
+            .onClick((): void => {
+              this.isErrorSheetVisible = false
+              this.handleTriggerEvaluation()
+            })
+            .enabled(!this.isTriggering)
+        }
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding(20)
+    .alignItems(HorizontalAlign.Start)
+  }
+
   private formatConfidence(c: number): string {
     if (c <= 0) {
       return '—'
@@ -654,15 +761,46 @@ struct LearningDailyEvaluationPage {
   private PageContent() {
     Column({ space: 12 }) {
       this.DatePickerBar()
-      if (!this.isLoading && this.adjustment !== null) {
+
+      if (this.isLoading) {
+        // 加载中显示 spinner
+        Column() {
+          LoadingProgress()
+            .width(32)
+            .height(32)
+            .color(this.themePrimary)
+        }
+        .width('100%')
+        .padding({ top: 64 })
+        .alignItems(HorizontalAlign.Center)
+      } else if (this.adjustment !== null &&
+                 this.adjustment.status !== TeachingStyleAdjustmentStatus.FAILED &&
+                 this.adjustment.status !== 'pending' &&
+                 this.adjustment.status !== 'running') {
+        // done
         this.SummaryCard()
         this.DimensionsBlock()
         this.WeeklyTrendBlock()
+      } else if (this.adjustment !== null && this.adjustment.status === 'pending') {
+        this.PendingState()
+      } else if (this.adjustment !== null && this.adjustment.status === 'running') {
+        this.RunningState()
+      } else if (this.adjustment !== null && this.adjustment.status === TeachingStyleAdjustmentStatus.FAILED) {
+        this.FailedState()
+      } else {
+        // null — EmptyState (下个 task 加)
+        Text('TODO: EmptyState')
+          .fontSize(14)
+          .fontColor($r('app.color.text_secondary'))
       }
     }
     .width('100%')
     .layoutWeight(1)
     .padding({ left: 16, right: 16 })
+    .bindSheet($$this.isErrorSheetVisible, this.ErrorDetailSheet(), {
+      height: SheetSize.FIT_CONTENT,
+      showClose: false
+    })
   }
 
   build() {
