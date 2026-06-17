@@ -517,6 +517,132 @@ struct LearningDailyEvaluationPage {
     .alignItems(HorizontalAlign.Start)
   }
 
+  @Builder
+  private ProgressDots(progress: number, activeColor: ResourceColor, inactiveColor: ResourceColor) {
+    Row({ space: 4 }) {
+      ForEach([0, 1, 2, 3, 4], (_unused: number, index: number) => {
+        Column()
+          .width(8)
+          .height(8)
+          .borderRadius(4)
+          .backgroundColor(index < progress ? activeColor : inactiveColor)
+      }, (item: number) => `${item}`)
+    }
+  }
+
+  @Builder
+  private WeeklyTrendBlock() {
+    if (this.trend === null) {
+      // 降级态
+      Column({ space: 6 }) {
+        Text($r('app.string.learning_daily_evaluation_trend'))
+          .fontSize(12)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_secondary'))
+          .padding({ left: 4 })
+        Text('本周趋势数据已过期')
+          .fontSize(12)
+          .fontColor($r('app.color.text_tertiary'))
+          .padding(14)
+          .width('100%')
+          .backgroundColor($r('app.color.surface'))
+          .borderRadius(16)
+          .border({ width: 1, color: $r('app.color.divider') })
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+    } else {
+      Column({ space: 10 }) {
+        Text($r('app.string.learning_daily_evaluation_trend'))
+          .fontSize(12)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_secondary'))
+          .padding({ left: 4 })
+
+        Column({ space: 0 }) {
+          this.TrendRowProgress('技能速度', this.computeSkillVelocityProgress())
+          Divider().color($r('app.color.divider')).margin({ left: 14, right: 14 })
+          this.TrendRowProgress('反复出错', this.computeStrugglingProgress())
+          Divider().color($r('app.color.divider')).margin({ left: 14, right: 14 })
+          this.TrendRowChips('兴趣主题', this.trend.topicInterests.map((t): string => t.topicLabel))
+        }
+        .width('100%')
+        .backgroundColor($r('app.color.surface'))
+        .borderRadius(16)
+        .border({ width: 1, color: $r('app.color.divider') })
+        .visualEffect(buildPointLightBorderEffect())
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+    }
+  }
+
+  @Builder
+  private TrendRowProgress(label: string, progress: number) {
+    Row() {
+      Text(label)
+        .fontSize(13)
+        .fontColor($r('app.color.text_primary'))
+        .layoutWeight(1)
+      this.ProgressDots(progress, this.themePrimary, $r('app.color.divider'))
+      Text(getTrendRatingLabel(progress))
+        .fontSize(11)
+        .fontColor($r('app.color.text_tertiary'))
+        .margin({ left: 8 })
+        .width(40)
+        .textAlign(TextAlign.End)
+    }
+    .width('100%')
+    .padding({ top: 12, bottom: 12, left: 14, right: 14 })
+    .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
+  private TrendRowChips(label: string, items: string[]) {
+    Column({ space: 6 }) {
+      Text(label)
+        .fontSize(13)
+        .fontColor($r('app.color.text_primary'))
+        .width('100%')
+      if (items.length === 0) {
+        Text('无明显偏好')
+          .fontSize(12)
+          .fontColor($r('app.color.text_tertiary'))
+      } else {
+        Flex({ wrap: FlexWrap.Wrap }) {
+          ForEach(items, (item: string, index: number) => {
+            Text(item)
+              .fontSize(11)
+              .fontColor(this.themePrimary)
+              .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+              .borderRadius(10)
+              .backgroundColor(this.themePrimaryLight)
+              .margin({ right: 4, bottom: 4 })
+          }, (item: string, index: number) => `${index}_${item}`)
+        }
+        .width('100%')
+      }
+    }
+    .width('100%')
+    .padding({ top: 12, bottom: 12, left: 14, right: 14 })
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  private computeSkillVelocityProgress(): number {
+    if (this.trend === null) {
+      return 2
+    }
+    return computeTrendProgress(this.trend.topImprovements.length, this.trend.topRegressions.length)
+  }
+
+  private computeStrugglingProgress(): number {
+    if (this.trend === null) {
+      return 2
+    }
+    // 反复出错越多进度越低 (反向)
+    return computeTrendProgress(0, this.trend.topStruggling.length)
+  }
+
   private formatConfidence(c: number): string {
     if (c <= 0) {
       return '—'
@@ -531,10 +657,8 @@ struct LearningDailyEvaluationPage {
       if (!this.isLoading && this.adjustment !== null) {
         this.SummaryCard()
         this.DimensionsBlock()
+        this.WeeklyTrendBlock()
       }
-      Text('TODO: WeeklyTrend')
-        .fontSize(14)
-        .fontColor($r('app.color.text_secondary'))
     }
     .width('100%')
     .layoutWeight(1)
