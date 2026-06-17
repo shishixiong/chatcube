@@ -695,13 +695,21 @@ struct LearningDailyEvaluationPage {
         .fontSize(16)
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.text_primary'))
-      Text(this.loadError)
-        .fontSize(12)
-        .fontColor($r('app.color.text_tertiary'))
-        .padding({ left: 24, right: 24 })
-        .textAlign(TextAlign.Center)
-        .maxLines(6)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      if (this.loadError !== '') {
+        Text(this.loadError)
+          .fontSize(12)
+          .fontColor($r('app.color.text_tertiary'))
+          .padding({ left: 24, right: 24 })
+          .textAlign(TextAlign.Center)
+          .maxLines(6)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      } else {
+        Text($r('app.string.learning_daily_evaluation_failed_no_detail'))
+          .fontSize(12)
+          .fontColor($r('app.color.text_tertiary'))
+          .padding({ left: 24, right: 24 })
+          .textAlign(TextAlign.Center)
+      }
       if (this.selectedDate === todayYMD()) {
         Button($r('app.string.learning_daily_evaluation_retry'))
           .onClick((): void => {
@@ -722,10 +730,12 @@ struct LearningDailyEvaluationPage {
         .fontSize(16)
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.text_primary'))
-      Text(this.loadError)
+      Text(this.loadError !== '' ? this.loadError : $r('app.string.learning_daily_evaluation_failed_no_detail'))
         .fontSize(13)
         .fontColor($r('app.color.text_secondary'))
         .lineHeight(20)
+        .maxLines(20)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
         .width('100%')
       Row({ space: 10 }) {
         Button($r('app.string.learning_daily_evaluation_close'))
@@ -799,7 +809,10 @@ struct LearningDailyEvaluationPage {
     .padding({ left: 16, right: 16 })
     .bindSheet($$this.isErrorSheetVisible, this.ErrorDetailSheet(), {
       height: SheetSize.FIT_CONTENT,
-      showClose: false
+      showClose: false,
+      onDisappear: (): void => {
+        this.isErrorSheetVisible = false
+      }
     })
   }
 
