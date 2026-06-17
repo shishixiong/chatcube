@@ -28,6 +28,7 @@ import { SkillLevelDots } from '../components/SkillLevelDots'
 import { getSkillLabel } from '../utils/SkillLabelUtils'
 import { formatRelativeTime } from '../utils/TimeFormatUtils'
 import { AppStorageKeys } from '../config/AppStorageKeys'
+import { setAppUiStateValue } from '../state/AppUiState'
 
 const RECENT_DAYS: number = 7
 const REFRESH_POLL_INTERVAL_MS: number = 2000
@@ -376,9 +377,13 @@ struct LearningTomorrowPlanPage {
   /**
    * 点击「开始今日教学」: 触发 Index OPEN_NEW_CHAT 监听器, 切换到 chat tab 并开新会话。
    * ChatPage 的 default assistantId 已是 DEFAULT_ASSISTANT_ID (小星老师), 不需要传参。
+   *
+   * 注意: 必须用 setAppUiStateValue, 不用 AppStorage.setOrCreate。
+   * 原因: Index 的监听器是 observeAppUiState + UIUtils.addMonitor, 监控的是 AppStorageV2
+   * 连接的 AppUiState 对象, 不是裸 AppStorage。只 setOrCreate 不会触发 UIUtils 回调。
    */
   private handleStartTeaching(): void {
-    AppStorage.setOrCreate<number>(AppStorageKeys.OPEN_NEW_CHAT, Date.now())
+    setAppUiStateValue<number>(AppStorageKeys.OPEN_NEW_CHAT, Date.now())
   }
 
   private getFreeformKeys(plan: LessonPlan): string[] {
