@@ -991,22 +991,22 @@ struct LearningTomorrowPlanPage {
 
   @Builder
   private StartTeachingButton() {
-    Row({ space: 6 }) {
-      SymbolGlyph($r('sys.symbol.play_fill'))
-        .fontSize(13)
-        .fontColor([Color.White])
-      Text($r('app.string.learning_plan_start_teaching'))
-        .fontSize(13)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(Color.White)
+    Button({ type: ButtonType.Capsule }) {
+      Row({ space: 6 }) {
+        SymbolGlyph($r('sys.symbol.play_fill'))
+          .fontSize(13)
+          .fontColor([Color.White])
+        Text($r('app.string.learning_plan_start_teaching'))
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(Color.White)
+      }
+      .justifyContent(FlexAlign.Center)
+      .alignItems(VerticalAlign.Center)
     }
-    .padding({ left: 16, right: 16, top: 10, bottom: 10 })
-    .borderRadius(16)
-    .backgroundColor(this.themePrimary)
     .width('100%')
-    .justifyContent(FlexAlign.Center)
-    .alignItems(VerticalAlign.Center)
-    .hitTestBehavior(HitTestMode.Block)
+    .height(44)
+    .backgroundColor(this.themePrimary)
     .onClick(() => {
       console.info(TAG, 'StartTeachingButton clicked, status=' + this.status)
       this.handleStartTeaching()
