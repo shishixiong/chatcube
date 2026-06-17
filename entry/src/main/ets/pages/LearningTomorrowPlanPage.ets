@@ -1006,7 +1006,9 @@ struct LearningTomorrowPlanPage {
     .width('100%')
     .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Center)
+    .hitTestBehavior(HitTestMode.Block)
     .onClick(() => {
+      console.info(TAG, 'StartTeachingButton clicked, status=' + this.status)
       this.handleStartTeaching()
     })
   }
