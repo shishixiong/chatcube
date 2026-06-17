@@ -2,7 +2,7 @@ import { HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode } f
 import { SettingsCompactTitleBarContent } from '../components/settings/SettingsCompactPageHeader'
 import { SettingsPagePresentationMode } from '../config/SettingsDetailPresentation'
 import { getSettingsPageContentMaxWidth } from '../utils/SettingsPageLayoutHelper'
-import { getAppUiState } from '../state/AppUiState'
+import { getAppUiState, setAppUiStateValue } from '../state/AppUiState'
 import {
   buildHdsTopNavigationTitleBarOptionsForPage,
   getHdsTopNavigationContentTopPadding,
@@ -28,7 +28,6 @@ import { SkillLevelDots } from '../components/SkillLevelDots'
 import { getSkillLabel } from '../utils/SkillLabelUtils'
 import { formatRelativeTime } from '../utils/TimeFormatUtils'
 import { AppStorageKeys } from '../config/AppStorageKeys'
-import { setAppUiStateValue } from '../state/AppUiState'
 
 const RECENT_DAYS: number = 7
 const REFRESH_POLL_INTERVAL_MS: number = 2000
@@ -383,7 +382,12 @@ struct LearningTomorrowPlanPage {
    * 连接的 AppUiState 对象, 不是裸 AppStorage。只 setOrCreate 不会触发 UIUtils 回调。
    */
   private handleStartTeaching(): void {
-    setAppUiStateValue<number>(AppStorageKeys.OPEN_NEW_CHAT, Date.now())
+    const ts = Date.now()
+    console.info(TAG, `handleStartTeaching firing, ts=${ts}, key=${AppStorageKeys.OPEN_NEW_CHAT}`)
+    setAppUiStateValue<number>(AppStorageKeys.OPEN_NEW_CHAT, ts)
+    // 读回验证 setAppUiStateValue 是否真的更新了 @Trace 字段
+    const after = getAppUiState().openNewChatTimestamp
+    console.info(TAG, `handleStartTeaching post-set, AppUiState.openNewChatTimestamp=${after}`)
   }
 
   private getFreeformKeys(plan: LessonPlan): string[] {
