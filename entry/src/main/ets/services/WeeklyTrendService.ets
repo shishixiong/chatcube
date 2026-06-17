@@ -186,6 +186,22 @@ export class WeeklyTrendService {
     return all
   }
 
+  // =================== 按 id 查 ===================
+
+  /**
+   * 通过 id 查周级趋势。
+   * - id 格式 'wt_YYYYMMDD' (WeeklyTrendRow.id 格式)
+   * - 解析为 'YYYY-MM-DD' weekStartYMD 后调 getTrendByWeekStart
+   * - id 为空 / 格式错误 / 解析后查不到都返回 null
+   */
+  async getTrendById(id: string): Promise<WeeklyTrend | null> {
+    if (id === '' || !id.startsWith('wt_') || id.length !== 11) {
+      return null
+    }
+    const ymd: string = `${id.substring(3, 7)}-${id.substring(7, 9)}-${id.substring(9, 11)}`
+    return await this.getTrendByWeekStart(ymd)
+  }
+
   // =================== 内部：数据拉取与组装 ===================
 
   private async fetchStarEventsInRange(startMs: number, endMs: number): Promise<StarEventAggregate[]> {
