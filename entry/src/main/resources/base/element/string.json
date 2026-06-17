@@ -3699,6 +3699,14 @@
     {
       "name": "learning_daily_evaluation_rationale_missing",
       "value": "（无解释）"
+    },
+    {
+      "name": "learning_daily_evaluation_trend_expired",
+      "value": "本周趋势数据已过期"
+    },
+    {
+      "name": "learning_daily_evaluation_no_topic_interest",
+      "value": "无明显偏好"
     }
   ]
 }

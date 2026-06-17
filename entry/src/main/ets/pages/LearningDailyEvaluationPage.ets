@@ -540,7 +540,7 @@ struct LearningDailyEvaluationPage {
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.text_secondary'))
           .padding({ left: 4 })
-        Text('本周趋势数据已过期')
+        Text($r('app.string.learning_daily_evaluation_trend_expired'))
           .fontSize(12)
           .fontColor($r('app.color.text_tertiary'))
           .padding(14)
@@ -605,7 +605,7 @@ struct LearningDailyEvaluationPage {
         .fontColor($r('app.color.text_primary'))
         .width('100%')
       if (items.length === 0) {
-        Text('无明显偏好')
+        Text($r('app.string.learning_daily_evaluation_no_topic_interest'))
           .fontSize(12)
           .fontColor($r('app.color.text_tertiary'))
       } else {
