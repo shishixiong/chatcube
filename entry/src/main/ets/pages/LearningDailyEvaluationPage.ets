@@ -64,6 +64,9 @@ struct LearningDailyEvaluationPage {
   private get layoutSizeClass(): string {
     return getAppUiState().layoutSizeClass
   }
+  private get themePrimary(): string {
+    return getAppUiState().themePrimary
+  }
 
   @Local adjustment: TeachingStyleAdjustment | null = null
   @Local trend: WeeklyTrend | null = null
@@ -249,9 +252,93 @@ struct LearningDailyEvaluationPage {
   }
 
   @Builder
+  private DatePickerBar() {
+    Row({ space: 8 }) {
+      SymbolGlyph($r('sys.symbol.chevron_left'))
+        .fontSize(16)
+        .fontColor([this.canGoBack() ? $r('app.color.text_primary') : $r('app.color.text_tertiary')])
+        .onClick((): void => {
+          if (this.canGoBack()) {
+            this.selectedDate = shiftYMD(this.selectedDate, -1)
+            this.loadPage()
+          }
+        })
+
+      Column() {
+        Text(this.formatDateDisplay(this.selectedDate))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+        Text(this.formatWeekdayDisplay(this.selectedDate))
+          .fontSize(11)
+          .fontColor($r('app.color.text_tertiary'))
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Center)
+
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(16)
+        .fontColor([this.canGoForward() ? $r('app.color.text_primary') : $r('app.color.text_tertiary')])
+        .onClick((): void => {
+          if (this.canGoForward()) {
+            this.selectedDate = shiftYMD(this.selectedDate, 1)
+            this.loadPage()
+          }
+        })
+
+      if (this.selectedDate !== todayYMD()) {
+        Text($r('app.string.learning_daily_evaluation_today_short'))
+          .fontSize(12)
+          .fontColor($r('app.color.text_primary'))
+          .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+          .borderRadius(12)
+          .backgroundColor(withColorAlpha(this.themePrimary, '14'))
+          .onClick((): void => {
+            this.selectedDate = todayYMD()
+            this.loadPage()
+          })
+      }
+    }
+    .width('100%')
+    .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+    .alignItems(VerticalAlign.Center)
+    .backgroundColor($r('app.color.surface'))
+    .borderRadius(12)
+  }
+
+  private formatDateDisplay(ymd: string): string {
+    if (ymd === todayYMD()) {
+      return '今天'
+    }
+    return ymd
+  }
+
+  private formatWeekdayDisplay(ymd: string): string {
+    const labels: string[] = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+    const parts: string[] = ymd.split('-')
+    if (parts.length !== 3) {
+      return ''
+    }
+    const y: number = parseInt(parts[0], 10)
+    const m: number = parseInt(parts[1], 10) - 1
+    const d: number = parseInt(parts[2], 10)
+    const date: Date = new Date(y, m, d)
+    return labels[date.getDay()]
+  }
+
+  private canGoBack(): boolean {
+    return utilCanGoBack(this.selectedDate)
+  }
+
+  private canGoForward(): boolean {
+    return utilCanGoForward(this.selectedDate)
+  }
+
+  @Builder
   private PageContent() {
-    Column() {
-      Text('TODO: 评估内容')
+    Column({ space: 12 }) {
+      this.DatePickerBar()
+      Text('TODO: SummaryCard + 2 个 Block')
         .fontSize(14)
         .fontColor($r('app.color.text_secondary'))
     }
