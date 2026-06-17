@@ -116,6 +116,11 @@
       "buildFunction": "LearningEnglishImagesPageBuilder"
     },
     {
+      "name": "LearningDailyEvaluationPage",
+      "pageSourceFile": "src/main/ets/pages/LearningDailyEvaluationPage.ets",
+      "buildFunction": "LearningDailyEvaluationPageBuilder"
+    },
+    {
       "name": "PrivacyPolicyPage",
       "pageSourceFile": "src/main/ets/pages/PrivacyPolicyPage.ets",
       "buildFunction": "PrivacyPolicyPageBuilder"

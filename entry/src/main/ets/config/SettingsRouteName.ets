@@ -18,6 +18,7 @@ export enum SettingsRouteName {
   LEARNING_PROFILE = 'LearningProfilePage',
   LEARNING_TOMORROW_PLAN = 'LearningTomorrowPlanPage',
   LEARNING_ENGLISH_IMAGES = 'LearningEnglishImagesPage',
+  LEARNING_DAILY_EVALUATION = 'LearningDailyEvaluationPage',
   ABOUT = 'AboutPage',
   PRIVACY_POLICY = 'PrivacyPolicyPage',
   SUPPORT_DEVELOPMENT = 'SupportDevelopmentPage',
