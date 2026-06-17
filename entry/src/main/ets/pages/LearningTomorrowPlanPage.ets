@@ -28,6 +28,7 @@ import { SkillLevelDots } from '../components/SkillLevelDots'
 import { getSkillLabel } from '../utils/SkillLabelUtils'
 import { formatRelativeTime } from '../utils/TimeFormatUtils'
 import { AppStorageKeys } from '../config/AppStorageKeys'
+import { router } from '@kit.ArkUI'
 
 const RECENT_DAYS: number = 7
 const REFRESH_POLL_INTERVAL_MS: number = 2000
@@ -374,20 +375,22 @@ struct LearningTomorrowPlanPage {
   }
 
   /**
-   * 点击「开始今日教学」: 触发 Index OPEN_NEW_CHAT 监听器, 切换到 chat tab 并开新会话。
-   * ChatPage 的 default assistantId 已是 DEFAULT_ASSISTANT_ID (小星老师), 不需要传参。
+   * 点击「开始今日教学」: 直接用 router.pushUrl 跳到 ChatPage, 跳过 observeAppUiState
+   * 观察者链 (实测: setAppUiStateValue + UIUtils.addMonitor 路径在真机不可靠,
+   * 监听器不被触发)。
    *
-   * 注意: 必须用 setAppUiStateValue, 不用 AppStorage.setOrCreate。
-   * 原因: Index 的监听器是 observeAppUiState + UIUtils.addMonitor, 监控的是 AppStorageV2
-   * 连接的 AppUiState 对象, 不是裸 AppStorage。只 setOrCreate 不会触发 UIUtils 回调。
+   * ChatPage 的 default assistantId 已是 DEFAULT_ASSISTANT_ID (小星老师), 不需要传参。
    */
   private handleStartTeaching(): void {
-    const ts = Date.now()
-    console.info(TAG, `handleStartTeaching firing, ts=${ts}, key=${AppStorageKeys.OPEN_NEW_CHAT}`)
-    setAppUiStateValue<number>(AppStorageKeys.OPEN_NEW_CHAT, ts)
-    // 读回验证 setAppUiStateValue 是否真的更新了 @Trace 字段
-    const after = getAppUiState().openNewChatTimestamp
-    console.info(TAG, `handleStartTeaching post-set, AppUiState.openNewChatTimestamp=${after}`)
+    console.info(TAG, 'handleStartTeaching via router.pushUrl')
+    try {
+      router.pushUrl({ url: 'pages/ChatPage' })
+    } catch (e) {
+      // 备选: AppStorage 触发, 留给 Index 自己的监听器 (如果某天它修好了)
+      const msg = (e as BusinessError).message ?? String(e)
+      console.error(TAG, `router.pushUrl failed: ${msg}, falling back to AppStorage`)
+      setAppUiStateValue<number>(AppStorageKeys.OPEN_NEW_CHAT, Date.now())
+    }
   }
 
   private getFreeformKeys(plan: LessonPlan): string[] {
