@@ -1,6 +1,7 @@
 {
   "src": [
     "pages/Index",
+    "pages/ChatPage",
     "pages/ModelManagePage",
     "pages/DefaultModelPage",
     "pages/ThemeModeSettingsPage",

@@ -380,12 +380,14 @@ struct LearningTomorrowPlanPage {
    * 监听器不被触发)。
    *
    * ChatPage 的 default assistantId 已是 DEFAULT_ASSISTANT_ID (小星老师), 不需要传参。
-   * url 用 router_map.json 的 name 字段 (不带 pages/ 前缀)。
+   * url 用 main_pages.json 注册的 pages/ChatPage 形式 (带 pages/ 前缀);
+   * 单纯 'ChatPage' 在 router.pushUrl 下解析不到 (router.pushUrl 只看 main_pages.json,
+   * 不看 router_map.json)。
    */
   private handleStartTeaching(): void {
     console.info(TAG, 'handleStartTeaching via router.pushUrl')
     try {
-      router.pushUrl({ url: 'ChatPage' })
+      router.pushUrl({ url: 'pages/ChatPage' })
     } catch (e) {
       // 备选: AppStorage 触发, 留给 Index 自己的监听器 (如果某天它修好了)
       const msg = (e as BusinessError).message ?? String(e)
