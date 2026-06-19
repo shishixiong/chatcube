@@ -2630,7 +2630,7 @@
     },
     {
       "name": "onboarding_step2_desc",
-      "value": "Pick a provider and paste its API key to start chatting."
+      "value": "Pick a provider, paste its API key, and (optionally) manage its models and capabilities."
     },
     {
       "name": "onboarding_step2_apikey_label",
@@ -2639,6 +2639,10 @@
     {
       "name": "onboarding_step2_apikey_placeholder",
       "value": "Paste your API key"
+    },
+    {
+      "name": "onboarding_step2_manage_models",
+      "value": "Manage models & capabilities"
     },
     {
       "name": "onboarding_step3_title",

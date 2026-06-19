@@ -62,8 +62,6 @@ import {
 } from '../utils/TaskAlertUtils'
 import { IndexBottomTabItem } from '../components/index/IndexBottomTabItem'
 import { IndexEmptyStateCard } from '../components/index/IndexEmptyStateCard'
-import { OnboardingOverlay } from '../components/onboarding/OnboardingOverlay'
-import { getOnboardingViewModel } from '../viewmodels/OnboardingViewModel'
 import { IndexSettingsPanel } from '../components/index/IndexSettingsPanel'
 import { IndexSettingsSheetContent } from '../components/index/IndexSettingsSheetContent'
 import { IndexSessionListSection } from '../components/index/IndexSessionListSection'
@@ -952,8 +950,10 @@ struct Index {
         this.onboardingActive = false
         return
       }
-      getOnboardingViewModel().start(this.currentThemeMode, this.currentColorTheme)
       this.onboardingActive = true
+      // 首次启动:直接进入服务商管理页(替代旧的 3 步引导)。
+      // 启用任意服务商后才会写 onboarding_completed=true。
+      this.openSettingsDestination(SettingsRouteName.MODEL_MANAGE)
     } catch (err) {
       console.error('Index', `Failed to initialize onboarding: ${JSON.stringify(err)}`)
       // 读取失败时默认跳过 onboarding 不阻塞用户
@@ -961,13 +961,20 @@ struct Index {
     }
   }
 
-  private handleOnboardingCompleted(prefillText: string): void {
-    this.preferencesService.setOnboardingCompleted(true).catch((err: Object) => {
-      console.error('Index', `Failed to persist onboarding flag: ${JSON.stringify(err)}`)
-    })
-    this.onboardingActive = false
-    if (prefillText !== '') {
-      this.openChatRoute({ initialDraft: prefillText } as ChatPageRouteParams)
+  // 检查引导完成条件:已启用至少一个服务商即视为完成。
+  // 在 onPageShow 和从 ModelManagePage 返回时调用。
+  private async checkOnboardingCompletion(): Promise<void> {
+    if (!this.onboardingActive) {
+      return
+    }
+    try {
+      const enabled = await this.providerViewModel.loadProviders()
+      if (enabled.length > 0) {
+        await this.preferencesService.setOnboardingCompleted(true)
+        this.onboardingActive = false
+      }
+    } catch (err) {
+      console.error('Index', `Failed to check onboarding completion: ${JSON.stringify(err)}`)
     }
   }
 
@@ -978,6 +985,7 @@ struct Index {
     this.loadHandAdaptiveSettings()
     this.processInAppTaskAlertPayload(this.inAppTaskAlertPayload)
     this.processPendingToolInteractionAlert(false)
+    this.checkOnboardingCompletion()
   }
 
   aboutToDisappear(): void {
@@ -1031,6 +1039,8 @@ struct Index {
       } else {
         this.settingsNavPathStack.pop()
       }
+      // 从服务商管理页返回时,若已启用服务商则完成引导。
+      this.checkOnboardingCompletion()
       return true
     }
 
@@ -2049,15 +2059,6 @@ struct Index {
             this.showAssistantToolPickerSheet = false
           }
         })
-
-      if (this.onboardingActive) {
-        OnboardingOverlay({
-          onCompleted: (prefillText: string): void => {
-            this.handleOnboardingCompleted(prefillText)
-          }
-        })
-      }
-
     }
     .width('100%')
     .height('100%')
@@ -4925,15 +4926,15 @@ struct Index {
   }
 
   private handleReplayOnboarding(): void {
-    // 关掉设置 sheet,免得 overlay 被 sheet 盖住
+    // 关掉设置 sheet,免得被 sheet 盖住
     if (this.showSettingsSheet) {
       this.showSettingsSheet = false
     }
     this.preferencesService.setOnboardingCompleted(false).catch((err: Object) => {
       console.error('Index', `Failed to reset onboarding flag: ${JSON.stringify(err)}`)
     })
-    getOnboardingViewModel().start(this.currentThemeMode, this.currentColorTheme)
     this.onboardingActive = true
+    this.openSettingsDestination(SettingsRouteName.MODEL_MANAGE)
   }
 
   @Builder

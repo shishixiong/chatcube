@@ -2630,7 +2630,7 @@
     },
     {
       "name": "onboarding_step2_desc",
-      "value": "选一个服务商并粘贴 API Key,即可开始对话。"
+      "value": "选一个服务商,粘贴 API Key,并可按需调整模型与能力。"
     },
     {
       "name": "onboarding_step2_apikey_label",
@@ -2639,6 +2639,10 @@
     {
       "name": "onboarding_step2_apikey_placeholder",
       "value": "粘贴你的 API Key"
+    },
+    {
+      "name": "onboarding_step2_manage_models",
+      "value": "管理模型与能力"
     },
     {
       "name": "onboarding_step3_title",
