@@ -103,6 +103,9 @@ export class StarRewardService {
       const difficulty = (payload['difficulty'] as number) ?? 0
       return DIFFICULTY_STARS[difficulty] ?? 1
     }
+    if (activityType === 'chat_correct') {
+      return 1
+    }
     return 0
   }
 

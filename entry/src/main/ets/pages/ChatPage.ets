@@ -64,6 +64,7 @@ import { inputMethod } from '@kit.IMEKit'
 import { webview } from '@kit.ArkWeb'
 import { dismissActiveSnackBarOnBack, showSnackBar, showToast, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
 import { getEffectiveCapabilities } from '../utils/ModelCapabilityDeriver'
+import { validateProviderConfig } from '../utils/ProviderValidationUtils'
 import { filterReasoningModels } from '../utils/ReasoningModelFilter'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { ChatModelSelectorSheetContent } from '../components/chat/ChatModelSelectorSheetContent'
@@ -134,6 +135,8 @@ import {
 } from '../utils/ImagePreviewSaveUtil'
 import { DocumentParsePolicy, DocumentParseResult, WebDocumentParserService } from '../services/DocumentParseService'
 import { shouldUseLeftHandAdaptiveLayout } from '../utils/HandAdaptiveUtils'
+import { formatYMD } from '../utils/DateFormatUtils'
+import { shouldAutoGreetToday, GREETING_SYSTEM_HINT } from '../utils/GreetingUtils'
 
 const DOMAIN = 0x0003
 const TAG = 'ChatPage'
@@ -154,6 +157,14 @@ const HDS_NAV_TITLE_NATIVE_START_INSET: number = 56
 const HDS_NAV_TITLE_NATIVE_MENU_BUTTON_WIDTH: number = 56
 const HDS_NAV_TITLE_NATIVE_MENU_EDGE_INSET: number = 16
 const HDS_NAV_SPLIT_TITLE_BAR_MASK_EXTRA_HEIGHT: number = 20
+
+// dispatchSend 抽出的共享发送通道入参 (用于用户输入与主动招呼两条路径)
+interface DispatchSendOptions {
+  content: string                          // 发送内容 (空 = 主动招呼, 跳过 prepareSendRequest 校验)
+  functionToolChoice: string | undefined   // undefined = 默认 auto; "required" = 强制至少一个函数调用
+  extraSystemPrompt?: string               // 主动招呼专用元指令, 注入到 system prompt 末尾
+  suppressUserBubble?: boolean             // true = 不创建 user 消息气泡 (主动招呼场景)
+}
 
 @ComponentV2
 export struct ChatPage {
@@ -406,6 +417,9 @@ export struct ChatPage {
   private pendingInitialToolIds: string[] = []
   private initialPromptAutoSent: boolean = false
   private forcedToolIdsOnce: string[] = []
+  // 单次主动招呼的派发守卫: 防止 triggerPostLoadActions 在同一页面实例内被多次回调时重复招呼
+  // 跨日/跨页面进入的重复守卫依赖 AppUiState.lastGreetDate (per-day 粒度)
+  private autoGreetDispatched: boolean = false
   private currentTaskId: string = ''
   private isSendDispatching: boolean = false
   private lastHandledAlertTimestamp: number = 0
@@ -762,6 +776,14 @@ export struct ChatPage {
       setTimeout(() => {
         this.autoSendInitialPrompt()
       }, 120)
+    }
+
+    // 主动招呼: 仅在「全新小星老师对话 + 今日首次」触发, 晚于 autoSendInitialPrompt
+    // 让首屏渲染稳定并让推荐提示词路径先决断 (autoSendInitialPrompt 先发会置 isSending)
+    if (this.isNewChatTransition
+        && this.currentAssistantId === DEFAULT_ASSISTANT_ID
+        && !this.autoGreetDispatched) {
+      setTimeout((): void => { this.autoGreetAssistant() }, 400)
     }
   }
 
@@ -1929,6 +1951,49 @@ export struct ChatPage {
     this.forcedToolIdsOnce = [...this.pendingInitialToolIds]
 
     await this.sendMessage()
+  }
+
+  // 小星老师每日首次进入 chat 主动招呼。
+  //
+  // 触发条件 (shouldAutoGreetToday 已封装):
+  //   1. 新会话过渡 (isNewChatTransition)
+  //   2. 当前助手为小星老师 (DEFAULT_ASSISTANT_ID)
+  //   3. 当前 session 消息数 = 0
+  //   4. 输入框为空 (小朋友未开始打字)
+  //   5. 今日尚未招呼过 (AppUiState.lastGreetDate !== todayYmd)
+  //
+  // 取消策略: 落库 (setAppUiStateValue LAST_GREET_DATE) 在 await sendAutoGreet 之前,
+  // 即使 LLM 调用崩溃/超时, 同日不再重试 (per-day 粒度优先于"今天一定要听到招呼")。
+  // autoGreetDispatched 守卫页面内重入; AppStorage 守卫跨页面/跨日。
+  private async autoGreetAssistant(): Promise<void> {
+    if (this.autoGreetDispatched) {
+      return
+    }
+    if (this.isSending || this.isSendDispatching) {
+      // 已被其它路径 (autoSendInitialPrompt / 用户主动发送) 占用, 让路静默退出
+      return
+    }
+    const todayYmd = formatYMD(Date.now())
+    const lastGreet = getAppUiState().lastGreetDate
+    if (!shouldAutoGreetToday({
+      isNewChatTransition: this.isNewChatTransition,
+      currentAssistantId: this.currentAssistantId,
+      messagesLength: this.messages.length,
+      inputText: this.inputText,
+      lastGreetDate: lastGreet,
+      todayYmd
+    })) {
+      return
+    }
+    // 二次校验: 400ms 内用户可能已键入内容
+    if (this.inputText.trim() !== '') {
+      return
+    }
+
+    this.autoGreetDispatched = true
+    setAppUiStateValue(AppStorageKeys.LAST_GREET_DATE, todayYmd)
+
+    await this.sendAutoGreet(GREETING_SYSTEM_HINT)
   }
 
   private findProviderModelSelection(
@@ -4430,7 +4495,12 @@ export struct ChatPage {
     this.showChatSnack($r('app.string.model_switched'), 2000, SnackBarTone.SUCCESS)
   }
 
-  async sendMessage(): Promise<void> {
+  // 抽出共享发送通道: 用户输入与主动招呼都走这里, 差异在 opts
+  // - content: 发送内容 (空字符串 = 主动招呼, 跳过 prepareSendRequest 校验)
+  // - functionToolChoice: undefined = 默认 auto; "required" = 强制至少一个函数调用
+  // - extraSystemPrompt: 主动招呼专用元指令, 注入到 system prompt 末尾
+  // - suppressUserBubble: true = 不创建 user 消息气泡 (主动招呼场景)
+  private async dispatchSend(opts: DispatchSendOptions): Promise<void> {
     if (this.isSendDispatching || this.isSending) {
       return
     }
@@ -4439,20 +4509,49 @@ export struct ChatPage {
     }
     this.isSendDispatching = true
     try {
-      const prepareResult = this.getSendFlow().prepareSendRequest(
-        this.inputText,
-        this.pendingAttachments.length,
-        this.isSending,
-        this.currentProvider,
-        this.currentModelId,
-        this.chatTaskOrchestrator.canStartNewTask()
-      )
-      if (!prepareResult.shouldSend || prepareResult.currentProvider === null) {
-        return
+      let messageContent: string
+      let currentProvider: ModelProvider
+      let effectiveApiKey: string
+
+      if (opts.content === '') {
+        // 主动招呼路径: 跳过 prepareSendRequest (它会因空 content 拒绝)。
+        // 但仍要走 validateProviderConfig 解析 effectiveApiKey — 不能传空串,
+        // 否则下游 getEffectiveApiKey(providerId, '') 会回退到 presetApiKey,
+        // 而 OpenAI 等服务商没有 presetApiKey, 直接 401。
+        if (this.currentProvider === null) {
+          this.showError($r('app.string.provider_required_before_chat'))
+          return
+        }
+        if (!this.chatTaskOrchestrator.canStartNewTask()) {
+          showToast(this.getUIContext(), $r('app.string.task_parallel_limit_reached'), 1500)
+          return
+        }
+        const providerValidation = validateProviderConfig(this.currentProvider)
+        if (!providerValidation.isValid) {
+          // provider 配置缺失/无效时静默放弃招呼, 不弹 toast 打扰小朋友
+          // 错误信息仍记日志便于排查
+          console.warn('ChatPage', `autoGreet skipped: ${providerValidation.errorMessage}`)
+          return
+        }
+        messageContent = ''
+        currentProvider = this.currentProvider
+        effectiveApiKey = providerValidation.effectiveApiKey
+      } else {
+        const prepareResult = this.getSendFlow().prepareSendRequest(
+          opts.content,
+          this.pendingAttachments.length,
+          this.isSending,
+          this.currentProvider,
+          this.currentModelId,
+          this.chatTaskOrchestrator.canStartNewTask()
+        )
+        if (!prepareResult.shouldSend || prepareResult.currentProvider === null) {
+          return
+        }
+        messageContent = prepareResult.messageContent
+        currentProvider = prepareResult.currentProvider
+        effectiveApiKey = prepareResult.effectiveApiKey
       }
-      const messageContent = prepareResult.messageContent
-      const currentProvider = prepareResult.currentProvider
-      const effectiveApiKey = prepareResult.effectiveApiKey
 
       await this.syncToolAvailabilityFromPreferences()
       // per-assistant 工具白名单: 取代旧版 chatpage chip 选择的 selectedToolIds。
@@ -4476,13 +4575,6 @@ export struct ChatPage {
       const activeSearchMode: ChatSearchMode = this.resolveEffectiveSearchModeForCurrentProvider(this.searchMode)
       const activeBuiltinImageGen = this.getActiveComposerBuiltinImageGenEnabled() &&
         this.isOpenAIBuiltinImageGenAvailableForCurrentProvider()
-      // 教学助手(默认小星老师)在新会话首轮强制 tool_choice="required",
-      // 强制 AI 先调 child_profile read 读取孩子画像,后续出题才有人设参考依据。
-      // 非首轮不强制,避免每轮都干扰 AI 的自然回答。
-      const functionToolChoice: string | undefined =
-        (this.messages.length === 0 && this.currentAssistantId === DEFAULT_ASSISTANT_ID)
-          ? 'required'
-          : undefined
       await this.getSendFlow().executeSend(
         messageContent,
         currentProvider,
@@ -4494,16 +4586,46 @@ export struct ChatPage {
         this.currentModelId,
         activeSearchMode,
         activeBuiltinImageGen,
-        functionToolChoice
+        opts.functionToolChoice,
+        opts.extraSystemPrompt ?? '',
+        opts.suppressUserBubble ?? false
       )
       this.forcedToolIdsOnce = []
     } catch (error) {
-      console.error('ChatPage', `sendMessage failed: ${JSON.stringify(error)}`)
+      console.error('ChatPage', `dispatchSend failed: ${JSON.stringify(error)}`)
       this.forcedToolIdsOnce = []
       this.showError($r('app.string.action_failed_retry'))
     } finally {
       this.isSendDispatching = false
     }
+  }
+
+  // 教学助手(默认小星老师)在新会话首轮强制 tool_choice="required",
+  // 强制 AI 先调 child_profile read 读取孩子画像,后续出题才有人设参考依据。
+  // 非首轮不强制,避免每轮都干扰 AI 的自然回答。
+  private resolveFunctionToolChoice(): string | undefined {
+    return (this.messages.length === 0 && this.currentAssistantId === DEFAULT_ASSISTANT_ID)
+      ? 'required'
+      : undefined
+  }
+
+  async sendMessage(): Promise<void> {
+    const sendOpts: DispatchSendOptions = {
+      content: this.inputText,
+      functionToolChoice: this.resolveFunctionToolChoice()
+    }
+    await this.dispatchSend(sendOpts)
+  }
+
+  // 主动招呼专用: 走工具通道但不强制 function calling, 注入 greeting 元指令, 不创建 user 气泡
+  private async sendAutoGreet(greetingHint: string): Promise<void> {
+    const sendOpts: DispatchSendOptions = {
+      content: '',
+      functionToolChoice: undefined,
+      extraSystemPrompt: greetingHint,
+      suppressUserBubble: true
+    }
+    await this.dispatchSend(sendOpts)
   }
 
   // 处理重新生成（支持非最后一条消息，支持用户消息和 AI 消息）

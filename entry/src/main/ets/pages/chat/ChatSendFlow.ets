@@ -191,7 +191,12 @@ export class ChatSendFlow {
     builtinImageGenEnabled: boolean = false,
     // 函数调用 tool_choice: undefined = 默认 auto; "required" = 强制至少一个函数调用。
     // 调用方按"是否首轮 + 是否教学助手"判定;非教学助手传 undefined 行为完全不变。
-    functionToolChoice?: string
+    functionToolChoice?: string,
+    // 主动招呼专用: 注入到 system prompt 末尾的元指令
+    // 仅 ChatPage.autoGreetAssistant 调用时非空, 配合 injectTeachingSections 末尾拼接
+    extraSystemPrompt: string = '',
+    // 主动招呼专用: true = 不创建 user 消息气泡 (招呼是 AI 单方面开口)
+    suppressUserBubble: boolean = false
   ): Promise<void> {
     // Pre-send 守门: 当 pending 附件含图片且当前模型不支持视觉时, 阻断发送并提示。
     // 解决"用户给非视觉模型发图→API 400→图片残留历史→后续轮持续 400"的循环错误。
@@ -226,7 +231,9 @@ export class ChatSendFlow {
         plan.learnToolsOnSuccess,
         plan.builtInResponsesTools,
         plan.builtInResponsesToolChoice,
-        plan.functionToolChoice
+        plan.functionToolChoice,
+        extraSystemPrompt,
+        suppressUserBubble
       )
       return
     }
@@ -243,7 +250,8 @@ export class ChatSendFlow {
       currentProvider,
       effectiveApiKey,
       attachmentsToSend,
-      plan.builtInResponsesTools
+      plan.builtInResponsesTools,
+      extraSystemPrompt
     )
   }
 
@@ -639,7 +647,11 @@ export class ChatSendFlow {
       messageContent,
       currentProvider,
       effectiveApiKey,
-      attachmentsToSend
+      attachmentsToSend,
+      [],
+      // 主动招呼的 extraSystemPrompt 已在 tools 路径入口传入, 此处不再重传
+      // (fallback 发生在 tools 调用失败之后, 主动招呼本身不应走到这里)
+      ''
     )
   }
 
@@ -671,7 +683,10 @@ export class ChatSendFlow {
       messageContent,
       currentProvider,
       effectiveApiKey,
-      stripped
+      stripped,
+      [],
+      // 主动招呼的 extraSystemPrompt 在主路径已传入; 兜底重试时不重传避免重复
+      ''
     )
   }
 
@@ -680,7 +695,9 @@ export class ChatSendFlow {
     currentProvider: ModelProvider,
     effectiveApiKey: string,
     attachmentsToSend: MessageAttachment[] = [],
-    builtInResponsesTools: BuiltInResponsesToolSpec[] = []
+    builtInResponsesTools: BuiltInResponsesToolSpec[] = [],
+    // 主动招呼专用: 透传到 chatViewModel.sendMessage
+    extraSystemPrompt: string = ''
   ): Promise<void> {
     const taskId = this.startTaskOrFail(messageContent)
     if (taskId === '') {
@@ -748,7 +765,8 @@ export class ChatSendFlow {
         currentProvider.customHeadersJson || undefined,
         currentProvider.openaiTransport,
         maxOutputTokens > 0 ? maxOutputTokens : undefined,
-        builtInResponsesTools.length > 0 ? builtInResponsesTools : undefined
+        builtInResponsesTools.length > 0 ? builtInResponsesTools : undefined,
+        extraSystemPrompt
       )
     } catch (error) {
       const message = `发送失败: ${JSON.stringify(error)}`
@@ -767,7 +785,11 @@ export class ChatSendFlow {
     builtInResponsesToolChoice?: OpenAIResponsesToolChoice,
     // 函数调用 tool_choice: undefined = 默认 auto; "required" = 强制至少一个函数调用。
     // 由 ChatViewModel 在 executeToolCallLoop 内合并到 aiApiService.streamChatRequestWithTools 的 toolChoice 参数。
-    functionToolChoice?: string
+    functionToolChoice?: string,
+    // 主动招呼专用: 透传到 chatViewModel.sendMessageWithTools
+    extraSystemPrompt: string = '',
+    // 主动招呼专用: 透传到 chatViewModel.sendMessageWithTools 跳过 user 气泡创建
+    suppressUserBubble: boolean = false
   ): Promise<void> {
     const taskId = this.startTaskOrFail(messageContent)
     if (taskId === '') {
@@ -869,7 +891,9 @@ export class ChatSendFlow {
         currentProvider.openaiTransport,
         builtInResponsesTools.length > 0 ? builtInResponsesTools : undefined,
         builtInResponsesToolChoice,
-        functionToolChoice
+        functionToolChoice,
+        extraSystemPrompt,
+        suppressUserBubble
       )
       if (completedSuccessfully && learnToolsOnSuccess && !fallbackStarted) {
         await this.deps.onConfirmModelSupportsTools(currentProvider.id, modelId)

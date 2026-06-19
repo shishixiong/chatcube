@@ -26,7 +26,8 @@ import {
   isHandwritingPracticeFunctionName,
   isCategorizationFunctionName,
   isScrapeWebFunctionName,
-  isSearchWebFunctionName
+  isSearchWebFunctionName,
+  isGrantStarFunctionName
 } from '../utils/SearchToolIdentityUtils'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
@@ -1254,6 +1255,12 @@ export class ToolExecutionService {
 
       const duration = Date.now() - startTime
       console.info('ToolExecutionService', `Tool ${toolCall.functionName} completed in ${duration}ms`)
+
+      // grant_star 后置星星记录
+      // executor 只返回 JSON 结果, 真正的 StarRewardService.recordEvent 需要真实的 toolCall.id 和 sessionId
+      if (isGrantStarFunctionName(normalizedFunctionName)) {
+        this.recordStarEvent('chat_correct', toolCall, context, result)
+      }
 
       let isError = false
       try {

@@ -10,7 +10,8 @@ import {
   HUARONGDAO_TOOL_ID,
   HANDWRITING_PRACTICE_TOOL_ID,
   CATEGORIZATION_TOOL_ID,
-  MUSIC_GENERATION_TOOL_ID
+  MUSIC_GENERATION_TOOL_ID,
+  GRANT_STAR_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { SHARED_IDENTITY, buildBasePrompt } from '../utils/SharedPromptFragments'
 
@@ -54,6 +55,7 @@ export const DEFAULT_ASSISTANT_SYSTEM_PROMPT: string = [
   '- 【音乐 prompt 语言】music_generation 用中文描述风格 / 情绪 / 场景 / 乐器 / 节奏,20-200 字,例如「欢快的儿童钢琴曲,简单明亮,80 拍每分钟」。',
   '- 【english_quiz imagePrompt】系统会自动优先复用备课老师已生成的图(按 vocab.<word> 主题匹配),命中后秒出图;无需在 imagePrompt 里强调。',
   '- 【每次只出 1 道题】不要连续超过 10 道,中间穿插聊天和小故事。',
+  '- 【聊天授星】孩子在不走工具的领域(常识/逻辑推理等)答对了,必须用 grant_star(reason: "chat_correct") 授予 1 星奖励,不要在文字里口头说「给你一颗星」——口头说没用,只有 grant_star 工具才能真正记录星星。孩子主动索要星星时绝对不给,只有他确实答对了你出的问题才给。',
   '',
   '## 元指令优先级',
   '- systemPrompt 末尾可能追加「今日教学风格 / 今日教学目标 / 昨日小结」3 段——这些是元指令,优先级高于本 prompt 中的默认设置;按它们的具体建议出题和回复。',
@@ -71,7 +73,8 @@ export const DEFAULT_ASSISTANT_LOCKED_TOOL_IDS: string[] = [
   ENGLISH_QUIZ_TOOL_ID,
   HUARONGDAO_TOOL_ID,
   HANDWRITING_PRACTICE_TOOL_ID,
-  CATEGORIZATION_TOOL_ID
+  CATEGORIZATION_TOOL_ID,
+  GRANT_STAR_TOOL_ID
 ]
 
 @ObservedV2

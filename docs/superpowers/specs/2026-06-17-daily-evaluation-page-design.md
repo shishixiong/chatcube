@@ -228,10 +228,10 @@ async getTrendById(id: string): Promise<WeeklyTrend | null> {
 | `feedbackTone` | DimensionRow 2 enum | 枚举 |
 | `weakStrongBalance` | DimensionRow 3 enum | 枚举 |
 | `learningPace` | DimensionRow 4 enum | 枚举 |
-| `difficultyTendencyRationale` | DimensionRow 1 rationale | 字符串 |
-| `feedbackToneRationale` | DimensionRow 2 rationale | 字符串 |
-| `weakStrongBalanceRationale` | DimensionRow 3 rationale | 字符串 |
-| `learningPaceRationale` | DimensionRow 4 rationale | 字符串 |
+| `difficultyRationale` | DimensionRow 1 rationale | 字符串 |
+| `feedbackRationale` | DimensionRow 2 rationale | 字符串 |
+| `balanceRationale` | DimensionRow 3 rationale | 字符串 |
+| `paceRationale` | DimensionRow 4 rationale | 字符串 |
 | `sourceWeeklyTrendId` | WeeklyTrendBlock 查询键 | `wt_YYYYMMDD` 格式 |
 
 ### 4.4 WeeklyTrend 字段映射

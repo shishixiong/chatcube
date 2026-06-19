@@ -77,6 +77,11 @@ export class AppStorageKeys {
   static readonly STAR_TODAY_SUMMARY: string = 'star_today_summary'
   static readonly STAR_TODAY_LOADED: string = 'star_today_loaded'
 
+  // 每日主动招呼 (auto-greet on first open today)
+  // 存储格式: 'YYYY-MM-DD' (本地时区); 空字符串 = 从未招呼过
+  // 写入必须用 state/AppUiState.ets 的 setAppUiStateValue 包装,避免 AppStorageV2 陷阱
+  static readonly LAST_GREET_DATE: string = 'last_greet_date'
+
   // 备课老师（每日动态教学）刷新通知
   // plan 更新时 pulse, ChatViewModel buildRequestSystemPrompt 检测到该值变化时重新拉取
   static readonly LESSON_PLAN_REFRESH_TICK: string = 'lesson_plan_refresh_tick'

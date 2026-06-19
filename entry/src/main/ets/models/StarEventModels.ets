@@ -7,7 +7,7 @@
  * - 读取: ChatPage 标题栏菜单项 / TodayStarDetailSheet
  */
 
-export type StarActivityType = 'math_quiz' | 'english_quiz' | 'number_puzzle' | 'handwriting_practice' | 'categorization'
+export type StarActivityType = 'math_quiz' | 'english_quiz' | 'number_puzzle' | 'handwriting_practice' | 'categorization' | 'chat_correct'
 
 export interface StarEventInsert {
   createdAt: number
@@ -41,6 +41,7 @@ export interface TodayStarSummaryByType {
   number_puzzle: StarTypeBucket
   handwriting_practice: StarTypeBucket
   categorization: StarTypeBucket
+  chat_correct: StarTypeBucket
 }
 
 export interface TodayStarSummary {
@@ -68,7 +69,8 @@ export function createEmptyTodayStarSummary(): TodayStarSummary {
     english_quiz: createEmptyBucket(),
     number_puzzle: createEmptyBucket(),
     handwriting_practice: createEmptyBucket(),
-    categorization: createEmptyBucket()
+    categorization: createEmptyBucket(),
+    chat_correct: createEmptyBucket()
   }
   return { total: 0, byType: byType }
 }
@@ -87,6 +89,7 @@ export interface StarActivityMetaMap {
   number_puzzle: StarActivityMeta
   handwriting_practice: StarActivityMeta
   categorization: StarActivityMeta
+  chat_correct: StarActivityMeta
 }
 
 const META_MATH: StarActivityMeta = {
@@ -124,17 +127,25 @@ const META_CATEGORIZATION: StarActivityMeta = {
   grantedHint: '分类小管家完成',
   unit: '局'
 }
+const META_CHAT_CORRECT: StarActivityMeta = {
+  emoji: '💬',
+  shortLabel: '聊天',
+  longLabel: '聊天答对',
+  grantedHint: '聊天答对',
+  unit: '次'
+}
 
 const metaRecord: StarActivityMetaMap = {
   math_quiz: META_MATH,
   english_quiz: META_ENGLISH,
   number_puzzle: META_PUZZLE,
   handwriting_practice: META_HANDWRITING,
-  categorization: META_CATEGORIZATION
+  categorization: META_CATEGORIZATION,
+  chat_correct: META_CHAT_CORRECT
 }
 export const STAR_ACTIVITY_META: StarActivityMetaMap = metaRecord
 
-const activityTypes: StarActivityType[] = ['math_quiz', 'english_quiz', 'number_puzzle', 'handwriting_practice', 'categorization']
+const activityTypes: StarActivityType[] = ['math_quiz', 'english_quiz', 'number_puzzle', 'handwriting_practice', 'categorization', 'chat_correct']
 export const STAR_ACTIVITY_TYPES: StarActivityType[] = activityTypes
 
 export function getBucketFromSummary(summary: TodayStarSummary, type: StarActivityType): StarTypeBucket {
@@ -151,6 +162,9 @@ export function getBucketFromSummary(summary: TodayStarSummary, type: StarActivi
   if (type === 'categorization') {
     return byType.categorization
   }
+  if (type === 'chat_correct') {
+    return byType.chat_correct
+  }
   return byType.number_puzzle
 }
 
@@ -166,6 +180,9 @@ export function getActivityMeta(type: StarActivityType): StarActivityMeta {
   }
   if (type === 'categorization') {
     return META_CATEGORIZATION
+  }
+  if (type === 'chat_correct') {
+    return META_CHAT_CORRECT
   }
   return META_PUZZLE
 }
@@ -186,6 +203,9 @@ export function getActivitySymbol(type: StarActivityType): Resource {
   }
   if (type === 'categorization') {
     return $r('sys.symbol.folder')
+  }
+  if (type === 'chat_correct') {
+    return $r('sys.symbol.message')
   }
   return $r('sys.symbol.lightbulb')
 }

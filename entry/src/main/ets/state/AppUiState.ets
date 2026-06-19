@@ -68,6 +68,10 @@ export class AppUiState {
   @Trace starLastGrant: string = ''          // 最近一次授星详情 (JSON 字符串)
   @Trace starTodaySummary: string = ''       // TodayStarSummary JSON 字符串
   @Trace starTodayLoaded: boolean = false    // 预热守卫
+
+  // 每日主动招呼 (auto-greet on first open today)
+  // 写入必须用 setAppUiStateValue,raw AppStorage.setOrCreate 不会触发 @Trace 观察者
+  @Trace lastGreetDate: string = ''          // 'YYYY-MM-DD' (本地时区) 或 ''
 }
 
 function readStorageValue<T>(key: string, fallback: T): T {
@@ -254,6 +258,9 @@ function applyAppUiStateValue<T extends string | number | boolean>(state: AppUiS
     case AppStorageKeys.STAR_TODAY_LOADED:
       state.starTodayLoaded = value as boolean
       return
+    case AppStorageKeys.LAST_GREET_DATE:
+      state.lastGreetDate = value as string
+      return
     default:
       return
   }
@@ -370,6 +377,8 @@ function createAppUiStateFromStorage(): AppUiState {
     readStorageValue<string>(AppStorageKeys.STAR_TODAY_SUMMARY, ''))
   applyAppUiStateValue(state, AppStorageKeys.STAR_TODAY_LOADED,
     readStorageValue<boolean>(AppStorageKeys.STAR_TODAY_LOADED, false))
+  applyAppUiStateValue(state, AppStorageKeys.LAST_GREET_DATE,
+    readStorageValue<string>(AppStorageKeys.LAST_GREET_DATE, ''))
   return state
 }
 
@@ -443,6 +452,7 @@ export function syncAppUiStateFromStorage(): void {
   state.starLastGrant = freshState.starLastGrant
   state.starTodaySummary = freshState.starTodaySummary
   state.starTodayLoaded = freshState.starTodayLoaded
+  state.lastGreetDate = freshState.lastGreetDate
 }
 
 export function applyThemeToAppUiState(themeId: string, colors: ThemeColorConfig): void {

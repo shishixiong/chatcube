@@ -301,7 +301,7 @@ export class ChatViewModel {
 	    return config.reasoningLevel
 	  }
 
-	  private async buildRequestSystemPrompt(extraPrompt: string = ''): Promise<string> {
+	  private async buildRequestSystemPrompt(extraPrompt: string = '', greetingHint: string = ''): Promise<string> {
 	    let globalPrompt = ''
 	    const assistantConfig = await this.getAssistantRuntimeConfig()
       if (assistantConfig.assistantId !== DEFAULT_ASSISTANT_ID) {
@@ -313,7 +313,7 @@ export class ChatViewModel {
 	    if (assistantConfig.assistantId !== DEFAULT_ASSISTANT_ID) {
 	      return withExtra
 	    }
-	    return await this.injectTeachingSections(withExtra)
+	    return await this.injectTeachingSections(withExtra, greetingHint)
 	  }
 
 	    /**
@@ -327,7 +327,7 @@ export class ChatViewModel {
    * - 任一段缺失时静默降级,不报错
    * - tsa 缺失时跳过 style 段（不会让 prompt 出现"无调整"）
    */
-  private async injectTeachingSections(basePrompt: string): Promise<string> {
+  private async injectTeachingSections(basePrompt: string, greetingHint: string = ''): Promise<string> {
     try {
       const planner = getLessonPlanningService()
       const today = await planner.getTodayPlan()
@@ -361,6 +361,12 @@ export class ChatViewModel {
         if (section !== '') {
           composed = this.assistantService.combineSystemPrompts(composed, section)
         }
+      }
+
+      // 4. 主动招呼元指令 (greetingHint, 仅主动招呼时非空)
+      // 末尾最高优先级,LLM 注意力上最近被读取的指令
+      if (greetingHint.trim() !== '') {
+        composed = this.assistantService.combineSystemPrompts(composed, greetingHint)
       }
       return composed
     } catch (error) {
@@ -1490,7 +1496,10 @@ export class ChatViewModel {
     openaiTransport?: OpenAITransport,
     maxOutputTokens?: number,
     // OpenAI Responses 内置工具 (web_search / image_generation), 仅在 transport=responses 时下发
-    builtInResponsesTools?: BuiltInResponsesToolSpec[]
+    builtInResponsesTools?: BuiltInResponsesToolSpec[],
+    // 主动招呼专用: 注入到 system prompt 末尾的元指令
+    // 仅 ChatPage.autoGreetAssistant 调用时非空, 配合 injectTeachingSections 末尾拼接
+    extraSystemPrompt?: string
   ): Promise<void> {
     const cancelSnapshot = this.cancelToken
     // 首次发送消息时，先持久化待处理的会话
@@ -1568,7 +1577,7 @@ export class ChatViewModel {
 
 	    // 构建请求消息列表（从上下文起始位置开始，过滤掉上下文清空标记）
 	    const requestMessages: RequestMessage[] = []
-	    const renderedSystemPrompt = await this.buildRequestSystemPrompt()
+	    const renderedSystemPrompt = await this.buildRequestSystemPrompt('', extraSystemPrompt ?? '')
 	    if (renderedSystemPrompt !== '') {
 	      requestMessages.push(new RequestMessage('system', renderedSystemPrompt))
 	    }
@@ -2442,7 +2451,12 @@ ${limitedSearchContext}
     // 函数调用 tool_choice: undefined = 默认 auto; "required" = 强制至少一个函数调用。
     // 与 builtInResponsesToolChoice 互斥: 前者管本地 function tools, 后者管 hosted 工具。
     // 在 executeToolCallLoop 内合并后传给 aiApiService.streamChatRequestWithTools。
-    functionToolChoice?: string
+    functionToolChoice?: string,
+    // 主动招呼专用: 注入到 system prompt 末尾的元指令
+    // 仅 ChatPage.autoGreetAssistant 调用时非空, 配合 injectTeachingSections 末尾拼接
+    extraSystemPrompt?: string,
+    // 主动招呼专用: true = 不创建 user 消息气泡 (招呼是 AI 单方面开口, 没有 user 输入)
+    suppressUserBubble?: boolean
   ): Promise<void> {
     const cancelSnapshot = this.cancelToken
     // 首次发送消息时，先持久化待处理的会话
@@ -2479,17 +2493,32 @@ ${limitedSearchContext}
       return
     }
 
-    // 创建用户消息
-    const userMessage = new ChatMessage(
-      this.generateId(),
-      MessageRole.USER,
-      content,
-      ''
-    )
-    userMessage.attachments = this.cloneAttachmentsForStoredMessage(attachments)
+    // 主动招呼路径: 不创建 user 消息, 直接占位 AI 消息
+    if (suppressUserBubble !== true) {
+      // 创建用户消息
+      const userMessage = new ChatMessage(
+        this.generateId(),
+        MessageRole.USER,
+        content,
+        ''
+      )
+      userMessage.attachments = this.cloneAttachmentsForStoredMessage(attachments)
 
-    // 通知 UI 添加用户消息（优先渲染）
-    onUserMessageAdded(userMessage)
+      // 通知 UI 添加用户消息（优先渲染）
+      onUserMessageAdded(userMessage)
+
+      // 保存用户消息到数据库 (仅招呼以外的路径)
+      if (snapshotSession !== null) {
+        await this.databaseService.addMessage(snapshotSessionId, userMessage)
+        this.appendMessageToSessionIfMissing(snapshotSession, userMessage)
+        if (shouldAutoGenerateTitle) {
+          const title = content.length > 20 ? content.substring(0, 20) + '...' : content
+          snapshotSession.title = title
+          await this.databaseService.updateSessionTitle(snapshotSessionId, title)
+          this.notifySessionListChanged()
+        }
+      }
+    }
 
     // 提前创建 AI 消息占位符，确保中途退出页面也能恢复模型信息/重新生成
     const aiMessage = new ChatMessage(
@@ -2503,18 +2532,6 @@ ${limitedSearchContext}
 
     onAIMessageAdded(aiMessage)
     this.addPendingAIMessage(aiMessage, snapshotSessionId)
-
-    // 保存用户消息到数据库
-    if (snapshotSession !== null) {
-      await this.databaseService.addMessage(snapshotSessionId, userMessage)
-      this.appendMessageToSessionIfMissing(snapshotSession, userMessage)
-      if (shouldAutoGenerateTitle) {
-        const title = content.length > 20 ? content.substring(0, 20) + '...' : content
-        snapshotSession.title = title
-        await this.databaseService.updateSessionTitle(snapshotSessionId, title)
-        this.notifySessionListChanged()
-      }
-    }
     if (this.isCancelled(cancelSnapshot)) {
       return
     }
@@ -2538,7 +2555,7 @@ ${limitedSearchContext}
 - 对外部系统有副作用的工具必须先确认用户意图与目标对象，不要擅自操作。
 - 若用户提到”今天/昨天/明天/现在/最新”等相对时间，请以当前时间为基准理解，不要编造不一致的绝对日期。
 - 工具返回后必须给出最终回答，不要在没有必要的情况下重复调用工具。`
-    const finalToolUsageSystemPrompt = await this.buildRequestSystemPrompt(toolUsageSystemPrompt)
+    const finalToolUsageSystemPrompt = await this.buildRequestSystemPrompt(toolUsageSystemPrompt, extraSystemPrompt ?? '')
     requestMessages.push(new RequestMessage('system', finalToolUsageSystemPrompt))
     for (let i = 0; i < historyMessages.length; i++) {
       requestMessages.push(historyMessages[i])

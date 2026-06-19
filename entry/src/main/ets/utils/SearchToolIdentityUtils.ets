@@ -12,6 +12,7 @@ export const ENGLISH_QUIZ_TOOL_ID: string = 'english_quiz'
 export const HUARONGDAO_TOOL_ID: string = 'huarongdao'
 export const HANDWRITING_PRACTICE_TOOL_ID: string = 'handwriting_practice'
 export const CATEGORIZATION_TOOL_ID: string = 'categorization'
+export const GRANT_STAR_TOOL_ID: string = 'grant_star'
 
 
 export function normalizeToolFunctionName(raw: string): string {
@@ -103,6 +104,10 @@ export function isCategorizationFunctionName(functionName: string): boolean {
   return normalized === CATEGORIZATION_TOOL_ID ||
     normalized === 'classify' ||
     normalized === 'categorize'
+}
+
+export function isGrantStarFunctionName(functionName: string): boolean {
+  return normalizeToolFunctionName(functionName) === GRANT_STAR_TOOL_ID
 }
 
 

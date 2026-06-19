@@ -28,7 +28,8 @@ import {
   ENGLISH_QUIZ_TOOL_ID,
   HUARONGDAO_TOOL_ID,
   HANDWRITING_PRACTICE_TOOL_ID,
-  CATEGORIZATION_TOOL_ID
+  CATEGORIZATION_TOOL_ID,
+  GRANT_STAR_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { i18n } from '@kit.LocalizationKit'
 import {
@@ -1959,6 +1960,72 @@ function createCategorizationToolConfig(): ToolConfig {
 }
 
 
+// ===== grant_star 工具 =====
+// 聊天授星工具：让小星老师在孩子通过聊天答对了问题时（不走 quiz 卡片的领域）主动授予 1 星奖励。
+// 纯后端即时执行器，不需要交互卡片或 pending answer。
+// 星星记录由 ToolExecutionService 的 post-hook 调用 StarRewardService.recordEvent 完成
+// （因为 executor 内部没有 toolCall.id 和 sessionId 上下文）。
+
+interface GrantStarArgs {
+  reason: string
+}
+
+class GrantStarExecutor implements ToolExecutor {
+  async execute(args: string): Promise<string> {
+    try {
+      const params = JSON.parse(args) as GrantStarArgs
+      const reason = (params.reason ?? '').trim()
+      if (reason !== 'chat_correct') {
+        return JSON.stringify({ stars: 0, error: 'reason must be chat_correct' })
+      }
+      return JSON.stringify({ stars: 1, reason: reason })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`grant_star error: ${String(error)}`))
+    }
+  }
+}
+
+function createGrantStarToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "reason": {
+        "type": "string",
+        "description": "授予理由,目前仅支持 chat_correct 表示孩子在聊天中答对了问题"
+      }
+    },
+    "required": ["reason"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    GRANT_STAR_TOOL_ID,
+    'Grant a star reward when the child correctly answers a question in casual chat (not via quiz cards). Use this INSTEAD of writing 「给你一颗星」 in plain text — plain-text star grants are fake and do not update the child\'s star total; only this tool can actually record a star. Call this ONLY when the child genuinely answered correctly — for example, they correctly identified an animal, solved a riddle you posed in text, or gave the right answer to a general knowledge question. The reason must be chat_correct. NEVER call this when the child merely asks for stars, begs, whines, or says please — stars are earned by answering correctly, not by asking. Also do NOT use this when the child simply says hi, agrees, or gives a trivially short response.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createGrantStarToolConfig(): ToolConfig {
+  return new ToolConfig(
+    GRANT_STAR_TOOL_ID,
+    '聊天授星',
+    '孩子在聊天中答对了问题时授予星星奖励, 用于不走互动卡片的教学领域。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    GRANT_STAR_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
 // 注册所有内置工具
 export function registerBuiltinTools(): void {
   const registry = getToolRegistry()
@@ -2118,6 +2185,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(GRANT_STAR_TOOL_ID)) {
+    const grantStarTool = new RegisteredTool(
+      GRANT_STAR_TOOL_ID,
+      createGrantStarToolConfig(),
+      createGrantStarToolDefinition(),
+      new GrantStarExecutor()
+    )
+    registry.registerTool(grantStarTool)
+    registeredNow += 1
+  }
+
   console.info(
     'BuiltinTools',
     `Builtin tools ready: total=${registry.getToolCount()}, newlyRegistered=${registeredNow}`
@@ -2126,5 +2204,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, HUARONGDAO_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, HUARONGDAO_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, GRANT_STAR_TOOL_ID]
 }
