@@ -1001,6 +1001,8 @@ struct LearningDailyEvaluationPage {
         // null
         this.EmptyState()
       }
+
+      this.LastCompletedSection()
     }
     .width('100%')
     .layoutWeight(1)
