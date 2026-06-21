@@ -381,98 +381,89 @@ struct LearningDailyEvaluationPage {
   }
 
   @Builder
-  private SummaryCard() {
-    if (this.adjustment === null) {
-      // 占位
-      Column() {}
-    } else {
-      Column({ space: 6 }) {
-        Row() {
-          Row({ space: 8 }) {
-            SymbolGlyph($r('sys.symbol.calendar'))
-              .fontSize(13)
-              .fontColor([this.themePrimary])
-            Text(this.formatDateDisplay(this.adjustment.effectiveDate))
-              .fontSize(14)
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.text_primary'))
-          }
-          .layoutWeight(1)
-
-          this.StatusPill(this.adjustment.status)
+  private SummaryCard(adj: TeachingStyleAdjustment) {
+    Column({ space: 6 }) {
+      Row() {
+        Row({ space: 8 }) {
+          SymbolGlyph($r('sys.symbol.calendar'))
+            .fontSize(13)
+            .fontColor([this.themePrimary])
+          Text(this.formatDateDisplay(adj.effectiveDate))
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.text_primary'))
         }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
+        .layoutWeight(1)
 
-        Text(`生成于 ${formatRelativeTime(this.adjustment.createdAt)} · 来自 ${this.adjustment.sourceSessionCount} 次对话`)
-          .fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
-
-        Text(`置信度 ${this.formatConfidence(this.adjustment.confidence)} · 模型 ${this.adjustment.evaluatorModelName !== '' ? this.adjustment.evaluatorModelName : '—'}`)
-          .fontSize(12)
-          .fontColor($r('app.color.text_tertiary'))
+        this.StatusPill(adj.status)
       }
       .width('100%')
-      .padding(14)
-      .alignItems(HorizontalAlign.Start)
+      .alignItems(VerticalAlign.Center)
+
+      Text(`生成于 ${formatRelativeTime(adj.createdAt)} · 来自 ${adj.sourceSessionCount} 次对话`)
+        .fontSize(12)
+        .fontColor($r('app.color.text_secondary'))
+
+      Text(`置信度 ${this.formatConfidence(adj.confidence)} · 模型 ${adj.evaluatorModelName !== '' ? adj.evaluatorModelName : '—'}`)
+        .fontSize(12)
+        .fontColor($r('app.color.text_tertiary'))
+    }
+    .width('100%')
+    .padding(14)
+    .alignItems(HorizontalAlign.Start)
+    .backgroundColor($r('app.color.surface'))
+    .borderRadius(16)
+    .border({ width: 1, color: $r('app.color.divider') })
+    .visualEffect(buildPointLightBorderEffect())
+  }
+
+  @Builder
+  private DimensionsBlock(adj: TeachingStyleAdjustment) {
+    Column({ space: 10 }) {
+      Text($r('app.string.learning_daily_evaluation_dimensions'))
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_secondary'))
+        .padding({ left: 4 })
+
+      Column() {
+        this.DimensionRow(
+          $r('app.string.learning_daily_evaluation_dim_difficulty'),
+          'difficultyTendency',
+          adj.difficultyTendency,
+          adj.difficultyRationale
+        )
+        Divider().color($r('app.color.divider')).margin({ left: 14, right: 14 })
+        this.DimensionRow(
+          $r('app.string.learning_daily_evaluation_dim_feedback'),
+          'feedbackTone',
+          adj.feedbackTone,
+          adj.feedbackRationale
+        )
+        Divider().color($r('app.color.divider')).margin({ left: 14, right: 14 })
+        this.DimensionRow(
+          $r('app.string.learning_daily_evaluation_dim_balance'),
+          'weakStrongBalance',
+          adj.weakStrongBalance,
+          adj.balanceRationale
+        )
+        Divider().color($r('app.color.divider')).margin({ left: 14, right: 14 })
+        this.DimensionRow(
+          $r('app.string.learning_daily_evaluation_dim_pace'),
+          'learningPace',
+          adj.learningPace,
+          adj.paceRationale
+        )
+      }
+      .width('100%')
+      .padding({ top: 4, bottom: 4 })
       .backgroundColor($r('app.color.surface'))
       .borderRadius(16)
       .border({ width: 1, color: $r('app.color.divider') })
       .visualEffect(buildPointLightBorderEffect())
     }
-  }
-
-  @Builder
-  private DimensionsBlock() {
-    if (this.adjustment === null) {
-      Column() {}
-    } else {
-      Column({ space: 10 }) {
-        Text($r('app.string.learning_daily_evaluation_dimensions'))
-          .fontSize(12)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_secondary'))
-          .padding({ left: 4 })
-
-        Column() {
-          this.DimensionRow(
-            $r('app.string.learning_daily_evaluation_dim_difficulty'),
-            'difficultyTendency',
-            this.adjustment.difficultyTendency,
-            this.adjustment.difficultyRationale
-          )
-          Divider().color($r('app.color.divider')).margin({ left: 14, right: 14 })
-          this.DimensionRow(
-            $r('app.string.learning_daily_evaluation_dim_feedback'),
-            'feedbackTone',
-            this.adjustment.feedbackTone,
-            this.adjustment.feedbackRationale
-          )
-          Divider().color($r('app.color.divider')).margin({ left: 14, right: 14 })
-          this.DimensionRow(
-            $r('app.string.learning_daily_evaluation_dim_balance'),
-            'weakStrongBalance',
-            this.adjustment.weakStrongBalance,
-            this.adjustment.balanceRationale
-          )
-          Divider().color($r('app.color.divider')).margin({ left: 14, right: 14 })
-          this.DimensionRow(
-            $r('app.string.learning_daily_evaluation_dim_pace'),
-            'learningPace',
-            this.adjustment.learningPace,
-            this.adjustment.paceRationale
-          )
-        }
-        .width('100%')
-        .padding({ top: 4, bottom: 4 })
-        .backgroundColor($r('app.color.surface'))
-        .borderRadius(16)
-        .border({ width: 1, color: $r('app.color.divider') })
-        .visualEffect(buildPointLightBorderEffect())
-      }
-      .width('100%')
-      .alignItems(HorizontalAlign.Start)
-    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
   }
 
   @Builder
@@ -532,8 +523,8 @@ struct LearningDailyEvaluationPage {
   }
 
   @Builder
-  private WeeklyTrendBlock() {
-    if (this.trend === null) {
+  private WeeklyTrendBlock(trend: WeeklyTrend | null) {
+    if (trend === null) {
       // 降级态
       Column({ space: 6 }) {
         Text($r('app.string.learning_daily_evaluation_trend'))
@@ -561,11 +552,11 @@ struct LearningDailyEvaluationPage {
           .padding({ left: 4 })
 
         Column({ space: 0 }) {
-          this.TrendRowProgress('技能速度', this.computeSkillVelocityProgress())
+          this.TrendRowProgress('技能速度', this.computeSkillVelocityProgressForTrend(trend))
           Divider().color($r('app.color.divider')).margin({ left: 14, right: 14 })
-          this.TrendRowProgress('反复出错', this.computeStrugglingProgress())
+          this.TrendRowProgress('反复出错', this.computeStrugglingProgressForTrend(trend))
           Divider().color($r('app.color.divider')).margin({ left: 14, right: 14 })
-          this.TrendRowChips('兴趣主题', this.trend.topicInterests.map((t): string => t.topicLabel))
+          this.TrendRowChips('兴趣主题', trend.topicInterests.map((t): string => t.topicLabel))
         }
         .width('100%')
         .backgroundColor($r('app.color.surface'))
@@ -629,19 +620,13 @@ struct LearningDailyEvaluationPage {
     .alignItems(HorizontalAlign.Start)
   }
 
-  private computeSkillVelocityProgress(): number {
-    if (this.trend === null) {
-      return 2
-    }
-    return computeTrendProgress(this.trend.topImprovements.length, this.trend.topRegressions.length)
+  private computeSkillVelocityProgressForTrend(trend: WeeklyTrend): number {
+    return computeTrendProgress(trend.topImprovements.length, trend.topRegressions.length)
   }
 
-  private computeStrugglingProgress(): number {
-    if (this.trend === null) {
-      return 2
-    }
+  private computeStrugglingProgressForTrend(trend: WeeklyTrend): number {
     // 反复出错越多进度越低 (反向)
-    return computeTrendProgress(0, this.trend.topStruggling.length)
+    return computeTrendProgress(0, trend.topStruggling.length)
   }
 
   @Builder
@@ -862,9 +847,9 @@ struct LearningDailyEvaluationPage {
                  this.adjustment.status !== 'pending' &&
                  this.adjustment.status !== 'running') {
         // done
-        this.SummaryCard()
-        this.DimensionsBlock()
-        this.WeeklyTrendBlock()
+        this.SummaryCard(this.adjustment)
+        this.DimensionsBlock(this.adjustment)
+        this.WeeklyTrendBlock(this.trend)
       } else if (this.adjustment !== null && this.adjustment.status === 'pending') {
         this.PendingState()
       } else if (this.adjustment !== null && this.adjustment.status === 'running') {
