@@ -81,7 +81,13 @@ struct LearningDailyEvaluationPage {
   @Local isErrorSheetVisible: boolean = false
   @Local loadError: string = ''
 
+  // 上次完成的评估 (今日未完成时在下方追加展示)
+  @Local lastCompletedAdj: TeachingStyleAdjustment | null = null
+  @Local lastCompletedTrend: WeeklyTrend | null = null
+  @Local lastCompletedLoadError: string = ''
+
   private loadToken: number = 0
+  private lastCompletedToken: number = 0
   private pollTimerId: number = -1
   private pollCount: number = 0
   private readonly POLL_INTERVAL_MS: number = 2000
@@ -140,6 +146,83 @@ struct LearningDailyEvaluationPage {
       }
     }
     this.maybeStartPolling()
+
+    // 上次完成的评估 (仅 selectedDate === today && 今日未 done 时拉取)
+    if (this.shouldFetchLastCompleted()) {
+      await this.loadLastCompleted()
+    } else {
+      this.clearLastCompleted()
+    }
+  }
+
+  /**
+   * 是否需要拉取"上次完成的评估"。
+   * 层 A 触发条件: selectedDate 必须是今天 + 今日未 done (null/pending/running/failed)。
+   * 切到过去日期时不拉 (避免与 DatePickerBar 冲突); 今日 done 时不拉 (section 自动隐藏)。
+   */
+  private shouldFetchLastCompleted(): boolean {
+    if (this.selectedDate !== todayYMD()) {
+      return false
+    }
+    if (this.adjustment === null) {
+      return true
+    }
+    if (this.adjustment.status === TeachingStyleAdjustmentStatus.DONE) {
+      return false
+    }
+    return true
+  }
+
+  /**
+   * 拉取最近一次已完成的评估。
+   * 用 asOfYMD=yesterday 调 getCurrentAdjustment, 严格排除今天, 只取 status='done' 的最近一条。
+   * service 已自动过滤 failed 行 (TeachingStyleAdjustmentService 行 107-109)。
+   */
+  private async loadLastCompleted(): Promise<void> {
+    const token: number = ++this.lastCompletedToken
+    this.lastCompletedLoadError = ''
+    try {
+      const yesterdayYMD: string = shiftYMD(todayYMD(), -1)
+      const adj: TeachingStyleAdjustment | null =
+        await ServiceRegistry.teachingStyle().getCurrentAdjustment(yesterdayYMD, Date.now())
+      if (token !== this.lastCompletedToken) {
+        return
+      }
+      this.lastCompletedAdj = adj
+      if (adj !== null && adj.sourceWeeklyTrendId !== '') {
+        try {
+          const trend: WeeklyTrend | null =
+            await ServiceRegistry.weeklyTrend().getTrendById(adj.sourceWeeklyTrendId)
+          if (token !== this.lastCompletedToken) {
+            return
+          }
+          this.lastCompletedTrend = trend
+        } catch (e) {
+          console.error(TAG, `lastCompleted getTrendById failed: ${(e as BusinessError).message ?? String(e)}`)
+          this.lastCompletedTrend = null
+        }
+      } else {
+        this.lastCompletedTrend = null
+      }
+    } catch (e) {
+      console.error(TAG, `loadLastCompleted failed: ${(e as BusinessError).message ?? String(e)}`)
+      if (token === this.lastCompletedToken) {
+        this.lastCompletedLoadError = (e as BusinessError).message ?? String(e)
+        this.lastCompletedAdj = null
+        this.lastCompletedTrend = null
+      }
+    }
+  }
+
+  /**
+   * 清空 last completed 状态。切到过去日期 / 今日 done 时调用。
+   * 内部 ++lastCompletedToken 丢弃任何 in-flight 的 loadLastCompleted 结果。
+   */
+  private clearLastCompleted(): void {
+    this.lastCompletedAdj = null
+    this.lastCompletedTrend = null
+    this.lastCompletedLoadError = ''
+    this.lastCompletedToken++
   }
 
   private maybeStartPolling(): void {
