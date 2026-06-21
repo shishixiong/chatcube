@@ -22,7 +22,8 @@ import {
   shiftYMD,
   canGoBack as utilCanGoBack,
   canGoForward as utilCanGoForward,
-  isWithinHistoryRange
+  isWithinHistoryRange,
+  daysBetween
 } from '../utils/DateRangeUtils'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { formatRelativeTime } from '../utils/TimeFormatUtils'
@@ -900,6 +901,63 @@ struct LearningDailyEvaluationPage {
     .width('100%')
     .padding({ top: 64, bottom: 64 })
     .alignItems(HorizontalAlign.Center)
+  }
+
+  /**
+   * "上次评估" section 的可点击 header。
+   * 显示 "上次评估" 标题 + " · YYYY-MM-DD (距今 N 天)" 副标题 + 右侧 chevron。
+   * 点击: 跳转到该日期 (同步 DatePickerBar, 走 loadPage)。
+   */
+  @Builder
+  private LastCompletedHeader(adj: TeachingStyleAdjustment) {
+    Row() {
+      Column({ space: 2 }) {
+        Text($r('app.string.learning_daily_evaluation_last_completed_title'))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_secondary'))
+
+        Text(` · ${adj.effectiveDate} (${String($r('app.string.learning_daily_evaluation_last_completed_subtitle_format')).replace('%d', String(daysBetween(adj.effectiveDate, todayYMD())))})`)
+          .fontSize(11)
+          .fontColor($r('app.color.text_tertiary'))
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(14)
+        .fontColor([$r('app.color.text_tertiary')])
+    }
+    .width('100%')
+    .height(44)
+    .padding({ left: 4, right: 4 })
+    .alignItems(VerticalAlign.Center)
+    .onClick((): void => {
+      this.selectedDate = adj.effectiveDate
+      this.loadPage()
+    })
+  }
+
+  /**
+   * "上次评估" section 容器。条件渲染:
+   * - lastCompletedAdj === null → 空占位
+   * - effectiveDate === today → 防御性空占位
+   * - 否则: header + SummaryCard + DimensionsBlock + WeeklyTrendBlock
+   */
+  @Builder
+  private LastCompletedSection() {
+    if (this.lastCompletedAdj !== null && this.lastCompletedAdj.effectiveDate !== todayYMD()) {
+      Column({ space: 12 }) {
+        this.LastCompletedHeader(this.lastCompletedAdj)
+        this.SummaryCard(this.lastCompletedAdj)
+        this.DimensionsBlock(this.lastCompletedAdj)
+        this.WeeklyTrendBlock(this.lastCompletedTrend)
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+    } else {
+      Column() {}
+    }
   }
 
   private formatConfidence(c: number): string {
