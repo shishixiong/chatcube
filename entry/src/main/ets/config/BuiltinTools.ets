@@ -1891,7 +1891,7 @@ function createCategorizationToolDefinition(): ToolDefinition {
     "properties": {
       "theme": {
         "type": "string",
-        "description": "主题名称，如「动物的家」、「水果与蔬菜」。2-12 字。"
+        "description": "主题名称，2-12 字。从工具 description 的「主题库」6 大类（动物/食物/自然/生活/认知/学习）里选一个具体主题，避免连续重复同一主题。"
       },
       "instruction": {
         "type": "string",
@@ -1936,7 +1936,7 @@ function createCategorizationToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     CATEGORIZATION_TOOL_ID,
-    'Present an interactive categorization game to the child. Use this INSTEAD of describing sorting exercises in plain text — plain-text sorting cannot grade answers or update the child\'s categorization skill level, only this tool can. Provide a theme (2-12 Chinese characters), 2-3 bins each with a name (and optional emoji), and items each with a name (and optional emoji) and bin_index pointing to the correct bin. Difficulty 1=4 items 2 bins (beginner), 2=6 items 3 bins (easy), 3=9 items 3 bins (advanced).',
+    'Present an interactive categorization game to the child. Use this INSTEAD of describing sorting exercises in plain text — plain-text sorting cannot grade answers or update the child\'s categorization skill level, only this tool can. Provide a theme (2-12 Chinese characters), 2-3 bins each with a name (and optional emoji), and items each with a name (and optional emoji) and bin_index pointing to the correct bin. Difficulty 1=4 items 2 bins (beginner), 2=6 items 3 bins (easy), 3=9 items 3 bins (advanced).\n\nTheme library — rotate across these 6 categories, prefer themes the child has not played recently:\n- 动物 (Animals): 动物的家 (陆地/水里/天空), 食物链 (食草/食肉/杂食), 腿数 (2/4/6+), 栖息环境 (宠物/农场/野生)\n- 食物 (Food): 水果与蔬菜 (水果/蔬菜), 三餐 (早餐/午餐/晚餐), 健康与零食 (健康/零食), 调味与主食 (调味料/主食)\n- 自然 (Nature): 天气 (晴/雨/雪), 四季 (春/夏/秋/冬), 地形 (山/河/海), 天文 (日/月/星)\n- 生活 (Daily life): 家里的房间 (厨房/卧室/浴室), 衣物 (上衣/裤子/鞋袜), 职业 (老师/医生/工人), 交通 (陆/水/空)\n- 认知 (Concepts): 颜色 (红/黄/蓝), 形状 (圆/方/三角), 冷热 (冷/热), 快慢 (快/慢)\n- 学习 (Academic): 拼音首字母 (a/b/p/m), 英文首字母 (A/B/C), 奇偶 (奇/偶), 大小写 (大写/小写)\n\nGuidance: pick a fresh theme each round, match difficulty to child_profile.categorization level (level 1-2 = difficulty 1, level 3-4 = difficulty 2, level 5 = difficulty 3), ensure each bin has 2+ items, and prefer concrete recognizable items with emoji over abstract concepts.',
     parameters
   )
 

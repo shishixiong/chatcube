@@ -16,6 +16,7 @@ import { ToolCall } from '../models/ChatModels'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { getPreferencesService, PreferenceKeys } from '../services/PreferencesService'
+import { validateAndNormalizeCategorization, NormalizedCategorizationData } from '../utils/CategorizationValidation'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { curves } from '@kit.ArkUI'
 
@@ -35,6 +36,29 @@ const SPRING_GENTLE: AnimateParam = { duration: 360, curve: curves.springMotion(
 const BIN_COLOR_WARM: string = '#FB923C'   // 暖橙
 const BIN_COLOR_HONEY: string = '#FBBF24'  // 蜂蜜黄
 const BIN_COLOR_MINT: string = '#34D399'   // 薄荷绿 (冷色平衡)
+
+// ================ 物品呼吸 / 引导动画参数 ================
+// 这些之前散落在 ItemCircle / startItemAnim / shakeItem 里, 抽出来便于调参。
+const ITEM_ANIM_INTERVAL_MS: number = 50         // 呼吸 setInterval 频率
+const ITEM_ANIM_PHASE_STEP: number = 6            // 每 tick 推进的相位 (度), 6° / 50ms = 120°/s
+const ITEM_BREATHING_AMPLITUDE: number = 0.03      // 未选中物品 ±3% scale (sin 驱动)
+const ITEM_PHASE_OFFSET_PER_INDEX: number = 30     // 多物品间的相位差, 避免整齐划一
+const ITEM_TUTORIAL_BOB_AMPLITUDE: number = 1.5    // 引导态首物品 bobbing 浮动幅度 (vp)
+const WRONG_DROP_SHAKE_MS: number = 400            // 拖错时物品震动持续时长
+
+// ================ 拖拽命中检测 ================
+const DRAG_START_DISTANCE: number = 5              // PanGesture 触发阈值 (vp), 避免误触
+const DRAGGING_ITEM_SCALE: number = 1.2            // 拖动中物品放大
+const DRAGGING_SHADOW_RADIUS: number = 12           // 拖动阴影半径
+const HOVERED_BIN_SCALE: number = 1.05             // 拖到桶上方时桶放大
+
+// 桶的窗口空间 bbox, 由 onAreaChange 同步, 供拖拽命中检测使用
+interface BinRect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
 
 // ================ 公共接口 ================
 export interface CategorizationResult {
@@ -58,15 +82,7 @@ export interface CategorizationItem {
   bin_index: number
 }
 
-interface NormalizedData {
-  ok: boolean
-  error: string
-  bins: CategorizationBin[]
-  items: CategorizationItem[]
-  difficulty: number
-  theme: string
-  instruction: string
-}
+// 校验 / 解析逻辑已抽到 utils/CategorizationValidation.ets, 此处仅复用其类型
 
 // ================ 组件 ================
 // TODO (v1.1): 当前仅实现点击交互 (点击物品选中 → 点击桶归位)。
@@ -101,6 +117,11 @@ export struct CategorizationCard {
   @Local shakingItemIndex: number = -1
   @Local itemPressedIndex: number = -1
 
+  // 拖拽态: draggingItemIndex = 当前被拖动的物品; dragOffsetX/Y = 实时位移 (驱动 scale + translate)
+  @Local draggingItemIndex: number = -1
+  @Local dragOffsetX: number = 0
+  @Local dragOffsetY: number = 0
+
   // 引导状态: 首次玩时显示气泡 + 首物品 bobbing 动画
   @Local isFirstPlay: boolean = true
 
@@ -119,6 +140,10 @@ export struct CategorizationCard {
   private shakeTimerId: number = -1
   private itemAnimTimerId: number = -1
   private startTime: number = 0
+
+  // 拖拽命中检测: 各桶的窗口空间 bbox (globalPosition + width/height)。
+  // 由 BinCell 的 onAreaChange 实时同步, 非响应式避免每 tick 触发重渲染。
+  private binRects: Map<number, BinRect> = new Map()
 
   // ================ 主题派生 (NumberPuzzleCard 同款 getter) ================
   private get themePrimary(): string {
@@ -183,10 +208,11 @@ export struct CategorizationCard {
 
   private startItemAnim(): void {
     this.stopItemAnim()
-    // 6° / 50ms = 120°/s, |sin| 半周期 1.5s, 驱动首物品 bobbing + 所有物品呼吸 scale
+    // ITEM_ANIM_PHASE_STEP° / ITEM_ANIM_INTERVAL_MS ms = 120°/s, |sin| 半周期 1.5s,
+    // 驱动首物品 bobbing + 所有物品呼吸 scale
     this.itemAnimTimerId = setInterval(() => {
-      this.itemAnimPhase = (this.itemAnimPhase + 6) % 360
-    }, 50)
+      this.itemAnimPhase = (this.itemAnimPhase + ITEM_ANIM_PHASE_STEP) % 360
+    }, ITEM_ANIM_INTERVAL_MS)
   }
 
   private stopItemAnim(): void {
@@ -196,12 +222,15 @@ export struct CategorizationCard {
     }
   }
 
-  // 用户首次点击物品后, 关闭引导并持久化 (item anim 继续跑, 只用于呼吸)
+  // 用户首次点击物品后, 关闭引导并持久化。
+  // 同时停止呼吸 setInterval(50ms)——引导已尽其职, 物品不再需要 bobbing / 呼吸 scale,
+  // 节省每 50ms × N 物品的属性求值开销 (难度 3 = 9 件 × 20/s ≈ 180 次/s)。
   private async dismissTutorial(): Promise<void> {
     if (!this.isFirstPlay) {
       return
     }
     this.isFirstPlay = false
+    this.stopItemAnim()
     try {
       await getPreferencesService().setCategorizationTutorialSeen(true)
     } catch (_e) {
@@ -279,106 +308,10 @@ export struct CategorizationCard {
   }
 
   // ================ 校验 / 解析 ================
-  private validateAndNormalize(): NormalizedData {
-    const fail = (msg: string): NormalizedData => {
-      return {
-        ok: false,
-        error: msg,
-        bins: [],
-        items: [],
-        difficulty: 1,
-        theme: '',
-        instruction: ''
-      }
-    }
-
-    let parsed: Record<string, Object>
-    try {
-      parsed = JSON.parse(this.toolCall.arguments) as Record<string, Object>
-    } catch (_e) {
-      return fail('题目格式错误，请提示小星老师再出一题吧')
-    }
-
-    const theme = ((parsed['theme'] as string) ?? '').trim()
-    if (theme === '') {
-      return fail('主题为空，请提示小星老师再出一题吧')
-    }
-    const instruction = ((parsed['instruction'] as string) ?? '').trim()
-
-    const binsRaw = parsed['bins'] as Array<Record<string, Object>> | undefined
-    if (!binsRaw || binsRaw.length < 2 || binsRaw.length > 3) {
-      return fail('分类桶数量不对（需要 2 或 3 个）')
-    }
-    const bins: CategorizationBin[] = []
-    for (let i = 0; i < binsRaw.length; i++) {
-      const raw = binsRaw[i]
-      const name = ((raw['name'] as string) ?? '').trim()
-      if (name === '') {
-        return fail(`第 ${i + 1} 个分类桶缺少名字`)
-      }
-      bins.push({
-        name: name,
-        emoji: (raw['emoji'] as string) ?? ''
-      })
-    }
-
-    const itemsRaw = parsed['items'] as Array<Record<string, Object>> | undefined
-    if (!itemsRaw || itemsRaw.length === 0) {
-      return fail('物品列表为空')
-    }
-
-    let difficulty = (parsed['difficulty'] as number) ?? 0
-    if (difficulty !== 1 && difficulty !== 2 && difficulty !== 3) {
-      if (itemsRaw.length === 4) {
-        difficulty = 1
-      } else if (itemsRaw.length === 6) {
-        difficulty = 2
-      } else if (itemsRaw.length === 9) {
-        difficulty = 3
-      } else {
-        return fail(`物品数量 ${itemsRaw.length} 与难度不匹配（应为 4/6/9）`)
-      }
-    }
-    const expectedCount = difficulty === 1 ? 4 : (difficulty === 2 ? 6 : 9)
-    if (itemsRaw.length !== expectedCount) {
-      return fail(`物品数量 ${itemsRaw.length} 与难度 ${difficulty}（期望 ${expectedCount}）不一致`)
-    }
-
-    const binCounts: number[] = []
-    for (let i = 0; i < bins.length; i++) {
-      binCounts.push(0)
-    }
-    const items: CategorizationItem[] = []
-    for (let i = 0; i < itemsRaw.length; i++) {
-      const raw = itemsRaw[i]
-      const name = ((raw['name'] as string) ?? '').trim()
-      const emoji = (raw['emoji'] as string) ?? ''
-      const binIndex = raw['bin_index'] as number
-      if (name === '') {
-        return fail(`第 ${i + 1} 个物品缺少名字`)
-      }
-      if (typeof binIndex !== 'number' || Math.floor(binIndex) !== binIndex
-        || binIndex < 0 || binIndex >= bins.length) {
-        return fail(`第 ${i + 1} 个物品的 bin_index 不合法`)
-      }
-      binCounts[binIndex] = binCounts[binIndex] + 1
-      items.push({ name: name, emoji: emoji, bin_index: binIndex })
-    }
-    for (let i = 0; i < binCounts.length; i++) {
-      if (binCounts[i] < 2) {
-        return fail(`第 ${i + 1} 个桶只有 ${binCounts[i]} 件物品（至少 2 件）`)
-      }
-    }
-
-    return {
-      ok: true,
-      error: '',
-      bins,
-      items,
-      difficulty,
-      theme,
-      instruction
-    }
+  // 校验逻辑已抽到 utils/CategorizationValidation.ets (纯函数, 可单测)。
+  // 此处仅做参数转发, 保留组件内访问入口。
+  private validateAndNormalize(): NormalizedCategorizationData {
+    return validateAndNormalizeCategorization(this.toolCall.arguments)
   }
 
   private parseAnsweredPayload(): void {
@@ -497,7 +430,7 @@ export struct CategorizationCard {
     this.shakeTimerId = setTimeout(() => {
       this.shakingItemIndex = -1
       this.shakeTimerId = -1
-    }, 400)
+    }, WRONG_DROP_SHAKE_MS)
   }
 
   private evaluateWin(): void {
@@ -527,6 +460,68 @@ export struct CategorizationCard {
     this.isCompleted = true
     this.hasWon = false
     this.submitResult(false)
+  }
+
+  // 撤回: 点击桶内已归位的物品, 取出回到 ItemsLayer。
+  // 若该物品原本正确归类, correctCount 同步扣减; wrongAttempts 不动 (累计指标)。
+  private handleUnplace(itemIndex: number): void {
+    if (this.isCompleted) {
+      return
+    }
+    const bin = this.placedItems[itemIndex]
+    if (bin < 0) {
+      return
+    }
+    if (this.items[itemIndex].bin_index === bin) {
+      this.correctCount = Math.max(0, this.correctCount - 1)
+    }
+    const next: number[] = []
+    for (let i = 0; i < this.placedItems.length; i++) {
+      next.push(i === itemIndex ? -1 : this.placedItems[i])
+    }
+    this.placedItems = next
+    hilog.info(DOMAIN, TAG, `unplace: item=${itemIndex} from bin=${bin}`)
+  }
+
+  // ================ 拖拽手势 handler ================
+  // PanGesture 链: onActionStart 设 draggingItemIndex, onActionUpdate 跟随手指 + 更新 hoveredBinIndex,
+  // onActionEnd 视 hoveredBinIndex 决定 handleDrop 或弹回。
+  private handleDragStart(itemIndex: number): void {
+    if (this.isCompleted || this.isAnswered) {
+      return
+    }
+    // 已归位的物品不允许起拖 (撤回走 handleUnplace 独立路径)
+    if (this.placedItems[itemIndex] >= 0) {
+      return
+    }
+    this.draggingItemIndex = itemIndex
+    this.dragOffsetX = 0
+    this.dragOffsetY = 0
+    // 起拖即关闭引导 (与点击行为一致)
+    this.dismissTutorial()
+  }
+
+  private handleDragUpdate(offsetX: number, offsetY: number, globalX: number, globalY: number): void {
+    if (this.draggingItemIndex < 0) {
+      return
+    }
+    this.dragOffsetX = offsetX
+    this.dragOffsetY = offsetY
+    this.hoveredBinIndex = this.hitTestBin(globalX, globalY)
+  }
+
+  private handleDragEnd(itemIndex: number): void {
+    if (this.draggingItemIndex !== itemIndex) {
+      return
+    }
+    const targetBin = this.hoveredBinIndex
+    this.draggingItemIndex = -1
+    this.dragOffsetX = 0
+    this.dragOffsetY = 0
+    this.hoveredBinIndex = -1
+    if (targetBin >= 0) {
+      this.handleDrop(itemIndex, targetBin)
+    }
   }
 
   private submitResult(completed: boolean): void {
@@ -584,6 +579,46 @@ export struct CategorizationCard {
       }
     }
     return count
+  }
+
+  // 返回该桶内已归位物品的 index 数组 (按 placed 顺序, 用于在桶内渲染 mini item)
+  private getItemsInBin(binIndex: number): number[] {
+    const result: number[] = []
+    for (let i = 0; i < this.placedItems.length; i++) {
+      if (this.placedItems[i] === binIndex) {
+        result.push(i)
+      }
+    }
+    return result
+  }
+
+  // 同步桶的窗口空间 bbox. 由 BinCell.onAreaChange 调用, 非响应式。
+  private updateBinRect(binIndex: number, area: Area): void {
+    // Area.globalPosition.x/y 类型是 Length (string | number), 运行时通常是 number vp。
+    // 强转为 number 以便后续坐标比较 (与 FingerInfo.globalX/Y 同一坐标空间)。
+    const rect: BinRect = {
+      x: area.globalPosition.x as number,
+      y: area.globalPosition.y as number,
+      w: area.width as number,
+      h: area.height as number
+    }
+    this.binRects.set(binIndex, rect)
+  }
+
+  // 命中检测: 给定窗口坐标, 返回包含该点的桶 index, 找不到返回 -1
+  private hitTestBin(globalX: number, globalY: number): number {
+    const it = this.binRects.entries()
+    let entry = it.next()
+    while (!entry.done) {
+      const idx = entry.value[0] as number
+      const rect = entry.value[1] as BinRect
+      if (globalX >= rect.x && globalX <= rect.x + rect.w
+        && globalY >= rect.y && globalY <= rect.y + rect.h) {
+        return idx
+      }
+      entry = it.next()
+    }
+    return -1
   }
 
   private hasUnplacedItem(): boolean {
@@ -763,6 +798,9 @@ export struct CategorizationCard {
         Text(`${this.countPlacedInBin(index)} 件`)
           .fontSize(this.largeSize ? 11 : 10)
           .fontColor($r('app.color.text_tertiary'))
+
+        // 已落入物品堆: 按归位顺序横排显示 emoji, 点击 = 撤回
+        this.BinItemsRow(index)
       }
       .layoutWeight(1)
       .justifyContent(FlexAlign.Center)
@@ -782,7 +820,7 @@ export struct CategorizationCard {
         })
     }
     .layoutWeight(1)
-    .height(this.largeSize ? 120 : 96)
+    .height(this.largeSize ? 140 : 116)
     .padding({ left: 6, right: 6, top: 2, bottom: 2 })
     .borderRadius(this.largeSize ? 16 : 14)
     .linearGradient(this.hoveredBinIndex === index
@@ -807,11 +845,70 @@ export struct CategorizationCard {
         ? this.themePrimary
         : withColorAlpha(this.getBinAccentColor(index), '38')
     })
-    .scale(this.selectedItemIndex >= 0
-      ? { x: 1.05, y: 1.05 }
+    .scale(this.hoveredBinIndex === index || this.selectedItemIndex >= 0
+      ? { x: HOVERED_BIN_SCALE, y: HOVERED_BIN_SCALE }
       : { x: 1, y: 1 })
     .animation(SPRING_GENTLE)
     .onClick(() => this.handleBinClick(index))
+    // 同步桶的窗口空间 bbox, 供拖拽命中检测使用
+    .onAreaChange((_oldArea: Area, newArea: Area) => {
+      this.updateBinRect(index, newArea)
+    })
+  }
+
+  // 桶内已归位物品的横排堆栈。空桶时 ForEach 输出空数组, Flex 自然不渲染子项。
+  // 每个 emoji 点击 = 撤回该物品 (从桶取出回到 ItemsLayer)。
+  @Builder
+  BinItemsRow(binIndex: number) {
+    Flex({ wrap: FlexWrap.NoWrap, justifyContent: FlexAlign.Center, alignItems: ItemAlign.Center }) {
+      ForEach(this.getItemsInBin(binIndex), (itemIdx: number) => {
+        this.BinPlacedItem(itemIdx)
+      }, (itemIdx: number) => `binitem_${binIndex}_${itemIdx}`)
+    }
+    .width('100%')
+    .margin({ top: 4 })
+  }
+
+  @Builder
+  BinPlacedItem(itemIdx: number) {
+    Column() {
+      if (this.items[itemIdx].emoji !== '') {
+        Text(this.items[itemIdx].emoji)
+          .fontSize(this.largeSize ? 18 : 16)
+      } else {
+        Text(this.items[itemIdx].name)
+          .fontSize(10)
+          .fontColor($r('app.color.text_primary'))
+          .maxLines(1)
+      }
+    }
+    .width(this.largeSize ? 30 : 26)
+    .height(this.largeSize ? 30 : 26)
+    .borderRadius(this.largeSize ? 15 : 13)
+    .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '18' : '12'))
+    .border({
+      width: 1,
+      color: withColorAlpha(this.themePrimary, '40'),
+      style: BorderStyle.Solid
+    })
+    .margin(2)
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .scale(this.itemPressedIndex === itemIdx ? { x: 0.9, y: 0.9 } : { x: 1, y: 1 })
+    .animation(SPRING_QUICK)
+    .onTouch((e: TouchEvent) => {
+      if (e.type === TouchType.Down) {
+        this.itemPressedIndex = itemIdx
+      } else if (e.type === TouchType.Up || e.type === TouchType.Cancel) {
+        this.itemPressedIndex = -1
+      }
+    })
+    // 只在未完成 + 非 isAnswered 时允许撤回
+    .onClick(() => {
+      if (!this.isCompleted && !this.isAnswered) {
+        this.handleUnplace(itemIdx)
+      }
+    })
   }
 
   @Builder
@@ -846,7 +943,7 @@ export struct CategorizationCard {
     .width(this.largeSize ? 80 : 68)
     .height(this.largeSize ? 80 : 68)
     .borderRadius(this.largeSize ? 40 : 34)
-    .linearGradient(this.selectedItemIndex === index
+    .linearGradient(this.selectedItemIndex === index || this.draggingItemIndex === index
       ? {
         angle: 180,
         colors: [
@@ -861,29 +958,38 @@ export struct CategorizationCard {
           [withColorAlpha(this.themePrimary, '04'), 1.0]
         ]
       })
-    .borderWidth(this.selectedItemIndex === index || this.shakingItemIndex === index ? 3 : 1)
+    .borderWidth(this.selectedItemIndex === index || this.shakingItemIndex === index
+      || this.draggingItemIndex === index ? 3 : 1)
     .borderColor(this.shakingItemIndex === index
       ? ERROR_RED
-      : (this.selectedItemIndex === index ? this.themePrimary : withColorAlpha(this.themePrimary, '30')))
-    .scale(this.selectedItemIndex === index
-      ? { x: 1.15, y: 1.15 }
-      : (this.shakingItemIndex === index
-        ? { x: 1.05, y: 1.05 }
-        : (this.itemPressedIndex === index
-          ? { x: 0.95, y: 0.95 }
-          : {
-            x: 1 + Math.sin((this.itemAnimPhase + index * 30) % 360 * Math.PI / 180) * 0.03,
-            y: 1 + Math.sin((this.itemAnimPhase + index * 30) % 360 * Math.PI / 180) * 0.03
-          })))
-    .shadow(this.selectedItemIndex === index
-      ? { radius: 10, color: '#33000000', offsetY: 3 }
-      : { radius: 4, color: '#1F000000', offsetY: 1 })
-    .translate(this.isFirstPlay && index === 0
-      && this.selectedItemIndex !== index
-      && this.shakingItemIndex !== index
-      && this.itemPressedIndex !== index
-      ? { x: 0, y: -Math.abs(Math.sin(this.itemAnimPhase * Math.PI / 180)) * 1.5 }
-      : { x: 0, y: 0 })
+      : (this.selectedItemIndex === index || this.draggingItemIndex === index
+        ? this.themePrimary
+        : withColorAlpha(this.themePrimary, '30')))
+    .scale(this.draggingItemIndex === index
+      ? { x: DRAGGING_ITEM_SCALE, y: DRAGGING_ITEM_SCALE }
+      : (this.selectedItemIndex === index
+        ? { x: 1.15, y: 1.15 }
+        : (this.shakingItemIndex === index
+          ? { x: 1.05, y: 1.05 }
+          : (this.itemPressedIndex === index
+            ? { x: 0.95, y: 0.95 }
+            : {
+              x: 1 + Math.sin((this.itemAnimPhase + index * ITEM_PHASE_OFFSET_PER_INDEX) % 360 * Math.PI / 180) * ITEM_BREATHING_AMPLITUDE,
+              y: 1 + Math.sin((this.itemAnimPhase + index * ITEM_PHASE_OFFSET_PER_INDEX) % 360 * Math.PI / 180) * ITEM_BREATHING_AMPLITUDE
+            }))))
+    .shadow(this.draggingItemIndex === index
+      ? { radius: DRAGGING_SHADOW_RADIUS, color: '#40000000', offsetY: 4 }
+      : (this.selectedItemIndex === index
+        ? { radius: 10, color: '#33000000', offsetY: 3 }
+        : { radius: 4, color: '#1F000000', offsetY: 1 }))
+    .translate(this.draggingItemIndex === index
+      ? { x: this.dragOffsetX, y: this.dragOffsetY }
+      : (this.isFirstPlay && index === 0
+        && this.selectedItemIndex !== index
+        && this.shakingItemIndex !== index
+        && this.itemPressedIndex !== index
+        ? { x: 0, y: -Math.abs(Math.sin(this.itemAnimPhase * Math.PI / 180)) * ITEM_TUTORIAL_BOB_AMPLITUDE }
+        : { x: 0, y: 0 }))
     .animation(SPRING_QUICK)
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
@@ -896,19 +1002,47 @@ export struct CategorizationCard {
       }
     })
     .onClick(() => this.handleItemClick(index))
+    // 拖拽手势: 已回答 / 已完成时不出拖 (与 onClick 同条件)
+    .priorityGesture(
+      PanGesture({ direction: PanDirection.All, distance: DRAG_START_DISTANCE })
+        .onActionStart((event: GestureEvent) => {
+          if (this.isCompleted || this.isAnswered) {
+            return
+          }
+          this.handleDragStart(index)
+        })
+        .onActionUpdate((event: GestureEvent) => {
+          if (this.draggingItemIndex !== index) {
+            return
+          }
+          const finger = event.fingerList && event.fingerList.length > 0 ? event.fingerList[0] : undefined
+          if (finger === undefined) {
+            return
+          }
+          // FingerInfo.globalX/globalY = 窗口坐标, 与 Area.globalPosition 同坐标空间
+          this.handleDragUpdate(event.offsetX, event.offsetY,
+            (finger as FingerInfo).globalX, (finger as FingerInfo).globalY)
+        })
+        .onActionEnd((_event: GestureEvent) => {
+          if (this.draggingItemIndex !== index) {
+            return
+          }
+          this.handleDragEnd(index)
+        })
+    )
   }
 
   @Builder
   StatsGrid() {
     Row({ space: 8 }) {
-      this.StatCard($r('sys.symbol.clock'), '时间', this.formatBestTime(this.elapsedSeconds))
-      this.StatCard($r('sys.symbol.checkmark'), '进度', `${this.correctCount}/${this.items.length}`)
+      this.StatCard($r('sys.symbol.clock'), '时间', this.formatBestTime(this.elapsedSeconds), false)
+      this.StatCard($r('sys.symbol.checkmark'), '进度', `${this.correctCount}/${this.items.length}`, true)
     }
     .width('100%')
   }
 
   @Builder
-  StatCard(icon: Resource, label: string, value: string) {
+  StatCard(icon: Resource, label: string, value: string, showWrongAttempts: boolean) {
     Column({ space: 4 }) {
       Row({ space: 4 }) {
         SymbolGlyph(icon)
@@ -928,7 +1062,7 @@ export struct CategorizationCard {
         .textAlign(TextAlign.Start)
         .margin({ top: 2 })
 
-      if (this.wrongAttempts > 0 && label === '进度') {
+      if (showWrongAttempts && this.wrongAttempts > 0) {
         Text(`失败 ${this.wrongAttempts} 次`)
           .fontSize(10)
           .fontColor(GIVEUP_ORANGE)
