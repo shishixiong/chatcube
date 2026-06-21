@@ -75,3 +75,22 @@ export function shiftYMD(ymd: string, days: number): string {
   }
   return todayYMD(ms + days * MS_PER_DAY)
 }
+
+/**
+ * 计算两个 YMD 日期相差的天数 (toYMD - fromYMD)
+ * - 同日: 0
+ * - 反向: 负数
+ * - 任意一端为空或格式错误: 0
+ * - 跨月/跨年正确处理 (走 Date 构造 + epoch ms)
+ */
+export function daysBetween(fromYMD: string, toYMD: string): number {
+  if (fromYMD === '' || toYMD === '') {
+    return 0
+  }
+  const fromMs: number = ymdToMs(fromYMD)
+  const toMs: number = ymdToMs(toYMD)
+  if (isNaN(fromMs) || isNaN(toMs)) {
+    return 0
+  }
+  return Math.round((toMs - fromMs) / MS_PER_DAY)
+}
