@@ -370,7 +370,7 @@ function createAskUserToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     ASK_USER_TOOL_ID,
-    'Ask the user clarifying questions before proceeding. Use this ONLY when the request is genuinely ambiguous and choosing a default would lead to significant rework. Do NOT use it for trivial details you can infer. Batch 1-3 related questions in a single call to avoid multiple back-and-forth rounds. Each question needs a unique id, concise question text, selection_type (single|multi|text), and options[] when selection_type is single or multi. The tool result will be a JSON object of the user answers keyed by question id; use those answers to continue your reply.',
+    'Present an interactive question card on screen for the user (typically a child) to answer. Use this INSTEAD of writing questions in plain text and then answering them yourself — plain-text questions cannot capture the user\'s answer, only this tool can. selection_type=single (one answer from options, with optional custom answer), multi (multiple answers from options), text (free-form input + optional chip hints). Batch 1-3 related questions in a single call to avoid multiple back-and-forth rounds. Each question needs a unique id, concise question text, selection_type, and options[] when selection_type is single or multi. The tool result will be a JSON object of the user answers keyed by question id; use those answers to continue your reply.',
     parameters
   )
 
