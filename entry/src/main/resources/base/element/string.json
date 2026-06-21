@@ -3715,6 +3715,14 @@
     {
       "name": "learning_daily_evaluation_failed_no_detail",
       "value": "（暂无错误详情）"
+    },
+    {
+      "name": "learning_daily_evaluation_last_completed_title",
+      "value": "上次评估"
+    },
+    {
+      "name": "learning_daily_evaluation_last_completed_subtitle_format",
+      "value": "距今 %d 天"
     }
   ]
 }
