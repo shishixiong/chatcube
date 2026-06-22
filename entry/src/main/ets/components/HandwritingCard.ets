@@ -7,7 +7,7 @@ import { getStrokeOrder, HandwritingStroke } from '../config/StrokeOrderData'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 
 // 用户写的笔画点
-interface StrokePoint {
+interface DrawnPoint {
   x: number
   y: number
   timestamp: number
@@ -15,7 +15,7 @@ interface StrokePoint {
 
 // 完成的一笔
 interface DrawnStroke {
-  points: StrokePoint[]
+  points: DrawnPoint[]
 }
 
 // 结果接口（与组件导出对齐）
@@ -29,6 +29,9 @@ export interface HandwritingResult {
 
 const SUCCESS_GREEN: string = '#22C55E'
 const STROKE_WIDTH: number = 6
+const TICK_MS: number = 33           // ~30fps
+const FADE_PER_TICK: number = 0.08   // ~12 ticks to full alpha ≈ 400ms per stroke
+const SVG_GRID: number = 1024       // hanzi-writer-data 网格尺寸
 
 @ComponentV2
 export struct HandwritingCard {
@@ -49,13 +52,27 @@ export struct HandwritingCard {
   @Local isCompleted: boolean = false
   @Local hasContent: boolean = false
 
+  // 笔顺动画状态
+  @Local isPlaying: boolean = false
+  @Local currentStrokeIdx: number = -1       // 当前播放的笔画索引，-1 = 未开始/已结束
+  @Local currentStrokeAlpha: number = 0      // 0..1 当前笔画的淡入透明度
+  @Local playedStrokeCount: number = 0        // 已完整显示的笔画数
+
   // 私有
   private canvasContext: CanvasRenderingContext2D = new CanvasRenderingContext2D(
     new RenderingContextSettings(true)
   )
   private canvasWidth: number = 0
   private canvasHeight: number = 0
-  private currentPoints: StrokePoint[] = []
+  private currentPoints: DrawnPoint[] = []
+
+  // 笔顺动画私有字段
+  private demoCanvasContext: CanvasRenderingContext2D = new CanvasRenderingContext2D(
+    new RenderingContextSettings(true)
+  )
+  private demoCanvasWidth: number = 0
+  private demoCanvasHeight: number = 0
+  private animTimerId: number = -1
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
@@ -111,7 +128,7 @@ export struct HandwritingCard {
   }
 
   aboutToDisappear(): void {
-    // 静态态无需清理
+    this.stopPlayback()
   }
 
   private parseArguments(): void {
@@ -120,24 +137,21 @@ export struct HandwritingCard {
       this.character = (args['character'] as string) ?? 'A'
       this.charType = (args['type'] as string) ?? 'letter'
 
-      // 优先使用本地笔顺数据
+      // 使用本地笔顺数据（SVG 路径）
       const localStrokes = getStrokeOrder(this.character)
       if (localStrokes !== null) {
         this.strokes = localStrokes
-      } else {
-        // 使用 AI 提供的笔顺
-        const rawStrokes = args['strokes'] as Array<Record<string, Object>> | undefined
-        if (rawStrokes !== undefined) {
-          this.strokes = rawStrokes.map((s: Record<string, Object>): HandwritingStroke => {
-            return {
-              x1: (s['x1'] as number) ?? 0,
-              y1: (s['y1'] as number) ?? 0,
-              x2: (s['x2'] as number) ?? 0,
-              y2: (s['y2'] as number) ?? 0,
-              label: (s['label'] as string) ?? ''
-            } as HandwritingStroke
-          })
-        }
+      }
+      // AI 也可直接传 SVG path 数据
+      const rawStrokes = args['strokes'] as Array<Record<string, Object>> | undefined
+      if (localStrokes === null && rawStrokes !== undefined) {
+        this.strokes = rawStrokes.map((s: Record<string, Object>): HandwritingStroke => {
+          const stroke: HandwritingStroke = {
+            path: (s['path'] as string) ?? '',
+            label: (s['label'] as string) ?? ''
+          }
+          return stroke
+        })
       }
     } catch (_e) {
       this.character = 'A'
@@ -162,7 +176,7 @@ export struct HandwritingCard {
     }
     event.stopPropagation()
     const touch = event.touches[0]
-    const point: StrokePoint = { x: touch.x, y: touch.y, timestamp: Date.now() }
+    const point: DrawnPoint = { x: touch.x, y: touch.y, timestamp: Date.now() }
     this.currentPoints = [point]
     this.canvasContext.beginPath()
     this.canvasContext.moveTo(point.x, point.y)
@@ -174,7 +188,7 @@ export struct HandwritingCard {
     }
     event.stopPropagation()
     const touch = event.touches[0]
-    const point: StrokePoint = { x: touch.x, y: touch.y, timestamp: Date.now() }
+    const point: DrawnPoint = { x: touch.x, y: touch.y, timestamp: Date.now() }
     this.currentPoints.push(point)
     this.canvasContext.lineTo(point.x, point.y)
     this.canvasContext.stroke()
@@ -221,12 +235,142 @@ export struct HandwritingCard {
     this.hasContent = false
   }
 
+  // ====== 笔顺动画（SVG 路径填充 + 逐笔淡入）======
+
+  private initDemoCanvas(): void {
+    this.demoCanvasContext.lineCap = 'round'
+    this.demoCanvasContext.lineJoin = 'round'
+  }
+
+  // 启动笔顺动画；无笔顺数据时直接 return
+  private startPlayback(): void {
+    if (this.strokes.length === 0) {
+      console.info('HandwritingCard', `startPlayback: no strokes for character "${this.character}"`)
+      return
+    }
+    if (this.demoCanvasWidth === 0 || this.demoCanvasHeight === 0) {
+      console.info('HandwritingCard', `startPlayback: canvas not ready (w=${this.demoCanvasWidth} h=${this.demoCanvasHeight})`)
+      return
+    }
+    this.stopPlayback()
+    this.demoCanvasContext.clearRect(0, 0, this.demoCanvasWidth, this.demoCanvasHeight)
+    this.isPlaying = true
+    this.currentStrokeIdx = 0
+    this.currentStrokeAlpha = 0
+    this.playedStrokeCount = 0
+    console.info('HandwritingCard', `startPlayback: ${this.strokes.length} strokes, canvas ${this.demoCanvasWidth}x${this.demoCanvasHeight}`)
+    this.animTimerId = setInterval((): void => this.tick(), TICK_MS)
+  }
+
+  private stopPlayback(): void {
+    if (this.animTimerId !== -1) {
+      clearInterval(this.animTimerId)
+      this.animTimerId = -1
+    }
+    this.isPlaying = false
+  }
+
+  private tick(): void {
+    if (this.currentStrokeIdx < 0 || this.currentStrokeIdx >= this.strokes.length) {
+      this.stopPlayback()
+      this.currentStrokeIdx = -1
+      this.redrawDemoCanvas()
+      return
+    }
+    this.currentStrokeAlpha += FADE_PER_TICK
+    if (this.currentStrokeAlpha >= 1) {
+      this.playedStrokeCount = this.currentStrokeIdx + 1
+      this.currentStrokeIdx += 1
+      this.currentStrokeAlpha = 0
+    }
+    this.redrawDemoCanvas()
+  }
+
+  private redrawDemoCanvas(): void {
+    const ctx = this.demoCanvasContext
+    const w = this.demoCanvasWidth
+    const h = this.demoCanvasHeight
+    if (w === 0 || h === 0) {
+      return
+    }
+    ctx.clearRect(0, 0, w, h)
+
+    // 等比缩放居中：1024×1024 网格 → Canvas 尺寸
+    const scale = Math.min(w, h) / SVG_GRID
+    const offsetX = (w - SVG_GRID * scale) / 2
+    const offsetY = (h - SVG_GRID * scale) / 2
+
+    // 1. 画已完成的笔画（深琥珀色）
+    ctx.fillStyle = this.demoStrokeDescColor
+    const playedEnd = Math.min(this.playedStrokeCount, this.strokes.length)
+    for (let i = 0; i < playedEnd; i++) {
+      ctx.beginPath()
+      this.drawSvgPath(ctx, this.strokes[i].path, scale, offsetX, offsetY)
+      ctx.fill()
+    }
+
+    // 2. 画当前笔画（绿色，淡入）
+    if (this.currentStrokeIdx >= 0 && this.currentStrokeIdx < this.strokes.length) {
+      ctx.fillStyle = SUCCESS_GREEN
+      ctx.globalAlpha = Math.max(0, Math.min(1, this.currentStrokeAlpha))
+      ctx.beginPath()
+      this.drawSvgPath(ctx, this.strokes[this.currentStrokeIdx].path, scale, offsetX, offsetY)
+      ctx.fill()
+      ctx.globalAlpha = 1
+    }
+  }
+
+  // 解析 SVG path 字符串并执行到 Canvas 上下文
+  // 支持 M / Q / L / C / Z 命令
+  // hanzi-writer-data 使用 Y-up 坐标系（原点在左下角），需翻转 Y 轴适配 Canvas（Y-down）
+  private drawSvgPath(ctx: CanvasRenderingContext2D, path: string, scale: number, offsetX: number, offsetY: number): void {
+    const tokens = path.match(/[MQLCZmqlcz]|-?\d+\.?\d*/g)
+    if (tokens === null || tokens.length === 0) {
+      return
+    }
+    let i = 0
+    while (i < tokens.length) {
+      const cmd = tokens[i]
+      i += 1
+      if (cmd === 'M' || cmd === 'm') {
+        const x = parseFloat(tokens[i]) * scale + offsetX
+        const y = (SVG_GRID - parseFloat(tokens[i + 1])) * scale + offsetY
+        ctx.moveTo(x, y)
+        i += 2
+      } else if (cmd === 'Q' || cmd === 'q') {
+        const cx = parseFloat(tokens[i]) * scale + offsetX
+        const cy = (SVG_GRID - parseFloat(tokens[i + 1])) * scale + offsetY
+        const x = parseFloat(tokens[i + 2]) * scale + offsetX
+        const y = (SVG_GRID - parseFloat(tokens[i + 3])) * scale + offsetY
+        ctx.quadraticCurveTo(cx, cy, x, y)
+        i += 4
+      } else if (cmd === 'C' || cmd === 'c') {
+        const cx1 = parseFloat(tokens[i]) * scale + offsetX
+        const cy1 = (SVG_GRID - parseFloat(tokens[i + 1])) * scale + offsetY
+        const cx2 = parseFloat(tokens[i + 2]) * scale + offsetX
+        const cy2 = (SVG_GRID - parseFloat(tokens[i + 3])) * scale + offsetY
+        const x = parseFloat(tokens[i + 4]) * scale + offsetX
+        const y = (SVG_GRID - parseFloat(tokens[i + 5])) * scale + offsetY
+        ctx.bezierCurveTo(cx1, cy1, cx2, cy2, x, y)
+        i += 6
+      } else if (cmd === 'L' || cmd === 'l') {
+        const x = parseFloat(tokens[i]) * scale + offsetX
+        const y = (SVG_GRID - parseFloat(tokens[i + 1])) * scale + offsetY
+        ctx.lineTo(x, y)
+        i += 2
+      } else if (cmd === 'Z' || cmd === 'z') {
+        ctx.closePath()
+      }
+    }
+  }
+
   // ====== 提交 ======
 
   private async handleSubmit(): Promise<void> {
     if (this.isSubmitting || this.isCompleted) {
       return
     }
+    this.stopPlayback()
     this.isSubmitting = true
 
     try {
@@ -289,6 +433,7 @@ export struct HandwritingCard {
   // ====== 放弃 ======
 
   private handleGiveUp(): void {
+    this.stopPlayback()
     const result: HandwritingResult = {
       character: this.character,
       type: this.charType,
@@ -452,28 +597,66 @@ export struct HandwritingCard {
 
   @Builder
   DemoPanel() {
-    Column({ space: 4 }) {
-      // 大字号字符字形（成品字参考）
-      Text(this.character)
-        .fontSize(120)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(this.ghostCharColor)
-        .textAlign(TextAlign.Center)
+    Column({ space: 6 }) {
+      // 字形 + 笔顺动画 Canvas
+      Stack({ alignContent: Alignment.Center }) {
+        // 笔顺动画 Canvas（透明背景）
+        if (this.strokes.length > 0) {
+          Canvas(this.demoCanvasContext)
+            .width('100%')
+            .height(160)
+            .onReady(() => {
+              this.initDemoCanvas()
+            })
+            .onAreaChange((_oldArea: Area, newArea: Area) => {
+              this.demoCanvasWidth = newArea.width as number
+              this.demoCanvasHeight = newArea.height as number
+              // 首次获得有效尺寸时启动播放
+              if (!this.isPlaying && this.currentStrokeIdx === -1 && !this.isCompleted) {
+                this.startPlayback()
+              }
+              this.redrawDemoCanvas()
+            })
+            .hitTestBehavior(HitTestMode.Transparent)
+        } else {
+          // 无笔顺数据时显示鬼影大字
+          Text(this.character)
+            .fontSize(120)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.ghostCharColor)
+            .textAlign(TextAlign.Center)
+        }
+      }
+      .width('100%')
+      .height(160)
+      .alignContent(Alignment.Center)
+      .backgroundColor(withColorAlpha(this.themePrimary, '08'))
+      .borderRadius(12)
+      .border({ width: 1.5, color: withColorAlpha(this.themePrimary, '38'), style: BorderStyle.Dashed })
 
-      // 笔顺描述（无 strokes 数据时自动隐藏）
-      if (this.strokeLabels !== '') {
-        Text(`${this.strokes.length} 笔 · ${this.strokeLabels}`)
-          .fontSize(11)
-          .fontColor(this.demoStrokeDescColor)
+      // 笔顺描述 + 重播按钮
+      if (this.strokes.length > 0) {
+        Row() {
+          Text(`${this.strokes.length} 笔 · ${this.strokeLabels}`)
+            .fontSize(11)
+            .fontColor(this.demoStrokeDescColor)
+            .layoutWeight(1)
+
+          Button(this.isPlaying ? '播放中...' : '▶ 重播')
+            .fontSize(11)
+            .fontColor(this.themePrimary)
+            .backgroundColor(Color.Transparent)
+            .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+            .enabled(!this.isPlaying && !this.isCompleted)
+            .opacity(!this.isPlaying && !this.isCompleted ? 1 : 0.5)
+            .onClick(() => {
+              this.startPlayback()
+            })
+        }
+        .width('100%')
       }
     }
     .width('100%')
-    .height(160)
-    .alignItems(HorizontalAlign.Center)
-    .justifyContent(FlexAlign.Center)
-    .backgroundColor(withColorAlpha(this.themePrimary, '08'))
-    .borderRadius(12)
-    .border({ width: 1.5, color: withColorAlpha(this.themePrimary, '38'), style: BorderStyle.Dashed })
   }
 
   @Builder

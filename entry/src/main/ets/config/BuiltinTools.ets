@@ -1767,14 +1767,16 @@ function createHuarongdaoToolConfig(): ToolConfig {
 interface HandwritingPracticeArgs {
   character: string
   type: string
-  strokes?: HandwritingStroke[]
+  strokes?: HandwritingPracticeStroke[]
 }
 
-interface HandwritingStroke {
-  x1: number
-  y1: number
-  x2: number
-  y2: number
+interface HandwritingPracticePoint {
+  x: number
+  y: number
+}
+
+interface HandwritingPracticeStroke {
+  points: HandwritingPracticePoint[]
   label: string
 }
 
@@ -1809,14 +1811,20 @@ function createHandwritingPracticeToolDefinition(): ToolDefinition {
       },
       "strokes": {
         "type": "array",
-        "description": "Optional. Stroke order data as array of objects with x1,y1,x2,y2 (relative 0-1 coordinates) and label. If omitted, the built-in stroke library will be used for common characters.",
+        "description": "Optional. Stroke order data as array of objects. Each stroke has a points array (ordered polyline of x,y pairs in relative 0-1 coordinates; 2 points for straight strokes, 4-8 sample points for curves, 1 point for dots) and a label string (stroke direction symbol like slash, backslash, dash, pipe, arc, or dot). If omitted, the built-in stroke library will be used for common characters.",
         "items": {
           "type": "object",
           "properties": {
-            "x1": { "type": "number" },
-            "y1": { "type": "number" },
-            "x2": { "type": "number" },
-            "y2": { "type": "number" },
+            "points": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "x": { "type": "number" },
+                  "y": { "type": "number" }
+                }
+              }
+            },
             "label": { "type": "string" }
           }
         }
