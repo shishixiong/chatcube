@@ -40,6 +40,7 @@ import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
 import { ChatSessionStore } from './ChatSessionStore'
 import { createThrottle, StreamFlusher } from '../utils/ThrottleUtil'
+import { truncateRequestHistory } from '../utils/RequestHistoryCleanup'
 import { TypewriterFlusher } from '../utils/DisplaySyncTypewriter'
 import { UIContext } from '@kit.ArkUI'
 import {
@@ -1232,7 +1233,10 @@ export class ChatViewModel {
     // 截断到最近 maxHistoryMessages 条。maxHistoryMessages<=0 表示不截断
     if (maxHistoryMessages > 0 && historyMessages.length > maxHistoryMessages) {
       const dropped = historyMessages.length - maxHistoryMessages
-      const truncated = historyMessages.slice(historyMessages.length - maxHistoryMessages)
+      // 用 truncateRequestHistory 而不是直接 slice, 因为单个 ChatMessage.parts
+      // 会在 historyMessages 中展开成 (assistant(tool_calls) + 多个 tool(result)),
+      // 直接 slice 可能把这种组从中间切断, 产生 orphan tool 消息 → OpenAI HTTP 400。
+      const truncated = truncateRequestHistory(historyMessages, maxHistoryMessages)
       console.info('ChatViewModel',
         `History truncated: kept ${truncated.length} of ${historyMessages.length} messages (dropped ${dropped})`)
       return truncated
