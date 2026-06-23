@@ -79,6 +79,9 @@ import {
   PlannerSessionSummary,
   summarizeSessionForPlanner
 } from '../utils/SessionSummaryUtils'
+import {
+  validatePlannerOutput
+} from '../utils/LessonPlannerValidation'
 import { getTeachingStyleAdjustmentService } from './TeachingStyleAdjustmentService'
 import { TeachingStyleAdjustmentSummary } from '../models/TeachingReflectionModels'
 import { setAppUiStateValue } from '../state/AppUiState'
@@ -558,31 +561,45 @@ export class LessonPlanningService {
         return
       }
 
-      // 7. 解析 + 校验 LLM 输出
-      const cleaned = cleanPlannerJsonOutput(llmResult.content)
-      if (cleaned === '' || !isValidJson(cleaned)) {
-        await this.markFailed(planId, planDate, 'LLM 输出非合法 JSON', sessions.length, messageCount, sessionIdsJson)
-        return
-      }
-      let plan = parseLessonPlan(cleaned)
-      // 强制 planDate 同步为本地时区（防止 LLM 写出错误日期）
-      plan.planDate = planDate
-      plan.childSnapshot = childSnapshot
+      // 7. 解析 + 校验 LLM 输出 (3 次内部重试, 仅末次失败才 markFailed 一次)
+      const MAX_INTERNAL_ATTEMPTS = 3
+      let plan: LessonPlan | null = null
+      let lastError = ''
 
-      // 校验: 4 个模块数组全空 + themeTitle/teacherNotes 非空 = LLM 把所有内容
-      // 写成叙述文字塞进 theme, 没有按 schema 填入结构化模块。视为无效输出, 失败重试
-      const hasAnyModuleItem = plan.vocab.length > 0 || plan.math.length > 0 ||
-        plan.writing.length > 0 || plan.generalKnowledge.length > 0
-      const hasNarrative = plan.themeTitle !== '' || plan.teacherNotes !== ''
-      if (!hasAnyModuleItem && hasNarrative) {
+      for (let attempt = 1; attempt <= MAX_INTERNAL_ATTEMPTS; attempt++) {
+        // 内部重试时复用第一次的 llmResult 仅适合"LLM 偶发失败"场景。
+        // 校验失败是因为 prompt 输出不符合 schema, 必须重新调 LLM 才能拿到更好的输出。
+        const attemptLlm = attempt === 1 ? llmResult : await this.callPlannerLLM(userInput)
+        if (!attemptLlm.success) {
+          lastError = `LLM call failed: ${attemptLlm.errorMessage}`
+          break
+        }
+
+        const cleaned = cleanPlannerJsonOutput(attemptLlm.content)
+        if (cleaned === '' || !isValidJson(cleaned)) {
+          lastError = `attempt ${attempt}: LLM output is not valid JSON`
+          console.warn('LessonPlanningService', `Plan ${planDate} attempt ${attempt}: invalid JSON`)
+          continue
+        }
+
+        const candidate = parseLessonPlan(cleaned)
+        // 强制 planDate 同步为本地时区（防止 LLM 写出错误日期）
+        candidate.planDate = planDate
+        candidate.childSnapshot = childSnapshot
+
+        const validation = validatePlannerOutput(candidate)
+        if (validation.ok) {
+          plan = candidate
+          break
+        }
+        lastError = `attempt ${attempt}: ${validation.issues.join('; ')}`
         console.warn('LessonPlanningService',
-          `LLM output for ${planDate} has all 4 module arrays empty (theme/notes only) — ` +
-          `vocab=${plan.vocab.length} math=${plan.math.length} writing=${plan.writing.length} ` +
-          `general=${plan.generalKnowledge.length} themeLen=${plan.themeTitle.length} ` +
-          `notesLen=${plan.teacherNotes.length}. Marking failed.`)
-        await this.markFailed(planId, planDate,
-          'LLM 输出未遵循 schema: 4 个模块数组全空, 仅有 theme/teacherNotes 叙述',
-          sessions.length, messageCount, sessionIdsJson)
+          `Plan ${planDate} attempt ${attempt} validation failed: ${lastError}`)
+      }
+
+      // 3 次都不达标 → 记一次失败 (仅增 1 次计数, 不消耗当日 MAX_FAILS_PER_DAY 预算)
+      if (plan === null) {
+        await this.markFailed(planId, planDate, lastError, sessions.length, messageCount, sessionIdsJson)
         return
       }
 
