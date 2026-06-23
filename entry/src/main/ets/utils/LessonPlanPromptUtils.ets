@@ -47,6 +47,12 @@ JSON 对象,包含:
 2. **贴合薄弱点**。从 childProfile.weakAreas 中选 1-2 个做重点,其他点为巩固/兴趣。
 3. **承接昨日**。若 yesterdayPlan 存在,themeTitle 需自然过渡(同一主题深化或扩展)。
 4. **imagePrompt 必须是英文**。描述具体、童趣、安全(无暴力/无成人元素)。例: "a cute red apple with a smile face, cartoon style, white background, soft lighting, children's book illustration"。不要出现 photo / real / realistic 这类词。
+4.5 **math 模块必填字段 (硬约束)**:
+- 每个 math 项的 'dimension' 字段必填, 必须是以下之一:
+  math_counting / math_addition / math_subtraction / math_multiply / math_divide /
+  math_shapes / math_comparison / math_time
+- 每个 math 项的 'targetSkillLevel' 字段必填, 1-5 整数 (0 视为未填, 重试)
+- 严禁 dimension 留空字符串; 严禁 targetSkillLevel 填 0 或超过 5
 5. **难度匹配**。参考 childProfile 中对应 skill 的 level: 0-1 从最基础开始, 2-3 巩固, 4-5 挑战。
 6. **teacherNotes 写 3-5 句**。给小星老师的人话提示,例: "上午教 2 个词,下午教形状,记得每次都先问孩子昨天学了什么"。
 7. **响应教学风格调整**。若 currentStyleAdjustment 非空,需结合 4 维度调整内容侧重:
@@ -67,7 +73,12 @@ JSON 对象,包含:
 - vocab、sentence / math / writing / generalKnowledge **每个数组都必须填入至少 1 个具体教学点**
 - 禁止把内容写在 themeTitle/themeDescription/teacherNotes 里, 然后 4 个数组留空
 - themeTitle 是 1 句话主题, 它**不替代** 4 个模块里的具体内容
-- 典型配比: 1～5 个 vocab/sentence + 3～5 个 math + 1～5 个 writing + 1 个 generalKnowledge, 或视主题扩展
+- **数量硬下限**（系统会拒绝重试）:
+  - vocab: 至少 4 个, 建议 5 个
+  - math: 至少 4 个, 建议 5 个
+  - writing: 至少 2 个, 建议 3 个
+  - generalKnowledge: 至少 2 个, 建议 3 个
+  - 合计 12-16 个项目。低于下限视为不符合 schema, 调度会重试
 
 结构必须严格遵守:
 
@@ -99,6 +110,27 @@ JSON 对象,包含:
 - 词汇、句子的中文必须地道、6-7 岁孩子能懂
 - imagePrompt 不要出现 "photo, real, realistic, 真人, 写实" 等可能让 API 误生成的词
 - topicKey 必须全局唯一,推荐格式: "vocab.<word>" / "math.<dim>.<topic>" / "writing.<char>" / "general_<dim>.<topic>"
+- 严禁 math 项的 dimension 留空字符串; 严禁 targetSkillLevel 填 0 (系统会拒绝重试)
+- 严禁 4 个模块任一少于下限 (vocab<4 / math<4 / writing<2 / generalKnowledge<2)
+
+# math 题目难度 rubric (必须按 child skill level 查表出题)
+
+| skill_key            | Lv0 入门 | Lv1 入门 | Lv2 初步 | Lv3 中等 | Lv4 良好 | Lv5 精通 |
+|----------------------|---------|---------|---------|---------|---------|---------|
+| math_counting        | 数字认读 1-5 | 数 1-10 | 数 1-20 + 倒数 5-1 | 数列 2,4,6... | 100 内数数 | 凑十/破十计数 |
+| math_addition        | 0+0 概念 | 个位数 (3+5) | 两位无进位 (23+14) | 两位进位 (27+18) | 三位数 (123+234) | 多步/应用题 |
+| math_subtraction     | 0-0 概念 | 个位数 (8-3) | 两位无退位 (35-12) | 两位退位 (42-17) | 三位数 (532-218) | 多步/应用题 |
+| math_multiply        | 0×0 概念 | 1-5 表 | 1-9 表完整 | 多位数×1 位 | 多位数×2 位 | 应用题 |
+| math_divide          | 平均分概念 | 表内除法 | 有余数除法 | 多位数÷1 位 | 多位数÷2 位 | 应用题 |
+| math_shapes          | 圆形/方形识别 | 基本图形 | 组合形状 | 立体形状 | 周长/面积 | 体积/对称 |
+| math_comparison      | 大小/长短 | 多少比较 | 3 项排序 | 多条件排序 | 应用题比较 | 复合比较 |
+| math_time            | 整点认读 | 半点 | 5 分钟间隔 | 分钟精确 | 时间计算 | 日历/星期 |
+
+# 出题规则
+- 查 childProfile 中该 skill 的 level, 按上表对应行的内容出题
+- 例: child math_addition.level=3 → 出 27+18 类型的两位数进位加法
+- 如果 child level=0 但 difficultyTendency='harder', 可上跳一级 (取 Lv1 内容)
+- description 字段必须描述具体题型 (如「两位数加两位数, 含进位」), 不要写"出加法题"这种模糊描述
 
 # Fallback 逻辑 (用于无历史数据/无昨日计划时)
 如果 childProfile 全 level=0 且 yesterdayPlan 为空:
