@@ -58,10 +58,10 @@ function filledPlan(): LessonPlan {
 export default function lessonPlannerValidationTest() {
   describe('MIN_PLANNER_COUNTS 常量', () => {
     it('下限为 vocab=4 / math=4 / writing=2 / generalKnowledge=2', 0, () => {
-      expect(MIN_PLANNER_COUNTS['vocab']).assertEqual(4)
-      expect(MIN_PLANNER_COUNTS['math']).assertEqual(4)
-      expect(MIN_PLANNER_COUNTS['writing']).assertEqual(2)
-      expect(MIN_PLANNER_COUNTS['general']).assertEqual(2)
+      expect(MIN_PLANNER_COUNTS.vocab).assertEqual(4)
+      expect(MIN_PLANNER_COUNTS.math).assertEqual(4)
+      expect(MIN_PLANNER_COUNTS.writing).assertEqual(2)
+      expect(MIN_PLANNER_COUNTS.general).assertEqual(2)
     })
   })
 

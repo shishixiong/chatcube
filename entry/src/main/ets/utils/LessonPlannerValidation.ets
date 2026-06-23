@@ -17,7 +17,14 @@ import {
 } from '../models/LessonPlanModels'
 
 /** 每模块最小 item 数量（用户选"中等"目标 5/5/3/3 的下限） */
-export const MIN_PLANNER_COUNTS: Record<string, number> = {
+export interface MinPlannerCounts {
+  vocab: number
+  math: number
+  writing: number
+  general: number
+}
+
+export const MIN_PLANNER_COUNTS: MinPlannerCounts = {
   vocab: 4,
   math: 4,
   writing: 2,
@@ -52,17 +59,17 @@ export interface PlannerValidationResult {
 export function validatePlannerOutput(plan: LessonPlan): PlannerValidationResult {
   const issues: string[] = []
 
-  if (plan.vocab.length < MIN_PLANNER_COUNTS['vocab']) {
-    issues.push(`vocab=${plan.vocab.length} < min ${MIN_PLANNER_COUNTS['vocab']}`)
+  if (plan.vocab.length < MIN_PLANNER_COUNTS.vocab) {
+    issues.push(`vocab=${plan.vocab.length} < min ${MIN_PLANNER_COUNTS.vocab}`)
   }
-  if (plan.math.length < MIN_PLANNER_COUNTS['math']) {
-    issues.push(`math=${plan.math.length} < min ${MIN_PLANNER_COUNTS['math']}`)
+  if (plan.math.length < MIN_PLANNER_COUNTS.math) {
+    issues.push(`math=${plan.math.length} < min ${MIN_PLANNER_COUNTS.math}`)
   }
-  if (plan.writing.length < MIN_PLANNER_COUNTS['writing']) {
-    issues.push(`writing=${plan.writing.length} < min ${MIN_PLANNER_COUNTS['writing']}`)
+  if (plan.writing.length < MIN_PLANNER_COUNTS.writing) {
+    issues.push(`writing=${plan.writing.length} < min ${MIN_PLANNER_COUNTS.writing}`)
   }
-  if (plan.generalKnowledge.length < MIN_PLANNER_COUNTS['general']) {
-    issues.push(`generalKnowledge=${plan.generalKnowledge.length} < min ${MIN_PLANNER_COUNTS['general']}`)
+  if (plan.generalKnowledge.length < MIN_PLANNER_COUNTS.general) {
+    issues.push(`generalKnowledge=${plan.generalKnowledge.length} < min ${MIN_PLANNER_COUNTS.general}`)
   }
 
   for (let i = 0; i < plan.math.length; i++) {
