@@ -30,7 +30,7 @@ export interface HandwritingResult {
 const SUCCESS_GREEN: string = '#22C55E'
 const STROKE_WIDTH: number = 6
 const TICK_MS: number = 33           // ~30fps
-const FADE_PER_TICK: number = 0.08   // ~12 ticks to full alpha ≈ 400ms per stroke
+const FADE_PER_TICK: number = 0.05   // ~20 ticks to full alpha ≈ 660ms per stroke
 const SVG_GRID: number = 1024       // hanzi-writer-data 网格尺寸
 
 @ComponentV2
