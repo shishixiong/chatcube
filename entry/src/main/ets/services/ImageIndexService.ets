@@ -32,7 +32,7 @@ import { getEffectiveOutputMode } from '../utils/ModelCapabilityDeriver'
 // =================== 常量 ===================
 
 /** lesson_plan 源行 TTL：7 天 */
-const LESSON_PLAN_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const LESSON_PLAN_TTL_MS = 200 * 24 * 60 * 60 * 1000
 
 // =================== 类型别名 ===================
 
