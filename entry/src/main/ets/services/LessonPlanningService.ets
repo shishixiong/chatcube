@@ -82,6 +82,7 @@ import {
 import {
   validatePlannerOutput
 } from '../utils/LessonPlannerValidation'
+import { generateBaselinePlan } from '../utils/LessonPlannerBaseline'
 import { getTeachingStyleAdjustmentService } from './TeachingStyleAdjustmentService'
 import { TeachingStyleAdjustmentSummary } from '../models/TeachingReflectionModels'
 import { setAppUiStateValue } from '../state/AppUiState'
@@ -539,6 +540,9 @@ export class LessonPlanningService {
       const yesterdayPlanJson = (yesterdayRow !== null && yesterdayRow.status === LessonPlanStatus.DONE)
         ? yesterdayRow.planJson
         : ''
+      // 解析后的 yesterdayPlan, 用于 baseline 复用各模块内容 (line 590)
+      const yesterdayPlanParsed: LessonPlan | null =
+        yesterdayPlanJson !== '' ? parseLessonPlan(yesterdayPlanJson) : null
 
       // 6. 调用 LLM 生成 plan
       // 先读当前 tsa (评估老师产出, 可能为 null)
@@ -597,9 +601,59 @@ export class LessonPlanningService {
           `Plan ${planDate} attempt ${attempt} validation failed: ${lastError}`)
       }
 
-      // 3 次都不达标 → 记一次失败 (仅增 1 次计数, 不消耗当日 MAX_FAILS_PER_DAY 预算)
+      // 3 次都不达标 → 降级到代码侧 baseline 计划 (保证用户至少看到内容, 而非空页面)
+      // baseline 由 generateBaselinePlan 生成, 必通过 validatePlannerOutput;
+      // 原始 LLM 失败原因写入 errorMessage 供后续排查, 但 row 仍标记为 DONE
       if (plan === null) {
-        await this.markFailed(planId, planDate, lastError, sessions.length, messageCount, sessionIdsJson)
+        const baseline = generateBaselinePlan(planDate, childSnapshot, yesterdayPlanParsed)
+        const baselineErrorPrefix = `LLM 3 次校验均失败, 已降级到代码侧 baseline. 原始错误: ${lastError}`
+        console.warn('LessonPlanningService',
+          `Plan ${planDate} falling back to baseline: ${baselineErrorPrefix}. ` +
+          `vocab=${baseline.vocab.length}, math=${baseline.math.length}, ` +
+          `writing=${baseline.writing.length}, general=${baseline.generalKnowledge.length}`)
+        // baseline 校验必须是 true (generateBaselinePlan 的契约)
+        const baselineCheck = validatePlannerOutput(baseline)
+        if (!baselineCheck.ok) {
+          // 不应该发生, 防御性 fallback: 仍然 markFailed
+          await this.markFailed(planId, planDate,
+            `${baselineErrorPrefix}; baseline validation also failed: ${baselineCheck.issues.join('; ')}`,
+            sessions.length, messageCount, sessionIdsJson)
+          return
+        }
+        // 用 baseline 替换 plan, 继续走正常持久化路径
+        plan = baseline
+        // 把 baseline 标记写到 errorMessage, 方便 debug 看出是降级产物
+        // (通过 buildRow 的 errorMessage='') -> 我们手动 upsert 一行 DONE 即可
+        const now = Date.now()
+        const baselineRow = new DailyLessonPlanRow()
+        baselineRow.id = planId
+        baselineRow.planDate = planDate
+        baselineRow.planJson = serializeLessonPlan(baseline)
+        baselineRow.planVersion = baseline.schemaVersion
+        baselineRow.status = LessonPlanStatus.DONE
+        baselineRow.errorMessage = baselineErrorPrefix
+        baselineRow.plannerProviderId = llmResult.providerId
+        baselineRow.plannerModelId = llmResult.modelId
+        baselineRow.plannerModelName = llmResult.modelName
+        baselineRow.sessionIdsJson = sessionIdsJson
+        baselineRow.messageCount = messageCount
+        baselineRow.createdAt = now
+        baselineRow.updatedAt = now
+        baselineRow.completedAt = now
+        const baselineOk = await this.databaseService.upsertDailyLessonPlan(baselineRow)
+        if (!baselineOk) {
+          await this.markFailed(planId, planDate,
+            `${baselineErrorPrefix}; baseline 持久化失败`,
+            sessions.length, messageCount, sessionIdsJson)
+          return
+        }
+        // 成功 → 重置失败计数 + 通知 UI 刷新
+        await this.resetTodayFailCount()
+        setAppUiStateValue(AppStorageKeys.LESSON_PLAN_REFRESH_TICK, Date.now())
+        console.info('LessonPlanningService',
+          `Plan for ${planDate} (baseline) generated. ` +
+          `vocab=${baseline.vocab.length}, math=${baseline.math.length}, ` +
+          `writing=${baseline.writing.length}, general=${baseline.generalKnowledge.length}`)
         return
       }
 
