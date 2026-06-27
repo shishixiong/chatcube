@@ -73,7 +73,9 @@ import {
 import {
   PLANNER_SYSTEM_PROMPT,
   cleanPlannerJsonOutput,
-  isValidJson
+  isValidJson,
+  extractRecentTopics,
+  RecentTopicsSummary
 } from '../utils/LessonPlanPromptUtils'
 import {
   PlannerSessionSummary,
@@ -100,8 +102,8 @@ const MAX_FAILS_PER_DAY: number = 3
 /** 备课老师 LLM 调用最大输出 token */
 const PLANNER_MAX_TOKENS: number = 4096
 
-/** 备课老师 LLM 调用温度 */
-const PLANNER_TEMPERATURE: number = 0.4
+/** 备课老师 LLM 调用温度 (0.6: 在"承接昨日"指令移除后, 给类别轮换留出采样空间; 仍低于创意档 >0.8, 不影响 JSON schema 遵循) */
+const PLANNER_TEMPERATURE: number = 0.6
 
 /** 预生成图并发数（与 ChatTaskOrchestratorService.MAX_CONCURRENT_TASKS 一致） */
 const PREFETCH_CONCURRENCY: number = 3
@@ -544,6 +546,25 @@ export class LessonPlanningService {
       const yesterdayPlanParsed: LessonPlan | null =
         yesterdayPlanJson !== '' ? parseLessonPlan(yesterdayPlanJson) : null
 
+      // 近 7 天已 done 计划摘要 (防止跨日重复: frog 之类的词连续出现多天)
+      // 取 8 行 (今日可能未生成 + 7 天回溯), 过滤掉未 done / 今日 / 明日(本次 planDate)
+      const recentRows = await this.databaseService.getRecentDailyLessonPlans(8)
+      const recentPlans: LessonPlan[] = []
+      for (let i = 0; i < recentRows.length; i++) {
+        const r = recentRows[i]
+        if (r.status !== LessonPlanStatus.DONE) {
+          continue
+        }
+        if (r.planDate === planDate || r.planDate === todayYMD) {
+          continue
+        }
+        if (r.planJson === '') {
+          continue
+        }
+        recentPlans.push(parseLessonPlan(r.planJson))
+      }
+      const recentTopics: RecentTopicsSummary = extractRecentTopics(recentPlans)
+
       // 6. 调用 LLM 生成 plan
       // 先读当前 tsa (评估老师产出, 可能为 null)
       const currentAdj = await getTeachingStyleAdjustmentService().getCurrentAdjustment('', Date.now())
@@ -553,6 +574,7 @@ export class LessonPlanningService {
         todaysSessions: summaries,
         childProfile: this.buildChildProfileForPlanner(profile),
         yesterdayPlan: yesterdayPlanJson === '' ? null : JSON.parse(yesterdayPlanJson),
+        recentTopics: recentTopics,
         currentStyleAdjustment: currentStyleSummary,
         planDate: planDate,
         sessionCount: sessions.length,
