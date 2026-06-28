@@ -779,6 +779,7 @@ export struct TodayStarDetailSheet {
   }
 
   build() {
+    Scroll() {
     Column() {
       // Hero block: 40×40 圆角 icon well + 32vp Bold 总数
       Row() {
@@ -883,17 +884,19 @@ export struct TodayStarDetailSheet {
             }, (row: DetailRowData): string => `${row.event.id}`)
           }
           .width('100%')
-          .padding({ left: 16, right: 16 })
+          .padding({ left: 16, right: 16, top: 4, bottom: 16 })
         }
       } else {
         // 日历视图
         this.CalendarView()
       }
-
-      Blank()
     }
     .width('100%')
-    .height('70%')
+    .padding({ top: 0, bottom: 0 })
+    }
+    .width('100%')
+    .height('100%')
+    .scrollBar(BarState.Auto)
     .backgroundColor(this.themeSurface)
     .borderRadius({ topLeft: 28, topRight: 28 })
     .visualEffect(buildPointLightBorderEffect())
