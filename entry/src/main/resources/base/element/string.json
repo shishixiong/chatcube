@@ -3723,6 +3723,50 @@
     {
       "name": "learning_daily_evaluation_last_completed_subtitle_format",
       "value": "距今 %d 天"
+    },
+    {
+      "name": "english_image_import_title",
+      "value": "导入图片"
+    },
+    {
+      "name": "english_image_import_pick",
+      "value": "选择图片"
+    },
+    {
+      "name": "english_image_import_pick_failed",
+      "value": "读取图片失败，请重试"
+    },
+    {
+      "name": "english_image_import_repick",
+      "value": "重新选择"
+    },
+    {
+      "name": "english_image_import_word",
+      "value": "单词"
+    },
+    {
+      "name": "english_image_import_sentence",
+      "value": "句子"
+    },
+    {
+      "name": "english_image_import_word_hint",
+      "value": "请输入单词"
+    },
+    {
+      "name": "english_image_import_sentence_hint",
+      "value": "请输入句子"
+    },
+    {
+      "name": "english_image_import_conflict",
+      "value": "该单词/句子已存在图片，请重新输入"
+    },
+    {
+      "name": "english_image_import_invalid_input",
+      "value": "请输入有效的单词或句子"
+    },
+    {
+      "name": "english_image_import_save_failed",
+      "value": "保存失败，请重试"
     }
   ]
 }

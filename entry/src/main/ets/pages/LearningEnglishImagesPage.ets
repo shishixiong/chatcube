@@ -10,9 +10,16 @@ import {
   getHdsStatusBarContentColor
 } from '../utils/HdsVisualEffectUtil'
 import { AdaptiveImageThumbnail } from '../components/AdaptiveImageThumbnail'
+import { ImportEnglishImageSheet } from '../components/ImportEnglishImageSheet'
 import { getImageIndexService } from '../services/ImageIndexService'
 import { getDatabaseService } from '../services/DatabaseService'
 import { ImageIndexRow, ImageSource } from '../models/ImageIndexModels'
+import {
+  DefaultMediaModel,
+  DefaultMediaType,
+  MediaPreview,
+  MediaPreviewOptions
+} from '@lyb/media-preview'
 
 const TAG = 'LearningEnglishImagesPage'
 const GRID_LIMIT: number = 200
@@ -86,6 +93,7 @@ struct LearningEnglishImagesPage {
   @Local items: EnglishImageGalleryItem[] = []
   @Local isLoading: boolean = true
   @Local filterIndex: number = EnglishImageFilter.ALL
+  @Local showImportSheet: boolean = false
 
   private compactScroller: Scroller = new Scroller()
   private loadToken: number = 0
@@ -270,6 +278,37 @@ struct LearningEnglishImagesPage {
     }
   }
 
+  private openImportSheet(): void {
+    this.showImportSheet = true
+  }
+
+  private async refreshItems(): Promise<void> {
+    await this.loadItems()
+  }
+
+  private openItemPreview(target: EnglishImageGalleryItem): void {
+    const items = this.getFilteredItems()
+    const medias: DefaultMediaModel[] = []
+    let initIndex = 0
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i]
+      const uri = `file://${it.filePath}`
+      medias.push(new DefaultMediaModel(uri, uri, DefaultMediaType.IMAGE))
+      if (it.id === target.id) {
+        initIndex = medias.length - 1
+      }
+    }
+    if (medias.length === 0) {
+      return
+    }
+    const opts = new MediaPreviewOptions<DefaultMediaModel>()
+      .setMedias(medias)
+      .setInitIndex(initIndex)
+      .setShowPageText(true)
+      .setDuration(260)
+    MediaPreview.open(this.getUIContext(), opts)
+  }
+
   private getCompactContentTopPadding(): number {
     return getHdsTopNavigationContentTopPadding(this.px2vp(this.topAvoidHeight), this.windowWidthVp,
       this.windowHeightVp)
@@ -334,9 +373,40 @@ struct LearningEnglishImagesPage {
       this.FilterChip(EnglishImageFilter.QUIZ, $r('app.string.learning_image_filter_quiz'))
       this.FilterChip(EnglishImageFilter.PLAN, $r('app.string.learning_image_filter_plan'))
       Blank()
+      Button() {
+        Row({ space: 4 }) {
+          SymbolGlyph($r('sys.symbol.plus'))
+            .fontSize(13)
+            .fontColor([$r('app.color.text_primary')])
+          Text($r('app.string.english_image_import_title'))
+            .fontSize(13)
+            .fontColor($r('app.color.text_primary'))
+            .fontWeight(FontWeight.Medium)
+        }
+        .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+      }
+      .height(30)
+      .backgroundColor(this.themePrimaryLight)
+      .borderRadius(14)
+      .onClick(() => {
+        this.openImportSheet()
+      })
     }
     .width('100%')
     .padding({ left: 0, right: 0, top: 4, bottom: 4 })
+  }
+
+  @Builder
+  private ImportSheetBuilder() {
+    ImportEnglishImageSheet({
+      onDismiss: (): void => {
+        this.showImportSheet = false
+      },
+      onSaved: (): void => {
+        this.showImportSheet = false
+        this.refreshItems()
+      }
+    })
   }
 
   @Builder
@@ -426,6 +496,9 @@ struct LearningEnglishImagesPage {
                 GridItem() {
                   this.ImageCard(item)
                 }
+                .onClick(() => {
+                  this.openItemPreview(item)
+                })
               }, (item: EnglishImageGalleryItem) => item.id)
             }
             .width('100%')
@@ -482,6 +555,14 @@ struct LearningEnglishImagesPage {
     .width('100%')
     .height('100%')
     .backgroundColor(this.themeBackground)
+    .bindSheet($$this.showImportSheet, this.ImportSheetBuilder(), {
+      height: SheetSize.FIT_CONTENT,
+      showClose: false,
+      dragBar: true,
+      onDisappear: (): void => {
+        this.showImportSheet = false
+      }
+    })
   }
 }
 
