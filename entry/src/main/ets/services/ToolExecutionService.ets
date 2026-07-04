@@ -34,6 +34,7 @@ import { setAppUiStateValue } from '../state/AppUiState'
 import { getImageIndexService, ImageIndexService } from './ImageIndexService'
 import { ImageSource } from '../models/ImageIndexModels'
 import { generatePuzzle } from '../utils/HuarongdaoPuzzleGenerator'
+import { validateAndNormalizeCategorization } from '../utils/CategorizationValidation'
 import { ServiceRegistry } from './ServiceRegistry'
 import { modelSupportsVision } from './registry/ModelAbilityRegistry'
 import { RequestMessage, AIApiConfig } from './AIApiService'
@@ -882,6 +883,27 @@ export class ToolExecutionService {
       toolCall.sourceLabel = '内置工具'
     }
     toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 预校验: AI 偶发会发出「某桶 0 件物品」等非法分布, 若进入 pending 态,
+    // 卡片只渲染 ErrorPlaceholder 且永不调 onAnswer → handleCategorization 的 Promise
+    // 永不 resolve → 会话卡死。这里提前用纯函数校验, 失败直接回 error ToolResult,
+    // AI 收到错误后可据 message 自我修正并重新调用 categorization。
+    const validation = validateAndNormalizeCategorization(toolCall.arguments)
+    if (!validation.ok) {
+      console.warn('ToolExecutionService', `categorization validation failed: ${validation.error}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: 'validation_failed',
+          message: validation.error,
+          should_retry: true
+        }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
 
     toolCall.approvalState = 'pending'
 

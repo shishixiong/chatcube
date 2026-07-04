@@ -66,8 +66,8 @@ const MAX_FAILS_PER_DAY: number = 3
 /** failed/running 进入 retry 模式的最小更新间隔 (防止紧循环) */
 const RETRY_MIN_INTERVAL_MS: number = 30 * 60 * 1000
 
-/** 评估老师 LLM 调用最大输出 token (比备课 4096 小, 只输出 4 维度) */
-const EVALUATOR_MAX_TOKENS: number = 1024
+/** 评估老师 LLM 调用最大输出 token*/
+const EVALUATOR_MAX_TOKENS: number = 4096
 
 /** 评估老师 LLM 调用温度 (低温度,稳定输出) */
 const EVALUATOR_TEMPERATURE: number = 0.3
@@ -377,6 +377,17 @@ export class EvaluationService {
       // 8. 解析 + 校验 LLM 输出
       const cleaned = cleanEvaluatorJsonOutput(llmResult.content)
       if (cleaned === '' || !isValidEvaluatorJson(cleaned)) {
+        // 诊断日志: 捕获清洗后内容 + 原始内容前缀, 用于排查
+        const cleanedPreview = cleaned.length > 500
+          ? cleaned.substring(0, 500) + `...(+${cleaned.length - 500} chars)`
+          : cleaned
+        const rawPreview = llmResult.content.length > 500
+          ? llmResult.content.substring(0, 500) + `...(+${llmResult.content.length - 500} chars)`
+          : llmResult.content
+        console.warn('EvaluationService',
+          `JSON validation failed. cleanedLen=${cleaned.length}, rawLen=${llmResult.content.length}`)
+        console.warn('EvaluationService', `cleaned preview: ${cleanedPreview}`)
+        console.warn('EvaluationService', `raw content preview: ${rawPreview}`)
         await this.markFailed(tsaId, evaluationDate, trendId,
           'LLM 输出非合法 JSON', sessions.length, messageCount)
         return
@@ -528,8 +539,32 @@ export class EvaluationService {
         ReasoningLevel.OFF
       )
       if (!result.success) {
+        console.warn('EvaluationService',
+          `callEvaluatorLLM failed: ${result.errorMessage}, ` +
+          `provider=${provider.id}, model=${evaluatorModel.modelId}`)
         return this.makeLlmError(result.errorMessage, provider.id,
           evaluatorModel.modelId, evaluatorModel.modelName)
+      }
+      // 诊断日志: 捕获 LLM 原始输出元信息, 用于排查 JSON 解析失败
+      const usageInfo = result.usage !== null ? result.usage : null
+      console.info('EvaluationService',
+        `callEvaluatorLLM ok: contentLen=${result.content.length}, ` +
+        `reasoningLen=${result.reasoningContent.length}, ` +
+        `finishReason=${result.finishReason ?? 'unset'}, ` +
+        `promptTokens=${usageInfo !== null ? usageInfo.prompt_tokens : 'null'}, ` +
+        `completionTokens=${usageInfo !== null ? usageInfo.completion_tokens : 'null'}, ` +
+        `totalTokens=${usageInfo !== null ? usageInfo.total_tokens : 'null'}, ` +
+        `provider=${provider.id}, model=${evaluatorModel.modelId}`)
+      // 内容前 500 字 (截断, 避免日志爆炸)
+      const contentPreview = result.content.length > 500
+        ? result.content.substring(0, 500) + `...(+${result.content.length - 500} chars)`
+        : result.content
+      console.info('EvaluationService', `raw content preview: ${contentPreview}`)
+      if (result.reasoningContent.length > 0) {
+        const reasoningPreview = result.reasoningContent.length > 300
+          ? result.reasoningContent.substring(0, 300) + `...(+${result.reasoningContent.length - 300} chars)`
+          : result.reasoningContent
+        console.info('EvaluationService', `raw reasoning preview: ${reasoningPreview}`)
       }
       const ok = new EvaluatorLlmResult()
       ok.success = true

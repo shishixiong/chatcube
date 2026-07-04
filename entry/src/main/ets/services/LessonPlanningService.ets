@@ -100,7 +100,7 @@ const RETRY_MIN_INTERVAL_MS: number = 30 * 60 * 1000
 const MAX_FAILS_PER_DAY: number = 3
 
 /** 备课老师 LLM 调用最大输出 token */
-const PLANNER_MAX_TOKENS: number = 4096
+const PLANNER_MAX_TOKENS: number = 10240
 
 /** 备课老师 LLM 调用温度 (0.6: 在"承接昨日"指令移除后, 给类别轮换留出采样空间; 仍低于创意档 >0.8, 不影响 JSON schema 遵循) */
 const PLANNER_TEMPERATURE: number = 0.6
