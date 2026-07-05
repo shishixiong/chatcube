@@ -183,10 +183,12 @@ grep -cE '难度 [123] \(level' entry/src/main/ets/models/AssistantModels.ets
 - [ ] **Step 3: 验证每行字数在合理范围（防合并丢失换行）**
 
 ```bash
-awk '/^  ## 分类小管家主题库/,/^  ## 工具调用规则/' entry/src/main/ets/models/AssistantModels.ets | grep -cE '^\s+.{20,200}'
+awk '/## 分类小管家主题库/,/## 工具调用规则/' entry/src/main/ets/models/AssistantModels.ets | grep -cE "^\s+'[^']{20,200}'"
 ```
 
-预期输出：`>= 10`（节正文每行应有 20-200 字符，若少于 10 说明换行被吞掉成单行）
+预期输出：`>= 10`（节正文每行应有 20-200 字符的字符串字面量，若少于 10 说明换行被吞掉成单行）
+
+> **修正备注**：原 brief 锚点 `^  ## ...` 对裸 `##` 起作用，但实际文件中数组元素格式是 `  '## ...'`（每行用单引号包），所以原正则不匹配。修正为 `/## .../` 起点 + `^\s+'[^']{20,200}'` grep（识别引号内字符串字面量）。
 
 - [ ] **Step 4: ASCII 双引号最终扫描（防 JSON-in-template-literal 陷阱迁移）**
 
