@@ -1544,10 +1544,11 @@ git commit -m "feat(vertical-math): add step narrator with active/done states"
 
 Owns all interactive state: `operandA`, `operandB`, `selectedOperation`, `solution`, `visibleStepCount`, `errorMessage`, `isCompleted`. Renders input form (numeric text fields + operation chooser + 开始计算 button), control row (上一步 / 下一步 / 重置), then Board + Narrator. On full completion, calls `onAnswer(toolCallId, JSON.stringify(result))` exactly once.
 
-- [ ] **Step 11.1: Create the card component.**
+- [ ] **Step 11.1: Create the card component — contract MUST mirror `MathQuizCard` (Task 15 expects `@Param toolCall: ToolCall`).**
 
 ```ts
 // components/VerticalMathCard.ets
+import { ToolCall } from '../models/ChatModels'
 import {
   solveVerticalMath,
   VerticalMathOperation,
@@ -1573,11 +1574,9 @@ interface VerticalMathResultPayload {
 
 @ComponentV2
 export struct VerticalMathCard {
-  @Param toolCallId: string = ''
-  @Param initialOperation: VerticalMathOperation = VerticalMathOperation.ADD
-  @Param initialOperandA: number = -1
-  @Param initialOperandB: number = -1
+  @Param toolCall: ToolCall = new ToolCall()
   @Param isAnswered: boolean = false
+  @Param answeredPayload: string = ''
   @Param largeSize: boolean = false
 
   @Event onAnswer: (toolCallId: string, answerJson: string) => void = () => {}
@@ -1591,12 +1590,31 @@ export struct VerticalMathCard {
   @Local hasAnswered: boolean = false
 
   aboutToAppear() {
-    this.selectedOperation = this.initialOperation
-    if (this.initialOperandA >= 0) this.operandA = String(this.initialOperandA)
-    if (this.initialOperandB >= 0) this.operandB = String(this.initialOperandB)
+    this.parseToolCallArguments()
     if (this.isAnswered) {
       // Pre-compute solution so the user can walk through it again.
       this.regenerateSolution()
+    }
+  }
+
+  private parseToolCallArguments() {
+    try {
+      const args: Record<string, Object> = JSON.parse(this.toolCall.arguments ?? '{}') as Record<string, Object>
+      const op = args['operation']
+      if (typeof op === 'string') {
+        switch (op) {
+          case 'add': this.selectedOperation = VerticalMathOperation.ADD; break
+          case 'subtract': this.selectedOperation = VerticalMathOperation.SUBTRACT; break
+          case 'multiply': this.selectedOperation = VerticalMathOperation.MULTIPLY; break
+          case 'divide': this.selectedOperation = VerticalMathOperation.DIVIDE; break
+        }
+      }
+      const a = args['operand_a']
+      if (typeof a === 'number' && a >= 0) this.operandA = String(a)
+      const b = args['operand_b']
+      if (typeof b === 'number' && b >= 0) this.operandB = String(b)
+    } catch (_e) {
+      // Malformed arguments → leave defaults (empty inputs, ADD).
     }
   }
 
@@ -1635,7 +1653,7 @@ export struct VerticalMathCard {
         remainder: this.solution.remainder,
         step_count: this.visibleStepCount
       }
-      this.onAnswer(this.toolCallId, JSON.stringify(payload))
+      this.onAnswer(this.toolCall.id, JSON.stringify(payload))
     }
   }
 
