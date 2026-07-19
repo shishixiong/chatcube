@@ -19,12 +19,14 @@ import {
   HUARONGDAO_TOOL_ID,
   HANDWRITING_PRACTICE_TOOL_ID,
   CATEGORIZATION_TOOL_ID,
+  VERTICAL_MATH_TOOL_ID,
   isAskUserFunctionName,
   isMathQuizFunctionName,
   isEnglishQuizFunctionName,
   isHuarongdaoFunctionName,
   isHandwritingPracticeFunctionName,
   isCategorizationFunctionName,
+  isVerticalMathFunctionName,
   isScrapeWebFunctionName,
   isSearchWebFunctionName,
   isGrantStarFunctionName
@@ -1056,6 +1058,78 @@ export class ToolExecutionService {
     )
   }
 
+  // vertical_math 特殊路径: 与 categorization 类似, 挂起等待 VerticalMathCard 回答。
+  // 孩子走完所有步骤后由卡片 onAnswer 回传 {completed, operation, operand_a, operand_b, result, remainder, step_count} JSON。
+  // 注意: 本期不接入星星奖励系统 (spec §2.1), 不调用 recordStarEvent, 避免 StarEventModels.ets 联合类型扩散。
+  private async handleVerticalMath(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = VERTICAL_MATH_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '小小数学家'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    toolCall.approvalState = 'pending'
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = VERTICAL_MATH_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `vertical_math answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `vertical_math 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'vertical_math cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未完成竖式计算' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `vertical_math answered: ${toolCall.id}`)
+    // 注: 不调用 recordStarEvent — 本期不接入星星奖励系统。
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
   // 调用 AI vision 模型评价书写
   private async evaluateHandwriting(
     base64Image: string,
@@ -1204,6 +1278,12 @@ export class ToolExecutionService {
     // 学写字互动工具, 由 HandwritingCard 收集小朋友的书写, 然后调用 AI vision 评价。
     if (isHandwritingPracticeFunctionName(normalizedFunctionName)) {
       return await this.handleHandwriting(toolCall, context)
+    }
+
+    // === vertical_math 特殊路径 ===
+    // 竖式数学互动工具, 由 VerticalMathCard 收集孩子的计算结果。
+    if (isVerticalMathFunctionName(normalizedFunctionName)) {
+      return await this.handleVerticalMath(toolCall, context)
     }
 
     // 通过函数名获取工具 ID
