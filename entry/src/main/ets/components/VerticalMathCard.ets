@@ -34,7 +34,7 @@ interface OperationButtonDescriptor {
 // Module-level typed const for the operation chooser. ArkTS strict mode
 // rejects inline `{ label, op }` object literals inside @Builder/ForEach
 // bodies; a named typed array satisfies the inferred-array-type check.
-const OPERATION_BUTTONS: ReadonlyArray<OperationButtonDescriptor> = [
+const OPERATION_BUTTONS: OperationButtonDescriptor[] = [
   { label: '＋', op: VerticalMathOperation.ADD },
   { label: '－', op: VerticalMathOperation.SUBTRACT },
   { label: '×', op: VerticalMathOperation.MULTIPLY },

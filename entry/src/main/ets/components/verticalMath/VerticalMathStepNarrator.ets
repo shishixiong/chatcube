@@ -103,7 +103,8 @@ export struct VerticalMathStepNarrator {
     .margin({ bottom: 8 })
   }
 
-  private renderStepCard(step: VerticalMathStep, index: number): ListItem {
+  @Builder
+  private renderStepCard(step: VerticalMathStep, index: number) {
     ListItem() {
       this.StepCard(step, index)
     }

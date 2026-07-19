@@ -9,38 +9,38 @@ export enum VerticalMathOperation {
   DIVIDE = 'divide'
 }
 
-export interface VerticalMathHighlight {
-  rowIndex: number
-  columnIndex: number
-  kind: 'active' | 'done' | 'carry' | 'borrow' | 'quotient'
+export class VerticalMathHighlight {
+  rowIndex: number = 0
+  columnIndex: number = 0
+  kind: 'active' | 'done' | 'carry' | 'borrow' | 'quotient' = 'active'
 }
 
-export interface VerticalMathBoardRow {
-  cells: string[]                 // length = columnCount; '' = blank cell
+export class VerticalMathBoardRow {
+  cells: string[] = []            // length = columnCount; '' = blank cell
   operator?: string               // leading glyph ('+', '-', '×', '÷', '＋'), or undefined
   topMark?: string                // optional small glyph above the row ('•' for borrow, red 1 for add carry)
   topMarkColumn?: number          // which column the topMark belongs to
   topMarkRowIndex?: number        // visual row index used by carry row injection
 }
 
-export interface VerticalMathStep {
-  title: string
-  narration: string
-  rows: VerticalMathBoardRow[]    // complete snapshot of board at this step
-  highlights: VerticalMathHighlight[]
+export class VerticalMathStep {
+  title: string = ''
+  narration: string = ''
+  rows: VerticalMathBoardRow[] = []    // complete snapshot of board at this step
+  highlights: VerticalMathHighlight[] = []
   showFinalLine?: boolean         // when true, render the second horizontal line
   showResultRow?: boolean         // when true, render the final result row
 }
 
-export interface VerticalMathSolution {
-  operation: VerticalMathOperation
-  operandA: number
-  operandB: number
-  result: number
-  remainder: number
-  columnCount: number             // total place-value columns in the widest row
-  initialRows: VerticalMathBoardRow[]  // shown at visibleStepCount=0: A, operator, B, first line
-  steps: VerticalMathStep[]       // empty array if no further work needed
+export class VerticalMathSolution {
+  operation: VerticalMathOperation = VerticalMathOperation.ADD
+  operandA: number = 0
+  operandB: number = 0
+  result: number = 0
+  remainder: number = 0
+  columnCount: number = 1         // total place-value columns in the widest row
+  initialRows: VerticalMathBoardRow[] = []  // shown at visibleStepCount=0: A, operator, B, first line
+  steps: VerticalMathStep[] = []  // empty array if no further work needed
   finalRow?: VerticalMathBoardRow
   errorMessage?: string
 }

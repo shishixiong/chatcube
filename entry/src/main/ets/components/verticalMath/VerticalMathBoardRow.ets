@@ -37,7 +37,7 @@ export struct VerticalMathBoardRowView {
     if (kind === 'done') {
       return VERTICAL_MATH_DONE_BG
     }
-    return Color.Transparent
+    return 'transparent'
   }
 
   private getCellTextColor(columnIndex: number): string {
