@@ -84,6 +84,46 @@ export function validateVerticalMathInputs(
   return null
 }
 
+/**
+ * Orchestrator: validate inputs and dispatch to one of the four operation solvers.
+ *
+ * On validation error: returns a VerticalMathSolution whose `errorMessage` is set
+ * and whose `steps` is empty. The caller (UI) renders the error message instead
+ * of the board. On valid inputs, dispatches to the operation-specific solver.
+ */
+export function solveVerticalMath(
+  operation: VerticalMathOperation,
+  operandA: number,
+  operandB: number
+): VerticalMathSolution {
+  const validationError: VerticalMathValidationError | null = validateVerticalMathInputs(
+    operation, operandA, operandB
+  )
+  if (validationError !== null) {
+    return {
+      operation,
+      operandA,
+      operandB,
+      result: 0,
+      remainder: 0,
+      columnCount: 1,
+      initialRows: [],
+      steps: [],
+      errorMessage: validationError.message
+    }
+  }
+  switch (operation) {
+    case VerticalMathOperation.ADD:
+      return solveVerticalAdd(operandA, operandB)
+    case VerticalMathOperation.SUBTRACT:
+      return solveVerticalSubtract(operandA, operandB)
+    case VerticalMathOperation.MULTIPLY:
+      return solveVerticalMultiply(operandA, operandB)
+    case VerticalMathOperation.DIVIDE:
+      return solveVerticalDivide(operandA, operandB)
+  }
+}
+
 /** Left-pad a number to the given width with spaces, then split into single-char cells. */
 function padCells(n: number, width: number): string[] {
   const raw: string = String(n)

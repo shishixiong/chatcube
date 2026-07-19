@@ -8,7 +8,8 @@ import {
   solveVerticalAdd,
   solveVerticalSubtract,
   solveVerticalMultiply,
-  solveVerticalDivide
+  solveVerticalDivide,
+  solveVerticalMath
 } from '../../../main/ets/utils/VerticalMathSolver'
 
 export default function verticalMathSolverTest() {
@@ -202,6 +203,37 @@ export default function verticalMathSolverTest() {
       const s = solveVerticalDivide(999, 9)
       expect(s.result).assertEqual(111)
       expect(s.remainder).assertEqual(0)
+    })
+  })
+
+  describe('solveVerticalMath orchestrator', () => {
+    it('dispatches to addition', 0, () => {
+      const s = solveVerticalMath(VerticalMathOperation.ADD, 47, 28)
+      expect(s.operation).assertEqual(VerticalMathOperation.ADD)
+      expect(s.result).assertEqual(75)
+      expect(s.errorMessage === undefined).assertEqual(true)
+    })
+
+    it('dispatches to subtraction', 0, () => {
+      const s = solveVerticalMath(VerticalMathOperation.SUBTRACT, 503, 278)
+      expect(s.result).assertEqual(225)
+    })
+
+    it('dispatches to multiplication', 0, () => {
+      const s = solveVerticalMath(VerticalMathOperation.MULTIPLY, 988, 6)
+      expect(s.result).assertEqual(5928)
+    })
+
+    it('dispatches to division', 0, () => {
+      const s = solveVerticalMath(VerticalMathOperation.DIVIDE, 85, 4)
+      expect(s.result).assertEqual(21)
+      expect(s.remainder).assertEqual(1)
+    })
+
+    it('returns a validation-error solution on illegal inputs', 0, () => {
+      const s = solveVerticalMath(VerticalMathOperation.SUBTRACT, 5, 50)
+      expect(s.errorMessage !== undefined).assertEqual(true)
+      expect(s.steps.length).assertEqual(0)
     })
   })
 }
