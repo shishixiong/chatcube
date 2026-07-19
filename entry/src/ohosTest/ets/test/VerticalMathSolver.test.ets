@@ -5,7 +5,8 @@ import {
   VerticalMathStep,
   VerticalMathBoardRow,
   validateVerticalMathInputs,
-  solveVerticalAdd
+  solveVerticalAdd,
+  solveVerticalSubtract
 } from '../../../main/ets/utils/VerticalMathSolver'
 
 export default function verticalMathSolverTest() {
@@ -104,6 +105,31 @@ export default function verticalMathSolverTest() {
       const s = solveVerticalAdd(0, 0)
       expect(s.result).assertEqual(0)
       expect(s.columnCount).assertEqual(1)
+    })
+  })
+
+  describe('solveVerticalSubtract', () => {
+    it('503 - 278 = 225 with cascading borrow', 0, () => {
+      const s = solveVerticalSubtract(503, 278)
+      expect(s.result).assertEqual(225)
+      // expect at least one step with a '•' topMark (borrow marker)
+      const borrowSteps = s.steps.filter((step: VerticalMathStep) =>
+        step.rows.some((row: VerticalMathBoardRow) => row.topMark === '•'))
+      expect(borrowSteps.length >= 2).assertEqual(true)
+    })
+
+    it('100 - 50 = 50 with no borrow', 0, () => {
+      const s = solveVerticalSubtract(100, 50)
+      expect(s.result).assertEqual(50)
+      const borrowSteps = s.steps.filter((step: VerticalMathStep) =>
+        step.rows.some((row: VerticalMathBoardRow) => row.topMark === '•'))
+      expect(borrowSteps.length).assertEqual(0)
+    })
+
+    it('999 - 999 = 0', 0, () => {
+      const s = solveVerticalSubtract(999, 999)
+      expect(s.result).assertEqual(0)
+      expect(s.columnCount).assertEqual(3)
     })
   })
 }

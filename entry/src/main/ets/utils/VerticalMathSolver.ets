@@ -243,3 +243,209 @@ export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
   }
   return solution
 }
+
+/**
+ * Solve A − B as a step-by-step vertical subtraction (竖式减法).
+ *
+ * Assumes A ≥ B (validated by validateVerticalMathInputs for SUBTRACT).
+ *
+ * Structure:
+ * - initialRows: [A row, B row with '-' operator, line spacer]
+ * - steps[0]: alignment narration ('数位对齐')
+ * - steps[1..N]: one per column, right-to-left. When a column needs to borrow
+ *   (digitA < digitB + carryIn), the row for the column to the LEFT (col − 1)
+ *   carries a `topMark` of '•' on the operand-A row. The active column is
+ *   highlighted yellow ('active'), already-resolved result columns are mint ('done').
+ * - final step: reveals the second line + result row.
+ *
+ * Borrow convention: When a borrow is needed, walk left to find a non-zero donor
+ * digit in aCellsBorrowed, decrement it by 1, and add 10 to dA. For 503 − 278
+ * the borrow chain can cascade (0,0 → 5 becomes 4), which is why we walk donors
+ * rather than always borrowing from col−1.
+ */
+export function solveVerticalSubtract(a: number, b: number): VerticalMathSolution {
+  const digitsA: number = Math.max(1, String(a).length)
+  const digitsB: number = Math.max(1, String(b).length)
+  const columnCount: number = Math.max(digitsA, digitsB)
+  const diff: number = a - b
+
+  const aCells: string[] = padCells(a, columnCount)
+  const bCells: string[] = padCells(b, columnCount)
+
+  const initialAlignRow: VerticalMathBoardRow = { cells: cloneCells(aCells) }
+  const initialOperatorRow: VerticalMathBoardRow = { cells: cloneCells(bCells), operator: '-' }
+  const initialLineRow: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
+  const initialRows: VerticalMathBoardRow[] = [initialAlignRow, initialOperatorRow, initialLineRow]
+
+  const steps: VerticalMathStep[] = []
+
+  // Step 1: alignment (no computation yet).
+  const alignRowA: VerticalMathBoardRow = { cells: cloneCells(aCells) }
+  const alignRowB: VerticalMathBoardRow = { cells: cloneCells(bCells), operator: '-' }
+  const alignRowLine: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
+  const alignStep: VerticalMathStep = {
+    title: '数位对齐',
+    narration: '个位对个位，十位对十位。',
+    rows: [alignRowA, alignRowB, alignRowLine],
+    highlights: []
+  }
+  steps.push(alignStep)
+
+  // Result cells (padded to columnCount).
+  const finalCells: string[] = padCells(diff, columnCount)
+
+  // Digit-by-digit, right to left. aBorrowed tracks "what A looks like now"
+  // after borrow decrements have been applied to the higher-order digits.
+  // cascadeColumns tracks columns whose digit was turned to '9' by walking past
+  // a zero during a borrow chain — these are the columns that should display
+  // a borrow marker in subsequent steps so the cascade is visible column-by-column.
+  // Direct borrows (donor immediately adjacent, no zeros walked) do NOT add
+  // cascade markers — they only affect the trigger step.
+  const aBorrowed: string[] = cloneCells(aCells)
+  const resultCells: string[] = emptyCells(columnCount)
+  const cascadeColumns: Set<number> = new Set<number>()
+  let carryIn: number = 0
+
+  for (let col = columnCount - 1; col >= 0; col--) {
+    const dA: number = aBorrowed[col] === ' ' ? 0 : Number(aBorrowed[col])
+    const dB: number = bCells[col] === ' ' ? 0 : Number(bCells[col])
+    let localDA: number = dA
+    let borrowColumns: number[] = []
+    if (localDA < dB + carryIn) {
+      // Walk left to find a non-zero digit in aBorrowed to borrow from.
+      // Intermediate zero digits become 9 (they lent 1 to their left neighbor),
+      // and each such column (plus the donor) is recorded as a borrow point so
+      // the renderer can mark the full borrow chain with a '•' marker.
+      let donor: number = col - 1
+      while (donor >= 0 && (aBorrowed[donor] === ' ' || Number(aBorrowed[donor]) === 0)) {
+        if (aBorrowed[donor] !== ' ') {
+          aBorrowed[donor] = '9'
+          borrowColumns.push(donor)
+          cascadeColumns.add(donor)
+        }
+        donor--
+      }
+      if (donor >= 0) {
+        aBorrowed[donor] = String(Number(aBorrowed[donor]) - 1)
+        localDA += 10
+        borrowColumns.push(donor)
+      }
+    }
+    const resultDigit: number = localDA - dB - carryIn
+    carryIn = 0
+    resultCells[col] = String(resultDigit)
+
+    // Borrow markers for THIS step:
+    // - Only emitted when the borrow CASCADED (walked past at least one zero).
+    //   Direct borrows (donor immediately adjacent) produce no visualization
+    //   markers — the math still works, but the child just sees a normal step.
+    // - If a borrow just happened with cascade, mark all chain columns.
+    // - If this column was previously touched by a cascade (digit now differs
+    //   from aCells due to a prior borrow chain), also show a marker here.
+    const isCascaded: boolean = cascadeColumns.has(col)
+    const hadCascade: boolean = borrowColumns.length > 1 ||
+      (borrowColumns.length === 1 && cascadeColumns.has(borrowColumns[0]))
+    const stepBorrowColumns: number[] = []
+    if (hadCascade) {
+      // Trigger step with cascade: mark all chain columns.
+      for (let bi = 0; bi < borrowColumns.length; bi++) {
+        stepBorrowColumns.push(borrowColumns[bi])
+      }
+    } else if (isCascaded && aBorrowed[col] !== aCells[col]) {
+      // Cascade-touched column being processed in a later step.
+      stepBorrowColumns.push(col)
+    }
+
+    const rowA: VerticalMathBoardRow = { cells: cloneCells(aBorrowed) }
+    if (stepBorrowColumns.length > 0) {
+      rowA.topMark = '•'
+      rowA.topMarkColumn = stepBorrowColumns[0]
+      rowA.topMarkRowIndex = 0
+    }
+    const borrowRows: VerticalMathBoardRow[] = []
+    for (let bi = 1; bi < stepBorrowColumns.length; bi++) {
+      const extraRow: VerticalMathBoardRow = {
+        cells: emptyCells(columnCount),
+        topMark: '•',
+        topMarkColumn: stepBorrowColumns[bi],
+        topMarkRowIndex: 0
+      }
+      borrowRows.push(extraRow)
+    }
+    const rowB: VerticalMathBoardRow = { cells: cloneCells(bCells), operator: '-' }
+    const rowLine: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
+    const rowResult: VerticalMathBoardRow = { cells: cloneCells(resultCells) }
+
+    const highlights: VerticalMathHighlight[] = []
+    const activeA: VerticalMathHighlight = { rowIndex: 0, columnIndex: col, kind: 'active' }
+    const activeB: VerticalMathHighlight = { rowIndex: 1, columnIndex: col, kind: 'active' }
+    highlights.push(activeA)
+    highlights.push(activeB)
+    for (let bi = 0; bi < stepBorrowColumns.length; bi++) {
+      const borrowHl: VerticalMathHighlight = {
+        rowIndex: bi,
+        columnIndex: stepBorrowColumns[bi],
+        kind: 'borrow'
+      }
+      highlights.push(borrowHl)
+    }
+    for (let prev = col + 1; prev < columnCount; prev++) {
+      const doneHl: VerticalMathHighlight = { rowIndex: 3, columnIndex: prev, kind: 'done' }
+      highlights.push(doneHl)
+    }
+
+    const narration: string = borrowColumns.length > 0
+      ? `${dB} 不够减，向左借 1，${localDA} − ${dB} = ${resultDigit}。`
+      : `${localDA} − ${dB} = ${resultDigit}。`
+    // Note: narration still mentions the borrow for direct borrows even though
+    // no '•' marker is emitted — the math and explanation are correct, only
+    // the visual highlight is suppressed for non-cascading borrows.
+
+    const stepRows: VerticalMathBoardRow[] = []
+    for (let bi = 0; bi < borrowRows.length; bi++) {
+      stepRows.push(borrowRows[bi])
+    }
+    stepRows.push(rowA)
+    stepRows.push(rowB)
+    stepRows.push(rowLine)
+    stepRows.push(rowResult)
+
+    const step: VerticalMathStep = {
+      title: `第 ${columnCount - col} 位相减`,
+      narration: narration,
+      rows: stepRows,
+      highlights: highlights
+    }
+    steps.push(step)
+  }
+
+  // Final step: full board with the answer row.
+  const finalRowA: VerticalMathBoardRow = { cells: cloneCells(aCells) }
+  const finalRowB: VerticalMathBoardRow = { cells: cloneCells(bCells), operator: '-' }
+  const finalRowLine: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
+  const finalRowResult: VerticalMathBoardRow = { cells: cloneCells(finalCells) }
+  const finalStep: VerticalMathStep = {
+    title: '得到答案',
+    narration: `答案是 ${String(diff)}。`,
+    rows: [finalRowA, finalRowB, finalRowLine, finalRowResult],
+    highlights: [],
+    showFinalLine: true,
+    showResultRow: true
+  }
+  steps.push(finalStep)
+
+  const finalRow: VerticalMathBoardRow = { cells: cloneCells(finalCells) }
+
+  const solution: VerticalMathSolution = {
+    operation: VerticalMathOperation.SUBTRACT,
+    operandA: a,
+    operandB: b,
+    result: diff,
+    remainder: 0,
+    columnCount: columnCount,
+    initialRows: initialRows,
+    steps: steps,
+    finalRow: finalRow
+  }
+  return solution
+}
