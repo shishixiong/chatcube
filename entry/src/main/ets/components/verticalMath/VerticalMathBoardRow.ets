@@ -20,6 +20,40 @@ export struct VerticalMathBoardRowView {
   @Param cellSize: number = 36
   @Param columnCount: number = 1
 
+  private getHighlightKind(columnIndex: number): string {
+    for (let index: number = 0; index < this.highlights.length; index++) {
+      if (this.highlights[index].columnIndex === columnIndex) {
+        return this.highlights[index].kind
+      }
+    }
+    return ''
+  }
+
+  private getCellBackgroundColor(columnIndex: number): string {
+    const kind: string = this.getHighlightKind(columnIndex)
+    if (kind === 'active' || kind === 'quotient') {
+      return VERTICAL_MATH_ACTIVE_BG
+    }
+    if (kind === 'done') {
+      return VERTICAL_MATH_DONE_BG
+    }
+    return Color.Transparent
+  }
+
+  private getCellTextColor(columnIndex: number): string {
+    const kind: string = this.getHighlightKind(columnIndex)
+    if (kind === 'active' || kind === 'quotient') {
+      return VERTICAL_MATH_ACTIVE_TEXT
+    }
+    if (kind === 'done') {
+      return VERTICAL_MATH_DONE_TEXT
+    }
+    if (kind === 'carry') {
+      return VERTICAL_MATH_CARRY_TEXT
+    }
+    return VERTICAL_MATH_BOARD_TEXT
+  }
+
   @Builder
   private CellGlyph(text: string, colIndex: number) {
     Stack() {
@@ -30,13 +64,14 @@ export struct VerticalMathBoardRowView {
           .fontSize(this.cellSize * 0.62)
           .fontWeight(FontWeight.Bold)
           .fontFamily('ui-monospace, SFMono-Regular, Menlo, monospace')
-          .fontColor(VERTICAL_MATH_BOARD_TEXT)
+          .fontColor(this.getCellTextColor(colIndex))
           .width(this.cellSize)
           .textAlign(TextAlign.Center)
       }
     }
     .width(this.cellSize)
     .height(this.cellSize)
+    .backgroundColor(this.getCellBackgroundColor(colIndex))
     .borderRadius(8)
   }
 
