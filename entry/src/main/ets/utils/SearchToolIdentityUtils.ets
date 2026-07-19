@@ -12,6 +12,7 @@ export const ENGLISH_QUIZ_TOOL_ID: string = 'english_quiz'
 export const HUARONGDAO_TOOL_ID: string = 'huarongdao'
 export const HANDWRITING_PRACTICE_TOOL_ID: string = 'handwriting_practice'
 export const CATEGORIZATION_TOOL_ID: string = 'categorization'
+export const VERTICAL_MATH_TOOL_ID: string = 'vertical_math'
 export const GRANT_STAR_TOOL_ID: string = 'grant_star'
 
 
@@ -104,6 +105,16 @@ export function isCategorizationFunctionName(functionName: string): boolean {
   return normalized === CATEGORIZATION_TOOL_ID ||
     normalized === 'classify' ||
     normalized === 'categorize'
+}
+
+export function isVerticalMathFunctionName(functionName: string): boolean {
+  const normalized = normalizeToolFunctionName(functionName)
+  return normalized === VERTICAL_MATH_TOOL_ID
+}
+
+export function isVerticalMathToolId(toolId: string): boolean {
+  const normalized = normalizeToolFunctionName(toolId)
+  return normalized === VERTICAL_MATH_TOOL_ID
 }
 
 export function isGrantStarFunctionName(functionName: string): boolean {
