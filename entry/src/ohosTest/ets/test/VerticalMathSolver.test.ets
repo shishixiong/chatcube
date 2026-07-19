@@ -7,7 +7,8 @@ import {
   validateVerticalMathInputs,
   solveVerticalAdd,
   solveVerticalSubtract,
-  solveVerticalMultiply
+  solveVerticalMultiply,
+  solveVerticalDivide
 } from '../../../main/ets/utils/VerticalMathSolver'
 
 export default function verticalMathSolverTest() {
@@ -167,6 +168,40 @@ export default function verticalMathSolverTest() {
         expect(activeHighlights.some(highlight => highlight.rowIndex === 1)).assertEqual(true)
         expect(activeHighlights.some(highlight => highlight.rowIndex === 0)).assertEqual(true)
       }
+    })
+  })
+
+  describe('solveVerticalDivide', () => {
+    it('84 ÷ 4 = 21 remainder 0', 0, () => {
+      const s = solveVerticalDivide(84, 4)
+      expect(s.result).assertEqual(21)
+      expect(s.remainder).assertEqual(0)
+    })
+
+    it('85 ÷ 4 = 21 remainder 1', 0, () => {
+      const s = solveVerticalDivide(85, 4)
+      expect(s.result).assertEqual(21)
+      expect(s.remainder).assertEqual(1)
+    })
+
+    it('3 ÷ 7 first digit < divisor (no leading zero)', 0, () => {
+      const s = solveVerticalDivide(3, 7)
+      expect(s.result).assertEqual(0)
+      expect(s.remainder).assertEqual(3)
+      // The narration should mention "首位不够除" at least once.
+      expect(s.steps.some((step: VerticalMathStep) => step.narration.includes('首位不够除'))).assertEqual(true)
+    })
+
+    it('0 ÷ 5 = 0 remainder 0', 0, () => {
+      const s = solveVerticalDivide(0, 5)
+      expect(s.result).assertEqual(0)
+      expect(s.remainder).assertEqual(0)
+    })
+
+    it('999 ÷ 9 = 111 remainder 0', 0, () => {
+      const s = solveVerticalDivide(999, 9)
+      expect(s.result).assertEqual(111)
+      expect(s.remainder).assertEqual(0)
     })
   })
 }

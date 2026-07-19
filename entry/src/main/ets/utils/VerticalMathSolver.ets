@@ -622,3 +622,153 @@ export function solveVerticalMultiply(a: number, b: number): VerticalMathSolutio
     finalRow: { cells: cloneCells(resultCells) }
   }
 }
+
+/**
+ * Solve A ÷ B as step-by-step long division (竖式除法).
+ *
+ * Assumes B ∈ [1, 9] (validated by validateVerticalMathInputs for DIVIDE).
+ * Uses the 厂字形 layout: dividend A on top, divisor B right-aligned in row 1
+ * with a '÷' operator, first horizontal line as row 2. The quotient grows above
+ * the dividend row; intermediate products and remainders appear below it.
+ *
+ * Algorithm per digit position (left-to-right):
+ * - "看首位": Examine window (previous remainder × 10 + current digit).
+ * - If window < B: emit "首位不够除" narration, NO quotient digit rendered.
+ * - Else: "试商" = floor(window / B). "乘" = q × B. "减" = window − product.
+ *   Append product row and remainder row below the line.
+ *
+ * Special cases:
+ * - A = 0: quotient is 0, remainder is 0, single digit column.
+ */
+export function solveVerticalDivide(a: number, b: number): VerticalMathSolution {
+  const aStr: string = String(a)
+  const digitsA: number = aStr.length
+  const columnCount: number = digitsA
+  const aCells: string[] = aStr.split('')
+  const bRowCells: string[] = emptyCells(columnCount)
+  bRowCells[columnCount - 1] = String(b)
+
+  const initialAlignRow: VerticalMathBoardRow = { cells: cloneCells(aCells) }
+  const initialOperatorRow: VerticalMathBoardRow = { cells: cloneCells(bRowCells), operator: '÷' }
+  const initialLineRow: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
+  const initialRows: VerticalMathBoardRow[] = [initialAlignRow, initialOperatorRow, initialLineRow]
+
+  const steps: VerticalMathStep[] = []
+
+  // Step 0: alignment
+  const alignRowA: VerticalMathBoardRow = { cells: cloneCells(aCells) }
+  const alignRowB: VerticalMathBoardRow = { cells: cloneCells(bRowCells), operator: '÷' }
+  const alignRowLine: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
+  const alignStep: VerticalMathStep = {
+    title: '数位对齐',
+    narration: '用除数去除被除数，从最高位开始。',
+    rows: [alignRowA, alignRowB, alignRowLine],
+    highlights: []
+  }
+  steps.push(alignStep)
+
+  // Simulate long division left-to-right
+  let remainder: number = 0
+  const quotientDigits: string[] = emptyCells(columnCount)
+  let anyQuotientDigit: boolean = false
+
+  for (let i = 0; i < columnCount; i++) {
+    const digit: number = Number(aCells[i])
+    const window: number = remainder * 10 + digit
+    if (window < b) {
+      // "首位不够除，先看下一位" — render narration only
+      const notEnoughRows: VerticalMathBoardRow[] = [
+        { cells: cloneCells(aCells) },
+        { cells: cloneCells(bRowCells), operator: '÷' },
+        { cells: emptyCells(columnCount) }
+      ]
+      steps.push({
+        title: `第 ${i + 1} 位：不够除`,
+        narration: '首位不够除，先看下一位。',
+        rows: notEnoughRows,
+        highlights: [
+          { rowIndex: 0, columnIndex: i, kind: 'active' },
+          { rowIndex: 1, columnIndex: columnCount - 1, kind: 'active' }
+        ]
+      })
+      remainder = window
+      continue
+    }
+    const q: number = Math.floor(window / b)
+    const prod: number = q * b
+    remainder = window - prod
+    anyQuotientDigit = true
+    quotientDigits[i] = String(q)
+
+    const quotientRow: VerticalMathBoardRow = { cells: cloneCells(quotientDigits) }
+    const productCells: string[] = emptyCells(columnCount)
+    const prodStr: string = String(prod)
+    for (let k = 0; k < prodStr.length; k++) {
+      productCells[i - prodStr.length + 1 + k] = prodStr.charAt(k)
+    }
+    const remainderCells: string[] = emptyCells(columnCount)
+    if (remainder > 0) {
+      const remStr: string = String(remainder)
+      for (let k = 0; k < remStr.length; k++) {
+        remainderCells[i - remStr.length + 1 + k] = remStr.charAt(k)
+      }
+    } else {
+      remainderCells[i] = '0'
+    }
+
+    const snap: VerticalMathBoardRow[] = [
+      { cells: cloneCells(aCells) },
+      { cells: cloneCells(bRowCells), operator: '÷' },
+      { cells: emptyCells(columnCount) },
+      quotientRow,
+      { cells: productCells },
+      { cells: remainderCells }
+    ]
+    const highlights: VerticalMathHighlight[] = [
+      { rowIndex: 0, columnIndex: i, kind: 'active' },
+      { rowIndex: 1, columnIndex: columnCount - 1, kind: 'active' },
+      { rowIndex: 3, columnIndex: i, kind: 'quotient' }
+    ]
+    steps.push({
+      title: `第 ${i + 1} 位：试商 ${q}`,
+      narration: `${window} ÷ ${b} = ${q} …… ${remainder}。`,
+      rows: snap,
+      highlights: highlights
+    })
+  }
+
+  const finalQuotient: string = anyQuotientDigit
+    ? quotientDigits.join('').replace(/^0+/, '') || '0'
+    : '0'
+
+  const finalStep: VerticalMathStep = {
+    title: '得到答案',
+    narration: remainder === 0
+      ? `${a} ÷ ${b} = ${finalQuotient}。`
+      : `${a} ÷ ${b} = ${finalQuotient}，余数 ${remainder}。`,
+    rows: [
+      { cells: cloneCells(aCells) },
+      { cells: cloneCells(bRowCells), operator: '÷' },
+      { cells: emptyCells(columnCount) },
+      { cells: cloneCells(quotientDigits) }
+    ],
+    highlights: [],
+    showFinalLine: true,
+    showResultRow: true
+  }
+  steps.push(finalStep)
+
+  const finalRow: VerticalMathBoardRow = { cells: cloneCells(quotientDigits) }
+
+  return {
+    operation: VerticalMathOperation.DIVIDE,
+    operandA: a,
+    operandB: b,
+    result: Number(finalQuotient),
+    remainder: remainder,
+    columnCount: columnCount,
+    initialRows: initialRows,
+    steps: steps,
+    finalRow: finalRow
+  }
+}
