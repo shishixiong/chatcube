@@ -29,6 +29,7 @@ import {
   HUARONGDAO_TOOL_ID,
   HANDWRITING_PRACTICE_TOOL_ID,
   CATEGORIZATION_TOOL_ID,
+  VERTICAL_MATH_TOOL_ID,
   GRANT_STAR_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { i18n } from '@kit.LocalizationKit'
@@ -1970,6 +1971,88 @@ function createCategorizationToolConfig(): ToolConfig {
 }
 
 
+// ===== vertical_math 工具 =====
+// 小学竖式闯关工具：让小星老师发起加减乘除竖式计算互动，孩子按位填写并通过 AnimatedVerticalMathBoard 渲染。
+// 交互由前端 VerticalMathCard 组件处理，后端 ToolExecutionService.handleVerticalMath 拦截处理记录保存。
+
+interface VerticalMathArgs {
+  operation?: string
+  operand_a?: number
+  operand_b?: number
+}
+
+class VerticalMathExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    try {
+      const params = JSON.parse(_args) as VerticalMathArgs
+      return JSON.stringify({
+        operation: params.operation ?? '',
+        operand_a: params.operand_a ?? null,
+        operand_b: params.operand_b ?? null,
+        completed: false,
+        correct: false
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`vertical_math error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createVerticalMathToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "operation": {
+        "type": "string",
+        "enum": ["add", "subtract", "multiply", "divide"],
+        "description": "运算类型：add=加法、subtract=减法、multiply=乘法、divide=除法。"
+      },
+      "operand_a": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 999,
+        "description": "第一个数（被加数/被减数/被乘数/被除数），0–999。允许省略让孩子自行填入。"
+      },
+      "operand_b": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 999,
+        "description": "第二个数（加数/减数/乘数/除数），0–999。乘法限制 0–9、除法限制 1–9。允许省略。"
+      }
+    },
+    "required": [],
+    "additionalProperties": false
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    VERTICAL_MATH_TOOL_ID,
+    '「小学竖式闯关」：输入两个 0–999 之间的整数和孩子选择的加减乘除，AI 引导孩子按位算出标准小学竖式。Use this tool INSTEAD of writing math problems in plain text whenever the child is practicing vertical arithmetic.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createVerticalMathToolConfig(): ToolConfig {
+  return new ToolConfig(
+    VERTICAL_MATH_TOOL_ID,
+    '竖式闯关',
+    '小学竖式计算互动游戏, 让孩子按位填写加减乘除竖式的每一步计算过程。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    VERTICAL_MATH_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
 // ===== grant_star 工具 =====
 // 聊天授星工具：让小星老师在孩子通过聊天答对了问题时（不走 quiz 卡片的领域）主动授予 1 星奖励。
 // 纯后端即时执行器，不需要交互卡片或 pending answer。
@@ -2195,6 +2278,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(VERTICAL_MATH_TOOL_ID)) {
+    const verticalMathTool = new RegisteredTool(
+      VERTICAL_MATH_TOOL_ID,
+      createVerticalMathToolConfig(),
+      createVerticalMathToolDefinition(),
+      new VerticalMathExecutor()
+    )
+    registry.registerTool(verticalMathTool)
+    registeredNow += 1
+  }
+
   if (!registry.isToolRegistered(GRANT_STAR_TOOL_ID)) {
     const grantStarTool = new RegisteredTool(
       GRANT_STAR_TOOL_ID,
@@ -2214,5 +2308,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, HUARONGDAO_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, GRANT_STAR_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, HUARONGDAO_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, GRANT_STAR_TOOL_ID]
 }
