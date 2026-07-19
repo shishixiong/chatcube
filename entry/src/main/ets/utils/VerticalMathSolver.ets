@@ -310,7 +310,7 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
     const dA: number = aBorrowed[col] === ' ' ? 0 : Number(aBorrowed[col])
     const dB: number = bCells[col] === ' ' ? 0 : Number(bCells[col])
     let localDA: number = dA
-    let borrowColumns: number[] = []
+    const borrowColumns: number[] = []
     if (localDA < dB + carryIn) {
       // Walk left to find a non-zero digit in aBorrowed to borrow from.
       // Intermediate zero digits become 9 (they lent 1 to their left neighbor),
@@ -334,6 +334,32 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
     const resultDigit: number = localDA - dB - carryIn
     carryIn = 0
     resultCells[col] = String(resultDigit)
+
+    // Left-trim leading '0's with spaces so per-step result rows match the final
+    // answer row's padding (which uses padCells(diff, columnCount)). Without this,
+    // e.g. 100 - 50 shows '050' in the final per-step row but ' 50' in the reveal.
+    // Rule: find the rightmost revealed non-zero digit; everything strictly to
+    // its left among revealed cells becomes ' '. If all revealed digits are '0'
+    // (zero-answer case), trim everything except the rightmost revealed cell.
+    let rightmostNonZero: number = -1
+    for (let scan = columnCount - 1; scan >= col; scan--) {
+      if (resultCells[scan] !== '0') {
+        rightmostNonZero = scan
+        break
+      }
+    }
+    if (rightmostNonZero >= 0) {
+      for (let trim = col; trim < rightmostNonZero; trim++) {
+        if (resultCells[trim] === '0') {
+          resultCells[trim] = ' '
+        }
+      }
+    } else {
+      // All revealed digits are '0' (zero answer) — trim all but the rightmost.
+      for (let trim = col; trim < columnCount - 1; trim++) {
+        resultCells[trim] = ' '
+      }
+    }
 
     // Borrow markers for THIS step:
     // - Only emitted when the borrow CASCADED (walked past at least one zero).
@@ -376,21 +402,48 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
     const rowLine: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
     const rowResult: VerticalMathBoardRow = { cells: cloneCells(resultCells) }
 
+    // Assemble stepRows in a stable order: [extra borrow rows..., rowA, rowB, rowLine, rowResult].
+    // Indices below derive from this exact order — do NOT reorder without recomputing.
+    const stepRows: VerticalMathBoardRow[] = []
+    for (let bi = 0; bi < borrowRows.length; bi++) {
+      stepRows.push(borrowRows[bi])
+    }
+    stepRows.push(rowA)
+    stepRows.push(rowB)
+    stepRows.push(rowLine)
+    stepRows.push(rowResult)
+
+    // Derived row indices. These MUST be computed AFTER stepRows is built:
+    // - cascade-trigger steps prepend `borrowRows.length` extra rows, shifting
+    //   every subsequent row down. Computing from hardcoded values (e.g. 0/1/3)
+    //   would highlight the wrong rows for cascades (503 − 278 col=2 step).
+    const rowAIndex: number = borrowRows.length
+    const rowBIndex: number = borrowRows.length + 1
+    const rowLineIndex: number = borrowRows.length + 2
+    const rowResultIndex: number = borrowRows.length + 3
+
     const highlights: VerticalMathHighlight[] = []
-    const activeA: VerticalMathHighlight = { rowIndex: 0, columnIndex: col, kind: 'active' }
-    const activeB: VerticalMathHighlight = { rowIndex: 1, columnIndex: col, kind: 'active' }
+    const activeA: VerticalMathHighlight = { rowIndex: rowAIndex, columnIndex: col, kind: 'active' }
+    const activeB: VerticalMathHighlight = { rowIndex: rowBIndex, columnIndex: col, kind: 'active' }
     highlights.push(activeA)
     highlights.push(activeB)
+    // Borrow row 0 is rowA itself (its topMark); rows 1..N are the extra borrowRows.
+    // borrowing index 0 maps to rowA; index bi maps to borrowRows[bi-1].
     for (let bi = 0; bi < stepBorrowColumns.length; bi++) {
+      const borrowRowIndex: number = bi === 0 ? rowAIndex : (bi - 1)
       const borrowHl: VerticalMathHighlight = {
-        rowIndex: bi,
+        rowIndex: borrowRowIndex,
         columnIndex: stepBorrowColumns[bi],
         kind: 'borrow'
       }
       highlights.push(borrowHl)
     }
     for (let prev = col + 1; prev < columnCount; prev++) {
-      const doneHl: VerticalMathHighlight = { rowIndex: 3, columnIndex: prev, kind: 'done' }
+      const doneHl: VerticalMathHighlight = {
+        rowIndex: rowResultIndex,
+        columnIndex: prev,
+        kind: 'done'
+      }
       highlights.push(doneHl)
     }
 
@@ -400,15 +453,6 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
     // Note: narration still mentions the borrow for direct borrows even though
     // no '•' marker is emitted — the math and explanation are correct, only
     // the visual highlight is suppressed for non-cascading borrows.
-
-    const stepRows: VerticalMathBoardRow[] = []
-    for (let bi = 0; bi < borrowRows.length; bi++) {
-      stepRows.push(borrowRows[bi])
-    }
-    stepRows.push(rowA)
-    stepRows.push(rowB)
-    stepRows.push(rowLine)
-    stepRows.push(rowResult)
 
     const step: VerticalMathStep = {
       title: `第 ${columnCount - col} 位相减`,
