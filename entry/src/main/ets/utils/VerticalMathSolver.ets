@@ -493,3 +493,132 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
   }
   return solution
 }
+
+/** Solve A × B with one shifted partial-product row per digit of A. */
+export function solveVerticalMultiply(a: number, b: number): VerticalMathSolution {
+  const aStr: string = String(a)
+  const bStr: string = String(b)
+  const digits: number[] = []
+  const products: number[] = []
+  let maxProductDigits: number = 1
+  for (let index = aStr.length - 1; index >= 0; index--) {
+    const digit: number = Number(aStr.charAt(index))
+    const product: number = digit * b
+    digits.push(digit)
+    products.push(product)
+    maxProductDigits = Math.max(maxProductDigits, String(product).length)
+  }
+  const columnCount: number = aStr.length + maxProductDigits - 1
+  const aCells: string[] = padCells(a, columnCount)
+  const bCells: string[] = emptyCells(columnCount)
+  for (let index = 0; index < bStr.length; index++) {
+    bCells[columnCount - bStr.length + index] = bStr.charAt(index)
+  }
+  const initialRows: VerticalMathBoardRow[] = [
+    { cells: cloneCells(aCells) },
+    { cells: cloneCells(bCells), operator: '×' },
+    { cells: emptyCells(columnCount) }
+  ]
+  const steps: VerticalMathStep[] = [{
+    title: '数位对齐',
+    narration: `${a} 和 ${b} 各就各位，准备出发。`,
+    rows: [
+      { cells: cloneCells(aCells) },
+      { cells: cloneCells(bCells), operator: '×' },
+      { cells: emptyCells(columnCount) }
+    ],
+    highlights: []
+  }]
+  const partialRows: VerticalMathBoardRow[] = []
+  for (let index = 0; index < digits.length; index++) {
+    const cells: string[] = emptyCells(columnCount)
+    const productStr: string = String(products[index])
+    const startColumn: number = columnCount - index - productStr.length
+    for (let productIndex = 0; productIndex < productStr.length; productIndex++) {
+      cells[startColumn + productIndex] = productStr.charAt(productIndex)
+    }
+    const partialRow: VerticalMathBoardRow = { cells: cells }
+    if (index === digits.length - 1) {
+      partialRow.operator = '＋'
+    }
+    partialRows.push(partialRow)
+  }
+  const labels: string[] = ['个', '十', '百', '千', '万']
+  for (let index = 0; index < partialRows.length; index++) {
+    const snapshot: VerticalMathBoardRow[] = [
+      { cells: cloneCells(aCells) },
+      { cells: cloneCells(bCells), operator: '×' },
+      { cells: emptyCells(columnCount) }
+    ]
+    for (let partialIndex = 0; partialIndex <= index; partialIndex++) {
+      const partialSnapshot: VerticalMathBoardRow = { cells: cloneCells(partialRows[partialIndex].cells) }
+      if (partialRows[partialIndex].operator !== undefined) {
+        partialSnapshot.operator = partialRows[partialIndex].operator
+      }
+      snapshot.push(partialSnapshot)
+    }
+    const multiplicandColumn: number = columnCount - 1 - index
+    const currentPartialRowIndex: number = snapshot.length - 1
+    const highlights: VerticalMathHighlight[] = [
+      { rowIndex: 0, columnIndex: multiplicandColumn, kind: 'active' },
+      { rowIndex: 1, columnIndex: columnCount - 1, kind: 'active' }
+    ]
+    for (let column = 0; column < columnCount; column++) {
+      if (snapshot[currentPartialRowIndex].cells[column] !== '') {
+        highlights.push({ rowIndex: currentPartialRowIndex, columnIndex: column, kind: 'active' })
+      }
+    }
+    for (let partialIndex = 0; partialIndex < index; partialIndex++) {
+      const previousPartialRowIndex: number = 3 + partialIndex
+      for (let column = 0; column < columnCount; column++) {
+        if (snapshot[previousPartialRowIndex].cells[column] !== '') {
+          highlights.push({ rowIndex: previousPartialRowIndex, columnIndex: column, kind: 'done' })
+        }
+      }
+    }
+    const positionLabel: string = index < labels.length ? labels[index] : `第${index + 1}位`
+    const narration: string = index === 0
+      ? `${positionLabel}：${digits[index]}×${b}=${products[index]}，部分积放在十位和个位。`
+      : `${positionLabel}：${digits[index]}×${b}=${products[index]}，部分积向左移动${index}格。`
+    steps.push({
+      title: `${positionLabel}：${digits[index]}×${b}=${products[index]}`,
+      narration: narration,
+      rows: snapshot,
+      highlights: highlights
+    })
+  }
+  const result: number = a * b
+  const resultCells: string[] = padCells(result, columnCount)
+  const finalRows: VerticalMathBoardRow[] = [
+    { cells: cloneCells(aCells) },
+    { cells: cloneCells(bCells), operator: '×' },
+    { cells: emptyCells(columnCount) }
+  ]
+  for (let index = 0; index < partialRows.length; index++) {
+    const finalPartialRow: VerticalMathBoardRow = { cells: cloneCells(partialRows[index].cells) }
+    if (partialRows[index].operator !== undefined) {
+      finalPartialRow.operator = partialRows[index].operator
+    }
+    finalRows.push(finalPartialRow)
+  }
+  finalRows.push({ cells: cloneCells(resultCells) })
+  steps.push({
+    title: '按位相加',
+    narration: `把各位部分积按位相加，得到 ${result}。`,
+    rows: finalRows,
+    highlights: [],
+    showFinalLine: true,
+    showResultRow: true
+  })
+  return {
+    operation: VerticalMathOperation.MULTIPLY,
+    operandA: a,
+    operandB: b,
+    result: result,
+    remainder: 0,
+    columnCount: columnCount,
+    initialRows: initialRows,
+    steps: steps,
+    finalRow: { cells: cloneCells(resultCells) }
+  }
+}

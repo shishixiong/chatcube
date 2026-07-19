@@ -6,7 +6,8 @@ import {
   VerticalMathBoardRow,
   validateVerticalMathInputs,
   solveVerticalAdd,
-  solveVerticalSubtract
+  solveVerticalSubtract,
+  solveVerticalMultiply
 } from '../../../main/ets/utils/VerticalMathSolver'
 
 export default function verticalMathSolverTest() {
@@ -130,6 +131,42 @@ export default function verticalMathSolverTest() {
       const s = solveVerticalSubtract(999, 999)
       expect(s.result).assertEqual(0)
       expect(s.columnCount).assertEqual(3)
+    })
+  })
+
+  describe('solveVerticalMultiply', () => {
+    it('988 × 6 = 5928 with three aligned partial products', 0, () => {
+      const s = solveVerticalMultiply(988, 6)
+      expect(s.result).assertEqual(5928)
+      expect(s.columnCount).assertEqual(4)
+      const expectedRows: string[] = ['  48', ' 48 ', '54  ']
+      for (let index = 0; index < expectedRows.length; index++) {
+        expect(s.steps[index + 1].rows[s.steps[index + 1].rows.length - 1].cells.join(''))
+          .assertEqual(expectedRows[index])
+      }
+      expect(s.steps.every((step: VerticalMathStep) =>
+        !step.rows.some((row: VerticalMathBoardRow) => row.topMark === '1'))).assertEqual(true)
+    })
+
+    it('5 × 3 = 15 (single digit × single digit)', 0, () => {
+      const s = solveVerticalMultiply(5, 3)
+      expect(s.result).assertEqual(15)
+      expect(s.columnCount).assertEqual(2)
+    })
+
+    it('123 × 0 = 0', 0, () => {
+      const s = solveVerticalMultiply(123, 0)
+      expect(s.result).assertEqual(0)
+    })
+
+    it('multiplier highlights pair with current multiplicand digit', 0, () => {
+      const s = solveVerticalMultiply(988, 6)
+      for (let index = 1; index <= 3; index++) {
+        const activeHighlights = s.steps[index].highlights.filter(highlight => highlight.kind === 'active')
+        expect(activeHighlights.length >= 2).assertEqual(true)
+        expect(activeHighlights.some(highlight => highlight.rowIndex === 1)).assertEqual(true)
+        expect(activeHighlights.some(highlight => highlight.rowIndex === 0)).assertEqual(true)
+      }
     })
   })
 }
