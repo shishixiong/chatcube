@@ -83,3 +83,163 @@ export function validateVerticalMathInputs(
   }
   return null
 }
+
+/** Left-pad a number to the given width with spaces, then split into single-char cells. */
+function padCells(n: number, width: number): string[] {
+  const raw: string = String(n)
+  const cells: string[] = []
+  const padLen: number = width - raw.length
+  for (let i = 0; i < padLen; i++) {
+    cells.push(' ')
+  }
+  for (let i = 0; i < raw.length; i++) {
+    cells.push(raw.charAt(i))
+  }
+  return cells
+}
+
+/** Build a fresh row of `width` empty cells. */
+function emptyCells(width: number): string[] {
+  const cells: string[] = []
+  for (let i = 0; i < width; i++) {
+    cells.push('')
+  }
+  return cells
+}
+
+function cloneCells(src: string[]): string[] {
+  const out: string[] = []
+  for (let i = 0; i < src.length; i++) {
+    out.push(src[i])
+  }
+  return out
+}
+
+/**
+ * Solve A + B as a step-by-step vertical addition (竖式加法).
+ *
+ * Structure:
+ * - initialRows: [A row, B row with '+' operator, line spacer]
+ * - steps[0]: alignment narration ('数位对齐')
+ * - steps[1..N]: one per column, right-to-left. When a column produces a carry
+ *   (digitA + digitB + carryIn >= 10), the row for the NEXT column to the left
+ *   carries a `topMark` of '1'. The active column is highlighted yellow ('active'),
+ *   already-resolved result columns are mint ('done').
+ * - final step: reveals the second line + result row.
+ */
+export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
+  const digitsA: number = Math.max(1, String(a).length)
+  const digitsB: number = Math.max(1, String(b).length)
+  const total: number = a + b
+  const digitsResult: number = Math.max(1, String(total).length)
+  const columnCount: number = Math.max(digitsA, digitsB, digitsResult)
+
+  const aCells: string[] = padCells(a, columnCount)
+  const bCells: string[] = padCells(b, columnCount)
+
+  const initialAlignRow: VerticalMathBoardRow = { cells: cloneCells(aCells) }
+  const initialOperatorRow: VerticalMathBoardRow = { cells: cloneCells(bCells), operator: '+' }
+  const initialLineRow: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
+  const initialRows: VerticalMathBoardRow[] = [initialAlignRow, initialOperatorRow, initialLineRow]
+
+  const steps: VerticalMathStep[] = []
+
+  // Step 1: alignment (no computation yet).
+  const alignRowA: VerticalMathBoardRow = { cells: cloneCells(aCells) }
+  const alignRowB: VerticalMathBoardRow = { cells: cloneCells(bCells), operator: '+' }
+  const alignRowLine: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
+  const alignStep: VerticalMathStep = {
+    title: '数位对齐',
+    narration: '个位对个位，十位对十位。',
+    rows: [alignRowA, alignRowB, alignRowLine],
+    highlights: []
+  }
+  steps.push(alignStep)
+
+  // Compute final result cells (padded to columnCount).
+  const totalStr: string = String(total)
+  const finalWidth: number = Math.max(columnCount, totalStr.length)
+  const finalCells: string[] = padCells(total, finalWidth)
+
+  // Digit-by-digit, right to left. Reveal one result digit per step and mark carries.
+  const revealed: string[] = emptyCells(columnCount)
+  let carryIn: number = 0
+  for (let col = columnCount - 1; col >= 0; col--) {
+    const dA: number = aCells[col] === ' ' ? 0 : Number(aCells[col])
+    const dB: number = bCells[col] === ' ' ? 0 : Number(bCells[col])
+    const sum: number = dA + dB + carryIn
+    const resultDigit: number = sum % 10
+    const carryOut: number = Math.floor(sum / 10)
+
+    revealed[col] = String(resultDigit)
+
+    const rowA: VerticalMathBoardRow = { cells: cloneCells(aCells) }
+    const rowB: VerticalMathBoardRow = { cells: cloneCells(bCells), operator: '+' }
+    // Carry mark sits above the operand rows, on the column to the LEFT (col - 1).
+    if (carryOut > 0 && col - 1 >= 0) {
+      rowA.topMark = '1'
+      rowA.topMarkColumn = col - 1
+      rowA.topMarkRowIndex = 0
+    }
+    const rowLine: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
+    const rowResult: VerticalMathBoardRow = { cells: cloneCells(revealed) }
+
+    const highlights: VerticalMathHighlight[] = []
+    const activeA: VerticalMathHighlight = { rowIndex: 0, columnIndex: col, kind: 'active' }
+    const activeB: VerticalMathHighlight = { rowIndex: 1, columnIndex: col, kind: 'active' }
+    highlights.push(activeA)
+    highlights.push(activeB)
+    if (carryOut > 0 && col - 1 >= 0) {
+      const carryHl: VerticalMathHighlight = { rowIndex: 0, columnIndex: col - 1, kind: 'carry' }
+      highlights.push(carryHl)
+    }
+    for (let prev = col + 1; prev < columnCount; prev++) {
+      const doneHl: VerticalMathHighlight = { rowIndex: 3, columnIndex: prev, kind: 'done' }
+      highlights.push(doneHl)
+    }
+
+    const narration: string = carryOut > 0
+      ? `${dA} + ${dB} = ${sum}，写 ${resultDigit}，进 ${carryOut}。`
+      : `${dA} + ${dB} = ${sum}，写 ${resultDigit}。`
+
+    const step: VerticalMathStep = {
+      title: `第 ${columnCount - col} 位相加`,
+      narration: narration,
+      rows: [rowA, rowB, rowLine, rowResult],
+      highlights: highlights
+    }
+    steps.push(step)
+
+    carryIn = carryOut
+  }
+
+  // Final step: full board with the answer row.
+  const finalRowA: VerticalMathBoardRow = { cells: cloneCells(aCells) }
+  const finalRowB: VerticalMathBoardRow = { cells: cloneCells(bCells), operator: '+' }
+  const finalRowLine: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
+  const finalRowResult: VerticalMathBoardRow = { cells: cloneCells(finalCells) }
+  const finalStep: VerticalMathStep = {
+    title: '得到答案',
+    narration: `答案是 ${String(total)}。`,
+    rows: [finalRowA, finalRowB, finalRowLine, finalRowResult],
+    highlights: [],
+    showFinalLine: true,
+    showResultRow: true
+  }
+  steps.push(finalStep)
+
+  const finalRow: VerticalMathBoardRow = { cells: cloneCells(finalCells) }
+
+  const solution: VerticalMathSolution = {
+    operation: VerticalMathOperation.ADD,
+    operandA: a,
+    operandB: b,
+    result: total,
+    remainder: 0,
+    columnCount: columnCount,
+    initialRows: initialRows,
+    steps: steps,
+    finalRow: finalRow
+  }
+  return solution
+}

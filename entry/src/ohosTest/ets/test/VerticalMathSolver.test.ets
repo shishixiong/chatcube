@@ -2,7 +2,10 @@ import { describe, it, expect } from '@ohos/hypium'
 import {
   VerticalMathOperation,
   VerticalMathValidationError,
-  validateVerticalMathInputs
+  VerticalMathStep,
+  VerticalMathBoardRow,
+  validateVerticalMathInputs,
+  solveVerticalAdd
 } from '../../../main/ets/utils/VerticalMathSolver'
 
 export default function verticalMathSolverTest() {
@@ -54,13 +57,53 @@ export default function verticalMathSolverTest() {
       expect(err === null).assertEqual(true)
     })
 
-    it('accepts boundary A = 999', 0, {
+    it('accepts boundary A = 999', 0, () => {
       let err: VerticalMathValidationError | null = validateVerticalMathInputs(
         VerticalMathOperation.ADD, 999, 999
       )
       expect(err === null).assertEqual(true)
       err = validateVerticalMathInputs(VerticalMathOperation.MULTIPLY, 999, 9)
       expect(err === null).assertEqual(true)
+    })
+  })
+
+  describe('solveVerticalAdd', () => {
+    it('47 + 28 = 75 with one carry', 0, () => {
+      const s = solveVerticalAdd(47, 28)
+      expect(s.result).assertEqual(75)
+      expect(s.remainder).assertEqual(0)
+      expect(s.columnCount).assertEqual(2)
+      // alignment step first
+      expect(s.steps[0].title).assertEqual('数位对齐')
+      // exactly one step should carry (units: 7+8=15)
+      const carrySteps = s.steps.filter((step: VerticalMathStep) =>
+        step.rows.some((row: VerticalMathBoardRow) => row.topMark === '1'))
+      expect(carrySteps.length).assertEqual(1)
+      // last step is the result
+      expect(s.steps[s.steps.length - 1].showResultRow).assertEqual(true)
+      expect(s.finalRow?.cells.join('')).assertEqual('75')
+    })
+
+    it('100 + 200 = 300 with no carry', 0, () => {
+      const s = solveVerticalAdd(100, 200)
+      expect(s.result).assertEqual(300)
+      expect(s.steps.every((step: VerticalMathStep) =>
+        !step.rows.some((row: VerticalMathBoardRow) => row.topMark === '1'))).assertEqual(true)
+    })
+
+    it('999 + 1 = 1000 (carry cascades)', 0, () => {
+      const s = solveVerticalAdd(999, 1)
+      expect(s.result).assertEqual(1000)
+      expect(s.columnCount).assertEqual(4)
+      const carrySteps = s.steps.filter((step: VerticalMathStep) =>
+        step.rows.some((row: VerticalMathBoardRow) => row.topMark === '1'))
+      expect(carrySteps.length >= 3).assertEqual(true)
+    })
+
+    it('0 + 0 = 0', 0, () => {
+      const s = solveVerticalAdd(0, 0)
+      expect(s.result).assertEqual(0)
+      expect(s.columnCount).assertEqual(1)
     })
   })
 }
