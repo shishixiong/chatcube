@@ -641,6 +641,64 @@ export function solveVerticalMultiply(a: number, b: number): VerticalMathSolutio
  * - A = 0: quotient is 0, remainder is 0, single digit column.
  */
 export function solveVerticalDivide(a: number, b: number): VerticalMathSolution {
+  // Special case: 0 ÷ B = 0. Per spec, this should NOT narrate "首位不够除";
+  // 0 divided by anything nonzero is trivially 0, not "the first digit can't be divided".
+  // Produces a clean 2-step solution (alignment + final) with the quotient shown as '0'.
+  if (a === 0) {
+    const columnCount: number = 1
+    const aCells: string[] = ['0']
+    const bRowCells: string[] = emptyCells(columnCount)
+    bRowCells[columnCount - 1] = String(b)
+
+    const initialAlignRow: VerticalMathBoardRow = { cells: cloneCells(aCells) }
+    const initialOperatorRow: VerticalMathBoardRow = { cells: cloneCells(bRowCells), operator: '÷' }
+    const initialLineRow: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
+    const initialRows: VerticalMathBoardRow[] = [initialAlignRow, initialOperatorRow, initialLineRow]
+
+    const steps: VerticalMathStep[] = []
+
+    // Step 1: alignment (no computation yet).
+    const alignRowA: VerticalMathBoardRow = { cells: cloneCells(aCells) }
+    const alignRowB: VerticalMathBoardRow = { cells: cloneCells(bRowCells), operator: '÷' }
+    const alignRowLine: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
+    const alignStep: VerticalMathStep = {
+      title: '数位对齐',
+      narration: '用除数去除被除数，从最高位开始。',
+      rows: [alignRowA, alignRowB, alignRowLine],
+      highlights: []
+    }
+    steps.push(alignStep)
+
+    // Final step: reveal the result '0'.
+    const finalRowCells: string[] = ['0']
+    const finalStep: VerticalMathStep = {
+      title: '得到答案',
+      narration: `0 ÷ ${b} = 0。`,
+      rows: [
+        { cells: cloneCells(aCells) },
+        { cells: cloneCells(bRowCells), operator: '÷' },
+        { cells: emptyCells(columnCount) },
+        { cells: cloneCells(finalRowCells) }
+      ],
+      highlights: [],
+      showFinalLine: true,
+      showResultRow: true
+    }
+    steps.push(finalStep)
+
+    return {
+      operation: VerticalMathOperation.DIVIDE,
+      operandA: a,
+      operandB: b,
+      result: 0,
+      remainder: 0,
+      columnCount: columnCount,
+      initialRows: initialRows,
+      steps: steps,
+      finalRow: { cells: cloneCells(finalRowCells) }
+    }
+  }
+
   const aStr: string = String(a)
   const digitsA: number = aStr.length
   const columnCount: number = digitsA
@@ -741,6 +799,17 @@ export function solveVerticalDivide(a: number, b: number): VerticalMathSolution 
     ? quotientDigits.join('').replace(/^0+/, '') || '0'
     : '0'
 
+  // For cases where no quotient digit was emitted (e.g. 3 ÷ 7), ensure finalRow
+  // displays a visible '0' at the rightmost column so the renderer shows the
+  // quotient digit rather than a blank cell. The result is still 0.
+  let finalRowCells: string[]
+  if (anyQuotientDigit) {
+    finalRowCells = cloneCells(quotientDigits)
+  } else {
+    finalRowCells = emptyCells(columnCount)
+    finalRowCells[columnCount - 1] = '0'
+  }
+
   const finalStep: VerticalMathStep = {
     title: '得到答案',
     narration: remainder === 0
@@ -750,7 +819,7 @@ export function solveVerticalDivide(a: number, b: number): VerticalMathSolution 
       { cells: cloneCells(aCells) },
       { cells: cloneCells(bRowCells), operator: '÷' },
       { cells: emptyCells(columnCount) },
-      { cells: cloneCells(quotientDigits) }
+      { cells: cloneCells(finalRowCells) }
     ],
     highlights: [],
     showFinalLine: true,
@@ -758,7 +827,7 @@ export function solveVerticalDivide(a: number, b: number): VerticalMathSolution 
   }
   steps.push(finalStep)
 
-  const finalRow: VerticalMathBoardRow = { cells: cloneCells(quotientDigits) }
+  const finalRow: VerticalMathBoardRow = { cells: cloneCells(finalRowCells) }
 
   return {
     operation: VerticalMathOperation.DIVIDE,
