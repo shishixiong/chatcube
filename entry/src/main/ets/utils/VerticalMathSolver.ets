@@ -162,7 +162,7 @@ function cloneCells(src: string[]): string[] {
  *
  * Structure:
  * - initialRows: [A row, B row with '+' operator, line spacer]
- * - steps[0]: alignment narration ('数位对齐')
+ * - steps[0..N-1]: per-column computation right-to-left (first step is units, no alignment step)
  * - steps[1..N]: one per column, right-to-left. When a column produces a carry
  *   (digitA + digitB + carryIn >= 10), the row for the NEXT column to the left
  *   carries a `topMark` of '1'. The active column is highlighted yellow ('active'),
@@ -185,18 +185,6 @@ export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
   const initialRows: VerticalMathBoardRow[] = [initialAlignRow, initialOperatorRow, initialLineRow]
 
   const steps: VerticalMathStep[] = []
-
-  // Step 1: alignment (no computation yet).
-  const alignRowA: VerticalMathBoardRow = { cells: cloneCells(aCells) }
-  const alignRowB: VerticalMathBoardRow = { cells: cloneCells(bCells), operator: '+' }
-  const alignRowLine: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
-  const alignStep: VerticalMathStep = {
-    title: '数位对齐',
-    narration: '个位对个位，十位对十位。',
-    rows: [alignRowA, alignRowB, alignRowLine],
-    highlights: []
-  }
-  steps.push(alignStep)
 
   // Compute final result cells (padded to columnCount).
   const totalStr: string = String(total)

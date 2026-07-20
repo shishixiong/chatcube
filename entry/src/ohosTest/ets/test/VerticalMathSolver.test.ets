@@ -85,13 +85,11 @@ export default function verticalMathSolverTest() {
       expect(s.result).assertEqual(75)
       expect(s.remainder).assertEqual(0)
       expect(s.columnCount).assertEqual(2)
-      // alignment step first
-      expect(s.steps[0].title).assertEqual('数位对齐')
-      // exactly one step should carry (units: 7+8=15)
+      // no standalone alignment step — first step is units computation
+      expect(s.steps[0].title).assertEqual('第 2 位相加')
       const carrySteps = s.steps.filter((step: VerticalMathStep) =>
         step.rows.some((row: VerticalMathBoardRow) => row.topMark === '1'))
       expect(carrySteps.length).assertEqual(1)
-      // last step is the result
       expect(s.steps[s.steps.length - 1].showResultRow).assertEqual(true)
       expect(s.finalRow?.cells.join('')).assertEqual('75')
     })
@@ -120,8 +118,8 @@ export default function verticalMathSolverTest() {
 
     it('marks each newly written addition result digit active', 0, () => {
       const s = solveVerticalAdd(22, 33)
-      for (let index = 1; index < s.steps.length - 1; index++) {
-        const expectedColumn: number = s.columnCount - index
+      for (let index = 0; index < s.steps.length - 1; index++) {
+        const expectedColumn: number = s.columnCount - 1 - index
         const resultActive: VerticalMathHighlight[] = s.steps[index].highlights.filter(
           (highlight: VerticalMathHighlight): boolean =>
             highlight.rowIndex === 3 && highlight.kind === 'active'
@@ -133,8 +131,8 @@ export default function verticalMathSolverTest() {
 
     it('keeps carry columns on later snapshots', 0, () => {
       const s = solveVerticalAdd(47, 28)
+      expect(s.steps[0].rows[0].carryColumns?.includes(0) ?? false).assertEqual(true)
       expect(s.steps[1].rows[0].carryColumns?.includes(0) ?? false).assertEqual(true)
-      expect(s.steps[2].rows[0].carryColumns?.includes(0) ?? false).assertEqual(true)
       expect(s.steps[s.steps.length - 1].rows[0].carryColumns?.includes(0) ?? false).assertEqual(true)
     })
   })
