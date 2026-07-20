@@ -11,6 +11,13 @@ import {
   solveVerticalDivide,
   solveVerticalMath
 } from '../../../main/ets/utils/VerticalMathSolver'
+import {
+  VERTICAL_MATH_BOARD_TEXT,
+  VERTICAL_MATH_BOARD_LINE,
+  VERTICAL_MATH_DONE_TEXT,
+  VERTICAL_MATH_CARRY_TEXT,
+  VERTICAL_MATH_BORROW_TEXT
+} from '../../../main/ets/utils/VerticalMathColors'
 
 export default function verticalMathSolverTest() {
   describe('validateVerticalMathInputs', () => {
@@ -203,6 +210,16 @@ export default function verticalMathSolverTest() {
       const s = solveVerticalDivide(999, 9)
       expect(s.result).assertEqual(111)
       expect(s.remainder).assertEqual(0)
+    })
+  })
+
+  describe('VerticalMathColors', () => {
+    it('uses readable cream-board colors', 0, () => {
+      expect(VERTICAL_MATH_BOARD_TEXT).assertEqual('#3a3320')
+      expect(VERTICAL_MATH_BOARD_LINE).assertEqual('rgba(58, 51, 32, 0.55)')
+      expect(VERTICAL_MATH_DONE_TEXT).assertEqual('#15803d')
+      expect(VERTICAL_MATH_CARRY_TEXT).assertEqual('#dc2626')
+      expect(VERTICAL_MATH_BORROW_TEXT).assertEqual('#7c3aed')
     })
   })
 

@@ -1,18 +1,20 @@
 // utils/VerticalMathColors.ets
+// Retain these three exports until Task 3 removes the gradient consumer and tokens together.
 export const VERTICAL_MATH_BOARD_BG_START: string = '#6448b5'
 export const VERTICAL_MATH_BOARD_BG_MID: string = '#3a2877'
 export const VERTICAL_MATH_BOARD_BG_END: string = '#27194f'
 
-export const VERTICAL_MATH_BOARD_TEXT: string = '#ffffff'
-export const VERTICAL_MATH_BOARD_LINE: string = 'rgba(255, 255, 255, 0.9)'
+export const VERTICAL_MATH_BOARD_TEXT: string = '#3a3320'
+export const VERTICAL_MATH_BOARD_LINE: string = 'rgba(58, 51, 32, 0.55)'
 
 export const VERTICAL_MATH_ACTIVE_BG: string = '#ffe66d'
 export const VERTICAL_MATH_ACTIVE_TEXT: string = '#3a2d0c'
 
-export const VERTICAL_MATH_DONE_TEXT: string = '#b9f2d0'
+export const VERTICAL_MATH_DONE_TEXT: string = '#15803d'
 export const VERTICAL_MATH_DONE_BG: string = 'rgba(185, 242, 208, 0.18)'
 
-export const VERTICAL_MATH_CARRY_TEXT: string = '#ff6b6b'
+export const VERTICAL_MATH_CARRY_TEXT: string = '#dc2626'
+export const VERTICAL_MATH_BORROW_TEXT: string = '#7c3aed'
 
 export const VERTICAL_MATH_ERROR_BG: string = '#ffe3dc'
 export const VERTICAL_MATH_ERROR_TEXT: string = '#89564b'
