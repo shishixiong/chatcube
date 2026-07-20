@@ -40,8 +40,9 @@
 | 棋盘背景 | 与 Narrator 同奶油色 `VERTICAL_MATH_NARRATOR_BG` (`rgba(255, 250, 240, 0.86)`) | 两块合起来是一张卡片,拆开看仍然像同一个组件 |
 | 棋盘边框 | `app.color.divider` 1px | 项目其他卡片通用边框 |
 | 棋盘圆角 | 14vp | 匹配 `NumberPuzzleCard` 12-14vp 半径 |
-| 删除原渐变 | 是 — `Board.ets` 的 `Stack { linearGradient(...) }` 整段删除 | 不再需要深紫背景作为视觉锚点 |
-| 棋盘文字色 | `text_primary`(在奶油底上清晰的深色) | 替代原白色 `#ffffff`,与气泡卡片一致 |
+| 删除原渐变 | 是 — `Board.ets` 的 `Stack { Column().linearGradient(...) }` 背景层整段删除,`build()` 顶层由 `Stack` 改为直接 `Column` | 不再需要深紫背景作为视觉锚点 |
+| 棋盘文字色 | `VERTICAL_MATH_BOARD_TEXT` 常量由 `#ffffff` 改为深墨色 `#3a3320`(暖调深色,在奶油底上清晰) | `Board`/`BoardRow` 都是无主题依赖的纯色串组件,改常量即可同时修正普通格子文字 + operator 符号;不引入 `getAppUiState()` 依赖,深色模式作为 §6 遗留风险 |
+| 横线颜色 | `VERTICAL_MATH_BOARD_LINE` 常量由 `rgba(255,255,255,0.9)` 改为半透明深色 `rgba(58, 51, 32, 0.55)` | 白线在奶油底不可见 |
 | 棋盘内边距 | 14vp (compact) / 20vp (大尺寸) | 同原值,不变 |
 
 ### 2.2 高亮语义
@@ -54,6 +55,13 @@
 | `done` | `rgba(185, 242, 208, 0.18)`(薄荷绿 18% 透) | `#15803d`(深绿) | 已算完的位 |
 | `carry` | 透明 | `#dc2626`(红) | 进位 1 |
 | `borrow` | 透明 | `#7c3aed`(紫) | 退位点 • |
+
+> **渲染分工(自审修正)**:`active` / `done` 是**格子高亮**,由 `VerticalMathBoardRow.ets` 的 `getCellBackgroundColor` / `getCellTextColor` 按 `highlight.kind` 渲染;`carry` / `borrow` 不是格子高亮,而是**列上方的 topMark 标记**,由 `VerticalMathBoard.ets` 的 `TopMark` builder + `getTopMarkColor` 渲染。
+>
+> **颜色常量变更**(`VerticalMathColors.ets`):
+> - `VERTICAL_MATH_DONE_TEXT`: `#b9f2d0`(浅薄荷,奶油底不可读)→ `#15803d`(深绿)
+> - `VERTICAL_MATH_CARRY_TEXT`: `#ff6b6b`(浅珊瑚)→ `#dc2626`(深红)
+> - **新增** `VERTICAL_MATH_BORROW_TEXT`: `#7c3aed`(紫)—— 当前 borrow `•` 复用 `VERTICAL_MATH_BOARD_TEXT`(白),改奶油底后会不可见,必须拆出独立紫色常量并在 `Board.getTopMarkColor` 中 `topMark === '•'` 分支引用它。
 
 **关键修复**:每个 solver 在写入「当前列的结果」之后,给 `rowResult`(结果行)在 `columnIndex=col` 新增一条 `kind: 'active'` 的 highlight,与正在计算的 operand 列同色。这样十位结果写入时,会从空位变成黄色高亮的 `5`,视觉上立即可辨。
 
@@ -125,13 +133,13 @@ export class VerticalMathBoardRow {
 
 | 文件 | 改动类型 | 估计行数 |
 |------|---------|---------|
-| `entry/src/main/ets/utils/VerticalMathColors.ets` | 删 `VERTICAL_MATH_BOARD_BG_START/MID/END`,文字色由 `BoardRow` 读 `text_primary` | -6 行 |
+| `entry/src/main/ets/utils/VerticalMathColors.ets` | (1) 删 `VERTICAL_MATH_BOARD_BG_START/MID/END`(渐变不再使用)<br>(2) `VERTICAL_MATH_BOARD_TEXT` `#ffffff` → `#3a3320`<br>(3) `VERTICAL_MATH_BOARD_LINE` 白 → `rgba(58, 51, 32, 0.55)`<br>(4) `VERTICAL_MATH_DONE_TEXT` → `#15803d`<br>(5) `VERTICAL_MATH_CARRY_TEXT` → `#dc2626`<br>(6) 新增 `VERTICAL_MATH_BORROW_TEXT = '#7c3aed'` | -3 / 改 |
 | `entry/src/main/ets/utils/VerticalMathSolver.ets` | (1) `VerticalMathBoardRow` 加 `carryColumns?: number[]` + `borrowColumns?: number[]`<br>(2) `solveVerticalAdd`:集合 + result-active + 持久化<br>(3) `solveVerticalSubtract`:同上加 borrow 级联持久<br>(4) `solveVerticalMultiply`:partial product 整行 active<br>(5) `solveVerticalDivide`:商的当前位 active<br>(6) `solveVerticalMath` 同样受影响(透传) | +50 / 改 |
-| `entry/src/main/ets/components/verticalMath/VerticalMathBoard.ets` | (1) 删 `Stack { linearGradient }` 装饰层<br>(2) `build()` 改成 `Column` + `backgroundColor` + `border` + `borderRadius`<br>(3) `getTopMarkOffset` / `getTopMarkColor` 改:接收 `column` 参数;`TopMark` builder 循环多列<br>(4) 颜色常量 `VERTICAL_MATH_DONE_TEXT` 改深绿(`#15803d`),`VERTICAL_MATH_CARRY_TEXT` 改 `dc2626`,`VERTICAL_MATH_BOARD_TEXT` 删 | -20 / 改 |
-| `entry/src/main/ets/components/verticalMath/VerticalMathBoardRow.ets` | `getCellTextColor`:白色 → `text_primary`;`getTopMarkTextColor`:`borrow` 从白色改紫色 | -3 / 改 |
+| `entry/src/main/ets/components/verticalMath/VerticalMathBoard.ets` | (1) `build()` 顶层由 `Stack{ Column().linearGradient(...) + Column{...} }` 改为直接 `Column{...}` + `.backgroundColor(VERTICAL_MATH_NARRATOR_BG)` + `.border({ width: 1, color: $r('app.color.divider') })` + `.borderRadius(14)`<br>(2) `getTopMarkOffset(column)` / `getTopMarkColor(row, mark)` 改:接收 `column` / `mark` 参数<br>(3) `getTopMarkColor` 的 borrow 分支引用新 `VERTICAL_MATH_BORROW_TEXT`(替代原 `VERTICAL_MATH_BOARD_TEXT`)<br>(4) `TopMark` builder 循环 `row.carryColumns` / `row.borrowColumns` 渲染多列(向后兼容原单 `topMark`) | ±20 |
+| `entry/src/main/ets/components/verticalMath/VerticalMathBoardRow.ets` | 无代码逻辑改动 —— 普通格子文字 + operator 符号均已读 `VERTICAL_MATH_BOARD_TEXT`,随常量变深色自动修正 | 0 |
 | `entry/src/main/ets/ohosTest/ets/test/VerticalMathSolver.test.ets` | 加 6 个测试覆盖:<br>• result-active 位置正确<br>• carry 跨步骤持续<br>• borrow 级联跨步骤持续<br>• multiplication partial-active<br>• division quotient-active | +50 行 |
 
-**总计**:改动 5 个文件,新增约 80 测试行、调整约 30 实现行。
+**总计**:改动 4 个源文件 + 1 个测试文件,新增约 80 测试行、调整约 30 实现行。`VerticalMathBoardRow.ets` 无需改代码(靠常量变更生效)。
 
 ---
 
@@ -142,7 +150,7 @@ export class VerticalMathBoardRow {
 - [ ] 棋盘背景与 Narrator 同色(奶油色),两块合起来像一张卡
 - [ ] 棋盘 1px divider 边框 + 14vp 圆角 + 14/20vp 内边距
 - [ ] 棋盘数字深色,在奶油底上清晰可读
-- [ ] 横线 `text_secondary` 半透明色(非纯白)
+- [ ] 横线 `VERTICAL_MATH_BOARD_LINE` 半透明深色 `rgba(58,51,32,0.55)`(非纯白)
 - [ ] 数字深色背景不再出现
 - [ ] Narrator 视觉不变
 
@@ -173,7 +181,7 @@ export class VerticalMathBoardRow {
   - `solveVerticalSubtract cascade`:303-178 的级联中点(0→9)后续步骤仍标 borrow
   - `solveVerticalMultiply`:每步 partial product 行所有非空格 cell 都标 active
   - `solveVerticalDivide`:每步 `resultCells` 当前位 active
-  - `Board` 渲染层:`VERTICAL_MATH_BOARD_TEXT` 不再出现(组件读 `text_primary`)
+  - `Board` 渲染层:`VERTICAL_MATH_BOARD_TEXT` 常量值为深墨色 `#3a3320`(不再是 `#ffffff`);`getTopMarkColor` 的 borrow 分支引用 `VERTICAL_MATH_BORROW_TEXT`(紫)
 
 - [ ] CLI `assembleHap` BUILD SUCCESSFUL
 - [ ] DevEco Studio Hypium 测试全绿(仅能在 GUI 内运行)
@@ -200,7 +208,8 @@ export class VerticalMathBoardRow {
 | `Board` 改 `Stack → Column` 可能影响手势穿透 | 现有版本没有手势捕获,纯视觉,无影响 |
 | 多 topMark 渲染性能 (carry/borrow 跨多列) | 最多 3 列 × 1 行 × 1 step = 3 个 Text,无压力 |
 | 改 `DONE_TEXT` 颜色值影响 Narrator 视觉 | Narrator 用 `VERTICAL_MATH_NARRATOR_DONE_TEXT`,与 `VERTICAL_MATH_DONE_TEXT` 是两个常量 — 不影响 |
-| `text_primary` 在深色模式可能与奶油底对比度差 | 文本色用 `getAppUiState().textPrimary` 跟随主题;若对比度不足,再考虑 dark mode 用主题 token |
+| 奶油底棋盘在深色模式下对比度差 | 本期用固定深墨色常量 `#3a3320`(不跟随主题),深色模式下奶油底 + 深字仍可读但与深色 chat 页略有割裂;若后续需要,再引入 `getAppUiState().textPrimary` 主题 token(需给 `Board`/`BoardRow` 传主题),列为 §7 遗留项 |
+| 改 borrow 复用 `BOARD_TEXT` → 独立紫常量遗漏 | 必须同步:新增 `VERTICAL_MATH_BORROW_TEXT` 常量 + `Board.getTopMarkColor` 的 `•` 分支切换引用,否则 borrow 会随 `BOARD_TEXT` 变深墨色而非紫色 |
 | Solver 测试 snapshot 大改破坏旧测试 | 新断言只 ADD,不删/改;旧断言保持数值不变 |
 
 **回退方案**:所有改动 commit 化(`utils/Color` 单独 commit、`Solver` 单独 commit、组件分别 commit),任意一处可独立 `git revert`。本期不发布到主分支,先在 `math_teacher` 合入验证。
@@ -212,3 +221,4 @@ export class VerticalMathBoardRow {
 - 多 carry 同时显示可加缓动动画(数字从上方落入)
 - 数字 hover/focus 效果(移动端无意义,先不做)
 - 高对比度模式(a11y)— 与项目统一约定后做
+- 深色模式主题联动:棋盘文字改用 `getAppUiState().textPrimary` 而非固定深墨常量(需给 `Board`/`BoardRow` 组件传入主题)
