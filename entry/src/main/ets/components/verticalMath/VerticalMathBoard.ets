@@ -1,11 +1,9 @@
 // components/verticalMath/VerticalMathBoard.ets
 import {
-  VERTICAL_MATH_BOARD_BG_START,
-  VERTICAL_MATH_BOARD_BG_MID,
-  VERTICAL_MATH_BOARD_BG_END,
-  VERTICAL_MATH_BOARD_TEXT,
   VERTICAL_MATH_BOARD_LINE,
-  VERTICAL_MATH_CARRY_TEXT
+  VERTICAL_MATH_CARRY_TEXT,
+  VERTICAL_MATH_BORROW_TEXT,
+  VERTICAL_MATH_NARRATOR_BG
 } from '../../utils/VerticalMathColors'
 import {
   VerticalMathSolution,
@@ -53,13 +51,24 @@ export struct VerticalMathBoard {
     return this.compact ? 32 : 40
   }
 
-  private getTopMarkOffset(row: VerticalMathBoardRow): number {
-    const column: number = row.topMarkColumn === undefined ? 0 : row.topMarkColumn
+  private getTopMarkOffset(column: number): number {
     return this.getCellSize() + column * this.getCellSize()
   }
 
-  private getTopMarkColor(row: VerticalMathBoardRow): string {
-    return row.topMark === '•' ? VERTICAL_MATH_BOARD_TEXT : VERTICAL_MATH_CARRY_TEXT
+  private getTopMarkColor(mark: string): string {
+    return mark === '•' ? VERTICAL_MATH_BORROW_TEXT : VERTICAL_MATH_CARRY_TEXT
+  }
+
+  private getCarryColumns(row: VerticalMathBoardRow): number[] {
+    return row.carryColumns ?? []
+  }
+
+  private getBorrowColumns(row: VerticalMathBoardRow): number[] {
+    return row.borrowColumns ?? []
+  }
+
+  private hasPersistentTopMarks(row: VerticalMathBoardRow): boolean {
+    return this.getCarryColumns(row).length > 0 || this.getBorrowColumns(row).length > 0
   }
 
   private shouldShowLine(rowIndex: number): boolean {
@@ -68,64 +77,66 @@ export struct VerticalMathBoard {
   }
 
   @Builder
+  private TopMarkAt(mark: string, column: number) {
+    Row() {
+      Text(mark)
+        .fontSize(this.compact ? 15 : 18)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.getTopMarkColor(mark))
+        .width(this.getCellSize())
+        .textAlign(TextAlign.Center)
+    }
+    .width(this.getCellSize() * (this.solution.columnCount + 1))
+    .padding({ left: this.getTopMarkOffset(column) })
+    .justifyContent(FlexAlign.Start)
+  }
+
+  @Builder
   private TopMark(row: VerticalMathBoardRow) {
-    if (row.topMark !== undefined && row.topMark !== '') {
-      Row() {
-        Text(row.topMark)
-          .fontSize(this.compact ? 15 : 18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.getTopMarkColor(row))
-          .width(this.getCellSize())
-          .textAlign(TextAlign.Center)
+    if (this.hasPersistentTopMarks(row)) {
+      Stack() {
+        ForEach(this.getCarryColumns(row), (column: number) => {
+          this.TopMarkAt('1', column)
+        }, (column: number) => `carry_${column}`)
+        ForEach(this.getBorrowColumns(row), (column: number) => {
+          this.TopMarkAt('•', column)
+        }, (column: number) => `borrow_${column}`)
       }
-      .width(this.getCellSize() * (this.solution.columnCount + 1))
-      .padding({ left: this.getTopMarkOffset(row) })
-      .justifyContent(FlexAlign.Start)
+    } else if (row.topMark !== undefined && row.topMark !== '') {
+      this.TopMarkAt(row.topMark, row.topMarkColumn === undefined ? 0 : row.topMarkColumn)
     }
   }
 
   build() {
-    Stack() {
-      Column()
-        .width('100%')
-        .height('100%')
-        .linearGradient({
-          angle: 145,
-          colors: [
-            [VERTICAL_MATH_BOARD_BG_START, 0.0],
-            [VERTICAL_MATH_BOARD_BG_MID, 0.66],
-            [VERTICAL_MATH_BOARD_BG_END, 1.0]
-          ]
-        })
-        .borderRadius(20)
-
-      Column() {
-        ForEach(this.getCurrentRows(), (row: VerticalMathBoardRow, rowIndex: number) => {
-          Column() {
-            this.TopMark(row)
-            VerticalMathBoardRowView({
-              row: row,
-              rowIndex: rowIndex,
-              highlights: this.getRowHighlights(rowIndex),
-              cellSize: this.getCellSize(),
-              columnCount: this.solution.columnCount
-            })
-            if (this.shouldShowLine(rowIndex)) {
-              Row()
-                .width(this.getCellSize() * this.solution.columnCount)
-                .height(4)
-                .margin({ left: this.getCellSize(), top: 4, bottom: 4 })
-                .backgroundColor(VERTICAL_MATH_BOARD_LINE)
-                .borderRadius(2)
-            }
+    Column() {
+      ForEach(this.getCurrentRows(), (row: VerticalMathBoardRow, rowIndex: number) => {
+        Column() {
+          this.TopMark(row)
+          VerticalMathBoardRowView({
+            row: row,
+            rowIndex: rowIndex,
+            highlights: this.getRowHighlights(rowIndex),
+            cellSize: this.getCellSize(),
+            columnCount: this.solution.columnCount
+          })
+          if (this.shouldShowLine(rowIndex)) {
+            Row()
+              .width(this.getCellSize() * this.solution.columnCount)
+              .height(4)
+              .margin({ left: this.getCellSize(), top: 4, bottom: 4 })
+              .backgroundColor(VERTICAL_MATH_BOARD_LINE)
+              .borderRadius(2)
           }
-          .alignItems(HorizontalAlign.Start)
-        }, (_row: VerticalMathBoardRow, rowIndex: number) => `row_${rowIndex}`)
-      }
-      .padding(this.compact ? 14 : 20)
-      .alignItems(HorizontalAlign.Start)
+        }
+        .alignItems(HorizontalAlign.Start)
+      }, (_row: VerticalMathBoardRow, rowIndex: number) => `row_${rowIndex}`)
     }
+    .padding(this.compact ? 14 : 20)
+    .alignItems(HorizontalAlign.Start)
     .width('100%')
     .height('100%')
+    .backgroundColor(VERTICAL_MATH_NARRATOR_BG)
+    .border({ width: 1, color: $r('app.color.divider') })
+    .borderRadius(14)
   }
 }
