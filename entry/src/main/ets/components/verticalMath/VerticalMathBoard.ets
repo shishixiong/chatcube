@@ -129,7 +129,7 @@ export struct VerticalMathBoard {
           }
         }
         .alignItems(HorizontalAlign.Start)
-      }, (_row: VerticalMathBoardRow, rowIndex: number) => `row_${rowIndex}`)
+      }, (_row: VerticalMathBoardRow, rowIndex: number) => `${this.visibleStepCount}_${rowIndex}`)
     }
     .padding(this.compact ? 14 : 20)
     .alignItems(HorizontalAlign.Start)
