@@ -21,6 +21,8 @@ export class VerticalMathBoardRow {
   topMark?: string                // optional small glyph above the row ('•' for borrow, red 1 for add carry)
   topMarkColumn?: number          // which column the topMark belongs to
   topMarkRowIndex?: number        // visual row index used by carry row injection
+  carryColumns?: number[]         // all carry columns accumulated through this snapshot
+  borrowColumns?: number[]        // all borrow columns accumulated through this snapshot
 }
 
 export class VerticalMathStep {
@@ -203,6 +205,7 @@ export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
 
   // Digit-by-digit, right to left. Reveal one result digit per step and mark carries.
   const revealed: string[] = emptyCells(columnCount)
+  const carryColumns: Set<number> = new Set<number>()
   let carryIn: number = 0
   for (let col = columnCount - 1; col >= 0; col--) {
     const dA: number = aCells[col] === ' ' ? 0 : Number(aCells[col])
@@ -215,11 +218,16 @@ export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
 
     const rowA: VerticalMathBoardRow = { cells: cloneCells(aCells) }
     const rowB: VerticalMathBoardRow = { cells: cloneCells(bCells), operator: '+' }
-    // Carry mark sits above the operand rows, on the column to the LEFT (col - 1).
+    // Keep the legacy single mark on the generation step, while carryColumns
+    // retains every carry for this and all later snapshots.
     if (carryOut > 0 && col - 1 >= 0) {
+      carryColumns.add(col - 1)
       rowA.topMark = '1'
       rowA.topMarkColumn = col - 1
       rowA.topMarkRowIndex = 0
+    }
+    if (carryColumns.size > 0) {
+      rowA.carryColumns = Array.from(carryColumns)
     }
     const rowLine: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
     const rowResult: VerticalMathBoardRow = { cells: cloneCells(revealed) }
@@ -229,6 +237,8 @@ export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
     const activeB: VerticalMathHighlight = { rowIndex: 1, columnIndex: col, kind: 'active' }
     highlights.push(activeA)
     highlights.push(activeB)
+    const activeResult: VerticalMathHighlight = { rowIndex: 3, columnIndex: col, kind: 'active' }
+    highlights.push(activeResult)
     if (carryOut > 0 && col - 1 >= 0) {
       const carryHl: VerticalMathHighlight = { rowIndex: 0, columnIndex: col - 1, kind: 'carry' }
       highlights.push(carryHl)
@@ -255,6 +265,9 @@ export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
 
   // Final step: full board with the answer row.
   const finalRowA: VerticalMathBoardRow = { cells: cloneCells(aCells) }
+  if (carryColumns.size > 0) {
+    finalRowA.carryColumns = Array.from(carryColumns)
+  }
   const finalRowB: VerticalMathBoardRow = { cells: cloneCells(bCells), operator: '+' }
   const finalRowLine: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
   const finalRowResult: VerticalMathBoardRow = { cells: cloneCells(finalCells) }
@@ -344,6 +357,7 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
   const aBorrowed: string[] = cloneCells(aCells)
   const resultCells: string[] = emptyCells(columnCount)
   const cascadeColumns: Set<number> = new Set<number>()
+  const persistentBorrowColumns: Set<number> = new Set<number>()
   let carryIn: number = 0
 
   for (let col = columnCount - 1; col >= 0; col--) {
@@ -369,6 +383,12 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
         aBorrowed[donor] = String(Number(aBorrowed[donor]) - 1)
         localDA += 10
         borrowColumns.push(donor)
+      }
+    }
+    if (borrowColumns.length > 0) {
+      persistentBorrowColumns.add(col)
+      for (let bi = 0; bi < borrowColumns.length; bi++) {
+        persistentBorrowColumns.add(borrowColumns[bi])
       }
     }
     const resultDigit: number = localDA - dB - carryIn
@@ -428,56 +448,37 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
       rowA.topMarkColumn = stepBorrowColumns[0]
       rowA.topMarkRowIndex = 0
     }
-    const borrowRows: VerticalMathBoardRow[] = []
-    for (let bi = 1; bi < stepBorrowColumns.length; bi++) {
-      const extraRow: VerticalMathBoardRow = {
-        cells: emptyCells(columnCount),
-        topMark: '•',
-        topMarkColumn: stepBorrowColumns[bi],
-        topMarkRowIndex: 0
-      }
-      borrowRows.push(extraRow)
+    if (persistentBorrowColumns.size > 0) {
+      rowA.borrowColumns = Array.from(persistentBorrowColumns)
     }
     const rowB: VerticalMathBoardRow = { cells: cloneCells(bCells), operator: '-' }
     const rowLine: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
     const rowResult: VerticalMathBoardRow = { cells: cloneCells(resultCells) }
+    const stepRows: VerticalMathBoardRow[] = [rowA, rowB, rowLine, rowResult]
 
-    // Assemble stepRows in a stable order: [extra borrow rows..., rowA, rowB, rowLine, rowResult].
-    // Indices below derive from this exact order — do NOT reorder without recomputing.
-    const stepRows: VerticalMathBoardRow[] = []
-    for (let bi = 0; bi < borrowRows.length; bi++) {
-      stepRows.push(borrowRows[bi])
-    }
-    stepRows.push(rowA)
-    stepRows.push(rowB)
-    stepRows.push(rowLine)
-    stepRows.push(rowResult)
-
-    // Derived row indices. These MUST be computed AFTER stepRows is built:
-    // - cascade-trigger steps prepend `borrowRows.length` extra rows, shifting
-    //   every subsequent row down. Computing from hardcoded values (e.g. 0/1/3)
-    //   would highlight the wrong rows for cascades (503 − 278 col=2 step).
-    const rowAIndex: number = borrowRows.length
-    const rowBIndex: number = borrowRows.length + 1
-    const rowLineIndex: number = borrowRows.length + 2
-    const rowResultIndex: number = borrowRows.length + 3
+    const rowAIndex: number = 0
+    const rowBIndex: number = 1
+    const rowResultIndex: number = 3
 
     const highlights: VerticalMathHighlight[] = []
     const activeA: VerticalMathHighlight = { rowIndex: rowAIndex, columnIndex: col, kind: 'active' }
     const activeB: VerticalMathHighlight = { rowIndex: rowBIndex, columnIndex: col, kind: 'active' }
     highlights.push(activeA)
     highlights.push(activeB)
-    // Borrow row 0 is rowA itself (its topMark); rows 1..N are the extra borrowRows.
-    // borrowing index 0 maps to rowA; index bi maps to borrowRows[bi-1].
     for (let bi = 0; bi < stepBorrowColumns.length; bi++) {
-      const borrowRowIndex: number = bi === 0 ? rowAIndex : (bi - 1)
       const borrowHl: VerticalMathHighlight = {
-        rowIndex: borrowRowIndex,
+        rowIndex: rowAIndex,
         columnIndex: stepBorrowColumns[bi],
         kind: 'borrow'
       }
       highlights.push(borrowHl)
     }
+    const activeResult: VerticalMathHighlight = {
+      rowIndex: rowResultIndex,
+      columnIndex: col,
+      kind: 'active'
+    }
+    highlights.push(activeResult)
     for (let prev = col + 1; prev < columnCount; prev++) {
       const doneHl: VerticalMathHighlight = {
         rowIndex: rowResultIndex,
@@ -505,6 +506,9 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
 
   // Final step: full board with the answer row.
   const finalRowA: VerticalMathBoardRow = { cells: cloneCells(aCells) }
+  if (persistentBorrowColumns.size > 0) {
+    finalRowA.borrowColumns = Array.from(persistentBorrowColumns)
+  }
   const finalRowB: VerticalMathBoardRow = { cells: cloneCells(bCells), operator: '-' }
   const finalRowLine: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
   const finalRowResult: VerticalMathBoardRow = { cells: cloneCells(finalCells) }

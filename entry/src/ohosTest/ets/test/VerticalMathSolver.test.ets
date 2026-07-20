@@ -4,6 +4,7 @@ import {
   VerticalMathValidationError,
   VerticalMathStep,
   VerticalMathBoardRow,
+  VerticalMathHighlight,
   validateVerticalMathInputs,
   solveVerticalAdd,
   solveVerticalSubtract,
@@ -116,6 +117,26 @@ export default function verticalMathSolverTest() {
       expect(s.result).assertEqual(0)
       expect(s.columnCount).assertEqual(1)
     })
+
+    it('marks each newly written addition result digit active', 0, () => {
+      const s = solveVerticalAdd(22, 33)
+      for (let index = 1; index < s.steps.length - 1; index++) {
+        const expectedColumn: number = s.columnCount - index
+        const resultActive: VerticalMathHighlight[] = s.steps[index].highlights.filter(
+          (highlight: VerticalMathHighlight): boolean =>
+            highlight.rowIndex === 3 && highlight.kind === 'active'
+        )
+        expect(resultActive.length).assertEqual(1)
+        expect(resultActive[0].columnIndex).assertEqual(expectedColumn)
+      }
+    })
+
+    it('keeps carry columns on later snapshots', 0, () => {
+      const s = solveVerticalAdd(47, 28)
+      expect(s.steps[1].rows[0].carryColumns?.includes(0) ?? false).assertEqual(true)
+      expect(s.steps[2].rows[0].carryColumns?.includes(0) ?? false).assertEqual(true)
+      expect(s.steps[s.steps.length - 1].rows[0].carryColumns?.includes(0) ?? false).assertEqual(true)
+    })
   })
 
   describe('solveVerticalSubtract', () => {
@@ -140,6 +161,28 @@ export default function verticalMathSolverTest() {
       const s = solveVerticalSubtract(999, 999)
       expect(s.result).assertEqual(0)
       expect(s.columnCount).assertEqual(3)
+    })
+
+    it('keeps cascade borrow columns and marks each new result active', 0, () => {
+      const s = solveVerticalSubtract(303, 178)
+      for (let index = 1; index < s.steps.length - 1; index++) {
+        const marks: number[] = s.steps[index].rows[0].borrowColumns ?? []
+        expect(marks.includes(0)).assertEqual(true)
+        expect(marks.includes(1)).assertEqual(true)
+        expect(marks.includes(2)).assertEqual(true)
+
+        const expectedColumn: number = s.columnCount - index
+        const resultActive: VerticalMathHighlight[] = s.steps[index].highlights.filter(
+          (highlight: VerticalMathHighlight): boolean =>
+            highlight.rowIndex === 3 && highlight.columnIndex === expectedColumn &&
+              highlight.kind === 'active'
+        )
+        expect(resultActive.length).assertEqual(1)
+      }
+      const finalMarks: number[] = s.steps[s.steps.length - 1].rows[0].borrowColumns ?? []
+      expect(finalMarks.includes(0)).assertEqual(true)
+      expect(finalMarks.includes(1)).assertEqual(true)
+      expect(finalMarks.includes(2)).assertEqual(true)
     })
   })
 
@@ -177,6 +220,23 @@ export default function verticalMathSolverTest() {
         expect(activeHighlights.some(highlight => highlight.rowIndex === 0)).assertEqual(true)
       }
     })
+
+    it('marks every non-empty current partial-product cell active', 0, () => {
+      const s = solveVerticalMultiply(988, 6)
+      for (let index = 1; index <= 3; index++) {
+        const partialRowIndex: number = s.steps[index].rows.length - 1
+        const partialCells: string[] = s.steps[index].rows[partialRowIndex].cells
+        for (let column = 0; column < partialCells.length; column++) {
+          if (partialCells[column] !== '') {
+            expect(s.steps[index].highlights.some(
+              (highlight: VerticalMathHighlight): boolean =>
+                highlight.rowIndex === partialRowIndex && highlight.columnIndex === column &&
+                  highlight.kind === 'active'
+            )).assertEqual(true)
+          }
+        }
+      }
+    })
   })
 
   describe('solveVerticalDivide', () => {
@@ -210,6 +270,21 @@ export default function verticalMathSolverTest() {
       const s = solveVerticalDivide(999, 9)
       expect(s.result).assertEqual(111)
       expect(s.remainder).assertEqual(0)
+    })
+
+    it('marks each written quotient digit with the active quotient semantic', 0, () => {
+      const s = solveVerticalDivide(84, 4)
+      const quotientSteps: VerticalMathStep[] = s.steps.filter(
+        (step: VerticalMathStep): boolean =>
+          step.highlights.some((highlight: VerticalMathHighlight): boolean => highlight.kind === 'quotient')
+      )
+      expect(quotientSteps.length).assertEqual(2)
+      for (let index = 0; index < quotientSteps.length; index++) {
+        expect(quotientSteps[index].highlights.some(
+          (highlight: VerticalMathHighlight): boolean =>
+            highlight.rowIndex === 3 && highlight.columnIndex === index && highlight.kind === 'quotient'
+        )).assertEqual(true)
+      }
     })
   })
 
