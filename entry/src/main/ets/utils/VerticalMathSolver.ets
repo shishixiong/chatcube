@@ -162,12 +162,10 @@ function cloneCells(src: string[]): string[] {
  *
  * Structure:
  * - initialRows: [A row, B row with '+' operator, line spacer]
- * - steps[0..N-1]: per-column computation right-to-left (first step is units, no alignment step)
- * - steps[1..N]: one per column, right-to-left. When a column produces a carry
+ * - steps[0..N-1]: one per column, right-to-left. When a column produces a carry
  *   (digitA + digitB + carryIn >= 10), the row for the NEXT column to the left
  *   carries a `topMark` of '1'. The active column is highlighted yellow ('active'),
  *   already-resolved result columns are mint ('done').
- * - final step: reveals the second line + result row.
  */
 export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
   const digitsA: number = Math.max(1, String(a).length)
