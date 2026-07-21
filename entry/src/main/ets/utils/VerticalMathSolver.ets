@@ -537,16 +537,7 @@ export function solveVerticalMultiply(a: number, b: number): VerticalMathSolutio
     { cells: cloneCells(bCells), operator: '×' },
     { cells: emptyCells(columnCount) }
   ]
-  const steps: VerticalMathStep[] = [{
-    title: '数位对齐',
-    narration: `${a} 和 ${b} 各就各位，准备出发。`,
-    rows: [
-      { cells: cloneCells(aCells) },
-      { cells: cloneCells(bCells), operator: '×' },
-      { cells: emptyCells(columnCount) }
-    ],
-    highlights: []
-  }]
+  const steps: VerticalMathStep[] = []
   const partialRows: VerticalMathBoardRow[] = []
   for (let index = 0; index < digits.length; index++) {
     const cells: string[] = emptyCells(columnCount)

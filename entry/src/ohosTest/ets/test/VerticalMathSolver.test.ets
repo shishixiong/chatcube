@@ -190,7 +190,7 @@ export default function verticalMathSolverTest() {
       expect(s.columnCount).assertEqual(4)
       const expectedRows: string[] = ['  48', ' 48 ', '54  ']
       for (let index = 0; index < expectedRows.length; index++) {
-        expect(s.steps[index + 1].rows[s.steps[index + 1].rows.length - 1].cells.join(''))
+        expect(s.steps[index].rows[s.steps[index].rows.length - 1].cells.join(''))
           .assertEqual(expectedRows[index])
       }
       expect(s.steps.every((step: VerticalMathStep) =>
@@ -210,7 +210,7 @@ export default function verticalMathSolverTest() {
 
     it('multiplier highlights pair with current multiplicand digit', 0, () => {
       const s = solveVerticalMultiply(988, 6)
-      for (let index = 1; index <= 3; index++) {
+      for (let index = 0; index < 3; index++) {
         const activeHighlights = s.steps[index].highlights.filter(highlight => highlight.kind === 'active')
         expect(activeHighlights.length >= 2).assertEqual(true)
         expect(activeHighlights.some(highlight => highlight.rowIndex === 1)).assertEqual(true)
@@ -220,7 +220,7 @@ export default function verticalMathSolverTest() {
 
     it('marks every non-empty current partial-product cell active', 0, () => {
       const s = solveVerticalMultiply(988, 6)
-      for (let index = 1; index <= 3; index++) {
+      for (let index = 0; index < 3; index++) {
         const partialRowIndex: number = s.steps[index].rows.length - 1
         const partialCells: string[] = s.steps[index].rows[partialRowIndex].cells
         for (let column = 0; column < partialCells.length; column++) {
