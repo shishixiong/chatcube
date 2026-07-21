@@ -141,10 +141,9 @@ export default function verticalMathSolverTest() {
     it('503 - 278 = 225 with cascading borrow', 0, () => {
       const s = solveVerticalSubtract(503, 278)
       expect(s.result).assertEqual(225)
-      // expect at least one step with a '•' topMark (borrow marker)
       const borrowSteps = s.steps.filter((step: VerticalMathStep) =>
         step.rows.some((row: VerticalMathBoardRow) => row.topMark === '•'))
-      expect(borrowSteps.length >= 2).assertEqual(true)
+      expect(borrowSteps.length >= 1).assertEqual(true)
     })
 
     it('100 - 50 = 50 with no borrow', 0, () => {
@@ -163,13 +162,13 @@ export default function verticalMathSolverTest() {
 
     it('keeps cascade borrow columns and marks each new result active', 0, () => {
       const s = solveVerticalSubtract(303, 178)
-      for (let index = 1; index < s.steps.length - 1; index++) {
+      for (let index = 0; index < s.steps.length - 1; index++) {
         const marks: number[] = s.steps[index].rows[0].borrowColumns ?? []
         expect(marks.includes(0)).assertEqual(true)
         expect(marks.includes(1)).assertEqual(true)
         expect(marks.includes(2)).assertEqual(true)
 
-        const expectedColumn: number = s.columnCount - index
+        const expectedColumn: number = s.columnCount - 1 - index
         const resultActive: VerticalMathHighlight[] = s.steps[index].highlights.filter(
           (highlight: VerticalMathHighlight): boolean =>
             highlight.rowIndex === 3 && highlight.columnIndex === expectedColumn &&

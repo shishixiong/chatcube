@@ -290,11 +290,11 @@ export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
  *
  * Structure:
  * - initialRows: [A row, B row with '-' operator, line spacer]
- * - steps[0]: alignment narration ('数位对齐')
- * - steps[1..N]: one per column, right-to-left. When a column needs to borrow
- *   (digitA < digitB + carryIn), the row for the column to the LEFT (col − 1)
- *   carries a `topMark` of '•' on the operand-A row. The active column is
- *   highlighted yellow ('active'), already-resolved result columns are mint ('done').
+ * - steps[0..N-1]: one per column, right-to-left (first step is units, no alignment step).
+ *   When a column needs to borrow (digitA < digitB + carryIn), the row for the column
+ *   to the LEFT (col − 1) carries a `topMark` of '•' on the operand-A row. The active
+ *   column is highlighted yellow ('active'), already-resolved result columns are mint
+ *   ('done').
  * - final step: reveals the second line + result row.
  *
  * Borrow convention: When a borrow is needed, walk left to find a non-zero donor
@@ -317,18 +317,6 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
   const initialRows: VerticalMathBoardRow[] = [initialAlignRow, initialOperatorRow, initialLineRow]
 
   const steps: VerticalMathStep[] = []
-
-  // Step 1: alignment (no computation yet).
-  const alignRowA: VerticalMathBoardRow = { cells: cloneCells(aCells) }
-  const alignRowB: VerticalMathBoardRow = { cells: cloneCells(bCells), operator: '-' }
-  const alignRowLine: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
-  const alignStep: VerticalMathStep = {
-    title: '数位对齐',
-    narration: '个位对个位，十位对十位。',
-    rows: [alignRowA, alignRowB, alignRowLine],
-    highlights: []
-  }
-  steps.push(alignStep)
 
   // Result cells (padded to columnCount).
   const finalCells: string[] = padCells(diff, columnCount)
