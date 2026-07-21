@@ -652,7 +652,7 @@ export function solveVerticalMultiply(a: number, b: number): VerticalMathSolutio
 export function solveVerticalDivide(a: number, b: number): VerticalMathSolution {
   // Special case: 0 ÷ B = 0. Per spec, this should NOT narrate "首位不够除";
   // 0 divided by anything nonzero is trivially 0, not "the first digit can't be divided".
-  // Produces a clean 2-step solution (alignment + final) with the quotient shown as '0'.
+  // Produces a single final step with the quotient shown as '0'.
   if (a === 0) {
     const columnCount: number = 1
     const aCells: string[] = ['0']
@@ -665,18 +665,6 @@ export function solveVerticalDivide(a: number, b: number): VerticalMathSolution 
     const initialRows: VerticalMathBoardRow[] = [initialAlignRow, initialOperatorRow, initialLineRow]
 
     const steps: VerticalMathStep[] = []
-
-    // Step 1: alignment (no computation yet).
-    const alignRowA: VerticalMathBoardRow = { cells: cloneCells(aCells) }
-    const alignRowB: VerticalMathBoardRow = { cells: cloneCells(bRowCells), operator: '÷' }
-    const alignRowLine: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
-    const alignStep: VerticalMathStep = {
-      title: '数位对齐',
-      narration: '用除数去除被除数，从最高位开始。',
-      rows: [alignRowA, alignRowB, alignRowLine],
-      highlights: []
-    }
-    steps.push(alignStep)
 
     // Final step: reveal the result '0'.
     const finalRowCells: string[] = ['0']
@@ -721,18 +709,6 @@ export function solveVerticalDivide(a: number, b: number): VerticalMathSolution 
   const initialRows: VerticalMathBoardRow[] = [initialAlignRow, initialOperatorRow, initialLineRow]
 
   const steps: VerticalMathStep[] = []
-
-  // Step 0: alignment
-  const alignRowA: VerticalMathBoardRow = { cells: cloneCells(aCells) }
-  const alignRowB: VerticalMathBoardRow = { cells: cloneCells(bRowCells), operator: '÷' }
-  const alignRowLine: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
-  const alignStep: VerticalMathStep = {
-    title: '数位对齐',
-    narration: '用除数去除被除数，从最高位开始。',
-    rows: [alignRowA, alignRowB, alignRowLine],
-    highlights: []
-  }
-  steps.push(alignStep)
 
   // Simulate long division left-to-right
   let remainder: number = 0

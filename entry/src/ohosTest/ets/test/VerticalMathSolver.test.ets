@@ -261,6 +261,9 @@ export default function verticalMathSolverTest() {
       const s = solveVerticalDivide(0, 5)
       expect(s.result).assertEqual(0)
       expect(s.remainder).assertEqual(0)
+      // No alignment step: only the final answer step remains.
+      expect(s.steps.length).assertEqual(1)
+      expect(s.steps[0].title).assertEqual('得到答案')
     })
 
     it('999 ÷ 9 = 111 remainder 0', 0, () => {
