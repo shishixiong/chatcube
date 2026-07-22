@@ -45,10 +45,14 @@ const OPERATION_BUTTONS: OperationButtonDescriptor[] = [
 // has all three required fields (operation + two operands) and that the operands
 // fit the solver's accepted range (0..999 integers). Used by aboutToAppear to
 // decide whether to auto-solve or fall back to the input form.
+//
+// Operands arrive as raw strings (the component holds them in @Local string
+// fields for the input form). Empty strings are treated as "missing" — Number('')
+// is 0, which would otherwise sneak into the valid range.
 function isCompleteVerticalMathArgs(
   operation: string,
-  operandA: number,
-  operandB: number
+  operandAStr: string,
+  operandBStr: string
 ): boolean {
   if (operation !== VerticalMathOperation.ADD &&
     operation !== VerticalMathOperation.SUBTRACT &&
@@ -56,6 +60,11 @@ function isCompleteVerticalMathArgs(
     operation !== VerticalMathOperation.DIVIDE) {
     return false
   }
+  if (operandAStr === '' || operandBStr === '') {
+    return false
+  }
+  const operandA: number = Number(operandAStr)
+  const operandB: number = Number(operandBStr)
   if (!Number.isInteger(operandA) || operandA < 0 || operandA > 999) {
     return false
   }
@@ -93,7 +102,7 @@ export struct VerticalMathCard {
       if (this.solution !== null && this.solution.steps.length > 0) {
         this.visibleStepCount = this.solution.steps.length
       }
-    } else if (isCompleteVerticalMathArgs(this.selectedOperation, Number(this.operandA), Number(this.operandB))) {
+    } else if (isCompleteVerticalMathArgs(this.selectedOperation, this.operandA, this.operandB)) {
       // AI supplied a complete operands payload — auto-solve and render the
       // walk-through immediately. Missing/out-of-range/unknown-operation cases
       // fall through and the input form is rendered (handled in build()).
