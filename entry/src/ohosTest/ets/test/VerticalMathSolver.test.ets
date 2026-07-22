@@ -135,6 +135,26 @@ export default function verticalMathSolverTest() {
       expect(s.steps[1].rows[0].carryColumns?.includes(0) ?? false).assertEqual(true)
       expect(s.steps[s.steps.length - 1].rows[0].carryColumns?.includes(0) ?? false).assertEqual(true)
     })
+
+    it('uses the persistent carry marker on the next higher-column step', 0, () => {
+      const s = solveVerticalAdd(47, 28)
+      const lowStep: VerticalMathStep = s.steps[0]
+      const highStep: VerticalMathStep = s.steps[1]
+      const lowActive: VerticalMathHighlight[] = lowStep.highlights.filter(
+        (highlight: VerticalMathHighlight): boolean =>
+          highlight.rowIndex === 0 && highlight.kind === 'active'
+      )
+      const highActive: VerticalMathHighlight[] = highStep.highlights.filter(
+        (highlight: VerticalMathHighlight): boolean =>
+          highlight.rowIndex === 0 && highlight.kind === 'active'
+      )
+      expect(lowActive[0].columnIndex).assertEqual(1)
+      expect(highActive[0].columnIndex).assertEqual(0)
+      expect(highStep.rows[0].carryColumns?.includes(highActive[0].columnIndex) ?? false)
+        .assertEqual(true)
+      expect(lowStep.rows[0].carryColumns?.includes(lowActive[0].columnIndex) ?? false)
+        .assertEqual(false)
+    })
   })
 
   describe('solveVerticalSubtract', () => {
@@ -180,6 +200,23 @@ export default function verticalMathSolverTest() {
       expect(finalMarks.includes(0)).assertEqual(true)
       expect(finalMarks.includes(1)).assertEqual(true)
       expect(finalMarks.includes(2)).assertEqual(true)
+    })
+
+    it('uses a persistent borrow marker on the active borrow column', 0, () => {
+      const s = solveVerticalSubtract(503, 278)
+      const activeStep: VerticalMathStep = s.steps[0]
+      const activeA: VerticalMathHighlight[] = activeStep.highlights.filter(
+        (highlight: VerticalMathHighlight): boolean =>
+          highlight.rowIndex === 0 && highlight.kind === 'active'
+      )
+      expect(activeA.length).assertEqual(1)
+      expect(activeStep.rows[0].borrowColumns?.includes(activeA[0].columnIndex) ?? false)
+        .assertEqual(true)
+      const finalStep: VerticalMathStep = s.steps[s.steps.length - 1]
+      expect(finalStep.highlights.some(
+        (highlight: VerticalMathHighlight): boolean =>
+          highlight.rowIndex === 0 && highlight.kind === 'active'
+      )).assertEqual(false)
     })
   })
 

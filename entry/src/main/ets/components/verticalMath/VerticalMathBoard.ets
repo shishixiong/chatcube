@@ -1,5 +1,6 @@
 // components/verticalMath/VerticalMathBoard.ets
 import {
+  VERTICAL_MATH_ACTIVE_BG,
   VERTICAL_MATH_BOARD_LINE,
   VERTICAL_MATH_CARRY_TEXT,
   VERTICAL_MATH_BORROW_TEXT,
@@ -32,6 +33,18 @@ export struct VerticalMathBoard {
     }
     const index: number = Math.min(this.visibleStepCount - 1, this.solution.steps.length - 1)
     return this.solution.steps[index].highlights
+  }
+
+  private getActiveOperandColumn(): number {
+    const active: VerticalMathHighlight | undefined = this.getCurrentHighlights().find(
+      (highlight: VerticalMathHighlight): boolean =>
+        highlight.rowIndex === 0 && highlight.kind === 'active'
+    )
+    return active === undefined ? -1 : active.columnIndex
+  }
+
+  private isActiveTopMark(column: number): boolean {
+    return column === this.getActiveOperandColumn()
   }
 
   private getRowHighlights(rowIndex: number): VerticalMathHighlight[] {
@@ -77,13 +90,16 @@ export struct VerticalMathBoard {
   }
 
   @Builder
-  private TopMarkAt(mark: string, column: number) {
+  private TopMarkAt(mark: string, column: number, isActive: boolean = false) {
     Row() {
       Text(mark)
         .fontSize(this.compact ? 15 : 18)
         .fontWeight(FontWeight.Bold)
         .fontColor(this.getTopMarkColor(mark))
         .width(this.getCellSize())
+        .height(this.getCellSize())
+        .borderRadius(this.getCellSize() / 2)
+        .backgroundColor(isActive ? VERTICAL_MATH_ACTIVE_BG : Color.Transparent)
         .textAlign(TextAlign.Center)
     }
     .width(this.getCellSize() * (this.solution.columnCount + 1))
@@ -96,14 +112,15 @@ export struct VerticalMathBoard {
     if (this.hasPersistentTopMarks(row)) {
       Stack() {
         ForEach(this.getCarryColumns(row), (column: number) => {
-          this.TopMarkAt('1', column)
+          this.TopMarkAt('1', column, this.isActiveTopMark(column))
         }, (column: number) => `carry_${column}`)
         ForEach(this.getBorrowColumns(row), (column: number) => {
-          this.TopMarkAt('•', column)
+          this.TopMarkAt('•', column, this.isActiveTopMark(column))
         }, (column: number) => `borrow_${column}`)
       }
     } else if (row.topMark !== undefined && row.topMark !== '') {
-      this.TopMarkAt(row.topMark, row.topMarkColumn === undefined ? 0 : row.topMarkColumn)
+      this.TopMarkAt(row.topMark, row.topMarkColumn === undefined ? 0 : row.topMarkColumn,
+        this.isActiveTopMark(row.topMarkColumn === undefined ? 0 : row.topMarkColumn))
     }
   }
 
