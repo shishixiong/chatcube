@@ -86,7 +86,7 @@ export default function verticalMathSolverTest() {
       expect(s.remainder).assertEqual(0)
       expect(s.columnCount).assertEqual(2)
       // no standalone alignment step — first step is units computation
-      expect(s.steps[0].title).assertEqual('第 2 位相加')
+      expect(s.steps[0].title).assertEqual('第 1 位相加')
       const carrySteps = s.steps.filter((step: VerticalMathStep) =>
         step.rows.some((row: VerticalMathBoardRow) => row.topMark === '1'))
       expect(carrySteps.length).assertEqual(1)
