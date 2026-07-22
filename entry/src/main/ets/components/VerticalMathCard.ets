@@ -63,6 +63,12 @@ export struct VerticalMathCard {
     if (this.isAnswered) {
       // Pre-compute solution so the user can walk through it again.
       this.regenerateSolution()
+      // Skip to the final step so re-opening a completed timeline entry shows the
+      // answer instead of "step 0 / N" + just the aligned initial board. The user
+      // can still replay the walk-through via "重置" or step back with "← 上一步".
+      if (this.solution !== null && this.solution.steps.length > 0) {
+        this.visibleStepCount = this.solution.steps.length
+      }
     }
   }
 
