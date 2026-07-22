@@ -41,6 +41,30 @@ const OPERATION_BUTTONS: OperationButtonDescriptor[] = [
   { label: '÷', op: VerticalMathOperation.DIVIDE }
 ]
 
+// File-private helper: validate that an AI-supplied toolCall.arguments payload
+// has all three required fields (operation + two operands) and that the operands
+// fit the solver's accepted range (0..999 integers). Used by aboutToAppear to
+// decide whether to auto-solve or fall back to the input form.
+function isCompleteVerticalMathArgs(
+  operation: string,
+  operandA: number,
+  operandB: number
+): boolean {
+  if (operation !== VerticalMathOperation.ADD &&
+    operation !== VerticalMathOperation.SUBTRACT &&
+    operation !== VerticalMathOperation.MULTIPLY &&
+    operation !== VerticalMathOperation.DIVIDE) {
+    return false
+  }
+  if (!Number.isInteger(operandA) || operandA < 0 || operandA > 999) {
+    return false
+  }
+  if (!Number.isInteger(operandB) || operandB < 0 || operandB > 999) {
+    return false
+  }
+  return true
+}
+
 @ComponentV2
 export struct VerticalMathCard {
   @Param toolCall: ToolCall = new ToolCall()
@@ -69,6 +93,11 @@ export struct VerticalMathCard {
       if (this.solution !== null && this.solution.steps.length > 0) {
         this.visibleStepCount = this.solution.steps.length
       }
+    } else if (isCompleteVerticalMathArgs(this.selectedOperation, Number(this.operandA), Number(this.operandB))) {
+      // AI supplied a complete operands payload — auto-solve and render the
+      // walk-through immediately. Missing/out-of-range/unknown-operation cases
+      // fall through and the input form is rendered (handled in build()).
+      this.regenerateSolution()
     }
   }
 
