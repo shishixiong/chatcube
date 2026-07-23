@@ -330,36 +330,38 @@ export struct VerticalMathCard {
         if (this.isCompact()) {
           // Stacked layout (mobile)
           Column() {
+            VerticalMathStepNarrator({
+              steps: this.solution.steps,
+              visibleStepCount: this.visibleStepCount,
+              operationLabel: `第 ${this.visibleStepCount} / ${this.solution.steps.length} 步`
+            })
+            .margin({ bottom: 8 })
             VerticalMathBoard({
               solution: this.solution,
               visibleStepCount: this.visibleStepCount,
               compact: true
             })
-            .height('60%')
-            VerticalMathStepNarrator({
-              steps: this.solution.steps,
-              visibleStepCount: this.visibleStepCount,
-              operationLabel: `第 ${this.visibleStepCount} / ${this.solution.steps.length} 步`
-            })
-            .height('40%')
           }
           .layoutWeight(1)
           .padding({ left: 12, right: 12, bottom: 12 })
         } else {
-          // 70/30 layout (tablet / largeSize)
-          Row() {
-            VerticalMathBoard({
-              solution: this.solution,
-              visibleStepCount: this.visibleStepCount,
-              compact: false
-            })
-            .layoutWeight(7)
+          // Narrator header above full-width board (tablet / largeSize)
+          Column() {
             VerticalMathStepNarrator({
               steps: this.solution.steps,
               visibleStepCount: this.visibleStepCount,
               operationLabel: `第 ${this.visibleStepCount} / ${this.solution.steps.length} 步`
             })
-            .layoutWeight(3)
+            .margin({ bottom: 10 })
+            Row() {
+              VerticalMathBoard({
+                solution: this.solution,
+                visibleStepCount: this.visibleStepCount,
+                compact: false
+              })
+              .layoutWeight(1)
+            }
+            .layoutWeight(1)
           }
           .layoutWeight(1)
           .padding(12)
