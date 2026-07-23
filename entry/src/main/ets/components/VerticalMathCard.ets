@@ -7,9 +7,13 @@ import { ToolCall } from '../models/ChatModels'
 import {
   solveVerticalMath,
   VerticalMathOperation,
-  VerticalMathSolution
+  VerticalMathSolution,
+  VerticalMathStep
 } from '../utils/VerticalMathSolver'
 import {
+  VERTICAL_MATH_ACTIVE_BG,
+  VERTICAL_MATH_ACTIVE_TEXT,
+  VERTICAL_MATH_DONE_TEXT,
   VERTICAL_MATH_ERROR_BG,
   VERTICAL_MATH_ERROR_TEXT
 } from '../utils/VerticalMathColors'
@@ -285,6 +289,42 @@ export struct VerticalMathCard {
     .padding(12)
   }
 
+  @Builder
+  private StepProgressDots() {
+    Row() {
+      if (this.solution !== null) {
+        ForEach(this.solution.steps, (_step: VerticalMathStep, index: number) => {
+          if (index < this.visibleStepCount - 1) {
+            // done
+            Circle()
+              .width(8)
+              .height(8)
+              .fill(VERTICAL_MATH_DONE_TEXT)
+          } else if (index === this.visibleStepCount - 1) {
+            // current
+            Circle()
+              .width(12)
+              .height(12)
+              .fill(VERTICAL_MATH_ACTIVE_BG)
+              .stroke(VERTICAL_MATH_ACTIVE_TEXT)
+              .strokeWidth(1.5)
+          } else {
+            // pending
+            Circle()
+              .width(8)
+              .height(8)
+              .fill(Color.Transparent)
+              .stroke($r('app.color.divider'))
+              .strokeWidth(1.5)
+          }
+        }, (_step: VerticalMathStep, index: number) => `step_dot_${index}`)
+      }
+    }
+    .width('100%')
+    .justifyContent(FlexAlign.Center)
+    .margin({ top: 12, bottom: 12 })
+  }
+
   build() {
     Column() {
       // Header
@@ -323,10 +363,9 @@ export struct VerticalMathCard {
         this.InputForm()
       }
 
-      // Controls (always visible when solution exists)
+      // Controls (always visible when solution exists) — MOVED to bottom; see below.
       if (this.solution !== null) {
-        this.Controls()
-        // Board + narrator
+        // Board + narrator + step dots
         if (this.isCompact()) {
           // Stacked layout (mobile)
           Column() {
@@ -341,9 +380,11 @@ export struct VerticalMathCard {
               visibleStepCount: this.visibleStepCount,
               compact: true
             })
+            .layoutWeight(1)
+            this.StepProgressDots()
           }
           .layoutWeight(1)
-          .padding({ left: 12, right: 12, bottom: 12 })
+          .padding({ left: 12, right: 12, top: 12, bottom: 8 })
         } else {
           // Narrator header above full-width board (tablet / largeSize)
           Column() {
@@ -353,19 +394,19 @@ export struct VerticalMathCard {
               operationLabel: `第 ${this.visibleStepCount} / ${this.solution.steps.length} 步`
             })
             .margin({ bottom: 10 })
-            Row() {
-              VerticalMathBoard({
-                solution: this.solution,
-                visibleStepCount: this.visibleStepCount,
-                compact: false
-              })
-              .layoutWeight(1)
-            }
+            VerticalMathBoard({
+              solution: this.solution,
+              visibleStepCount: this.visibleStepCount,
+              compact: false
+            })
             .layoutWeight(1)
+            this.StepProgressDots()
           }
           .layoutWeight(1)
           .padding(12)
         }
+        // Controls now sit below the main content (see spec §3.2.4 rationale).
+        this.Controls()
       }
     }
     .width('100%')

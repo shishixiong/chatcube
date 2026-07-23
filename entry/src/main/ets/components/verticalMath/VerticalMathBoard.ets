@@ -149,6 +149,7 @@ export struct VerticalMathBoard {
       }, (_row: VerticalMathBoardRow, rowIndex: number) => `${this.visibleStepCount}_${rowIndex}`)
     }
     .padding(this.compact ? 14 : 20)
+    .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .height('100%')
