@@ -48,9 +48,9 @@ Column() {
 
 | 索引 vs `visibleStepCount` | 状态 | 样式 |
 |---|---|---|
-| `index >= visibleStepCount` | pending | 直径 8vp，1.5vp 边框（`#cdd2e6`），透明填充 |
-| `index === visibleStepCount - 1` | current | 直径 12vp，实心填充 `themeActive` (`#ffe66d`)，描边 `themeActiveText` (`#3a2d0c`) |
-| `index < visibleStepCount - 1` | done | 直径 8vp，实心填充 `themeDone` (`#15803d`) |
+| `index >= visibleStepCount` | pending | 直径 8vp，1.5vp 边框 `$r('app.color.divider')`，透明填充 |
+| `index === visibleStepCount - 1` | current | 直径 12vp，实心填充 `VERTICAL_MATH_ACTIVE_BG`，描边 `VERTICAL_MATH_ACTIVE_TEXT` |
+| `index < visibleStepCount - 1` | done | 直径 8vp，实心填充 `VERTICAL_MATH_DONE_TEXT` |
 
 Row 容器：8vp 间距水平居中，外加 `margin({ top: 12, bottom: 12 })`。
 
