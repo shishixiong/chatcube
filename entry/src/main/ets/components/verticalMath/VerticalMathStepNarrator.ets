@@ -50,6 +50,11 @@ export struct VerticalMathStepNarrator {
         .fontColor('#21153f')
         .lineHeight(22)
         .width('100%')
+        // .id() changes per step force ArkUI V2 to treat each render as a
+        // fresh component instance, so the .transition() below actually
+        // fires when visibleStepCount changes (insert/delete, not attribute
+        // mutation). Without this, the Text content would swap instantly.
+        .id(`narrator_step_${this.visibleStepCount}`)
         .transition(
           TransitionEffect.OPACITY
             .combine(TransitionEffect.move(TransitionEdge.START))
