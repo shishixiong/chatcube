@@ -464,7 +464,6 @@ export struct VerticalMathCard {
       }
     }
     .width('100%')
-    .height('100%')
     .backgroundColor(this.largeSize ? Color.Transparent : this.palette.shell)
   }
 }
