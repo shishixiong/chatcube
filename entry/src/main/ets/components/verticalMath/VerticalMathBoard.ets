@@ -247,7 +247,7 @@ export struct VerticalMathBoard {
   }
 
   build() {
-    Stack({ alignContent: Alignment.Center }) {
+    Stack() {
       this.PlaceValueLaneOverlay()
       this.BoardRows()
       this.StepRelationOverlays()
