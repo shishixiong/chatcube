@@ -1,15 +1,12 @@
 // components/verticalMath/VerticalMathBoardRow.ets
 import {
-  VERTICAL_MATH_BOARD_TEXT,
-  VERTICAL_MATH_ACTIVE_BG,
-  VERTICAL_MATH_ACTIVE_TEXT,
-  VERTICAL_MATH_DONE_TEXT,
-  VERTICAL_MATH_DONE_BG,
-  VERTICAL_MATH_CARRY_TEXT
+  VerticalMathPalette,
+  resolveVerticalMathPalette
 } from '../../utils/VerticalMathColors'
 import {
   VerticalMathBoardRow as RowModel,
-  VerticalMathHighlight
+  VerticalMathHighlight,
+  VerticalMathOverlay
 } from '../../utils/VerticalMathSolver'
 
 @ComponentV2
@@ -17,8 +14,14 @@ export struct VerticalMathBoardRowView {
   @Param row: RowModel = new RowModel()
   @Param rowIndex: number = 0
   @Param highlights: VerticalMathHighlight[] = []
+  @Param overlays: VerticalMathOverlay[] = []
   @Param cellSize: number = 36
   @Param columnCount: number = 1
+  @Param isDarkMode: boolean = false
+
+  private get palette(): VerticalMathPalette {
+    return resolveVerticalMathPalette(this.isDarkMode)
+  }
 
   private getHighlightKind(columnIndex: number): string {
     for (let index: number = 0; index < this.highlights.length; index++) {
@@ -29,29 +32,39 @@ export struct VerticalMathBoardRowView {
     return ''
   }
 
-  private getCellBackgroundColor(columnIndex: number): string {
+  private isInPartialBand(columnIndex: number): boolean {
+    for (let index = 0; index < this.overlays.length; index++) {
+      const overlay: VerticalMathOverlay = this.overlays[index]
+      if (overlay.kind === 'partial_band' && overlay.rowIndex === this.rowIndex &&
+        columnIndex >= overlay.startColumn && columnIndex <= overlay.endColumn) {
+        return true
+      }
+    }
+    return false
+  }
+
+  private isActiveCell(columnIndex: number): boolean {
     const kind: string = this.getHighlightKind(columnIndex)
-    if (kind === 'active' || kind === 'quotient') {
-      return VERTICAL_MATH_ACTIVE_BG
-    }
-    if (kind === 'done') {
-      return VERTICAL_MATH_DONE_BG
-    }
+    return kind === 'active' || kind === 'quotient'
+  }
+
+  private getCellBackgroundColor(columnIndex: number): string {
+    if (this.isInPartialBand(columnIndex)) return this.palette.focus
+    const kind: string = this.getHighlightKind(columnIndex)
+    if (kind === 'active' || kind === 'quotient') return this.palette.focus
+    if (kind === 'done') return this.palette.successBackground
     return 'transparent'
   }
 
   private getCellTextColor(columnIndex: number): string {
     const kind: string = this.getHighlightKind(columnIndex)
-    if (kind === 'active' || kind === 'quotient') {
-      return VERTICAL_MATH_ACTIVE_TEXT
+    if (kind === 'active' || kind === 'quotient' || this.isInPartialBand(columnIndex)) {
+      return this.palette.focusText
     }
-    if (kind === 'done') {
-      return VERTICAL_MATH_DONE_TEXT
-    }
-    if (kind === 'carry') {
-      return VERTICAL_MATH_CARRY_TEXT
-    }
-    return VERTICAL_MATH_BOARD_TEXT
+    if (kind === 'done') return this.palette.success
+    if (kind === 'carry') return this.palette.carry
+    if (kind === 'borrow') return this.palette.borrow
+    return this.palette.ink
   }
 
   @Builder
@@ -73,6 +86,11 @@ export struct VerticalMathBoardRowView {
     .height(this.cellSize)
     .backgroundColor(this.getCellBackgroundColor(colIndex))
     .borderRadius(8)
+    .shadow({
+      radius: this.isActiveCell(colIndex) ? 3 : 0,
+      color: this.isActiveCell(colIndex) ? '#22000000' : Color.Transparent,
+      offsetY: this.isActiveCell(colIndex) ? 2 : 0
+    })
   }
 
   build() {
@@ -81,7 +99,7 @@ export struct VerticalMathBoardRowView {
         Text(this.row.operator)
           .fontSize(this.cellSize * 0.62)
           .fontWeight(FontWeight.Bold)
-          .fontColor(VERTICAL_MATH_BOARD_TEXT)
+          .fontColor(this.palette.ink)
           .width(this.cellSize)
           .height(this.cellSize)
           .textAlign(TextAlign.Center)

@@ -423,7 +423,9 @@ export struct VerticalMathCard {
             VerticalMathBoard({
               solution: this.solution,
               visibleStepCount: this.visibleStepCount,
-              compact: true
+              compact: true,
+              isDarkMode: this.isDarkMode,
+              reduceMotion: this.reduceMotion
             })
             .layoutWeight(1)
             this.StepProgressSegments()
@@ -443,7 +445,9 @@ export struct VerticalMathCard {
             VerticalMathBoard({
               solution: this.solution,
               visibleStepCount: this.visibleStepCount,
-              compact: false
+              compact: false,
+              isDarkMode: this.isDarkMode,
+              reduceMotion: this.reduceMotion
             })
             .layoutWeight(1)
             this.StepProgressSegments()

@@ -1,15 +1,14 @@
 // components/verticalMath/VerticalMathBoard.ets
 import {
-  VERTICAL_MATH_ACTIVE_BG,
-  VERTICAL_MATH_BOARD_LINE,
-  VERTICAL_MATH_CARRY_TEXT,
-  VERTICAL_MATH_BORROW_TEXT,
-  VERTICAL_MATH_NARRATOR_BG
+  VerticalMathPalette,
+  resolveVerticalMathPalette
 } from '../../utils/VerticalMathColors'
 import {
   VerticalMathSolution,
   VerticalMathBoardRow,
-  VerticalMathHighlight
+  VerticalMathHighlight,
+  VerticalMathOverlay,
+  VerticalMathStep
 } from '../../utils/VerticalMathSolver'
 import { VerticalMathBoardRowView } from './VerticalMathBoardRow'
 
@@ -18,6 +17,22 @@ export struct VerticalMathBoard {
   @Param solution: VerticalMathSolution = new VerticalMathSolution()
   @Param visibleStepCount: number = 0
   @Param compact: boolean = false
+  @Param isDarkMode: boolean = false
+  @Param reduceMotion: boolean = false
+
+  private get palette(): VerticalMathPalette {
+    return resolveVerticalMathPalette(this.isDarkMode)
+  }
+
+  private getCurrentStep(): VerticalMathStep | null {
+    if (this.visibleStepCount <= 0 || this.solution.steps.length === 0) return null
+    const index: number = Math.min(this.visibleStepCount - 1, this.solution.steps.length - 1)
+    return this.solution.steps[index]
+  }
+
+  private getCurrentOverlays(): VerticalMathOverlay[] {
+    return this.getCurrentStep()?.overlays ?? []
+  }
 
   private getCurrentRows(): VerticalMathBoardRow[] {
     if (this.solution.steps.length === 0 || this.visibleStepCount === 0) {
@@ -35,16 +50,14 @@ export struct VerticalMathBoard {
     return this.solution.steps[index].highlights
   }
 
-  private getActiveOperandColumn(): number {
-    const active: VerticalMathHighlight | undefined = this.getCurrentHighlights().find(
-      (highlight: VerticalMathHighlight): boolean =>
-        highlight.rowIndex === 0 && highlight.kind === 'active'
-    )
-    return active === undefined ? -1 : active.columnIndex
-  }
-
-  private isActiveTopMark(column: number): boolean {
-    return column === this.getActiveOperandColumn()
+  private getActiveColumn(): number {
+    const highlights: VerticalMathHighlight[] = this.getCurrentHighlights()
+    for (let index = 0; index < highlights.length; index++) {
+      if (highlights[index].rowIndex === 0 && highlights[index].kind === 'active') {
+        return highlights[index].columnIndex
+      }
+    }
+    return -1
   }
 
   private getRowHighlights(rowIndex: number): VerticalMathHighlight[] {
@@ -61,7 +74,24 @@ export struct VerticalMathBoard {
   }
 
   private getCellSize(): number {
-    return this.compact ? 32 : 40
+    return this.compact ? 36 : 44
+  }
+
+  private getBoardWidth(): number {
+    return this.getCellSize() * (this.solution.columnCount + 1)
+  }
+
+  private getCellX(column: number): number {
+    return this.getCellSize() * (column + 1)
+  }
+
+  private getBridgeStartX(overlay: VerticalMathOverlay): number {
+    return Math.min(this.getCellX(overlay.sourceColumn), this.getCellX(overlay.targetColumn)) +
+      this.getCellSize() / 2
+  }
+
+  private getBridgeWidth(overlay: VerticalMathOverlay): number {
+    return Math.abs(overlay.sourceColumn - overlay.targetColumn) * this.getCellSize()
   }
 
   private getTopMarkOffset(column: number): number {
@@ -69,7 +99,7 @@ export struct VerticalMathBoard {
   }
 
   private getTopMarkColor(mark: string): string {
-    return mark === '•' ? VERTICAL_MATH_BORROW_TEXT : VERTICAL_MATH_CARRY_TEXT
+    return mark === '•' ? this.palette.borrow : this.palette.carry
   }
 
   private getCarryColumns(row: VerticalMathBoardRow): number[] {
@@ -99,7 +129,7 @@ export struct VerticalMathBoard {
         .width(this.getCellSize())
         .height(this.getCellSize())
         .borderRadius(this.getCellSize() / 2)
-        .backgroundColor(isActive ? VERTICAL_MATH_ACTIVE_BG : Color.Transparent)
+        .backgroundColor(isActive ? this.palette.focus : Color.Transparent)
         .textAlign(TextAlign.Center)
     }
     .width(this.getCellSize() * (this.solution.columnCount + 1))
@@ -107,24 +137,29 @@ export struct VerticalMathBoard {
     .justifyContent(FlexAlign.Start)
   }
 
+  private resolveTopMarkColumn(row: VerticalMathBoardRow): number {
+    return row.topMarkColumn === undefined ? 0 : row.topMarkColumn
+  }
+
   @Builder
   private TopMark(row: VerticalMathBoardRow) {
     if (this.hasPersistentTopMarks(row)) {
       Stack() {
         ForEach(this.getCarryColumns(row), (column: number) => {
-          this.TopMarkAt('1', column, this.isActiveTopMark(column))
+          this.TopMarkAt('1', column, column === this.getActiveColumn())
         }, (column: number) => `carry_${column}`)
         ForEach(this.getBorrowColumns(row), (column: number) => {
-          this.TopMarkAt('•', column, this.isActiveTopMark(column))
+          this.TopMarkAt('•', column, column === this.getActiveColumn())
         }, (column: number) => `borrow_${column}`)
       }
     } else if (row.topMark !== undefined && row.topMark !== '') {
-      this.TopMarkAt(row.topMark, row.topMarkColumn === undefined ? 0 : row.topMarkColumn,
-        this.isActiveTopMark(row.topMarkColumn === undefined ? 0 : row.topMarkColumn))
+      this.TopMarkAt(row.topMark, this.resolveTopMarkColumn(row),
+        this.resolveTopMarkColumn(row) === this.getActiveColumn())
     }
   }
 
-  build() {
+  @Builder
+  private BoardRows() {
     Column() {
       ForEach(this.getCurrentRows(), (row: VerticalMathBoardRow, rowIndex: number) => {
         Column() {
@@ -133,28 +168,89 @@ export struct VerticalMathBoard {
             row: row,
             rowIndex: rowIndex,
             highlights: this.getRowHighlights(rowIndex),
+            overlays: this.getCurrentOverlays(),
             cellSize: this.getCellSize(),
-            columnCount: this.solution.columnCount
+            columnCount: this.solution.columnCount,
+            isDarkMode: this.isDarkMode
           })
           if (this.shouldShowLine(rowIndex)) {
             Row()
               .width(this.getCellSize() * this.solution.columnCount)
-              .height(4)
+              .height(3)
               .margin({ left: this.getCellSize(), top: 4, bottom: 4 })
-              .backgroundColor(VERTICAL_MATH_BOARD_LINE)
+              .backgroundColor(this.palette.ink)
+              .opacity(0.55)
               .borderRadius(2)
           }
         }
         .alignItems(HorizontalAlign.Start)
       }, (_row: VerticalMathBoardRow, rowIndex: number) => `${this.visibleStepCount}_${rowIndex}`)
     }
-    .padding(this.compact ? 14 : 20)
-    .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Start)
-    .width('100%')
+  }
+
+  @Builder
+  private PlaceValueLaneOverlay() {
+    if (this.getActiveColumn() >= 0) {
+      Row()
+        .width(this.getCellSize() - 6)
+        .height('92%')
+        .position({ x: this.getCellX(this.getActiveColumn()) + 3, y: 0 })
+        .backgroundColor(this.palette.focus)
+        .opacity(0.28)
+        .border({ width: 2, color: this.palette.focus })
+        .borderRadius(14)
+        .animation({
+          duration: this.reduceMotion ? 0 : 180,
+          curve: Curve.EaseInOut
+        })
+    }
+  }
+
+  @Builder
+  private RelationOverlay(overlay: VerticalMathOverlay) {
+    if (overlay.kind === 'carry_path') {
+      Row()
+        .width(this.getBridgeWidth(overlay))
+        .height(2)
+        .position({ x: this.getBridgeStartX(overlay), y: 8 })
+        .border({ width: { top: 2 }, color: this.palette.carry, style: BorderStyle.Dashed })
+        .animation({ duration: this.reduceMotion ? 0 : 220, curve: Curve.EaseOut })
+    } else if (overlay.kind === 'borrow_bridge') {
+      Row()
+        .width(this.getBridgeWidth(overlay))
+        .height(2)
+        .position({ x: this.getBridgeStartX(overlay), y: 8 })
+        .border({ width: { top: 2 }, color: this.palette.borrow, style: BorderStyle.Dashed })
+    } else if (overlay.kind === 'division_lane') {
+      Row()
+        .width((overlay.endColumn - overlay.startColumn + 1) * this.getCellSize())
+        .height(4)
+        .position({ x: this.getCellX(overlay.startColumn), y: 12 })
+        .backgroundColor(this.palette.focus)
+        .borderRadius(2)
+    }
+  }
+
+  @Builder
+  private StepRelationOverlays() {
+    ForEach(this.getCurrentOverlays(), (overlay: VerticalMathOverlay, index: number) => {
+      this.RelationOverlay(overlay)
+    }, (overlay: VerticalMathOverlay, index: number) =>
+      `${overlay.kind}_${overlay.sourceColumn}_${overlay.targetColumn}_${index}`)
+  }
+
+  build() {
+    Stack({ alignContent: Alignment.Center }) {
+      this.PlaceValueLaneOverlay()
+      this.BoardRows()
+      this.StepRelationOverlays()
+    }
+    .width(this.getBoardWidth())
     .height('100%')
-    .backgroundColor(VERTICAL_MATH_NARRATOR_BG)
-    .border({ width: 1, color: $r('app.color.divider') })
+    .padding(this.compact ? 14 : 20)
+    .backgroundColor(this.palette.paper)
+    .border({ width: 1, color: this.palette.divider })
     .borderRadius(14)
   }
 }
