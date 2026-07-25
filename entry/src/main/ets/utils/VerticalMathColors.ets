@@ -12,6 +12,12 @@ export interface VerticalMathPalette {
   borrow: string
   divider: string
   secondaryText: string
+  accentBackground: string
+  accentText: string
+  disabledBackground: string
+  disabledText: string
+  errorBackground: string
+  errorText: string
 }
 
 const LIGHT_VERTICAL_MATH_PALETTE: VerticalMathPalette = {
@@ -25,7 +31,13 @@ const LIGHT_VERTICAL_MATH_PALETTE: VerticalMathPalette = {
   carry: '#FF6B57',
   borrow: '#7C5BB8',
   divider: '#DED8CC',
-  secondaryText: '#6F675C'
+  secondaryText: '#6F675C',
+  accentBackground: '#EEE8FF',
+  accentText: '#30205F',
+  disabledBackground: '#C8C2B5',
+  disabledText: '#5E574A',
+  errorBackground: '#FFE3DC',
+  errorText: '#89564B'
 }
 
 const DARK_VERTICAL_MATH_PALETTE: VerticalMathPalette = {
@@ -39,7 +51,13 @@ const DARK_VERTICAL_MATH_PALETTE: VerticalMathPalette = {
   carry: '#FF7C6D',
   borrow: '#A88BD8',
   divider: '#5B554C',
-  secondaryText: '#C4BAAB'
+  secondaryText: '#C4BAAB',
+  accentBackground: '#3A2D5C',
+  accentText: '#D6CCF2',
+  disabledBackground: '#4A443C',
+  disabledText: '#8C8474',
+  errorBackground: '#5A2D2D',
+  errorText: '#F2B8A8'
 }
 
 export function resolveVerticalMathPalette(isDarkMode: boolean): VerticalMathPalette {
