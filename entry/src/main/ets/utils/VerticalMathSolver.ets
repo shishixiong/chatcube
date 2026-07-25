@@ -272,9 +272,13 @@ export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
       overlays.push(carryOverlay)
     }
 
-    const narration: string = carryOut > 0
-      ? `${dA} ＋ ${dB} ＝ ${sum}，${placeLabel}写 ${resultDigit}，把 ${carryOut} 送到${getPlaceValueLabel(columnCount, col - 1)}。`
-      : `${dA} ＋ ${dB} ＝ ${sum}，${placeLabel}写 ${resultDigit}，没有新进位。`
+    const formula: string = carryIn > 0
+      ? `${dA} ＋ ${dB} ＋ ${carryIn} ＝ ${sum}`
+      : `${dA} ＋ ${dB} ＝ ${sum}`
+    const tail: string = carryOut > 0
+      ? `${placeLabel}写 ${resultDigit}，把 ${carryOut} 送到${getPlaceValueLabel(columnCount, col - 1)}。`
+      : `${placeLabel}写 ${resultDigit}，没有新进位。`
+    const narration: string = `${formula}，${tail}`
 
     const step: VerticalMathStep = new VerticalMathStep()
     step.title = `${placeLabel}相加`
