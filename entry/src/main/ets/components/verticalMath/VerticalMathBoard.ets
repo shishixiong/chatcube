@@ -222,6 +222,7 @@ export struct VerticalMathBoard {
         .height(2)
         .position({ x: this.getBridgeStartX(overlay), y: 8 })
         .border({ width: { top: 2 }, color: this.palette.borrow, style: BorderStyle.Dashed })
+        .animation({ duration: this.reduceMotion ? 0 : 220, curve: Curve.EaseOut })
     } else if (overlay.kind === 'division_lane') {
       Row()
         .width((overlay.endColumn - overlay.startColumn + 1) * this.getCellSize())
@@ -229,6 +230,7 @@ export struct VerticalMathBoard {
         .position({ x: this.getCellX(overlay.startColumn), y: 12 })
         .backgroundColor(this.palette.focus)
         .borderRadius(2)
+        .animation({ duration: this.reduceMotion ? 0 : 220, curve: Curve.EaseOut })
     }
   }
 

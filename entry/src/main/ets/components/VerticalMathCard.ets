@@ -272,24 +272,31 @@ export struct VerticalMathCard {
       Row() {
         ForEach(OPERATION_BUTTONS, (item: OperationButtonDescriptor) => {
           Button(item.label)
-            .height(44)
+            .height(48)
             .padding({ left: 12, right: 12 })
             .margin({ right: 6 })
             .backgroundColor(this.selectedOperation === item.op ? this.palette.focus : this.palette.accentBackground)
             .fontColor(this.selectedOperation === item.op ? this.palette.focusText : this.palette.accentText)
             .onClick(() => { this.selectedOperation = item.op })
+            .accessibilityText(
+              item.op === VerticalMathOperation.ADD ? '选择加法' :
+                item.op === VerticalMathOperation.SUBTRACT ? '选择减法' :
+                item.op === VerticalMathOperation.MULTIPLY ? '选择乘法' :
+                '选择除法'
+            )
         }, (item: OperationButtonDescriptor) => item.label)
       }
       .margin({ top: 12 })
 
       Button('开始计算')
-        .height(44)
+        .height(48)
         .width('100%')
         .margin({ top: 12 })
         .backgroundColor(this.palette.focus)
         .fontColor(this.palette.focusText)
         .enabled(this.canStart())
         .onClick(() => this.handleStart())
+        .accessibilityText('开始计算')
     }
     .padding(12)
     .backgroundColor(this.largeSize ? Color.Transparent : this.palette.paper)
@@ -320,7 +327,7 @@ export struct VerticalMathCard {
           .fontColor(this.hasAnswered ? this.palette.disabledText : this.palette.focusText)
           .enabled(this.solution !== null && !this.hasAnswered)
           .onClick(() => this.handleNext())
-          .accessibilityText(this.hasAnswered ? '结果已告诉小星老师' : '进入下一步')
+          .accessibilityText(this.hasAnswered ? '结果已告诉小星老师' : this.getPrimaryActionLabel())
       }
       .width('100%')
 
