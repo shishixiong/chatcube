@@ -86,6 +86,22 @@ export struct VerticalMathBoard {
     return this.getCellSize() * (column + 1)
   }
 
+  private getLaneHeight(): number {
+    const rows: VerticalMathBoardRow[] = this.getCurrentRows()
+    if (rows.length === 0) return 0
+    let height: number = 0
+    for (let index = 0; index < rows.length; index++) {
+      const row: VerticalMathBoardRow = rows[index]
+      const hasTopMark: boolean = this.hasPersistentTopMarks(row) ||
+        (row.topMark !== undefined && row.topMark !== '')
+      height += this.getCellSize() * (hasTopMark ? 2 : 1)
+      if (this.shouldShowLine(index)) {
+        height += 11
+      }
+    }
+    return height
+  }
+
   private getBridgeStartX(overlay: VerticalMathOverlay): number {
     return Math.min(this.getCellX(overlay.sourceColumn), this.getCellX(overlay.targetColumn)) +
       this.getCellSize() / 2
@@ -195,7 +211,7 @@ export struct VerticalMathBoard {
     if (this.getActiveColumn() >= 0) {
       Row()
         .width(this.getCellSize() - 6)
-        .height('92%')
+        .height(this.getLaneHeight())
         .position({
           x: this.getCellX(this.getActiveColumn()) + 3 + (this.compact ? 14 : 20),
           y: 0
