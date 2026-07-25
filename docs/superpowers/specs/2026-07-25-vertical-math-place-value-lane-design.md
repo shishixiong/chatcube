@@ -180,6 +180,7 @@
 - 直接借位和级联借位都必须显示。
 - 紫色借位桥连接提供数字的高位与当前目标位。
 - 本位结果、借位来源和被修改的高位在同一步出现。
+- 借位讲解必须以当前被减数位为主语，例如“3 不够减 8，从十位借 1”；不得沿用当前实现中 `${dB} 不够减` 的错误主语。
 - 历史借位标记可保留，但只有本步借位桥使用强强调。
 
 验收例：直接借位题与 `503 - 278`。
@@ -249,6 +250,7 @@ export class VerticalMathStep {
 - 将 `StepProgressDots` 替换为分段进度条。
 - 主按钮读取下一步的 `actionLabel`。
 - `handleNext` 只推进步骤；当最终答案已展示时，下一次点击才提交。
+- `aboutToAppear` 在 `isAnswered === true` 时同步设置 `hasAnswered = true`，确保历史回放永远不会重新提交。
 - `hasAnswered` 继续作为防重复提交守卫。
 - 回放态的“重新演示”只改变 `visibleStepCount`，不清除 `hasAnswered`。
 
@@ -277,7 +279,7 @@ export class VerticalMathStep {
 
 ### 8.6 `VerticalMathColors.ets`
 
-将固定颜色收敛为第 4 节的语义令牌，并支持浅色/深色值。错误色继续读取项目资源，不复用进位珊瑚色。
+将固定颜色收敛为第 4 节的语义令牌。文件新增 `VerticalMathPalette` 命名接口和 `resolveVerticalMathPalette(isDarkMode)` 纯函数；`VerticalMathCard` 读取 `AppUiState.isDarkMode`，把布尔值传给 Narrator、Board 和 BoardRow，由子组件通过同一 resolver 取得颜色。这样浅色/深色切换只有一个来源，不在各 Builder 内散落条件分支。错误色继续读取项目资源，不复用进位珊瑚色。
 
 ## 9. 动效与可访问性
 
@@ -304,7 +306,7 @@ export class VerticalMathStep {
 
 | 当前表达 | 新表达 |
 |---|---|
-| `A` / `B` | `第一个数` / `第二个数` |
+| `A` / `B` | 输入框上方显示 `第一个数` / `第二个数`，框内只放数字示例 |
 | `请输入 0–999 之间的整数` | `请输入 0 到 999 的数字` |
 | `乘法的第二个数请输入 0–9` | `第二个数只能填一位数字` |
 | `除数请输入 1–9` | `除数请填 1 到 9` |
