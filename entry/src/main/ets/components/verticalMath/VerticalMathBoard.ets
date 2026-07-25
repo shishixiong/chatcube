@@ -78,7 +78,8 @@ export struct VerticalMathBoard {
   }
 
   private getBoardWidth(): number {
-    return this.getCellSize() * (this.solution.columnCount + 1)
+    const padding: number = this.compact ? 14 : 20
+    return this.getCellSize() * (this.solution.columnCount + 1) + 2 * padding
   }
 
   private getCellX(column: number): number {
@@ -195,7 +196,10 @@ export struct VerticalMathBoard {
       Row()
         .width(this.getCellSize() - 6)
         .height('92%')
-        .position({ x: this.getCellX(this.getActiveColumn()) + 3, y: 0 })
+        .position({
+          x: this.getCellX(this.getActiveColumn()) + 3 + (this.compact ? 14 : 20),
+          y: 0
+        })
         .backgroundColor(this.palette.focus)
         .opacity(0.28)
         .border({ width: 2, color: this.palette.focus })
@@ -249,7 +253,6 @@ export struct VerticalMathBoard {
       this.StepRelationOverlays()
     }
     .width(this.getBoardWidth())
-    .height('100%')
     .padding(this.compact ? 14 : 20)
     .backgroundColor(this.palette.paper)
     .border({ width: 1, color: this.palette.divider })

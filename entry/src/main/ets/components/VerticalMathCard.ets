@@ -434,7 +434,6 @@ export struct VerticalMathCard {
               isDarkMode: this.isDarkMode,
               reduceMotion: this.reduceMotion
             })
-            .layoutWeight(1)
             this.StepProgressSegments()
           }
           .layoutWeight(1)
