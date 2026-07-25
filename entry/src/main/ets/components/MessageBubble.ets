@@ -18,6 +18,7 @@ import { EnglishQuizCard } from './EnglishQuizCard'
 import { HuarongdaoCard } from './HuarongdaoCard'
 import { HandwritingCard, HandwritingResult } from './HandwritingCard'
 import { CategorizationCard, CategorizationResult } from './CategorizationCard'
+import { MazeCard } from './MazeCard'
 import { VerticalMathCard } from './VerticalMathCard'
 import { HtmlPreviewCard } from './HtmlPreviewCard'
 import { MermaidPreviewCard } from './MermaidPreviewCard'
@@ -38,7 +39,7 @@ import {
   getMarkdownTitleSizes
 } from '../utils/MarkdownTypographyUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isEnglishQuizFunctionName, isHuarongdaoFunctionName, isHandwritingPracticeFunctionName, isCategorizationFunctionName, isVerticalMathFunctionName, isMusicGenerationFunctionName } from '../utils/SearchToolIdentityUtils'
+import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isEnglishQuizFunctionName, isHuarongdaoFunctionName, isHandwritingPracticeFunctionName, isCategorizationFunctionName, isVerticalMathFunctionName, isMusicGenerationFunctionName, isMazeFunctionName } from '../utils/SearchToolIdentityUtils'
 import { MessagePart, MessagePartKind, ToolPartStatus } from '../models/MessageParts'
 import {
   ensureMessageParts,
@@ -254,6 +255,7 @@ export struct MessageBubble {
   @Event onOpenNumberPuzzleSheet: (toolCall: ToolCall) => void = () => {}
   // 写字工具大屏模式入口 (handwriting 大屏 sheet)
   @Event onOpenHandwritingSheet: (toolCall: ToolCall) => void = () => {}
+  @Event onOpenMazeSheet: (toolCall: ToolCall) => void = () => {}
 
   // 支持的翻译语言列表
   private translateLanguages: TranslateLanguage[] = [
@@ -2136,11 +2138,11 @@ export struct MessageBubble {
                   }
                 }, (toolCall: ToolCall, index: number) => 'handwriting_' + toolCall.id + '_' + index.toString())
               }
-              // categorization 待答时显示独立互动卡片;提交后收缩到 timeline step 内。
+              // maze 待答时显示独立互动卡片;提交后收缩到 timeline step 内。
               if (this.message.hasToolCalls()) {
                 ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
-                  if (this.shouldRenderCategorizationInteractionCard(toolCall, index)) {
-                    CategorizationCard({
+                  if (this.shouldRenderMazeInteractionCard(toolCall, index)) {
+                    MazeCard({
                       toolCall: toolCall,
                       isAnswered: false,
                       answeredPayload: '',
@@ -2151,9 +2153,27 @@ export struct MessageBubble {
                     })
                       .margin({ bottom: 6 })
                   }
+                }, (toolCall: ToolCall, index: number) => 'maze_' + toolCall.id + '_' + index.toString())
+              }
+              // categorization 待答时显示独立互动卡片;提交后收缩到 timeline step 内。
+              if (this.message.hasToolCalls()) {
+                ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
+                  if (this.shouldRenderCategorizationInteractionCard(toolCall, index)) {
+                    CategorizationCard({
+                      toolCall: toolCall,
+                      isAnswered: false,
+                      answeredPayload: toolCall.approvalReason,
+                      largeSize: false,
+                      onAnswer: (toolCallId: string, answerJson: string): void => {
+                        this.onAskUserAnswer(toolCallId, answerJson)
+                      }
+                    })
+                      .margin({ bottom: 6 })
+                  }
                 }, (toolCall: ToolCall, index: number) => 'categorization_' + toolCall.id + '_' + index.toString())
               }
             }
+
 
             // ========== 附件区域（AI 生成的图片） ==========
             if (this.hasRenderableMessageAttachments()) {
@@ -2583,8 +2603,11 @@ export struct MessageBubble {
       // 分类小管家: 已完成的可以展开查看分类结果
       return this.isSuccessfulToolStep(part)
     }
+    if (isMazeFunctionName(part.toolName)) {
+      return this.isSuccessfulToolStep(part)
+    }
     if (isVerticalMathFunctionName(part.toolName)) {
-      // 竖式计算: 已完成的可以展开查看答题结果
+      // 竖式计算: 已完成的可以展开查看答题详情
       return this.isSuccessfulToolStep(part)
     }
     if (isImageGenerationFunctionName(part.toolName)) {
@@ -2638,7 +2661,7 @@ export struct MessageBubble {
       return true
     }
     // 默认行为: 图片生成/数学游戏/英语看图说话 成功后默认展开查看结果
-    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName)) {
+    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
     return false
@@ -2646,9 +2669,9 @@ export struct MessageBubble {
 
   private toggleToolStep(part: MessagePart): void {
     const key = this.getToolStepKey(part)
-    // 默认展开的工具类型: 图片生成、数学游戏、英语看图说话、数字华容道
+    // 默认展开的工具类型: 图片生成、数学游戏、英语看图说话、数字华容道、迷宫等
     const isDefaultExpanded = this.isSuccessfulToolStep(part) &&
-      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName))
+      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName))
     const next: string[] = []
     let found = false
     let foundCollapsed = false
@@ -2750,6 +2773,13 @@ export struct MessageBubble {
 
   private shouldRenderCategorizationInteractionCard(toolCall: ToolCall, index: number): boolean {
     if (!isCategorizationFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
+      return false
+    }
+    return !this.isAskUserToolCallAnswered(toolCall, index)
+  }
+
+  private shouldRenderMazeInteractionCard(toolCall: ToolCall, index: number): boolean {
+    if (!isMazeFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
       return false
     }
     return !this.isAskUserToolCallAnswered(toolCall, index)
@@ -3116,6 +3146,10 @@ export struct MessageBubble {
     }
     // 分类小管家: 展开/折叠查看分类结果
     if (isCategorizationFunctionName(part.toolName)) {
+      this.toggleToolStep(part)
+      return
+    }
+    if (isMazeFunctionName(part.toolName)) {
       this.toggleToolStep(part)
       return
     }
@@ -3551,6 +3585,8 @@ export struct MessageBubble {
       this.HandwritingStepContent(step)
     } else if (isCategorizationFunctionName(step.toolName)) {
       this.CategorizationStepContent(step)
+    } else if (isMazeFunctionName(step.toolName)) {
+      this.MazeStepContent(step)
     } else if (isVerticalMathFunctionName(step.toolName)) {
       this.VerticalMathStepContent(step)
     } else if (isImageGenerationFunctionName(step.toolName) && this.isToolStepClickable(step)) {
@@ -4071,6 +4107,62 @@ export struct MessageBubble {
           onAnswer: (_toolCallId: string, _answerJson: string): void => {}
         })
         .margin({ top: 8 })
+      }
+    }
+    .width('100%')
+  }
+
+  // maze 工具步骤: 已完成的走迷宫, 在 timeline 中显示简化结果, 可展开查看详情
+  @Builder
+  MazeStepContent(step: MessagePart) {
+    Column() {
+      Row({ space: 6 }) {
+        if (step.toolStatus === 'succeeded') {
+          SymbolGlyph($r('sys.symbol.checkmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_success')])
+        } else if (step.toolStatus === 'failed' || step.toolStatus === 'denied') {
+          SymbolGlyph($r('sys.symbol.xmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_error')])
+        } else {
+          Column()
+            .width(8)
+            .height(8)
+            .borderRadius(4)
+            .backgroundColor(this.themePrimary)
+        }
+
+        Text(this.buildToolStepTitle(step))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+
+        if (this.isToolStepClickable(step)) {
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(12)
+            .fontColor([$r('app.color.text_tertiary')])
+            .rotate({ angle: this.isToolStepExpanded(step) ? 0 : -90 })
+            .animation({ duration: 200, curve: Curve.EaseOut })
+        }
+      }
+      .width('100%')
+      .onClick(() => {
+        if (this.isToolStepClickable(step)) {
+          this.handleToolStepClick(step)
+        }
+      })
+
+      if (this.isToolStepExpanded(step) && step.toolResult !== '') {
+        MazeCard({
+          toolCall: this.buildToolCallFromStep(step),
+          isAnswered: true,
+          answeredPayload: step.toolResult,
+          largeSize: false,
+          onAnswer: (_toolCallId: string, _answerJson: string): void => {}
+        })
+          .margin({ top: 8 })
       }
     }
     .width('100%')

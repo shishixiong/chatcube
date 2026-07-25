@@ -62,7 +62,11 @@ export class PreferenceKeys {
   static readonly NUMBER_PUZZLE_BEST_TIME_PREFIX: string = 'number_puzzle_best_time_'
   static readonly NUMBER_PUZZLE_BEST_MOVES_PREFIX: string = 'number_puzzle_best_moves_'
 
-  // 分类小管家最佳成绩 (按难度区分: categorization_best_time_1/2/3, categorization_best_perfect_1/2/3)
+  // 走迷宫最佳成绩 (按难度区分: maze_best_time_1/2/3, maze_best_moves_1/2/3, maze_best_stars_1/2/3)
+  static readonly MAZE_BEST_TIME_PREFIX: string = 'maze_best_time_'
+  static readonly MAZE_BEST_MOVES_PREFIX: string = 'maze_best_moves_'
+  static readonly MAZE_BEST_STARS_PREFIX: string = 'maze_best_stars_'
+
   // 速度王: 任意完成的最快用时; 全对王: correct===total 时的最快用时
   static readonly CATEGORIZATION_BEST_TIME_PREFIX: string = 'categorization_best_time_'
   static readonly CATEGORIZATION_BEST_PERFECT_PREFIX: string = 'categorization_best_perfect_'

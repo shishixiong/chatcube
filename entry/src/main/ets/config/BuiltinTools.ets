@@ -30,6 +30,7 @@ import {
   HANDWRITING_PRACTICE_TOOL_ID,
   CATEGORIZATION_TOOL_ID,
   VERTICAL_MATH_TOOL_ID,
+  MAZE_TOOL_ID,
   GRANT_STAR_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { i18n } from '@kit.LocalizationKit'
@@ -1762,6 +1763,78 @@ function createHuarongdaoToolConfig(): ToolConfig {
   )
 }
 
+
+// ===== maze 工具 =====
+// 走迷宫互动工具：让孩子在网格迷宫里点击相邻格子走出，锻炼方向感 + 路径规划 + 死胡同识别。
+// 交互由前端 MazeCard 组件处理，与 number_puzzle/categorization 模式类似。
+// 后端由 ToolExecutionService.handleMaze 拦截处理迷宫生成逻辑。
+
+interface MazeArgs {
+  difficulty: number
+}
+
+class MazeExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // maze 工具的交互由前端 MazeCard 组件处理。
+    // 后端由 ToolExecutionService.handleMaze 拦截处理迷宫生成逻辑。
+    // 如果工具被直接调用（没有前端交互），返回提示信息。
+    try {
+      const params = JSON.parse(_args) as MazeArgs
+      const difficulty = Math.max(1, Math.min(3, params.difficulty ?? 1))
+      // 简单预校验:返回提示让 AI 引导用户使用前端卡片
+      return JSON.stringify({
+        difficulty: difficulty,
+        grid_size: difficulty === 1 ? '4×4' : (difficulty === 2 ? '6×6' : '8×8'),
+        answered: false,
+        hint: '迷宫已生成,请小朋友在卡片里点击相邻格子走出。'
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`maze error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createMazeToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "difficulty": {
+        "type": "integer",
+        "description": "难度级别:1 = 简单 4×4(适合 5 岁,16 格,1-2 死胡同),2 = 进阶 6×6(适合 6-7 岁,36 格,3-4 死胡同),3 = 挑战 8×8(适合 7-8 岁,64 格,5-6 死胡同)。建议初次使用从 1 开始,根据 child_profile 中 spatial_reasoning 的 level 选择。",
+        "enum": [1, 2, 3]
+      }
+    },
+    "required": ["difficulty"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    MAZE_TOOL_ID,
+    'Present a maze (走迷宫) to the child as an interactive game. A grid maze is generated with paths and walls; the child taps adjacent cells to move a golden star from the start (top-left) to a purple-roofed house (bottom-right). Difficulty directly maps to grid size: 1=4×4 (easy, 16 cells), 2=6×6 (intermediate, 36 cells), 3=8×8 (challenging, 64 cells). Hidden stars in dead-ends can be collected for fun (not required for completion). Prefer difficulty 1-3 based on the child\'s spatial_reasoning level from child_profile. After completion or giving up, you receive result (moves, time, stars collected, completed). Then call child_profile update to record spatial_reasoning based on performance.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createMazeToolConfig(): ToolConfig {
+  return new ToolConfig(
+    MAZE_TOOL_ID,
+    '走迷宫',
+    '以互动卡片形式给小朋友出网格迷宫,孩子点击相邻格子走出迷宫,锻炼方向感 + 路径规划 + 死胡同识别。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    MAZE_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
 // ===== handwriting_practice 工具 =====
 // 学写字互动工具：教小朋友写英文字母、数字、基础汉字，通过 Canvas 自由书写，AI 评价。
 
@@ -2256,6 +2329,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(MAZE_TOOL_ID)) {
+    const mazeTool = new RegisteredTool(
+      MAZE_TOOL_ID,
+      createMazeToolConfig(),
+      createMazeToolDefinition(),
+      new MazeExecutor()
+    )
+    registry.registerTool(mazeTool)
+    registeredNow += 1
+  }
+
   if (!registry.isToolRegistered(HANDWRITING_PRACTICE_TOOL_ID)) {
     const handwritingTool = new RegisteredTool(
       HANDWRITING_PRACTICE_TOOL_ID,
@@ -2308,5 +2392,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, HUARONGDAO_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, GRANT_STAR_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, HUARONGDAO_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, GRANT_STAR_TOOL_ID]
 }

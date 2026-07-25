@@ -42,6 +42,7 @@ import { ScrollToBottomLoadingButton } from '../components/ScrollToBottomLoading
 import { SharePreviewSheet } from '../components/SharePreviewSheet'
 import { MessageMapSheet } from '../components/MessageMapSheet'
 import { NumberPuzzleCard, NumberPuzzleResult } from '../components/NumberPuzzleCard'
+import { MazeCard, MazeResult } from '../components/MazeCard'
 import { HandwritingCard, HandwritingResult } from '../components/HandwritingCard'
 import { ChatViewModel, TitleGenerationCallbacks } from '../viewmodels/ChatViewModel'
 import { ProviderViewModel } from '../viewmodels/ProviderViewModel'
@@ -299,12 +300,15 @@ export struct ChatPage {
   @Local showHandwritingSheet: boolean = false
   @Local handwritingSheetToolCall: ToolCall = new ToolCall()
   @Local handwritingAnswered: boolean = false
-  @Local toolExecutionApprovalSourceLabel: string = ''
+  @Local showMazeSheet: boolean = false
+  @Local mazeSheetToolCall: ToolCall = new ToolCall()
+  @Local mazeAnswered: boolean = false
   @Local toolExecutionApprovalName: string = ''
   @Local showStarSheet: boolean = false
   // 星星浮层触发信号: 每次 onStarEarnedTickChanged 自增, StarBurstOverlay 通过 @Monitor 监听
   @Local starBurstTrigger: number = 0
   @Local toolExecutionApprovalSourceId: string = ''
+  @Local toolExecutionApprovalSourceLabel: string = ''
   @Local toolExecutionApprovalArgumentSummary: string = ''
   @Local toolExecutionApprovalArgumentEntries: ToolPreviewEntry[] = []
   @Local toolExecutionApprovalArgumentsPreview: string = '{}'
@@ -2456,6 +2460,11 @@ export struct ChatPage {
             this.handwritingAnswered = false
             this.showHandwritingSheet = true
           },
+          onOpenMazeSheet: (toolCall: ToolCall): void => {
+            this.mazeSheetToolCall = toolCall
+            this.mazeAnswered = false
+            this.showMazeSheet = true
+          },
           onReachStart: (): void => {
             this.handleMessageListReachStart()
           },
@@ -2848,6 +2857,39 @@ export struct ChatPage {
                 this.handleAskUserAnswer(this.handwritingSheetToolCall.id, JSON.stringify(cancelResult))
               }
               this.showHandwritingSheet = false
+            }
+          })
+
+        Column()
+          .width(0)
+          .height(0)
+          .bindSheet($$this.showMazeSheet, this.MazeSheetBuilder(), {
+            height: SheetSize.LARGE,
+            dragBar: true,
+            showClose: true,
+            blurStyle: BlurStyle.Thick,
+            backgroundColor: this.themeBackground,
+            preferType: SheetType.BOTTOM,
+            onDisappear: () => {
+              if (this.showMazeSheet && !this.mazeAnswered) {
+                const cancelResult: MazeResult = {
+                  difficulty: 0,
+                  grid_size: '',
+                  time_seconds: 0,
+                  move_count: 0,
+                  stars_collected: 0,
+                  stars_total: 0,
+                  completed: false
+                }
+                try {
+                  const parsed = JSON.parse(this.mazeSheetToolCall.arguments) as Record<string, Object>
+                  cancelResult.difficulty = (parsed['difficulty'] as number) ?? 0
+                } catch (_e) {
+                  // ignore
+                }
+                this.handleAskUserAnswer(this.mazeSheetToolCall.id, JSON.stringify(cancelResult))
+              }
+              this.showMazeSheet = false
             }
           })
 
@@ -3347,6 +3389,21 @@ export struct ChatPage {
         this.numberPuzzleAnswered = true
         this.handleAskUserAnswer(toolCallId, answerJson)
         this.showNumberPuzzleSheet = false
+      }
+    })
+  }
+
+  @Builder
+  MazeSheetBuilder() {
+    MazeCard({
+      toolCall: this.mazeSheetToolCall,
+      isAnswered: false,
+      answeredPayload: '',
+      largeSize: true,
+      onAnswer: (toolCallId: string, answerJson: string): void => {
+        this.mazeAnswered = true
+        this.handleAskUserAnswer(toolCallId, answerJson)
+        this.showMazeSheet = false
       }
     })
   }

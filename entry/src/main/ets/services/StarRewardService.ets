@@ -103,6 +103,16 @@ export class StarRewardService {
       const difficulty = (payload['difficulty'] as number) ?? 0
       return DIFFICULTY_STARS[difficulty] ?? 1
     }
+    if (activityType === 'maze') {
+      const completed = payload['completed']
+      if (completed !== true) {
+        return 0
+      }
+      // 走迷宫: 完成 1 颗基础星 + 每个胡萝卜 1 颗奖励星
+      // 例: 收集 2 根胡萝卜并完成迷宫 → 1 + 2 = 3 颗星
+      const starsCollected = (payload['stars_collected'] as number) ?? 0
+      return 1 + Math.max(0, starsCollected)
+    }
     if (activityType === 'chat_correct') {
       return 1
     }

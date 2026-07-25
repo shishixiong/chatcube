@@ -20,6 +20,7 @@ import {
   HANDWRITING_PRACTICE_TOOL_ID,
   CATEGORIZATION_TOOL_ID,
   VERTICAL_MATH_TOOL_ID,
+  MAZE_TOOL_ID,
   isAskUserFunctionName,
   isMathQuizFunctionName,
   isEnglishQuizFunctionName,
@@ -27,6 +28,7 @@ import {
   isHandwritingPracticeFunctionName,
   isCategorizationFunctionName,
   isVerticalMathFunctionName,
+  isMazeFunctionName,
   isScrapeWebFunctionName,
   isSearchWebFunctionName,
   isGrantStarFunctionName
@@ -36,6 +38,7 @@ import { setAppUiStateValue } from '../state/AppUiState'
 import { getImageIndexService, ImageIndexService } from './ImageIndexService'
 import { ImageSource } from '../models/ImageIndexModels'
 import { generatePuzzle } from '../utils/HuarongdaoPuzzleGenerator'
+import { generateMaze } from '../utils/MazeGame'
 import { validateAndNormalizeCategorization } from '../utils/CategorizationValidation'
 import { ServiceRegistry } from './ServiceRegistry'
 import { modelSupportsVision } from './registry/ModelAbilityRegistry'
@@ -874,6 +877,108 @@ export class ToolExecutionService {
     )
   }
 
+  // maze 特殊路径: 与 number_puzzle/huarongdao 类似, 挂起等待 MazeCard 回答。
+  // 迷宫生成在后台完成并注入 toolCall.arguments (cells 网格 + 起点终点 + 收藏星)。
+  private async handleMaze(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = MAZE_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '走迷宫'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 1. 立即设置 pending 状态, 让卡片立即出现
+    toolCall.approvalState = 'pending'
+
+    // 2. 后台生成迷宫并注入到 toolCall.arguments
+    try {
+      const parsed = JSON.parse(toolCall.arguments) as Record<string, Object>
+      const difficulty = (parsed['difficulty'] as number) ?? 1
+      const clampedDifficulty = Math.max(1, Math.min(3, difficulty))
+
+      console.info('ToolExecutionService',
+        `maze generation start: difficulty=${clampedDifficulty}`)
+
+      const maze = generateMaze(
+        clampedDifficulty === 1 ? 4 : (clampedDifficulty === 2 ? 6 : 8),
+        clampedDifficulty === 1 ? 4 : (clampedDifficulty === 2 ? 6 : 8),
+        2
+      )
+
+      // 序列化 cells(供 MazeCard 在 aboutToAppear 还原)
+      parsed['cells'] = maze.cells as Object
+      parsed['rows'] = maze.rows as Object
+      parsed['cols'] = maze.cols as Object
+      parsed['stars_total'] = maze.starsTotal as Object
+      parsed['difficulty'] = clampedDifficulty as Object
+      parsed['grid_size'] = (clampedDifficulty === 1 ? '4×4' : (clampedDifficulty === 2 ? '6×6' : '8×8')) as Object
+      toolCall.arguments = JSON.stringify(parsed)
+
+      console.info('ToolExecutionService',
+        `maze generated: rows=${maze.rows}, cols=${maze.cols}, stars=${maze.starsTotal}`)
+    } catch (error) {
+      console.error('ToolExecutionService', `maze generation exception: ${JSON.stringify(error)}`)
+    }
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = MAZE_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `maze answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `maze 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'maze cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未完成该迷宫' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `maze answered: ${toolCall.id}`)
+    this.recordStarEvent('maze', toolCall, context, answerJson)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
   // categorization 特殊路径: 与 math_quiz 类似, 挂起等待 CategorizationCard 回答。
   private async handleCategorization(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
     toolCall.toolId = CATEGORIZATION_TOOL_ID
@@ -1284,6 +1389,12 @@ export class ToolExecutionService {
     // 竖式数学互动工具, 由 VerticalMathCard 收集孩子的计算结果。
     if (isVerticalMathFunctionName(normalizedFunctionName)) {
       return await this.handleVerticalMath(toolCall, context)
+    }
+
+    // === maze 特殊路径 ===
+    // 走迷宫互动工具, 由 MazeCard 收集小朋友的移动 / 完成结果。
+    if (isMazeFunctionName(normalizedFunctionName)) {
+      return await this.handleMaze(toolCall, context)
     }
 
     // 通过函数名获取工具 ID
