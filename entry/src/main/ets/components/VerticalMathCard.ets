@@ -436,7 +436,6 @@ export struct VerticalMathCard {
             })
             this.StepProgressSegments()
           }
-          .layoutWeight(1)
           .padding({ left: 12, right: 12, top: 12, bottom: 8 })
         } else {
           // Narrator header above full-width board (tablet / largeSize)
@@ -458,7 +457,6 @@ export struct VerticalMathCard {
             .layoutWeight(1)
             this.StepProgressSegments()
           }
-          .layoutWeight(1)
           .padding(12)
         }
         // Controls now sit below the main content (see spec §3.2.4 rationale).
