@@ -14,11 +14,8 @@ import {
   solveVerticalMath
 } from '../../../main/ets/utils/VerticalMathSolver'
 import {
-  VERTICAL_MATH_BOARD_TEXT,
-  VERTICAL_MATH_BOARD_LINE,
-  VERTICAL_MATH_DONE_TEXT,
-  VERTICAL_MATH_CARRY_TEXT,
-  VERTICAL_MATH_BORROW_TEXT
+  VerticalMathPalette,
+  resolveVerticalMathPalette
 } from '../../../main/ets/utils/VerticalMathColors'
 
 export default function verticalMathSolverTest() {
@@ -471,12 +468,26 @@ export default function verticalMathSolverTest() {
   })
 
   describe('VerticalMathColors', () => {
-    it('uses readable cream-board colors', 0, () => {
-      expect(VERTICAL_MATH_BOARD_TEXT).assertEqual('#3a3320')
-      expect(VERTICAL_MATH_BOARD_LINE).assertEqual('rgba(58, 51, 32, 0.55)')
-      expect(VERTICAL_MATH_DONE_TEXT).assertEqual('#15803d')
-      expect(VERTICAL_MATH_CARRY_TEXT).assertEqual('#dc2626')
-      expect(VERTICAL_MATH_BORROW_TEXT).assertEqual('#7c3aed')
+    it('resolves the approved light palette', 0, () => {
+      const palette: VerticalMathPalette = resolveVerticalMathPalette(false)
+      expect(palette.shell).assertEqual('#F2EEFB')
+      expect(palette.paper).assertEqual('#FFFDF7')
+      expect(palette.ink).assertEqual('#352E24')
+      expect(palette.focus).assertEqual('#FFE15A')
+      expect(palette.success).assertEqual('#56A779')
+      expect(palette.carry).assertEqual('#FF6B57')
+    })
+
+    it('resolves the approved dark palette', 0, () => {
+      const palette: VerticalMathPalette = resolveVerticalMathPalette(true)
+      expect(palette.shell).assertEqual('#272238')
+      expect(palette.paper).assertEqual('#302C27')
+      expect(palette.ink).assertEqual('#F7F1E4')
+      expect(palette.focus).assertEqual('#E7C74E')
+      expect(palette.success).assertEqual('#6FC294')
+      expect(palette.carry).assertEqual('#FF7C6D')
+      expect(palette.borrow.length > 0).assertEqual(true)
+      expect(palette.divider.length > 0).assertEqual(true)
     })
   })
 
