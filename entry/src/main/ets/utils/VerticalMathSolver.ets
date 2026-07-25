@@ -381,6 +381,7 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
     const dB: number = bCells[col] === ' ' ? 0 : Number(bCells[col])
     let localDA: number = dA
     const borrowColumns: number[] = []
+    let donorColumn: number = -1
     if (localDA < dB + carryIn) {
       // Walk left to find a non-zero digit in aBorrowed to borrow from.
       // Intermediate zero digits become 9 (they lent 1 to their left neighbor),
@@ -396,6 +397,7 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
         donor--
       }
       if (donor >= 0) {
+        donorColumn = donor
         aBorrowed[donor] = String(Number(aBorrowed[donor]) - 1)
         localDA += 10
         borrowColumns.push(donor)
@@ -504,18 +506,30 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
       highlights.push(doneHl)
     }
 
-    const narration: string = borrowColumns.length > 0
-      ? `${dB} 不够减，向左借 1，${localDA} − ${dB} = ${resultDigit}。`
-      : `${localDA} − ${dB} = ${resultDigit}。`
-    // Note: narration still mentions the borrow for direct borrows even though
-    // no '•' marker is emitted — the math and explanation are correct, only
-    // the visual highlight is suppressed for non-cascading borrows.
+    const placeLabel: string = getPlaceValueLabel(columnCount, col)
+    const overlays: VerticalMathOverlay[] = []
+    if (donorColumn >= 0) {
+      const borrowOverlay: VerticalMathOverlay = new VerticalMathOverlay()
+      borrowOverlay.kind = 'borrow_bridge'
+      borrowOverlay.sourceColumn = donorColumn
+      borrowOverlay.targetColumn = col
+      borrowOverlay.rowIndex = 0
+      borrowOverlay.value = '1'
+      overlays.push(borrowOverlay)
+    }
+
+    const narration: string = donorColumn >= 0
+      ? `${dA} 不够减 ${dB}，从${getPlaceValueLabel(columnCount, donorColumn)}借 1，${localDA} − ${dB} ＝ ${resultDigit}。`
+      : `${localDA} − ${dB} ＝ ${resultDigit}，没有借位。`
 
     const step: VerticalMathStep = new VerticalMathStep()
     step.title = `第 ${columnCount - col} 位相减`
     step.narration = narration
+    step.placeLabel = placeLabel
+    step.actionLabel = `算${placeLabel}`
     step.rows = stepRows
     step.highlights = highlights
+    step.overlays = overlays
     steps.push(step)
   }
 
@@ -530,8 +544,11 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
   const finalStep: VerticalMathStep = new VerticalMathStep()
   finalStep.title = '得到答案'
   finalStep.narration = `答案是 ${String(diff)}。`
+  finalStep.placeLabel = '完成'
+  finalStep.actionLabel = '完成竖式'
   finalStep.rows = [finalRowA, finalRowB, finalRowLine, finalRowResult]
   finalStep.highlights = []
+  finalStep.overlays = []
   finalStep.showFinalLine = true
   finalStep.showResultRow = true
   steps.push(finalStep)

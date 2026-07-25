@@ -274,6 +274,41 @@ export default function verticalMathSolverTest() {
           highlight.rowIndex === 0 && highlight.kind === 'active'
       )).assertEqual(false)
     })
+
+    it('creates a bridge for a direct borrow', 0, () => {
+      const s = solveVerticalSubtract(42, 18)
+      const units: VerticalMathStep = s.steps[0]
+      const bridges: VerticalMathOverlay[] = units.overlays.filter(
+        (overlay: VerticalMathOverlay): boolean => overlay.kind === 'borrow_bridge'
+      )
+      expect(bridges.length).assertEqual(1)
+      expect(bridges[0].sourceColumn).assertEqual(0)
+      expect(bridges[0].targetColumn).assertEqual(1)
+      expect(units.narration.includes('2 不够减 8')).assertEqual(true)
+      expect(units.narration.includes('从十位借 1')).assertEqual(true)
+    })
+
+    it('connects the donor to the target for a cascading borrow', 0, () => {
+      const s = solveVerticalSubtract(503, 278)
+      const units: VerticalMathStep = s.steps[0]
+      const bridges: VerticalMathOverlay[] = units.overlays.filter(
+        (overlay: VerticalMathOverlay): boolean => overlay.kind === 'borrow_bridge'
+      )
+      expect(bridges.length).assertEqual(1)
+      expect(bridges[0].sourceColumn).assertEqual(0)
+      expect(bridges[0].targetColumn).assertEqual(2)
+      expect(units.rows[0].borrowColumns?.includes(0) ?? false).assertEqual(true)
+      expect(units.rows[0].borrowColumns?.includes(1) ?? false).assertEqual(true)
+      expect(units.rows[0].borrowColumns?.includes(2) ?? false).assertEqual(true)
+    })
+
+    it('labels every subtraction step for navigation', 0, () => {
+      const s = solveVerticalSubtract(42, 18)
+      expect(s.steps[0].placeLabel).assertEqual('个位')
+      expect(s.steps[0].actionLabel).assertEqual('算个位')
+      expect(s.steps[1].placeLabel).assertEqual('十位')
+      expect(s.steps[s.steps.length - 1].placeLabel).assertEqual('完成')
+    })
   })
 
   describe('solveVerticalMultiply', () => {
