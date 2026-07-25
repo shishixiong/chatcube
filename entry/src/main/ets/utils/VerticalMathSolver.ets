@@ -25,11 +25,27 @@ export class VerticalMathBoardRow {
   borrowColumns?: number[]        // all borrow columns accumulated through this snapshot
 }
 
+export type VerticalMathOverlayKind =
+  'carry_path' | 'borrow_bridge' | 'partial_band' | 'division_lane'
+
+export class VerticalMathOverlay {
+  kind: VerticalMathOverlayKind = 'carry_path'
+  sourceColumn: number = -1
+  targetColumn: number = -1
+  rowIndex: number = -1
+  startColumn: number = -1
+  endColumn: number = -1
+  value: string = ''
+}
+
 export class VerticalMathStep {
   title: string = ''
   narration: string = ''
+  placeLabel: string = ''
+  actionLabel: string = ''
   rows: VerticalMathBoardRow[] = []    // complete snapshot of board at this step
   highlights: VerticalMathHighlight[] = []
+  overlays: VerticalMathOverlay[] = []
   showFinalLine?: boolean         // when true, render the second horizontal line
   showResultRow?: boolean         // when true, render the final result row
 }
@@ -238,12 +254,11 @@ export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
       ? `${dA} + ${dB} = ${sum}，写 ${resultDigit}，进 ${carryOut}。`
       : `${dA} + ${dB} = ${sum}，写 ${resultDigit}。`
 
-    const step: VerticalMathStep = {
-      title: `第 ${columnCount - col} 位相加`,
-      narration: narration,
-      rows: [rowA, rowB, rowLine, rowResult],
-      highlights: highlights
-    }
+    const step: VerticalMathStep = new VerticalMathStep()
+    step.title = `第 ${columnCount - col} 位相加`
+    step.narration = narration
+    step.rows = [rowA, rowB, rowLine, rowResult]
+    step.highlights = highlights
     steps.push(step)
 
     carryIn = carryOut
@@ -257,14 +272,13 @@ export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
   const finalRowB: VerticalMathBoardRow = { cells: cloneCells(bCells), operator: '+' }
   const finalRowLine: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
   const finalRowResult: VerticalMathBoardRow = { cells: cloneCells(finalCells) }
-  const finalStep: VerticalMathStep = {
-    title: '得到答案',
-    narration: `答案是 ${String(total)}。`,
-    rows: [finalRowA, finalRowB, finalRowLine, finalRowResult],
-    highlights: [],
-    showFinalLine: true,
-    showResultRow: true
-  }
+  const finalStep: VerticalMathStep = new VerticalMathStep()
+  finalStep.title = '得到答案'
+  finalStep.narration = `答案是 ${String(total)}。`
+  finalStep.rows = [finalRowA, finalRowB, finalRowLine, finalRowResult]
+  finalStep.highlights = []
+  finalStep.showFinalLine = true
+  finalStep.showResultRow = true
   steps.push(finalStep)
 
   const finalRow: VerticalMathBoardRow = { cells: cloneCells(finalCells) }
@@ -469,12 +483,11 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
     // no '•' marker is emitted — the math and explanation are correct, only
     // the visual highlight is suppressed for non-cascading borrows.
 
-    const step: VerticalMathStep = {
-      title: `第 ${columnCount - col} 位相减`,
-      narration: narration,
-      rows: stepRows,
-      highlights: highlights
-    }
+    const step: VerticalMathStep = new VerticalMathStep()
+    step.title = `第 ${columnCount - col} 位相减`
+    step.narration = narration
+    step.rows = stepRows
+    step.highlights = highlights
     steps.push(step)
   }
 
@@ -486,14 +499,13 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
   const finalRowB: VerticalMathBoardRow = { cells: cloneCells(bCells), operator: '-' }
   const finalRowLine: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
   const finalRowResult: VerticalMathBoardRow = { cells: cloneCells(finalCells) }
-  const finalStep: VerticalMathStep = {
-    title: '得到答案',
-    narration: `答案是 ${String(diff)}。`,
-    rows: [finalRowA, finalRowB, finalRowLine, finalRowResult],
-    highlights: [],
-    showFinalLine: true,
-    showResultRow: true
-  }
+  const finalStep: VerticalMathStep = new VerticalMathStep()
+  finalStep.title = '得到答案'
+  finalStep.narration = `答案是 ${String(diff)}。`
+  finalStep.rows = [finalRowA, finalRowB, finalRowLine, finalRowResult]
+  finalStep.highlights = []
+  finalStep.showFinalLine = true
+  finalStep.showResultRow = true
   steps.push(finalStep)
 
   const finalRow: VerticalMathBoardRow = { cells: cloneCells(finalCells) }
@@ -589,12 +601,12 @@ export function solveVerticalMultiply(a: number, b: number): VerticalMathSolutio
     const narration: string = index === 0
       ? `${positionLabel}：${digits[index]}×${b}=${products[index]}，部分积放在十位和个位。`
       : `${positionLabel}：${digits[index]}×${b}=${products[index]}，部分积向左移动${index}格。`
-    steps.push({
-      title: `${positionLabel}：${digits[index]}×${b}=${products[index]}`,
-      narration: narration,
-      rows: snapshot,
-      highlights: highlights
-    })
+    const mulStep: VerticalMathStep = new VerticalMathStep()
+    mulStep.title = `${positionLabel}：${digits[index]}×${b}=${products[index]}`
+    mulStep.narration = narration
+    mulStep.rows = snapshot
+    mulStep.highlights = highlights
+    steps.push(mulStep)
   }
   const result: number = a * b
   const resultCells: string[] = padCells(result, columnCount)
@@ -611,14 +623,14 @@ export function solveVerticalMultiply(a: number, b: number): VerticalMathSolutio
     finalRows.push(finalPartialRow)
   }
   finalRows.push({ cells: cloneCells(resultCells) })
-  steps.push({
-    title: '按位相加',
-    narration: `把各位部分积按位相加，得到 ${result}。`,
-    rows: finalRows,
-    highlights: [],
-    showFinalLine: true,
-    showResultRow: true
-  })
+  const mulFinalStep: VerticalMathStep = new VerticalMathStep()
+  mulFinalStep.title = '按位相加'
+  mulFinalStep.narration = `把各位部分积按位相加，得到 ${result}。`
+  mulFinalStep.rows = finalRows
+  mulFinalStep.highlights = []
+  mulFinalStep.showFinalLine = true
+  mulFinalStep.showResultRow = true
+  steps.push(mulFinalStep)
   return {
     operation: VerticalMathOperation.MULTIPLY,
     operandA: a,
@@ -668,19 +680,18 @@ export function solveVerticalDivide(a: number, b: number): VerticalMathSolution 
 
     // Final step: reveal the result '0'.
     const finalRowCells: string[] = ['0']
-    const finalStep: VerticalMathStep = {
-      title: '得到答案',
-      narration: `0 ÷ ${b} = 0。`,
-      rows: [
-        { cells: cloneCells(aCells) },
-        { cells: cloneCells(bRowCells), operator: '÷' },
-        { cells: emptyCells(columnCount) },
-        { cells: cloneCells(finalRowCells) }
-      ],
-      highlights: [],
-      showFinalLine: true,
-      showResultRow: true
-    }
+    const finalStep: VerticalMathStep = new VerticalMathStep()
+    finalStep.title = '得到答案'
+    finalStep.narration = `0 ÷ ${b} = 0。`
+    finalStep.rows = [
+      { cells: cloneCells(aCells) },
+      { cells: cloneCells(bRowCells), operator: '÷' },
+      { cells: emptyCells(columnCount) },
+      { cells: cloneCells(finalRowCells) }
+    ]
+    finalStep.highlights = []
+    finalStep.showFinalLine = true
+    finalStep.showResultRow = true
     steps.push(finalStep)
 
     return {
@@ -725,15 +736,15 @@ export function solveVerticalDivide(a: number, b: number): VerticalMathSolution 
         { cells: cloneCells(bRowCells), operator: '÷' },
         { cells: emptyCells(columnCount) }
       ]
-      steps.push({
-        title: `第 ${i + 1} 位：不够除`,
-        narration: '首位不够除，先看下一位。',
-        rows: notEnoughRows,
-        highlights: [
-          { rowIndex: 0, columnIndex: i, kind: 'active' },
-          { rowIndex: 1, columnIndex: columnCount - 1, kind: 'active' }
-        ]
-      })
+      const notEnoughStep: VerticalMathStep = new VerticalMathStep()
+      notEnoughStep.title = `第 ${i + 1} 位：不够除`
+      notEnoughStep.narration = '首位不够除，先看下一位。'
+      notEnoughStep.rows = notEnoughRows
+      notEnoughStep.highlights = [
+        { rowIndex: 0, columnIndex: i, kind: 'active' },
+        { rowIndex: 1, columnIndex: columnCount - 1, kind: 'active' }
+      ]
+      steps.push(notEnoughStep)
       remainder = window
       continue
     }
@@ -772,12 +783,12 @@ export function solveVerticalDivide(a: number, b: number): VerticalMathSolution 
       { rowIndex: 1, columnIndex: columnCount - 1, kind: 'active' },
       { rowIndex: 3, columnIndex: i, kind: 'quotient' }
     ]
-    steps.push({
-      title: `第 ${i + 1} 位：试商 ${q}`,
-      narration: `${window} ÷ ${b} = ${q} …… ${remainder}。`,
-      rows: snap,
-      highlights: highlights
-    })
+    const quotientStep: VerticalMathStep = new VerticalMathStep()
+    quotientStep.title = `第 ${i + 1} 位：试商 ${q}`
+    quotientStep.narration = `${window} ÷ ${b} = ${q} …… ${remainder}。`
+    quotientStep.rows = snap
+    quotientStep.highlights = highlights
+    steps.push(quotientStep)
   }
 
   const finalQuotient: string = anyQuotientDigit
@@ -795,21 +806,20 @@ export function solveVerticalDivide(a: number, b: number): VerticalMathSolution 
     finalRowCells[columnCount - 1] = '0'
   }
 
-  const finalStep: VerticalMathStep = {
-    title: '得到答案',
-    narration: remainder === 0
-      ? `${a} ÷ ${b} = ${finalQuotient}。`
-      : `${a} ÷ ${b} = ${finalQuotient}，余数 ${remainder}。`,
-    rows: [
-      { cells: cloneCells(aCells) },
-      { cells: cloneCells(bRowCells), operator: '÷' },
-      { cells: emptyCells(columnCount) },
-      { cells: cloneCells(finalRowCells) }
-    ],
-    highlights: [],
-    showFinalLine: true,
-    showResultRow: true
-  }
+  const finalStep: VerticalMathStep = new VerticalMathStep()
+  finalStep.title = '得到答案'
+  finalStep.narration = remainder === 0
+    ? `${a} ÷ ${b} = ${finalQuotient}。`
+    : `${a} ÷ ${b} = ${finalQuotient}，余数 ${remainder}。`
+  finalStep.rows = [
+    { cells: cloneCells(aCells) },
+    { cells: cloneCells(bRowCells), operator: '÷' },
+    { cells: emptyCells(columnCount) },
+    { cells: cloneCells(finalRowCells) }
+  ]
+  finalStep.highlights = []
+  finalStep.showFinalLine = true
+  finalStep.showResultRow = true
   steps.push(finalStep)
 
   const finalRow: VerticalMathBoardRow = { cells: cloneCells(finalRowCells) }

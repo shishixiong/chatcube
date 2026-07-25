@@ -5,6 +5,7 @@ import {
   VerticalMathStep,
   VerticalMathBoardRow,
   VerticalMathHighlight,
+  VerticalMathOverlay,
   validateVerticalMathInputs,
   solveVerticalAdd,
   solveVerticalSubtract,
@@ -21,6 +22,25 @@ import {
 } from '../../../main/ets/utils/VerticalMathColors'
 
 export default function verticalMathSolverTest() {
+  describe('VerticalMath presentation models', () => {
+    it('creates empty step presentation metadata', 0, () => {
+      const step: VerticalMathStep = new VerticalMathStep()
+      expect(step.placeLabel).assertEqual('')
+      expect(step.actionLabel).assertEqual('')
+      expect(step.overlays.length).assertEqual(0)
+    })
+
+    it('creates a typed carry overlay', 0, () => {
+      const overlay: VerticalMathOverlay = new VerticalMathOverlay()
+      expect(overlay.kind).assertEqual('carry_path')
+      expect(overlay.sourceColumn).assertEqual(-1)
+      expect(overlay.targetColumn).assertEqual(-1)
+      expect(overlay.startColumn).assertEqual(-1)
+      expect(overlay.endColumn).assertEqual(-1)
+      expect(overlay.value).assertEqual('')
+    })
+  })
+
   describe('validateVerticalMathInputs', () => {
     it('returns null for valid addition', 0, () => {
       const err: VerticalMathValidationError | null = validateVerticalMathInputs(
