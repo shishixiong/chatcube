@@ -10,12 +10,10 @@ import {
   VerticalMathSolution,
   VerticalMathStep
 } from '../utils/VerticalMathSolver'
+import { getAppUiState } from '../state/AppUiState'
 import {
-  VERTICAL_MATH_ACTIVE_BG,
-  VERTICAL_MATH_ACTIVE_TEXT,
-  VERTICAL_MATH_DONE_TEXT,
-  VERTICAL_MATH_ERROR_BG,
-  VERTICAL_MATH_ERROR_TEXT
+  VerticalMathPalette,
+  resolveVerticalMathPalette
 } from '../utils/VerticalMathColors'
 import { VerticalMathBoard } from './verticalMath/VerticalMathBoard'
 import { VerticalMathStepNarrator } from './verticalMath/VerticalMathStepNarrator'
@@ -84,6 +82,7 @@ export struct VerticalMathCard {
   @Param isAnswered: boolean = false
   @Param answeredPayload: string = ''
   @Param largeSize: boolean = false
+  @Param reduceMotion: boolean = false
 
   @Event onAnswer: (toolCallId: string, answerJson: string) => void = () => {}
 
@@ -95,9 +94,18 @@ export struct VerticalMathCard {
   @Local errorMessage: string = ''
   @Local hasAnswered: boolean = false
 
+  private get isDarkMode(): boolean {
+    return getAppUiState().isDarkMode
+  }
+
+  private get palette(): VerticalMathPalette {
+    return resolveVerticalMathPalette(this.isDarkMode)
+  }
+
   aboutToAppear() {
     this.parseToolCallArguments()
     if (this.isAnswered) {
+      this.hasAnswered = true
       // Pre-compute solution so the user can walk through it again.
       this.regenerateSolution()
       // Skip to the final step so re-opening a completed timeline entry shows the
@@ -154,24 +162,28 @@ export struct VerticalMathCard {
     this.regenerateSolution()
   }
 
+  private submitResult() {
+    if (this.solution === null || this.hasAnswered) return
+    this.hasAnswered = true
+    const payload: VerticalMathResultPayload = {
+      completed: true,
+      operation: this.selectedOperation,
+      operand_a: Number(this.operandA),
+      operand_b: Number(this.operandB),
+      result: this.solution.result,
+      remainder: this.solution.remainder,
+      step_count: this.visibleStepCount
+    }
+    this.onAnswer(this.toolCall.id, JSON.stringify(payload))
+  }
+
   private handleNext() {
-    if (this.solution === null) return
+    if (this.solution === null || this.hasAnswered) return
     if (this.visibleStepCount < this.solution.steps.length) {
       this.visibleStepCount++
+      return
     }
-    if (this.solution !== null && this.visibleStepCount === this.solution.steps.length && !this.hasAnswered) {
-      this.hasAnswered = true
-      const payload: VerticalMathResultPayload = {
-        completed: true,
-        operation: this.selectedOperation,
-        operand_a: Number(this.operandA),
-        operand_b: Number(this.operandB),
-        result: this.solution.result,
-        remainder: this.solution.remainder,
-        step_count: this.visibleStepCount
-      }
-      this.onAnswer(this.toolCall.id, JSON.stringify(payload))
-    }
+    this.submitResult()
   }
 
   private handlePrev() {
@@ -212,24 +224,48 @@ export struct VerticalMathCard {
     return !this.largeSize
   }
 
+  private isFinalAnswerVisible(): boolean {
+    return this.solution !== null && this.visibleStepCount === this.solution.steps.length
+  }
+
+  private getPrimaryActionLabel(): string {
+    if (this.solution === null) return ''
+    if (this.hasAnswered) return '已告诉小星老师'
+    if (this.isFinalAnswerVisible()) return '完成，告诉小星老师'
+    const nextStep: VerticalMathStep = this.solution.steps[this.visibleStepCount]
+    return this.visibleStepCount === 0 ? `开始${nextStep.actionLabel}` : nextStep.actionLabel
+  }
+
   @Builder
   private InputForm() {
     Column() {
       Row() {
-        TextInput({ text: this.operandA, placeholder: 'A' })
-          .type(InputType.Number)
-          .width(80)
-          .height(44)
-          .onChange((v: string) => this.handleInputA(v))
+        Column({ space: 4 }) {
+          Text('第一个数')
+            .fontSize(12)
+            .fontColor(this.palette.secondaryText)
+          TextInput({ text: this.operandA, placeholder: '47' })
+            .type(InputType.Number)
+            .height(48)
+            .onChange((v: string) => this.handleInputA(v))
+        }
+        .layoutWeight(1)
+
         Text(this.operationSymbol(this.selectedOperation))
           .fontSize(24)
           .fontWeight(FontWeight.Bold)
           .margin({ left: 8, right: 8 })
-        TextInput({ text: this.operandB, placeholder: 'B' })
-          .type(InputType.Number)
-          .width(80)
-          .height(44)
-          .onChange((v: string) => this.handleInputB(v))
+
+        Column({ space: 4 }) {
+          Text('第二个数')
+            .fontSize(12)
+            .fontColor(this.palette.secondaryText)
+          TextInput({ text: this.operandB, placeholder: '28' })
+            .type(InputType.Number)
+            .height(48)
+            .onChange((v: string) => this.handleInputB(v))
+        }
+        .layoutWeight(1)
       }
       .alignItems(VerticalAlign.Center)
 
@@ -256,72 +292,82 @@ export struct VerticalMathCard {
         .onClick(() => this.handleStart())
     }
     .padding(12)
-    .backgroundColor(this.largeSize ? Color.Transparent : '#fffaf0')
+    .backgroundColor(this.largeSize ? Color.Transparent : this.palette.paper)
     .borderRadius(14)
   }
 
   @Builder
   private Controls() {
-    Row() {
-      Button('← 上一步')
-        .height(44)
-        .layoutWeight(1)
-        .margin({ right: 8 })
-        .backgroundColor('#eee8ff')
-        .fontColor('#30205f')
-        .enabled(this.visibleStepCount > 0)
-        .onClick(() => this.handlePrev())
-      Button('下一步 →')
-        .height(44)
-        .layoutWeight(1)
-        .margin({ right: 8 })
-        .backgroundColor('#ffe66d')
-        .fontColor('#3a2d0c')
-        .enabled(this.solution !== null && this.visibleStepCount < this.solution.steps.length)
-        .onClick(() => this.handleNext())
-      Button('重置')
-        .height(44)
-        .layoutWeight(1)
-        .backgroundColor('#ffe3dc')
-        .fontColor('#89564b')
-        .onClick(() => this.handleReset())
+    Column() {
+      Row() {
+        Button('← 上一步')
+          .height(48)
+          .fontSize(13)
+          .layoutWeight(1)
+          .margin({ right: 8 })
+          .backgroundColor('#eee8ff')
+          .fontColor('#30205f')
+          .enabled(this.visibleStepCount > 0 && !this.hasAnswered)
+          .onClick(() => this.handlePrev())
+          .accessibilityText('回到上一步')
+
+        Button(this.getPrimaryActionLabel())
+          .height(48)
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .layoutWeight(1)
+          .backgroundColor(this.hasAnswered ? '#c8c2b5' : '#ffe66d')
+          .fontColor(this.hasAnswered ? '#5e574a' : '#3a2d0c')
+          .enabled(this.solution !== null && !this.hasAnswered)
+          .onClick(() => this.handleNext())
+          .accessibilityText(this.hasAnswered ? '结果已告诉小星老师' : '进入下一步')
+      }
+      .width('100%')
+
+      Row() {
+        Text('重新开始')
+          .fontSize(12)
+          .fontColor('#665b84')
+          .padding(8)
+          .onClick(() => this.handleReset())
+          .accessibilityText('重新开始竖式走一遍')
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
     }
-    .padding(12)
+    .padding({ left: 12, right: 12, top: 4, bottom: 12 })
   }
 
   @Builder
-  private StepProgressDots() {
-    Row() {
-      if (this.solution !== null) {
-        ForEach(this.solution.steps, (_step: VerticalMathStep, index: number) => {
-          if (index < this.visibleStepCount - 1) {
-            // done
-            Circle()
-              .width(8)
-              .height(8)
-              .fill(VERTICAL_MATH_DONE_TEXT)
-          } else if (index === this.visibleStepCount - 1) {
-            // current
-            Circle()
-              .width(12)
-              .height(12)
-              .fill(VERTICAL_MATH_ACTIVE_BG)
-              .stroke(VERTICAL_MATH_ACTIVE_TEXT)
-              .strokeWidth(1.5)
-          } else {
-            // pending
-            Circle()
-              .width(8)
-              .height(8)
-              .fill(Color.Transparent)
-              .stroke($r('app.color.divider'))
-              .strokeWidth(1.5)
-          }
-        }, (_step: VerticalMathStep, index: number) => `step_dot_${index}`)
+  private StepProgressSegments() {
+    Column({ space: 7 }) {
+      Row() {
+        Text(this.visibleStepCount === 0 ? '准备开始' :
+          this.isFinalAnswerVisible() ? '竖式完成' :
+            `${this.solution?.steps[this.visibleStepCount - 1].placeLabel ?? ''}完成`)
+          .fontSize(11)
+          .fontColor(this.palette.secondaryText)
+          .layoutWeight(1)
+        if (!this.isFinalAnswerVisible() && this.solution !== null) {
+          Text(`下一步：${this.solution.steps[this.visibleStepCount].placeLabel}`)
+            .fontSize(11)
+            .fontColor(this.palette.secondaryText)
+        }
       }
+      Row({ space: 6 }) {
+        if (this.solution !== null) {
+          ForEach(this.solution.steps, (_step: VerticalMathStep, index: number) => {
+            Row()
+              .height(6)
+              .layoutWeight(index === this.visibleStepCount ? 1.4 : 1)
+              .borderRadius(3)
+              .backgroundColor(index < this.visibleStepCount ? this.palette.success :
+                index === this.visibleStepCount ? this.palette.focus : this.palette.divider)
+          }, (_step: VerticalMathStep, index: number) => `step_segment_${index}`)
+        }
+      }
+      .width('100%')
     }
-    .width('100%')
-    .justifyContent(FlexAlign.Center)
     .margin({ top: 12, bottom: 12 })
   }
 
@@ -329,17 +375,16 @@ export struct VerticalMathCard {
     Column() {
       // Header
       Row() {
-        Text('🧮 小小数学家 · 竖式闯关')
+        Text('竖式计算')
           .fontSize(16)
           .fontWeight(FontWeight.Bold)
-          .fontColor('#21153f')
+          .fontColor(this.palette.ink)
           .layoutWeight(1)
-        if (this.solution !== null && this.solution.steps.length > 0) {
-          Text(this.visibleStepCount === this.solution.steps.length
-            ? `闯关完成 · ${this.visibleStepCount} / ${this.solution.steps.length}`
-            : `第 ${this.visibleStepCount} / ${this.solution.steps.length} 步`)
-            .fontSize(12)
-            .fontColor('#665b84')
+        if (this.solution !== null) {
+          Text(`${this.operandA}${this.operationSymbol(this.selectedOperation)}${this.operandB}`)
+            .fontSize(13)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.palette.secondaryText)
         }
       }
       .padding({ left: 14, right: 14, top: 12, bottom: 8 })
@@ -349,11 +394,11 @@ export struct VerticalMathCard {
         Row() {
           Text(this.errorMessage)
             .fontSize(13)
-            .fontColor(VERTICAL_MATH_ERROR_TEXT)
+            .fontColor('#89564b')
             .layoutWeight(1)
         }
         .padding(11)
-        .backgroundColor(VERTICAL_MATH_ERROR_BG)
+        .backgroundColor('#ffe3dc')
         .borderRadius(12)
         .margin({ left: 14, right: 14, bottom: 8 })
       }
@@ -363,16 +408,16 @@ export struct VerticalMathCard {
         this.InputForm()
       }
 
-      // Controls (always visible when solution exists) — MOVED to bottom; see below.
+      // Board + narrator + segmented progress (always visible when solution exists)
       if (this.solution !== null) {
-        // Board + narrator + step dots
         if (this.isCompact()) {
           // Stacked layout (mobile)
           Column() {
             VerticalMathStepNarrator({
               steps: this.solution.steps,
               visibleStepCount: this.visibleStepCount,
-              operationLabel: `第 ${this.visibleStepCount} / ${this.solution.steps.length} 步`
+              isDarkMode: this.isDarkMode,
+              reduceMotion: this.reduceMotion
             })
             .margin({ bottom: 8 })
             VerticalMathBoard({
@@ -381,7 +426,7 @@ export struct VerticalMathCard {
               compact: true
             })
             .layoutWeight(1)
-            this.StepProgressDots()
+            this.StepProgressSegments()
           }
           .layoutWeight(1)
           .padding({ left: 12, right: 12, top: 12, bottom: 8 })
@@ -391,7 +436,8 @@ export struct VerticalMathCard {
             VerticalMathStepNarrator({
               steps: this.solution.steps,
               visibleStepCount: this.visibleStepCount,
-              operationLabel: `第 ${this.visibleStepCount} / ${this.solution.steps.length} 步`
+              isDarkMode: this.isDarkMode,
+              reduceMotion: this.reduceMotion
             })
             .margin({ bottom: 10 })
             VerticalMathBoard({
@@ -400,7 +446,7 @@ export struct VerticalMathCard {
               compact: false
             })
             .layoutWeight(1)
-            this.StepProgressDots()
+            this.StepProgressSegments()
           }
           .layoutWeight(1)
           .padding(12)
@@ -411,6 +457,6 @@ export struct VerticalMathCard {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(this.largeSize ? Color.Transparent : '#f4efff')
+    .backgroundColor(this.largeSize ? Color.Transparent : this.palette.shell)
   }
 }

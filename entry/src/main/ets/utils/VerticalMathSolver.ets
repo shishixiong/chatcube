@@ -80,23 +80,23 @@ export function validateVerticalMathInputs(
   operandB: number
 ): VerticalMathValidationError | null {
   if (!Number.isInteger(operandA) || operandA < 0 || operandA > 999) {
-    return new VerticalMathValidationError('请输入 0–999 之间的整数')
+    return new VerticalMathValidationError('请输入 0 到 999 的数字')
   }
   if (!Number.isInteger(operandB) || operandB < 0 || operandB > 999) {
-    return new VerticalMathValidationError('请输入 0–999 之间的整数')
+    return new VerticalMathValidationError('请输入 0 到 999 的数字')
   }
   if (operation === VerticalMathOperation.SUBTRACT && operandA < operandB) {
     return new VerticalMathValidationError('不够减，建议换一道题哦')
   }
   if (operation === VerticalMathOperation.MULTIPLY && operandB > 9) {
-    return new VerticalMathValidationError('乘法的第二个数请输入 0–9')
+    return new VerticalMathValidationError('第二个数只能填一位数字')
   }
   if (operation === VerticalMathOperation.DIVIDE) {
     if (operandB === 0) {
-      return new VerticalMathValidationError('除数不能为 0')
+      return new VerticalMathValidationError('0 不能做除数，换一个数字吧')
     }
     if (operandB > 9) {
-      return new VerticalMathValidationError('除数请输入 1–9')
+      return new VerticalMathValidationError('除数请填 1 到 9')
     }
   }
   return null

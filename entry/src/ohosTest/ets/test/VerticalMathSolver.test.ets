@@ -68,17 +68,22 @@ export default function verticalMathSolverTest() {
 
     it('rejects multiply when B > 9', 0, () => {
       const err = validateVerticalMathInputs(VerticalMathOperation.MULTIPLY, 100, 10)
-      expect((err?.message ?? '')).assertEqual('乘法的第二个数请输入 0–9')
+      expect((err?.message ?? '')).assertEqual('第二个数只能填一位数字')
     })
 
     it('rejects divide when B = 0', 0, () => {
       const err = validateVerticalMathInputs(VerticalMathOperation.DIVIDE, 50, 0)
-      expect((err?.message ?? '')).assertEqual('除数不能为 0')
+      expect((err?.message ?? '')).assertEqual('0 不能做除数，换一个数字吧')
     })
 
     it('rejects divide when B > 9', 0, () => {
       const err = validateVerticalMathInputs(VerticalMathOperation.DIVIDE, 50, 12)
-      expect((err?.message ?? '')).assertEqual('除数请输入 1–9')
+      expect((err?.message ?? '')).assertEqual('除数请填 1 到 9')
+    })
+
+    it('uses child-friendly range copy', 0, () => {
+      const err = validateVerticalMathInputs(VerticalMathOperation.ADD, 1000, 1)
+      expect(err?.message ?? '').assertEqual('请输入 0 到 999 的数字')
     })
 
     it('accepts boundary A = 0', 0, () => {
