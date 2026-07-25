@@ -643,14 +643,35 @@ export function solveVerticalMultiply(a: number, b: number): VerticalMathSolutio
       }
     }
     const positionLabel: string = index < labels.length ? labels[index] : `第${index + 1}位`
+    let bandStart: number = -1
+    let bandEnd: number = -1
+    for (let column = 0; column < snapshot[currentPartialRowIndex].cells.length; column++) {
+      if (snapshot[currentPartialRowIndex].cells[column] !== '') {
+        if (bandStart < 0) bandStart = column
+        bandEnd = column
+      }
+    }
+    const mulOverlays: VerticalMathOverlay[] = []
+    if (bandStart >= 0 && bandEnd >= bandStart) {
+      const band: VerticalMathOverlay = new VerticalMathOverlay()
+      band.kind = 'partial_band'
+      band.rowIndex = currentPartialRowIndex
+      band.startColumn = bandStart
+      band.endColumn = bandEnd
+      mulOverlays.push(band)
+    }
+    const placeLabel: string = `${positionLabel}位`
     const narration: string = index === 0
       ? `${positionLabel}：${digits[index]}×${b}=${products[index]}，部分积放在十位和个位。`
       : `${positionLabel}：${digits[index]}×${b}=${products[index]}，部分积向左移动${index}格。`
     const mulStep: VerticalMathStep = new VerticalMathStep()
     mulStep.title = `${positionLabel}：${digits[index]}×${b}=${products[index]}`
     mulStep.narration = narration
+    mulStep.placeLabel = placeLabel
+    mulStep.actionLabel = `算${placeLabel}`
     mulStep.rows = snapshot
     mulStep.highlights = highlights
+    mulStep.overlays = mulOverlays
     steps.push(mulStep)
   }
   const result: number = a * b
@@ -671,8 +692,11 @@ export function solveVerticalMultiply(a: number, b: number): VerticalMathSolutio
   const mulFinalStep: VerticalMathStep = new VerticalMathStep()
   mulFinalStep.title = '按位相加'
   mulFinalStep.narration = `把各位部分积按位相加，得到 ${result}。`
+  mulFinalStep.placeLabel = '完成'
+  mulFinalStep.actionLabel = '完成竖式'
   mulFinalStep.rows = finalRows
   mulFinalStep.highlights = []
+  mulFinalStep.overlays = []
   mulFinalStep.showFinalLine = true
   mulFinalStep.showResultRow = true
   steps.push(mulFinalStep)
@@ -728,6 +752,8 @@ export function solveVerticalDivide(a: number, b: number): VerticalMathSolution 
     const finalStep: VerticalMathStep = new VerticalMathStep()
     finalStep.title = '得到答案'
     finalStep.narration = `0 ÷ ${b} = 0。`
+    finalStep.placeLabel = '完成'
+    finalStep.actionLabel = '完成竖式'
     finalStep.rows = [
       { cells: cloneCells(aCells) },
       { cells: cloneCells(bRowCells), operator: '÷' },
@@ -735,6 +761,7 @@ export function solveVerticalDivide(a: number, b: number): VerticalMathSolution 
       { cells: cloneCells(finalRowCells) }
     ]
     finalStep.highlights = []
+    finalStep.overlays = []
     finalStep.showFinalLine = true
     finalStep.showResultRow = true
     steps.push(finalStep)
@@ -770,6 +797,7 @@ export function solveVerticalDivide(a: number, b: number): VerticalMathSolution 
   let remainder: number = 0
   const quotientDigits: string[] = emptyCells(columnCount)
   let anyQuotientDigit: boolean = false
+  let windowStartColumn: number = 0
 
   for (let i = 0; i < columnCount; i++) {
     const digit: number = Number(aCells[i])
@@ -784,11 +812,14 @@ export function solveVerticalDivide(a: number, b: number): VerticalMathSolution 
       const notEnoughStep: VerticalMathStep = new VerticalMathStep()
       notEnoughStep.title = `第 ${i + 1} 位：不够除`
       notEnoughStep.narration = '首位不够除，先看下一位。'
+      notEnoughStep.placeLabel = `第 ${i + 1} 位`
+      notEnoughStep.actionLabel = `看第 ${i + 1} 位`
       notEnoughStep.rows = notEnoughRows
       notEnoughStep.highlights = [
         { rowIndex: 0, columnIndex: i, kind: 'active' },
         { rowIndex: 1, columnIndex: columnCount - 1, kind: 'active' }
       ]
+      notEnoughStep.overlays = []
       steps.push(notEnoughStep)
       remainder = window
       continue
@@ -831,9 +862,22 @@ export function solveVerticalDivide(a: number, b: number): VerticalMathSolution 
     const quotientStep: VerticalMathStep = new VerticalMathStep()
     quotientStep.title = `第 ${i + 1} 位：试商 ${q}`
     quotientStep.narration = `${window} ÷ ${b} = ${q} …… ${remainder}。`
+    quotientStep.placeLabel = `第 ${i + 1} 位`
+    quotientStep.actionLabel = `看第 ${i + 1} 位`
+    const divOverlays: VerticalMathOverlay[] = []
+    const lane: VerticalMathOverlay = new VerticalMathOverlay()
+    lane.kind = 'division_lane'
+    lane.sourceColumn = windowStartColumn
+    lane.targetColumn = i
+    lane.rowIndex = 0
+    lane.startColumn = windowStartColumn
+    lane.endColumn = i
+    divOverlays.push(lane)
+    quotientStep.overlays = divOverlays
     quotientStep.rows = snap
     quotientStep.highlights = highlights
     steps.push(quotientStep)
+    windowStartColumn = remainder > 0 ? i : i + 1
   }
 
   const finalQuotient: string = anyQuotientDigit
@@ -856,6 +900,8 @@ export function solveVerticalDivide(a: number, b: number): VerticalMathSolution 
   finalStep.narration = remainder === 0
     ? `${a} ÷ ${b} = ${finalQuotient}。`
     : `${a} ÷ ${b} = ${finalQuotient}，余数 ${remainder}。`
+  finalStep.placeLabel = '完成'
+  finalStep.actionLabel = '完成竖式'
   finalStep.rows = [
     { cells: cloneCells(aCells) },
     { cells: cloneCells(bRowCells), operator: '÷' },
@@ -863,6 +909,7 @@ export function solveVerticalDivide(a: number, b: number): VerticalMathSolution 
     { cells: cloneCells(finalRowCells) }
   ]
   finalStep.highlights = []
+  finalStep.overlays = []
   finalStep.showFinalLine = true
   finalStep.showResultRow = true
   steps.push(finalStep)

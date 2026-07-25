@@ -362,6 +362,32 @@ export default function verticalMathSolverTest() {
         }
       }
     })
+
+    it('matches each partial band to its non-empty product range', 0, () => {
+      const s = solveVerticalMultiply(988, 6)
+      for (let index = 0; index < 3; index++) {
+        const step: VerticalMathStep = s.steps[index]
+        const partialRowIndex: number = step.rows.length - 1
+        const cells: string[] = step.rows[partialRowIndex].cells
+        let expectedStart: number = -1
+        let expectedEnd: number = -1
+        for (let column = 0; column < cells.length; column++) {
+          if (cells[column] !== '') {
+            if (expectedStart < 0) expectedStart = column
+            expectedEnd = column
+          }
+        }
+        const bands: VerticalMathOverlay[] = step.overlays.filter(
+          (overlay: VerticalMathOverlay): boolean => overlay.kind === 'partial_band'
+        )
+        expect(bands.length).assertEqual(1)
+        expect(bands[0].rowIndex).assertEqual(partialRowIndex)
+        expect(bands[0].startColumn).assertEqual(expectedStart)
+        expect(bands[0].endColumn).assertEqual(expectedEnd)
+        expect(step.placeLabel.length > 0).assertEqual(true)
+        expect(step.actionLabel.length > 0).assertEqual(true)
+      }
+    })
   })
 
   describe('solveVerticalDivide', () => {
@@ -413,6 +439,34 @@ export default function verticalMathSolverTest() {
             highlight.rowIndex === 3 && highlight.columnIndex === index && highlight.kind === 'quotient'
         )).assertEqual(true)
       }
+    })
+
+    it('connects each dividend window to its quotient position', 0, () => {
+      const s = solveVerticalDivide(84, 4)
+      const quotientSteps: VerticalMathStep[] = s.steps.filter(
+        (step: VerticalMathStep): boolean => step.overlays.some(
+          (overlay: VerticalMathOverlay): boolean => overlay.kind === 'division_lane'
+        )
+      )
+      expect(quotientSteps.length).assertEqual(2)
+      for (let index = 0; index < quotientSteps.length; index++) {
+        const lanes: VerticalMathOverlay[] = quotientSteps[index].overlays.filter(
+          (overlay: VerticalMathOverlay): boolean => overlay.kind === 'division_lane'
+        )
+        expect(lanes.length).assertEqual(1)
+        expect(lanes[0].targetColumn).assertEqual(index)
+        expect(lanes[0].startColumn <= lanes[0].endColumn).assertEqual(true)
+      }
+    })
+
+    it('does not invent a quotient target when the window is too small', 0, () => {
+      const s = solveVerticalDivide(3, 7)
+      expect(s.steps[0].overlays.some(
+        (overlay: VerticalMathOverlay): boolean => overlay.kind === 'division_lane'
+      )).assertEqual(false)
+      expect(s.steps[0].highlights.some(
+        (highlight: VerticalMathHighlight): boolean => highlight.kind === 'quotient'
+      )).assertEqual(false)
     })
   })
 
