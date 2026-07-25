@@ -173,6 +173,16 @@ function cloneCells(src: string[]): string[] {
   return out
 }
 
+const PLACE_VALUE_LABELS: string[] = ['个位', '十位', '百位', '千位', '万位']
+
+function getPlaceValueLabel(columnCount: number, column: number): string {
+  const placeIndex: number = columnCount - 1 - column
+  if (placeIndex >= 0 && placeIndex < PLACE_VALUE_LABELS.length) {
+    return PLACE_VALUE_LABELS[placeIndex]
+  }
+  return `第 ${placeIndex + 1} 位`
+}
+
 /**
  * Solve A + B as a step-by-step vertical addition (竖式加法).
  *
@@ -250,15 +260,30 @@ export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
       highlights.push(doneHl)
     }
 
+    const placeLabel: string = getPlaceValueLabel(columnCount, col)
+    const overlays: VerticalMathOverlay[] = []
+    if (carryOut > 0 && col - 1 >= 0) {
+      const carryOverlay: VerticalMathOverlay = new VerticalMathOverlay()
+      carryOverlay.kind = 'carry_path'
+      carryOverlay.sourceColumn = col
+      carryOverlay.targetColumn = col - 1
+      carryOverlay.rowIndex = 0
+      carryOverlay.value = String(carryOut)
+      overlays.push(carryOverlay)
+    }
+
     const narration: string = carryOut > 0
-      ? `${dA} + ${dB} = ${sum}，写 ${resultDigit}，进 ${carryOut}。`
-      : `${dA} + ${dB} = ${sum}，写 ${resultDigit}。`
+      ? `${dA} ＋ ${dB} ＝ ${sum}，${placeLabel}写 ${resultDigit}，把 ${carryOut} 送到${getPlaceValueLabel(columnCount, col - 1)}。`
+      : `${dA} ＋ ${dB} ＝ ${sum}，${placeLabel}写 ${resultDigit}，没有新进位。`
 
     const step: VerticalMathStep = new VerticalMathStep()
-    step.title = `第 ${columnCount - col} 位相加`
+    step.title = `${placeLabel}相加`
     step.narration = narration
+    step.placeLabel = placeLabel
+    step.actionLabel = `算${placeLabel}`
     step.rows = [rowA, rowB, rowLine, rowResult]
     step.highlights = highlights
+    step.overlays = overlays
     steps.push(step)
 
     carryIn = carryOut
@@ -275,8 +300,11 @@ export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
   const finalStep: VerticalMathStep = new VerticalMathStep()
   finalStep.title = '得到答案'
   finalStep.narration = `答案是 ${String(total)}。`
+  finalStep.placeLabel = '完成'
+  finalStep.actionLabel = '完成竖式'
   finalStep.rows = [finalRowA, finalRowB, finalRowLine, finalRowResult]
   finalStep.highlights = []
+  finalStep.overlays = []
   finalStep.showFinalLine = true
   finalStep.showResultRow = true
   steps.push(finalStep)

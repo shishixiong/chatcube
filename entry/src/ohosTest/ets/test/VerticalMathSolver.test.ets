@@ -106,12 +106,48 @@ export default function verticalMathSolverTest() {
       expect(s.remainder).assertEqual(0)
       expect(s.columnCount).assertEqual(2)
       // no standalone alignment step — first step is units computation
-      expect(s.steps[0].title).assertEqual('第 1 位相加')
+      expect(s.steps[0].title).assertEqual('个位相加')
       const carrySteps = s.steps.filter((step: VerticalMathStep) =>
         step.rows.some((row: VerticalMathBoardRow) => row.topMark === '1'))
       expect(carrySteps.length).assertEqual(1)
       expect(s.steps[s.steps.length - 1].showResultRow).assertEqual(true)
       expect(s.finalRow?.cells.join('')).assertEqual('75')
+    })
+
+    it('shows result and carry path in the same units step', 0, () => {
+      const s = solveVerticalAdd(47, 28)
+      const units: VerticalMathStep = s.steps[0]
+      const carries: VerticalMathOverlay[] = units.overlays.filter(
+        (overlay: VerticalMathOverlay): boolean => overlay.kind === 'carry_path'
+      )
+      expect(units.placeLabel).assertEqual('个位')
+      expect(units.actionLabel).assertEqual('算个位')
+      expect(units.rows[3].cells[1]).assertEqual('5')
+      expect(carries.length).assertEqual(1)
+      expect(carries[0].sourceColumn).assertEqual(1)
+      expect(carries[0].targetColumn).assertEqual(0)
+      expect(carries[0].value).assertEqual('1')
+      expect(units.narration.includes('个位写 5')).assertEqual(true)
+      expect(units.narration.includes('送到十位')).assertEqual(true)
+    })
+
+    it('does not create an empty carry path', 0, () => {
+      const s = solveVerticalAdd(22, 33)
+      for (let index = 0; index < s.steps.length - 1; index++) {
+        expect(s.steps[index].overlays.some(
+          (overlay: VerticalMathOverlay): boolean => overlay.kind === 'carry_path'
+        )).assertEqual(false)
+        expect(s.steps[index].narration.includes('没有新进位')).assertEqual(true)
+      }
+    })
+
+    it('labels every addition step for child navigation', 0, () => {
+      const s = solveVerticalAdd(47, 28)
+      expect(s.steps[0].placeLabel).assertEqual('个位')
+      expect(s.steps[1].placeLabel).assertEqual('十位')
+      expect(s.steps[1].actionLabel).assertEqual('算十位')
+      expect(s.steps[s.steps.length - 1].placeLabel).assertEqual('完成')
+      expect(s.steps[s.steps.length - 1].actionLabel).assertEqual('完成竖式')
     })
 
     it('100 + 200 = 300 with no carry', 0, () => {
