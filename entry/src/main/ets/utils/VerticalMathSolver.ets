@@ -18,7 +18,7 @@ export class VerticalMathHighlight {
 export class VerticalMathBoardRow {
   cells: string[] = []            // length = columnCount; '' = blank cell
   operator?: string               // leading glyph ('+', '-', '×', '÷', '＋'), or undefined
-  topMark?: string                // optional small glyph above the row ('•' for borrow, red 1 for add carry)
+  topMark?: string                // optional small glyph above the row ('-1' for borrow, '+1' for add carry)
   topMarkColumn?: number          // which column the topMark belongs to
   topMarkRowIndex?: number        // visual row index used by carry row injection
   carryColumns?: number[]         // all carry columns accumulated through this snapshot
@@ -190,7 +190,7 @@ function getPlaceValueLabel(columnCount: number, column: number): string {
  * - initialRows: [A row, B row with '+' operator, line spacer]
  * - steps[0..N-1]: one per column, right-to-left. When a column produces a carry
  *   (digitA + digitB + carryIn >= 10), the row for the NEXT column to the left
- *   carries a `topMark` of '1'. The active column is highlighted yellow ('active'),
+ *   carries a `topMark` of '+1'. The active column is highlighted yellow ('active'),
  *   already-resolved result columns are mint ('done').
  */
 export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
@@ -234,7 +234,7 @@ export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
     // retains every carry for this and all later snapshots.
     if (carryOut > 0 && col - 1 >= 0) {
       carryColumns.add(col - 1)
-      rowA.topMark = '1'
+      rowA.topMark = '+1'
       rowA.topMarkColumn = col - 1
       rowA.topMarkRowIndex = 0
     }
@@ -338,7 +338,7 @@ export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
  * - initialRows: [A row, B row with '-' operator, line spacer]
  * - steps[0..N-1]: one per column, right-to-left (first step is units, no alignment step).
  *   When a column needs to borrow (digitA < digitB + carryIn), the row for the column
- *   to the LEFT (col − 1) carries a `topMark` of '•' on the operand-A row. The active
+ *   to the LEFT (col − 1) carries a `topMark` of '-1' on the operand-A row. The active
  *   column is highlighted yellow ('active'), already-resolved result columns are mint
  *   ('done').
  * - final step: reveals the second line + result row.
@@ -390,7 +390,7 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
       // Walk left to find a non-zero digit in aBorrowed to borrow from.
       // Intermediate zero digits become 9 (they lent 1 to their left neighbor),
       // and each such column (plus the donor) is recorded as a borrow point so
-      // the renderer can mark the full borrow chain with a '•' marker.
+      // the renderer can mark the full borrow chain with a '-1' marker.
       let donor: number = col - 1
       while (donor >= 0 && (aBorrowed[donor] === ' ' || Number(aBorrowed[donor]) === 0)) {
         if (aBorrowed[donor] !== ' ') {
@@ -466,7 +466,7 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
 
     const rowA: VerticalMathBoardRow = { cells: cloneCells(aBorrowed) }
     if (stepBorrowColumns.length > 0) {
-      rowA.topMark = '•'
+      rowA.topMark = '-1'
       rowA.topMarkColumn = stepBorrowColumns[0]
       rowA.topMarkRowIndex = 0
     }

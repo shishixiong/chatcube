@@ -116,7 +116,7 @@ export struct VerticalMathBoard {
   }
 
   private getTopMarkColor(mark: string): string {
-    return mark === '•' ? this.palette.borrow : this.palette.carry
+    return mark === '-1' ? this.palette.borrow : this.palette.carry
   }
 
   private getCarryColumns(row: VerticalMathBoardRow): number[] {
@@ -163,10 +163,10 @@ export struct VerticalMathBoard {
     if (this.hasPersistentTopMarks(row)) {
       Stack() {
         ForEach(this.getCarryColumns(row), (column: number) => {
-          this.TopMarkAt('1', column, column === this.getActiveColumn())
+          this.TopMarkAt('+1', column, column === this.getActiveColumn())
         }, (column: number) => `carry_${column}`)
         ForEach(this.getBorrowColumns(row), (column: number) => {
-          this.TopMarkAt('•', column, column === this.getActiveColumn())
+          this.TopMarkAt('-1', column, column === this.getActiveColumn())
         }, (column: number) => `borrow_${column}`)
       }
     } else if (row.topMark !== undefined && row.topMark !== '') {
