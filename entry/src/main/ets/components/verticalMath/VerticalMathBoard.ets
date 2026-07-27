@@ -86,23 +86,6 @@ export struct VerticalMathBoard {
     return this.getCellSize() * (column + 1)
   }
 
-  private getLaneHeight(): number {
-    const rows: VerticalMathBoardRow[] = this.getCurrentRows()
-    if (rows.length === 0) return 0
-    const markerHeight: number = this.hasPersistentTopMarks(rows[0]) ? this.getCellSize() : 0
-    let height: number = 0
-    for (let index = 0; index < rows.length; index++) {
-      height += this.getCellSize()
-      if (index === 1) {
-        height += markerHeight
-      }
-      if (this.shouldShowLine(index)) {
-        height += 11
-      }
-    }
-    return height
-  }
-
   private getTopMarkOffset(column: number): number {
     return this.getCellSize() + column * this.getCellSize()
   }
@@ -215,27 +198,6 @@ export struct VerticalMathBoard {
   }
 
   @Builder
-  private PlaceValueLaneOverlay() {
-    if (this.getActiveColumn() >= 0) {
-      Row()
-        .width(this.getCellSize() - 6)
-        .height(this.getLaneHeight())
-        .position({
-          x: this.getCellX(this.getActiveColumn()) + 3 + (this.compact ? 14 : 20),
-          y: 0
-        })
-        .backgroundColor(this.palette.focus)
-        .opacity(0.28)
-        .border({ width: 2, color: this.palette.focus })
-        .borderRadius(14)
-        .animation({
-          duration: this.reduceMotion ? 0 : 180,
-          curve: Curve.EaseInOut
-        })
-    }
-  }
-
-  @Builder
   private RelationOverlay(overlay: VerticalMathOverlay) {
     if (overlay.kind === 'division_lane') {
       Row()
@@ -258,7 +220,6 @@ export struct VerticalMathBoard {
 
   build() {
     Stack() {
-      this.PlaceValueLaneOverlay()
       this.BoardRows()
       this.StepRelationOverlays()
     }
