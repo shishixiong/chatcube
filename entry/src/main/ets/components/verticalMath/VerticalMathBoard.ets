@@ -103,15 +103,6 @@ export struct VerticalMathBoard {
     return height
   }
 
-  private getBridgeStartX(overlay: VerticalMathOverlay): number {
-    return Math.min(this.getCellX(overlay.sourceColumn), this.getCellX(overlay.targetColumn)) +
-      this.getCellSize() / 2
-  }
-
-  private getBridgeWidth(overlay: VerticalMathOverlay): number {
-    return Math.abs(overlay.sourceColumn - overlay.targetColumn) * this.getCellSize()
-  }
-
   private getTopMarkOffset(column: number): number {
     return this.getCellSize() + column * this.getCellSize()
   }
@@ -246,21 +237,7 @@ export struct VerticalMathBoard {
 
   @Builder
   private RelationOverlay(overlay: VerticalMathOverlay) {
-    if (overlay.kind === 'carry_path') {
-      Row()
-        .width(this.getBridgeWidth(overlay))
-        .height(2)
-        .position({ x: this.getBridgeStartX(overlay), y: 2 * this.getCellSize() + this.getCellSize() / 2 })
-        .border({ width: { top: 2 }, color: this.palette.carry, style: BorderStyle.Dashed })
-        .animation({ duration: this.reduceMotion ? 0 : 220, curve: Curve.EaseOut })
-    } else if (overlay.kind === 'borrow_bridge') {
-      Row()
-        .width(this.getBridgeWidth(overlay))
-        .height(2)
-        .position({ x: this.getBridgeStartX(overlay), y: 2 * this.getCellSize() + this.getCellSize() / 2 })
-        .border({ width: { top: 2 }, color: this.palette.borrow, style: BorderStyle.Dashed })
-        .animation({ duration: this.reduceMotion ? 0 : 220, curve: Curve.EaseOut })
-    } else if (overlay.kind === 'division_lane') {
+    if (overlay.kind === 'division_lane') {
       Row()
         .width((overlay.endColumn - overlay.startColumn + 1) * this.getCellSize())
         .height(4)

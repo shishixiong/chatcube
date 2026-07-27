@@ -262,15 +262,6 @@ export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
 
     const placeLabel: string = getPlaceValueLabel(columnCount, col)
     const overlays: VerticalMathOverlay[] = []
-    if (carryOut > 0 && col - 1 >= 0) {
-      const carryOverlay: VerticalMathOverlay = new VerticalMathOverlay()
-      carryOverlay.kind = 'carry_path'
-      carryOverlay.sourceColumn = col
-      carryOverlay.targetColumn = col - 1
-      carryOverlay.rowIndex = 0
-      carryOverlay.value = String(carryOut)
-      overlays.push(carryOverlay)
-    }
 
     const formula: string = carryIn > 0
       ? `${dA} ＋ ${dB} ＋ ${carryIn} ＝ ${sum}`
@@ -469,15 +460,6 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
 
     const placeLabel: string = getPlaceValueLabel(columnCount, col)
     const overlays: VerticalMathOverlay[] = []
-    if (donorColumn >= 0) {
-      const borrowOverlay: VerticalMathOverlay = new VerticalMathOverlay()
-      borrowOverlay.kind = 'borrow_bridge'
-      borrowOverlay.sourceColumn = donorColumn
-      borrowOverlay.targetColumn = col
-      borrowOverlay.rowIndex = 0
-      borrowOverlay.value = '1'
-      overlays.push(borrowOverlay)
-    }
 
     const narration: string = donorColumn >= 0
       ? `${dA} 不够减 ${dB}，从${getPlaceValueLabel(columnCount, donorColumn)}借 1，${localDA} − ${dB} ＝ ${resultDigit}。`

@@ -119,16 +119,9 @@ export default function verticalMathSolverTest() {
     it('shows result and carry path in the same units step', 0, () => {
       const s = solveVerticalAdd(47, 28)
       const units: VerticalMathStep = s.steps[0]
-      const carries: VerticalMathOverlay[] = units.overlays.filter(
-        (overlay: VerticalMathOverlay): boolean => overlay.kind === 'carry_path'
-      )
       expect(units.placeLabel).assertEqual('个位')
       expect(units.actionLabel).assertEqual('算个位')
       expect(units.rows[3].cells[1]).assertEqual('5')
-      expect(carries.length).assertEqual(1)
-      expect(carries[0].sourceColumn).assertEqual(1)
-      expect(carries[0].targetColumn).assertEqual(0)
-      expect(carries[0].value).assertEqual('1')
       expect(units.narration.includes('个位写 5')).assertEqual(true)
       expect(units.narration.includes('送到十位')).assertEqual(true)
     })
@@ -136,9 +129,6 @@ export default function verticalMathSolverTest() {
     it('does not create an empty carry path', 0, () => {
       const s = solveVerticalAdd(22, 33)
       for (let index = 0; index < s.steps.length - 1; index++) {
-        expect(s.steps[index].overlays.some(
-          (overlay: VerticalMathOverlay): boolean => overlay.kind === 'carry_path'
-        )).assertEqual(false)
         expect(s.steps[index].narration.includes('没有新进位')).assertEqual(true)
       }
     })
@@ -275,14 +265,8 @@ export default function verticalMathSolverTest() {
           highlight.rowIndex === 0 && highlight.kind === 'active'
       )
       expect(activeA.length).assertEqual(1)
-      // The '-1' marker sits on the DONOR column (bridge sourceColumn), not the
-      // active recipient column.
-      const bridges: VerticalMathOverlay[] = activeStep.overlays.filter(
-        (overlay: VerticalMathOverlay): boolean => overlay.kind === 'borrow_bridge'
-      )
-      const donorColumn: number = bridges[0].sourceColumn
-      expect(activeStep.rows[0].borrowColumns?.includes(donorColumn) ?? false)
-        .assertEqual(true)
+      // The '-1' marker sits on the DONOR column, not the active recipient column.
+      expect(activeStep.rows[0].borrowColumns?.includes(0) ?? false).assertEqual(true)
       const finalStep: VerticalMathStep = s.steps[s.steps.length - 1]
       expect(finalStep.highlights.some(
         (highlight: VerticalMathHighlight): boolean =>
@@ -293,12 +277,7 @@ export default function verticalMathSolverTest() {
     it('creates a bridge for a direct borrow', 0, () => {
       const s = solveVerticalSubtract(42, 18)
       const units: VerticalMathStep = s.steps[0]
-      const bridges: VerticalMathOverlay[] = units.overlays.filter(
-        (overlay: VerticalMathOverlay): boolean => overlay.kind === 'borrow_bridge'
-      )
-      expect(bridges.length).assertEqual(1)
-      expect(bridges[0].sourceColumn).assertEqual(0)
-      expect(bridges[0].targetColumn).assertEqual(1)
+      expect(units.rows[0].borrowColumns?.includes(0) ?? false).assertEqual(true)
       expect(units.narration.includes('2 不够减 8')).assertEqual(true)
       expect(units.narration.includes('从十位借 1')).assertEqual(true)
     })
@@ -306,12 +285,6 @@ export default function verticalMathSolverTest() {
     it('connects the donor to the target for a cascading borrow', 0, () => {
       const s = solveVerticalSubtract(503, 278)
       const units: VerticalMathStep = s.steps[0]
-      const bridges: VerticalMathOverlay[] = units.overlays.filter(
-        (overlay: VerticalMathOverlay): boolean => overlay.kind === 'borrow_bridge'
-      )
-      expect(bridges.length).assertEqual(1)
-      expect(bridges[0].sourceColumn).assertEqual(0)
-      expect(bridges[0].targetColumn).assertEqual(2)
       expect(units.rows[0].borrowColumns?.includes(0) ?? false).assertEqual(true)
       expect(units.rows[0].borrowColumns?.includes(1) ?? false).assertEqual(false)
       expect(units.rows[0].borrowColumns?.includes(2) ?? false).assertEqual(false)
