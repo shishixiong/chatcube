@@ -89,12 +89,13 @@ export struct VerticalMathBoard {
   private getLaneHeight(): number {
     const rows: VerticalMathBoardRow[] = this.getCurrentRows()
     if (rows.length === 0) return 0
+    const markerHeight: number = this.hasPersistentTopMarks(rows[0]) ? this.getCellSize() : 0
     let height: number = 0
     for (let index = 0; index < rows.length; index++) {
-      const row: VerticalMathBoardRow = rows[index]
-      const hasTopMark: boolean = this.hasPersistentTopMarks(row) ||
-        (row.topMark !== undefined && row.topMark !== '')
-      height += this.getCellSize() * (hasTopMark ? 2 : 1)
+      height += this.getCellSize()
+      if (index === 1) {
+        height += markerHeight
+      }
       if (this.shouldShowLine(index)) {
         height += 11
       }
@@ -176,11 +177,24 @@ export struct VerticalMathBoard {
   }
 
   @Builder
+  private PersistentMarkerRow(sourceRow: VerticalMathBoardRow) {
+    if (this.hasPersistentTopMarks(sourceRow)) {
+      Stack() {
+        ForEach(this.getCarryColumns(sourceRow), (column: number) => {
+          this.TopMarkAt('+1', column, column === this.getActiveColumn())
+        }, (column: number) => `carry_${column}`)
+        ForEach(this.getBorrowColumns(sourceRow), (column: number) => {
+          this.TopMarkAt('-1', column, column === this.getActiveColumn())
+        }, (column: number) => `borrow_${column}`)
+      }
+    }
+  }
+
+  @Builder
   private BoardRows() {
     Column() {
       ForEach(this.getCurrentRows(), (row: VerticalMathBoardRow, rowIndex: number) => {
         Column() {
-          this.TopMark(row)
           VerticalMathBoardRowView({
             row: row,
             rowIndex: rowIndex,
@@ -190,6 +204,9 @@ export struct VerticalMathBoard {
             columnCount: this.solution.columnCount,
             isDarkMode: this.isDarkMode
           })
+          if (rowIndex === 1) {
+            this.PersistentMarkerRow(this.getCurrentRows()[0])
+          }
           if (this.shouldShowLine(rowIndex)) {
             Row()
               .width(this.getCellSize() * this.solution.columnCount)
@@ -233,14 +250,14 @@ export struct VerticalMathBoard {
       Row()
         .width(this.getBridgeWidth(overlay))
         .height(2)
-        .position({ x: this.getBridgeStartX(overlay), y: 8 })
+        .position({ x: this.getBridgeStartX(overlay), y: 2 * this.getCellSize() + this.getCellSize() / 2 })
         .border({ width: { top: 2 }, color: this.palette.carry, style: BorderStyle.Dashed })
         .animation({ duration: this.reduceMotion ? 0 : 220, curve: Curve.EaseOut })
     } else if (overlay.kind === 'borrow_bridge') {
       Row()
         .width(this.getBridgeWidth(overlay))
         .height(2)
-        .position({ x: this.getBridgeStartX(overlay), y: 8 })
+        .position({ x: this.getBridgeStartX(overlay), y: 2 * this.getCellSize() + this.getCellSize() / 2 })
         .border({ width: { top: 2 }, color: this.palette.borrow, style: BorderStyle.Dashed })
         .animation({ duration: this.reduceMotion ? 0 : 220, curve: Curve.EaseOut })
     } else if (overlay.kind === 'division_lane') {

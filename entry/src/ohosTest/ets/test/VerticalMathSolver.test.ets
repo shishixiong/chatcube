@@ -259,9 +259,12 @@ export default function verticalMathSolverTest() {
         )
         expect(resultActive.length).assertEqual(1)
       }
-      // Final answer row carries no borrow markers.
-      const finalMarks: number[] = s.steps[s.steps.length - 1].rows[0].borrowColumns ?? []
-      expect(finalMarks.length).assertEqual(0)
+      // Borrow markers persist through later snapshots and the final answer.
+      for (let index = 0; index < s.steps.length; index++) {
+        const marks: number[] = s.steps[index].rows[0].borrowColumns ?? []
+        expect(marks.length).assertEqual(1)
+        expect(marks.includes(0)).assertEqual(true)
+      }
     })
 
     it('marks the donor column for the active borrow step', 0, () => {
@@ -339,6 +342,45 @@ export default function verticalMathSolverTest() {
       const marks: number[] = s.steps[0].rows[0].borrowColumns ?? []
       expect(marks.length).assertEqual(1)
       expect(marks.includes(0)).assertEqual(true)
+    })
+    it('keeps accumulated subtraction borrow markers on later and final snapshots', 0, () => {
+      const s150 = solveVerticalSubtract(150, 64)
+      const s150Step2Marks: number[] = s150.steps[1].rows[0].borrowColumns ?? []
+      expect(s150Step2Marks.join(',')).assertEqual('1,0')
+      const s150Step3Marks: number[] = s150.steps[2].rows[0].borrowColumns ?? []
+      expect(s150Step3Marks.join(',')).assertEqual('1,0')
+      const s150FinalMarks: number[] = s150.steps[s150.steps.length - 1].rows[0].borrowColumns ?? []
+      expect(s150FinalMarks.join(',')).assertEqual('1,0')
+
+      const s42 = solveVerticalSubtract(42, 18)
+      const s42Step2Marks: number[] = s42.steps[1].rows[0].borrowColumns ?? []
+      expect(s42Step2Marks.join(',')).assertEqual('0')
+      const s42FinalMarks: number[] = s42.steps[s42.steps.length - 1].rows[0].borrowColumns ?? []
+      expect(s42FinalMarks.join(',')).assertEqual('0')
+
+      const s503 = solveVerticalSubtract(503, 278)
+      const s503Step2Marks: number[] = s503.steps[1].rows[0].borrowColumns ?? []
+      expect(s503Step2Marks.join(',')).assertEqual('0')
+      const s503Step3Marks: number[] = s503.steps[2].rows[0].borrowColumns ?? []
+      expect(s503Step3Marks.join(',')).assertEqual('0')
+      const s503FinalMarks: number[] = s503.steps[s503.steps.length - 1].rows[0].borrowColumns ?? []
+      expect(s503FinalMarks.join(',')).assertEqual('0')
+
+      const s100 = solveVerticalSubtract(100, 50)
+      const s100Step3Marks: number[] = s100.steps[2].rows[0].borrowColumns ?? []
+      expect(s100Step3Marks.join(',')).assertEqual('0')
+      const s100FinalMarks: number[] = s100.steps[s100.steps.length - 1].rows[0].borrowColumns ?? []
+      expect(s100FinalMarks.join(',')).assertEqual('0')
+    })
+
+    it('keeps addition carry markers unchanged', 0, () => {
+      const s = solveVerticalAdd(56, 94)
+      const tensMarks: number[] = s.steps[1].rows[0].carryColumns ?? []
+      expect(tensMarks.join(',')).assertEqual('1')
+      const hundredsMarks: number[] = s.steps[2].rows[0].carryColumns ?? []
+      expect(hundredsMarks.join(',')).assertEqual('1')
+      const finalMarks: number[] = s.steps[s.steps.length - 1].rows[0].carryColumns ?? []
+      expect(finalMarks.join(',')).assertEqual('1')
     })
   })
 
