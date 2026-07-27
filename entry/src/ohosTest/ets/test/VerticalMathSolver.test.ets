@@ -220,16 +220,19 @@ export default function verticalMathSolverTest() {
       const s = solveVerticalSubtract(503, 278)
       expect(s.result).assertEqual(225)
       const borrowSteps = s.steps.filter((step: VerticalMathStep) =>
-        step.rows.some((row: VerticalMathBoardRow) => row.topMark === '•'))
+        step.rows[0].borrowColumns !== undefined && step.rows[0].borrowColumns.length > 0)
       expect(borrowSteps.length >= 1).assertEqual(true)
     })
 
-    it('100 - 50 = 50 with no borrow', 0, () => {
+    it('100 - 50 = 50 marks only the hundreds donor', 0, () => {
       const s = solveVerticalSubtract(100, 50)
       expect(s.result).assertEqual(50)
-      const borrowSteps = s.steps.filter((step: VerticalMathStep) =>
-        step.rows.some((row: VerticalMathBoardRow) => row.topMark === '•'))
-      expect(borrowSteps.length).assertEqual(0)
+      // Ones column (0-0) needs no borrow; tens column (0<5) borrows from hundreds.
+      const onesMarks: number[] = s.steps[0].rows[0].borrowColumns ?? []
+      expect(onesMarks.length).assertEqual(0)
+      const tensMarks: number[] = s.steps[1].rows[0].borrowColumns ?? []
+      expect(tensMarks.length).assertEqual(1)
+      expect(tensMarks.includes(0)).assertEqual(true)
     })
 
     it('999 - 999 = 0', 0, () => {
@@ -238,14 +241,16 @@ export default function verticalMathSolverTest() {
       expect(s.columnCount).assertEqual(3)
     })
 
-    it('keeps cascade borrow columns and marks each new result active', 0, () => {
+    it('marks only the donor column and keeps original digits', 0, () => {
       const s = solveVerticalSubtract(303, 178)
+      // Step 0 (ones): 3<8 borrows from hundreds (donor col 0, via a zero at tens).
+      const triggerMarks: number[] = s.steps[0].rows[0].borrowColumns ?? []
+      expect(triggerMarks.length).assertEqual(1)
+      expect(triggerMarks.includes(0)).assertEqual(true)
+      // Original digits are preserved on the operand-A row (no 9s, no decrements).
+      expect(s.steps[0].rows[0].cells.join('')).assertEqual('303')
+      // The result column for the active step is highlighted.
       for (let index = 0; index < s.steps.length - 1; index++) {
-        const marks: number[] = s.steps[index].rows[0].borrowColumns ?? []
-        expect(marks.includes(0)).assertEqual(true)
-        expect(marks.includes(1)).assertEqual(true)
-        expect(marks.includes(2)).assertEqual(true)
-
         const expectedColumn: number = s.columnCount - 1 - index
         const resultActive: VerticalMathHighlight[] = s.steps[index].highlights.filter(
           (highlight: VerticalMathHighlight): boolean =>
@@ -254,13 +259,12 @@ export default function verticalMathSolverTest() {
         )
         expect(resultActive.length).assertEqual(1)
       }
+      // Final answer row carries no borrow markers.
       const finalMarks: number[] = s.steps[s.steps.length - 1].rows[0].borrowColumns ?? []
-      expect(finalMarks.includes(0)).assertEqual(true)
-      expect(finalMarks.includes(1)).assertEqual(true)
-      expect(finalMarks.includes(2)).assertEqual(true)
+      expect(finalMarks.length).assertEqual(0)
     })
 
-    it('uses a persistent borrow marker on the active borrow column', 0, () => {
+    it('marks the donor column for the active borrow step', 0, () => {
       const s = solveVerticalSubtract(503, 278)
       const activeStep: VerticalMathStep = s.steps[0]
       const activeA: VerticalMathHighlight[] = activeStep.highlights.filter(
@@ -268,7 +272,13 @@ export default function verticalMathSolverTest() {
           highlight.rowIndex === 0 && highlight.kind === 'active'
       )
       expect(activeA.length).assertEqual(1)
-      expect(activeStep.rows[0].borrowColumns?.includes(activeA[0].columnIndex) ?? false)
+      // The '-1' marker sits on the DONOR column (bridge sourceColumn), not the
+      // active recipient column.
+      const bridges: VerticalMathOverlay[] = activeStep.overlays.filter(
+        (overlay: VerticalMathOverlay): boolean => overlay.kind === 'borrow_bridge'
+      )
+      const donorColumn: number = bridges[0].sourceColumn
+      expect(activeStep.rows[0].borrowColumns?.includes(donorColumn) ?? false)
         .assertEqual(true)
       const finalStep: VerticalMathStep = s.steps[s.steps.length - 1]
       expect(finalStep.highlights.some(
@@ -300,8 +310,8 @@ export default function verticalMathSolverTest() {
       expect(bridges[0].sourceColumn).assertEqual(0)
       expect(bridges[0].targetColumn).assertEqual(2)
       expect(units.rows[0].borrowColumns?.includes(0) ?? false).assertEqual(true)
-      expect(units.rows[0].borrowColumns?.includes(1) ?? false).assertEqual(true)
-      expect(units.rows[0].borrowColumns?.includes(2) ?? false).assertEqual(true)
+      expect(units.rows[0].borrowColumns?.includes(1) ?? false).assertEqual(false)
+      expect(units.rows[0].borrowColumns?.includes(2) ?? false).assertEqual(false)
     })
 
     it('labels every subtraction step for navigation', 0, () => {
@@ -310,6 +320,25 @@ export default function verticalMathSolverTest() {
       expect(s.steps[0].actionLabel).assertEqual('算个位')
       expect(s.steps[1].placeLabel).assertEqual('十位')
       expect(s.steps[s.steps.length - 1].placeLabel).assertEqual('完成')
+    })
+
+    it('150 - 64 step 1 shows original digits and marks only the tens donor', 0, () => {
+      const s = solveVerticalSubtract(150, 64)
+      expect(s.result).assertEqual(86)
+      // Operand-A row keeps the original 150 (not mutated to 140).
+      expect(s.steps[0].rows[0].cells.join('')).assertEqual('150')
+      // Only the tens column (donor, col 1) carries the '-1' marker.
+      const marks: number[] = s.steps[0].rows[0].borrowColumns ?? []
+      expect(marks.length).assertEqual(1)
+      expect(marks.includes(1)).assertEqual(true)
+    })
+
+    it('42 - 18 step 1 borrowColumns shows only the tens donor', 0, () => {
+      const s = solveVerticalSubtract(42, 18)
+      expect(s.result).assertEqual(24)
+      const marks: number[] = s.steps[0].rows[0].borrowColumns ?? []
+      expect(marks.length).assertEqual(1)
+      expect(marks.includes(0)).assertEqual(true)
     })
   })
 

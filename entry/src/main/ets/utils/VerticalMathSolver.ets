@@ -337,16 +337,17 @@ export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
  * Structure:
  * - initialRows: [A row, B row with '-' operator, line spacer]
  * - steps[0..N-1]: one per column, right-to-left (first step is units, no alignment step).
- *   When a column needs to borrow (digitA < digitB + carryIn), the row for the column
- *   to the LEFT (col − 1) carries a `topMark` of '-1' on the operand-A row. The active
- *   column is highlighted yellow ('active'), already-resolved result columns are mint
- *   ('done').
- * - final step: reveals the second line + result row.
+ *   When a column needs to borrow (digitA < digitB + carryIn), the DONOR column
+ *   for that step is recorded in `rowA.borrowColumns`; the renderer draws a single
+ *   '-1' marker above the donor. Each per-step operand-A row shows the ORIGINAL
+ *   digits (unmutated) so the number stays visually intact. The active column is
+ *   highlighted yellow ('active'), already-resolved result columns are mint ('done').
+ * - final step: reveals the second line + result row (no borrow markers).
  *
  * Borrow convention: When a borrow is needed, walk left to find a non-zero donor
- * digit in aCellsBorrowed, decrement it by 1, and add 10 to dA. For 503 − 278
- * the borrow chain can cascade (0,0 → 5 becomes 4), which is why we walk donors
- * rather than always borrowing from col−1.
+ * digit in aBorrowed, decrement it by 1, and add 10 to dA. aBorrowed is internal
+ * math state only — it drives the result digits and the donor bridge overlay, but
+ * is never rendered (rowA.cells uses the original aCells).
  */
 export function solveVerticalSubtract(a: number, b: number): VerticalMathSolution {
   const digitsA: number = Math.max(1, String(a).length)
@@ -369,34 +370,25 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
 
   // Digit-by-digit, right to left. aBorrowed tracks "what A looks like now"
   // after borrow decrements have been applied to the higher-order digits.
-  // cascadeColumns tracks columns whose digit was turned to '9' by walking past
-  // a zero during a borrow chain — these are the columns that should display
-  // a borrow marker in subsequent steps so the cascade is visible column-by-column.
-  // Direct borrows (donor immediately adjacent, no zeros walked) do NOT add
-  // cascade markers — they only affect the trigger step.
+  // aBorrowed is internal math state only — it computes the result digits and
+  // identifies the donor column, but is never rendered.
   const aBorrowed: string[] = cloneCells(aCells)
   const resultCells: string[] = emptyCells(columnCount)
-  const cascadeColumns: Set<number> = new Set<number>()
-  const persistentBorrowColumns: Set<number> = new Set<number>()
   let carryIn: number = 0
 
   for (let col = columnCount - 1; col >= 0; col--) {
     const dA: number = aBorrowed[col] === ' ' ? 0 : Number(aBorrowed[col])
     const dB: number = bCells[col] === ' ' ? 0 : Number(bCells[col])
     let localDA: number = dA
-    const borrowColumns: number[] = []
     let donorColumn: number = -1
     if (localDA < dB + carryIn) {
       // Walk left to find a non-zero digit in aBorrowed to borrow from.
-      // Intermediate zero digits become 9 (they lent 1 to their left neighbor),
-      // and each such column (plus the donor) is recorded as a borrow point so
-      // the renderer can mark the full borrow chain with a '-1' marker.
+      // Intermediate zero digits become 9 (they lent 1 to their left neighbor).
+      // These mutations are internal math state only (not rendered).
       let donor: number = col - 1
       while (donor >= 0 && (aBorrowed[donor] === ' ' || Number(aBorrowed[donor]) === 0)) {
         if (aBorrowed[donor] !== ' ') {
           aBorrowed[donor] = '9'
-          borrowColumns.push(donor)
-          cascadeColumns.add(donor)
         }
         donor--
       }
@@ -404,13 +396,6 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
         donorColumn = donor
         aBorrowed[donor] = String(Number(aBorrowed[donor]) - 1)
         localDA += 10
-        borrowColumns.push(donor)
-      }
-    }
-    if (borrowColumns.length > 0) {
-      persistentBorrowColumns.add(col)
-      for (let bi = 0; bi < borrowColumns.length; bi++) {
-        persistentBorrowColumns.add(borrowColumns[bi])
       }
     }
     const resultDigit: number = localDA - dB - carryIn
@@ -443,35 +428,11 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
       }
     }
 
-    // Borrow markers for THIS step:
-    // - Only emitted when the borrow CASCADED (walked past at least one zero).
-    //   Direct borrows (donor immediately adjacent) produce no visualization
-    //   markers — the math still works, but the child just sees a normal step.
-    // - If a borrow just happened with cascade, mark all chain columns.
-    // - If this column was previously touched by a cascade (digit now differs
-    //   from aCells due to a prior borrow chain), also show a marker here.
-    const isCascaded: boolean = cascadeColumns.has(col)
-    const hadCascade: boolean = borrowColumns.length > 1 ||
-      (borrowColumns.length === 1 && cascadeColumns.has(borrowColumns[0]))
-    const stepBorrowColumns: number[] = []
-    if (hadCascade) {
-      // Trigger step with cascade: mark all chain columns.
-      for (let bi = 0; bi < borrowColumns.length; bi++) {
-        stepBorrowColumns.push(borrowColumns[bi])
-      }
-    } else if (isCascaded && aBorrowed[col] !== aCells[col]) {
-      // Cascade-touched column being processed in a later step.
-      stepBorrowColumns.push(col)
-    }
-
-    const rowA: VerticalMathBoardRow = { cells: cloneCells(aBorrowed) }
-    if (stepBorrowColumns.length > 0) {
-      rowA.topMark = '-1'
-      rowA.topMarkColumn = stepBorrowColumns[0]
-      rowA.topMarkRowIndex = 0
-    }
-    if (persistentBorrowColumns.size > 0) {
-      rowA.borrowColumns = Array.from(persistentBorrowColumns)
+    // Per-step operand-A row shows the ORIGINAL digits (never mutated). The
+    // borrow is indicated only by a single '-1' marker above the donor column.
+    const rowA: VerticalMathBoardRow = { cells: cloneCells(aCells) }
+    if (donorColumn >= 0) {
+      rowA.borrowColumns = [donorColumn]
     }
     const rowB: VerticalMathBoardRow = { cells: cloneCells(bCells), operator: '-' }
     const rowLine: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
@@ -487,14 +448,6 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
     const activeB: VerticalMathHighlight = { rowIndex: rowBIndex, columnIndex: col, kind: 'active' }
     highlights.push(activeA)
     highlights.push(activeB)
-    for (let bi = 0; bi < stepBorrowColumns.length; bi++) {
-      const borrowHl: VerticalMathHighlight = {
-        rowIndex: rowAIndex,
-        columnIndex: stepBorrowColumns[bi],
-        kind: 'borrow'
-      }
-      highlights.push(borrowHl)
-    }
     const activeResult: VerticalMathHighlight = {
       rowIndex: rowResultIndex,
       columnIndex: col,
@@ -537,11 +490,8 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
     steps.push(step)
   }
 
-  // Final step: full board with the answer row.
+  // Final step: full board with the answer row (no borrow markers).
   const finalRowA: VerticalMathBoardRow = { cells: cloneCells(aCells) }
-  if (persistentBorrowColumns.size > 0) {
-    finalRowA.borrowColumns = Array.from(persistentBorrowColumns)
-  }
   const finalRowB: VerticalMathBoardRow = { cells: cloneCells(bCells), operator: '-' }
   const finalRowLine: VerticalMathBoardRow = { cells: emptyCells(columnCount) }
   const finalRowResult: VerticalMathBoardRow = { cells: cloneCells(finalCells) }
