@@ -19,6 +19,7 @@ import {
   MazeCell,
   MazePosition,
   MazeDifficulty,
+  Direction,
   generateMaze,
   canMove as mazeCanMove,
   movePlayer as mazeMovePlayer,
@@ -61,6 +62,8 @@ export struct MazeCard {
   // 状态机
   @Local isCompleted: boolean = false
   @Local hasWon: boolean = false
+  // 玩家移动入场动画: 首次渲染期间为 false, 之后开启
+  @Local shouldAnimate: boolean = false
   @Local bestTimeSeconds: number = -1
   @Local bestMoves: number = -1
   @Local bestStars: number = -1
@@ -71,6 +74,7 @@ export struct MazeCard {
   @Local pressedCellKey: string = ''       // 当前按下的格子 (格式 "r,c")
   @Local wallBumpKey: string = ''          // 撞墙抖动键 (格式 "r,c")
   @Local wallBumpAxis: 'h' | 'v' = 'h'     // 抖动方向
+  @Local wallBumpStep: number = 0          // 抖动阶段 (0=静止, 1-4=抖动幅度)
   @Local collectedKey: string = ''         // 刚被收集的星位置 (用于旋转动画)
 
   private timerId: number = -1
@@ -109,13 +113,15 @@ export struct MazeCard {
       if (rows >= 6) return 60
       return 70
     }
-    if (rows >= 8) return 36
+    if (rows >= 8) return 40
     if (rows >= 6) return 42
     return 48
   }
 
   private get cellGap(): number {
-    return this.largeSize ? 2 : 1
+    // 内联模式大格(cellSize≥40)用 0vp 间隙节省宽度, 小格保持 1vp 让墙条更明显
+    if (this.largeSize) return 2
+    return this.cellSize >= 40 ? 0 : 1
   }
 
   private get wallThickness(): number {
@@ -218,6 +224,8 @@ export struct MazeCard {
           this.maze = generateMaze(dims.rows, dims.cols, 2)
         }
         this.startTimer()
+        // 初次渲染后开启入场动画, 避免首次出现玩家就有滑入效果
+        this.shouldAnimate = true
       }
 
       // 异步加载最佳成绩(无论新游戏还是还原都需要)
@@ -349,15 +357,11 @@ export struct MazeCard {
       // 非相邻: 拒绝(无视觉反馈,保持简单)
       return
     }
-    const direction = dr === -1 ? 'top' : (dr === 1 ? 'bottom' : (dc === -1 ? 'left' : 'right'))
+    const direction: Direction = dr === -1 ? 'top' : (dr === 1 ? 'bottom' : (dc === -1 ? 'left' : 'right'))
     const currentCell: MazeCell = this.maze.cells[this.playerPos.row][this.playerPos.col]
     if (!mazeCanMove(currentCell, direction)) {
       // 撞墙: 抖动反馈
-      this.wallBumpKey = row + ',' + col
-      this.wallBumpAxis = (direction === 'top' || direction === 'bottom') ? 'v' : 'h'
-      setTimeout((): void => {
-        this.wallBumpKey = ''
-      }, 250)
+      this.triggerWallBump(row, col, (direction === 'top' || direction === 'bottom') ? 'v' : 'h')
       return
     }
     const newPos = mazeMovePlayer(this.maze.cells, this.playerPos, direction)
@@ -365,7 +369,7 @@ export struct MazeCard {
       return
     }
     this.moveCount += 1
-    this.playerPos = newPos
+    this.movePlayerVisually(newPos)
     // 检查收集星
     const landedCell: MazeCell = this.maze.cells[newPos.row][newPos.col]
     if (landedCell.hasStar && mazeCollectStar(landedCell)) {
@@ -390,6 +394,43 @@ export struct MazeCard {
 
   private handleCellTouchUp(): void {
     this.pressedCellKey = ''
+  }
+
+  private movePlayerVisually(newPos: MazePosition): void {
+    // 初始渲染期间 shouldAnimate=false: 同步赋值, 不开启动画 (避免首屏兔子飞入)
+    // 之后 shouldAnimate=true: 用 animateTo 包裹状态变化, 让 overlay 平滑滑动到新格子
+    if (!this.shouldAnimate) {
+      this.playerPos = newPos
+      return
+    }
+    animateTo({ duration: 200, curve: Curve.EaseOut }, (): void => {
+      this.playerPos = newPos
+    })
+  }
+
+  private triggerWallBump(row: number, col: number, axis: 'h' | 'v'): void {
+    this.wallBumpKey = `${row},${col}`
+    this.wallBumpAxis = axis
+    this.wallBumpStep = 1
+    setTimeout((): void => { this.wallBumpStep = 2 }, 50)
+    setTimeout((): void => { this.wallBumpStep = 3 }, 100)
+    setTimeout((): void => { this.wallBumpStep = 4 }, 150)
+    setTimeout((): void => { this.wallBumpStep = 0 }, 220)
+  }
+
+  private getBumpOffset(row: number, col: number, axis: 'h' | 'v'): number {
+    const cellKey: string = `${row},${col}`
+    if (this.wallBumpKey !== cellKey) {
+      return 0
+    }
+    if (axis !== this.wallBumpAxis) {
+      return 0
+    }
+    if (this.wallBumpStep <= 0) {
+      return 0
+    }
+    const offsets: number[] = [0, 3, -3, 1, -1]
+    return offsets[this.wallBumpStep] ?? 0
   }
 
   private handleWin(): void {
@@ -469,7 +510,7 @@ export struct MazeCard {
   HeaderRow() {
     Row() {
       Column() {
-        SymbolGlyph($r('sys.symbol.wand_and_stars'))
+        SymbolGlyph($r('sys.symbol.map'))
           .fontSize(15)
           .fontColor([this.themeAiBubble === '#FFFDF8' ? '#FF9F43' : this.themeAiBubble])
       }
@@ -548,15 +589,36 @@ export struct MazeCard {
   MazePanel() {
     Column() {
       if (this.maze !== null) {
-        Column() {
-          ForEach(this.maze.cells, (row: MazeCell[], rowIndex: number) => {
-            Row() {
-              ForEach(row, (cell: MazeCell, colIndex: number) => {
-                this.MazeCellView(cell, rowIndex, colIndex)
-              }, (cell: MazeCell, colIndex: number) => `cell_${rowIndex}_${colIndex}`)
+        Stack() {
+          // 背景层: 单元格网格(不含玩家)
+          Column() {
+            ForEach(this.maze.cells, (row: MazeCell[], rowIndex: number) => {
+              Row() {
+                ForEach(row, (cell: MazeCell, colIndex: number) => {
+                  this.MazeCellView(cell, rowIndex, colIndex)
+                }, (cell: MazeCell, colIndex: number) => `cell_${rowIndex}_${colIndex}`)
+              }
+              .width('100%')
+            }, (row: MazeCell[], rowIndex: number) => `row_${rowIndex}`)
+          }
+          .width('100%')
+
+          // 前景层: 玩家 overlay(绝对定位, 通过 .position() 滑动)
+          if (this.shouldShowPlayer) {
+            Column() {
+              Text('🐰')
+                .fontSize(this.playerSize)
             }
-            .width('100%')
-          }, (row: MazeCell[], rowIndex: number) => `row_${rowIndex}`)
+            .width(this.cellSize)
+            .height(this.cellSize)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
+            .position({
+              x: this.cellGap + this.playerPos.col * (this.cellSize + this.cellGap * 2),
+              y: this.cellGap + this.playerPos.row * (this.cellSize + this.cellGap * 2)
+            })
+            .animation({ duration: 200, curve: Curve.EaseOut })
+          }
         }
         .width('100%')
         .padding(this.cellGap * 2)
@@ -574,6 +636,17 @@ export struct MazeCard {
       // 阻止事件冒泡到外层 List(scroll)
       e.stopPropagation()
     })
+  }
+
+  private get shouldShowPlayer(): boolean {
+    if (this.maze === null) {
+      return false
+    }
+    if (this.isCompleted && this.hasWon) {
+      return false
+    }
+    const cell: MazeCell = this.maze.cells[this.playerPos.row][this.playerPos.col]
+    return !cell.isGoal
   }
 
   @Builder
@@ -615,17 +688,19 @@ export struct MazeCard {
           .position({ x: 0, y: 0 })
       }
 
-      // 中心图标: 玩家(小兔子) / 终点(小屋) / 隐藏胡萝卜
-      if (this.playerPos.row === row && this.playerPos.col === col && !cell.isGoal) {
-        Column() {
-          Text('🐰')
-            .fontSize(this.playerSize)
-        }
-        .width(this.cellSize)
-        .height(this.cellSize)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Center)
-      } else if (cell.isGoal) {
+      // 中心图标: 终点(小屋) / 隐藏胡萝卜 (玩家已提升为 MazePanel 顶层 overlay, 避免 transition 残影)
+      if (cell.isGoal) {
+        // 目的地印章: 虚线圆角包裹, 强化"纸面地图 + 终点标记"语义
+        Column()
+          .width(this.cellSize - 6)
+          .height(this.cellSize - 6)
+          .border({
+            width: 1.5,
+            color: withColorAlpha(this.wallColor, this.isDarkMode ? '50' : '38'),
+            style: BorderStyle.Dashed
+          })
+          .borderRadius(this.cellSize * 0.22)
+          .position({ x: 3, y: 3 })
         Column() {
           Text('🏠')
             .fontSize(this.goalSize)
@@ -648,6 +723,16 @@ export struct MazeCard {
     .width(this.cellSize)
     .height(this.cellSize)
     .margin(this.cellGap)
+    .translate({
+      x: this.getBumpOffset(row, col, 'h'),
+      y: this.getBumpOffset(row, col, 'v')
+    })
+    .animation({ duration: 50, curve: Curve.EaseOut })
+    .scale({
+      x: this.pressedCellKey === `${row},${col}` ? 0.94 : 1,
+      y: this.pressedCellKey === `${row},${col}` ? 0.94 : 1
+    })
+    .animation({ duration: 80, curve: Curve.EaseOut })
     .onClick((): void => {
       this.handleCellPress(row, col)
     })
@@ -681,12 +766,12 @@ export struct MazeCard {
       .layoutWeight(1)
       .padding(10)
       .borderRadius(10)
-      .backgroundColor(withColorAlpha('#FF9F43', this.isDarkMode ? '10' : '08'))
+      .backgroundColor(withColorAlpha(this.wallColor, this.isDarkMode ? '12' : '08'))
       .border({
         width: 1,
         color: this.isNewBest
           ? withColorAlpha(MazeCard.SUCCESS_GREEN, '60')
-          : withColorAlpha('#FF9F43', this.isDarkMode ? '22' : '18'),
+          : withColorAlpha(this.wallColor, this.isDarkMode ? '28' : '1C'),
         style: BorderStyle.Solid
       })
 
@@ -712,12 +797,12 @@ export struct MazeCard {
       .layoutWeight(1)
       .padding(10)
       .borderRadius(10)
-      .backgroundColor(withColorAlpha('#9D5BB3', this.isDarkMode ? '10' : '08'))
+      .backgroundColor(withColorAlpha('#B45309', this.isDarkMode ? '12' : '08'))
       .border({
         width: 1,
         color: this.isNewBest
           ? withColorAlpha(MazeCard.SUCCESS_GREEN, '60')
-          : withColorAlpha('#9D5BB3', this.isDarkMode ? '22' : '18'),
+          : withColorAlpha('#B45309', this.isDarkMode ? '28' : '1C'),
         style: BorderStyle.Solid
       })
 
@@ -762,7 +847,7 @@ export struct MazeCard {
     Row() {
       Blank()
       if (!this.hasWon && !this.isAnswered && !this.isCompleted) {
-        Text('放弃本局 →')
+        Text('走不出去了？换一局 →')
           .fontSize(12)
           .fontColor($r('app.color.text_tertiary'))
           .padding(8)
