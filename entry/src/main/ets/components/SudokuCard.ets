@@ -67,15 +67,17 @@ export struct SudokuCard {
   @Local hasWon: boolean = false
   @Local bestTimeSeconds: number = -1
   @Local bestMistakes: number = -1
-  @Local isNewBest: boolean = false
+  @Local isNewBestTime: boolean = false
+  @Local isNewBestMistakes: boolean = false
   @Local bestScoresLoaded: boolean = false
   @Local winPopIndex: number = -1
   @Local isGenerating: boolean = true
+  @Local pressedDigitKey: number = -99 // -99 = none, -1 = erase, 1..N = digit
 
   private timerId: number = -1
   private winPopTimerId: number = -1
   private readonly SUCCESS_GREEN: string = '#22C55E'
-  private readonly CONFLICT_RED: string = '#EF4444'
+  private readonly CONFLICT_RED: string = '#F87171'
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
@@ -247,7 +249,8 @@ export struct SudokuCard {
         await prefs.setNumber(mistakesKey, this.mistakeCount)
         this.bestMistakes = this.mistakeCount
       }
-      this.isNewBest = isNewBestTime || isNewBestMistakes
+      this.isNewBestTime = isNewBestTime
+      this.isNewBestMistakes = isNewBestMistakes
     } catch (_e) {
       // ignore persistence errors
     }
@@ -272,7 +275,8 @@ export struct SudokuCard {
   private startGame(): void {
     this.isCompleted = false
     this.hasWon = false
-    this.isNewBest = false
+    this.isNewBestTime = false
+    this.isNewBestMistakes = false
     this.mistakeCount = 0
     this.selectedCellIndex = -1
     this.conflicts = []
@@ -650,7 +654,7 @@ export struct SudokuCard {
           .fontSize(13)
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.status_success'))
-        Text(`${this.formatTime(this.elapsedSeconds)} · ${this.mistakeCount} 错`)
+        Text(`${this.formatTime(this.elapsedSeconds)} · ${this.mistakeCount} 失误`)
           .fontSize(11)
           .fontColor($r('app.color.text_secondary'))
           .margin({ top: 2 })
@@ -658,7 +662,7 @@ export struct SudokuCard {
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
 
-      if (this.isNewBest) {
+      if (this.isNewBestTime || this.isNewBestMistakes) {
         Text('新纪录')
           .fontSize(10)
           .fontColor(Color.White)
@@ -761,7 +765,7 @@ export struct SudokuCard {
         left: 0.5,
         right: this.isExternalRightEdge(index) ? 1.5 : (this.isBoxRightEdge(index) ? 1.5 : 0.5)
       },
-      color: this.isDarkMode ? '#5A5A5A' : '#B5B5B5',
+      color: $r('app.color.divider'),
       style: BorderStyle.Solid
     })
     .onClick(() => this.handleCellTap(index))
@@ -800,8 +804,17 @@ export struct SudokuCard {
       .height(this.padKeySize())
       .borderRadius(8)
       .backgroundColor(this.themeAiBubble)
+      .scale(this.pressedDigitKey === digit ? { x: 0.94, y: 0.94 } : { x: 1, y: 1 })
+      .animation({ duration: 80, curve: Curve.EaseOut })
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
+      .onTouch(e => {
+        if (e.type === TouchType.Down) {
+          this.pressedDigitKey = digit
+        } else if (e.type === TouchType.Up || e.type === TouchType.Cancel) {
+          this.pressedDigitKey = -99
+        }
+      })
       .onClick(() => this.handleErase())
     } else {
       Column() {
@@ -814,17 +827,33 @@ export struct SudokuCard {
       .height(this.padKeySize())
       .borderRadius(8)
       .backgroundColor(this.themeAiBubble)
+      .scale(this.pressedDigitKey === digit ? { x: 0.94, y: 0.94 } : { x: 1, y: 1 })
+      .animation({ duration: 80, curve: Curve.EaseOut })
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
+      .onTouch(e => {
+        if (e.type === TouchType.Down) {
+          this.pressedDigitKey = digit
+        } else if (e.type === TouchType.Up || e.type === TouchType.Cancel) {
+          this.pressedDigitKey = -99
+        }
+      })
       .onClick(() => this.handleDigit(digit))
     }
   }
 
+  private padColumns(): number {
+    // 9×9: 10 键 → 5×2; 6×6: 7 键 → 4+3; 4×4: 5 键 → 5×1
+    if (this.gridSize === 9) return 5
+    if (this.gridSize === 6) return 4
+    return 5
+  }
+
   private padKeySize(): number {
-    const count = this.gridSize + 1 // 1..size + 擦除
+    const cols = this.padColumns()
     const gap = 6
-    const total = this.totalWidth - gap * (count - 1)
-    return Math.max(32, Math.floor(total / count))
+    const total = this.totalWidth - gap * (cols - 1)
+    return Math.max(32, Math.floor(total / cols))
   }
 
   @Builder
@@ -850,7 +879,7 @@ export struct SudokuCard {
         Text(isTime ? '⏱' : '✗')
           .fontSize(11)
           .fontColor($r('app.color.text_tertiary'))
-        Text(isTime ? ' 时间' : ' 错误')
+        Text(isTime ? ' 时间' : ' 失误')
           .fontSize(11)
           .fontColor($r('app.color.text_tertiary'))
       }
@@ -874,7 +903,7 @@ export struct SudokuCard {
     .animation({ duration: 600, curve: Curve.EaseInOut })
     .border({
       width: 1,
-      color: this.isNewBest
+      color: (isTime ? this.isNewBestTime : this.isNewBestMistakes)
         ? withColorAlpha(this.SUCCESS_GREEN, '60')
         : withColorAlpha(this.themePrimary, this.isDarkMode ? '22' : '18'),
       style: BorderStyle.Solid
