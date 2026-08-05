@@ -113,6 +113,22 @@ export class StarRewardService {
       const starsCollected = (payload['stars_collected'] as number) ?? 0
       return 1 + Math.max(0, starsCollected)
     }
+    if (activityType === 'sudoku') {
+      const completed = payload['completed']
+      if (completed !== true) {
+        return 0
+      }
+      // 数独: 按难度授予 milestone 星 (镜像 number_puzzle 的 1/2/3/5 体系, 5 级梯度版)
+      const difficulty = (payload['difficulty'] as number) ?? 0
+      const SUDOKU_DIFFICULTY_STARS: Record<number, number> = {
+        1: 1,
+        2: 2,
+        3: 3,
+        4: 5,
+        5: 7
+      }
+      return SUDOKU_DIFFICULTY_STARS[difficulty] ?? 1
+    }
     if (activityType === 'chat_correct') {
       return 1
     }

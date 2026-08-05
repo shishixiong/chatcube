@@ -31,6 +31,7 @@ import {
   CATEGORIZATION_TOOL_ID,
   VERTICAL_MATH_TOOL_ID,
   MAZE_TOOL_ID,
+  SUDOKU_TOOL_ID,
   GRANT_STAR_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { i18n } from '@kit.LocalizationKit'
@@ -1835,6 +1836,77 @@ function createMazeToolConfig(): ToolConfig {
   )
 }
 
+// ===== sudoku 工具 =====
+// 数独互动工具: 让孩子在 4×4 / 6×6 / 9×9 网格里填数字, 锻炼逻辑推理 + 空间规则意识。
+// 交互由前端 SudokuCard 组件处理, 与 number_puzzle/categorization/maze 模式类似。
+// 后端由 ToolExecutionService.handleSudoku 拦截, 在 pending 状态下让卡片显示「生成中」,
+// 后台异步调用 utils/SudokuGenerator 生成盘面后注入 toolCall.arguments。
+
+interface SudokuArgs {
+  difficulty: number
+}
+
+class SudokuExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // sudoku 工具的交互由前端 SudokuCard 组件处理。
+    // 后端由 ToolExecutionService.handleSudoku 拦截处理生成逻辑。
+    // 如果工具被直接调用 (没有前端交互), 返回提示信息。
+    try {
+      const params = JSON.parse(_args) as SudokuArgs
+      const difficulty = Math.max(1, Math.min(5, params.difficulty ?? 1))
+      return JSON.stringify({
+        difficulty: difficulty,
+        grid_size: difficulty === 1 ? '4×4' : (difficulty === 2 ? '6×6' : '9×9'),
+        answered: false,
+        hint: '数独已生成,请小朋友在卡片里填满数字。'
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`sudoku error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createSudokuToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "difficulty": {
+        "type": "integer",
+        "description": "难度级别:1 = 4×4 (2×2 盒, 适合 5 岁, 6-8 个已知),2 = 6×6 (2×3 盒, 适合 6 岁, 18-22 个已知),3 = 9×9 简单 (3×3 盒, 适合 7 岁+, 40-45 个已知),4 = 9×9 中等 (30-34 个已知),5 = 9×9 挑战 (24-28 个已知, 适合数独熟练的孩子)。按 child_profile 中 logic_thinking / spatial_reasoning 的 level 选难度。",
+        "enum": [1, 2, 3, 4, 5]
+      }
+    },
+    "required": ["difficulty"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    SUDOKU_TOOL_ID,
+    'Present a Sudoku (数独) puzzle to the child as an interactive game. A grid of size 4×4 / 6×6 / 9×9 is generated with sub-boxes (2×2 / 2×3 / 3×3) and some cells pre-filled. The child taps an empty cell then a digit on the number pad to fill it. Soft live validation highlights row/column/box conflicts in red (rule-level, never revealing the hidden solution). Difficulty 1=4×4 (5y), 2=6×6 (6y), 3=9×9 easy (7y+), 4=9×9 medium, 5=9×9 hard. Pick by the child\'s logic_thinking / spatial_reasoning level from child_profile. After completion or giving up, you receive result (time, mistakes, completed). Then call child_profile update to record logic_thinking / spatial_reasoning based on performance.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createSudokuToolConfig(): ToolConfig {
+  return new ToolConfig(
+    SUDOKU_TOOL_ID,
+    '数独',
+    '以互动卡片形式给小朋友出数独,孩子在网格里填数字,每行/列/盒内数字不重复,锻炼逻辑推理 + 空间规则意识。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    SUDOKU_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
 // ===== handwriting_practice 工具 =====
 // 学写字互动工具：教小朋友写英文字母、数字、基础汉字，通过 Canvas 自由书写，AI 评价。
 
@@ -2340,6 +2412,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(SUDOKU_TOOL_ID)) {
+    const sudokuTool = new RegisteredTool(
+      SUDOKU_TOOL_ID,
+      createSudokuToolConfig(),
+      createSudokuToolDefinition(),
+      new SudokuExecutor()
+    )
+    registry.registerTool(sudokuTool)
+    registeredNow += 1
+  }
+
   if (!registry.isToolRegistered(HANDWRITING_PRACTICE_TOOL_ID)) {
     const handwritingTool = new RegisteredTool(
       HANDWRITING_PRACTICE_TOOL_ID,
@@ -2392,5 +2475,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, HUARONGDAO_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, GRANT_STAR_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, HUARONGDAO_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, GRANT_STAR_TOOL_ID]
 }

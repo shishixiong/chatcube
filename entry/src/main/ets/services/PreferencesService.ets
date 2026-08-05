@@ -67,6 +67,10 @@ export class PreferenceKeys {
   static readonly MAZE_BEST_MOVES_PREFIX: string = 'maze_best_moves_'
   static readonly MAZE_BEST_STARS_PREFIX: string = 'maze_best_stars_'
 
+  // 数独最佳成绩 (按难度区分: sudoku_best_time_1..5, sudoku_best_mistakes_1..5)
+  static readonly SUDOKU_BEST_TIME_PREFIX: string = 'sudoku_best_time_'
+  static readonly SUDOKU_BEST_MISTAKES_PREFIX: string = 'sudoku_best_mistakes_'
+
   // 速度王: 任意完成的最快用时; 全对王: correct===total 时的最快用时
   static readonly CATEGORIZATION_BEST_TIME_PREFIX: string = 'categorization_best_time_'
   static readonly CATEGORIZATION_BEST_PERFECT_PREFIX: string = 'categorization_best_perfect_'

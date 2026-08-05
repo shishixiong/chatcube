@@ -15,6 +15,7 @@ export const CATEGORIZATION_TOOL_ID: string = 'categorization'
 export const VERTICAL_MATH_TOOL_ID: string = 'vertical_math'
 export const GRANT_STAR_TOOL_ID: string = 'grant_star'
 export const MAZE_TOOL_ID: string = 'maze'
+export const SUDOKU_TOOL_ID: string = 'sudoku'
 
 
 export function normalizeToolFunctionName(raw: string): string {
@@ -95,6 +96,10 @@ export function isHuarongdaoFunctionName(functionName: string): boolean {
 
 export function isMazeFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === MAZE_TOOL_ID
+}
+
+export function isSudokuFunctionName(functionName: string): boolean {
+  return normalizeToolFunctionName(functionName) === SUDOKU_TOOL_ID
 }
 
 export function isHandwritingPracticeFunctionName(functionName: string): boolean {
