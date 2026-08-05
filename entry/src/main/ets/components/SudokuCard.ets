@@ -500,10 +500,44 @@ export struct SudokuCard {
     if (this.isSelected(index)) {
       return withColorAlpha(this.themePrimary, '30')
     }
+    if (this.isInfluencedBySelection(index)) {
+      // 选中格所在行/列/盒的兄弟格 — 与 given 相同色调, 让孩子看到约束范围
+      return withColorAlpha(this.themePrimary, this.isDarkMode ? '10' : '08')
+    }
     if (this.isGiven(index)) {
       return withColorAlpha(this.themePrimary, this.isDarkMode ? '10' : '08')
     }
     return withColorAlpha(this.themePrimary, this.isDarkMode ? '06' : '04')
+  }
+
+  // 选中格的行/列/盒兄弟格 (不含选中格本身 — 选中格走更强的高亮)
+  private isInfluencedBySelection(index: number): boolean {
+    if (this.selectedCellIndex < 0 || index === this.selectedCellIndex) {
+      return false
+    }
+    return this.isInSameRowAsSelection(index)
+      || this.isInSameColAsSelection(index)
+      || this.isInSameBoxAsSelection(index)
+  }
+
+  private isInSameRowAsSelection(index: number): boolean {
+    const row = Math.floor(index / this.gridSize)
+    const selRow = Math.floor(this.selectedCellIndex / this.gridSize)
+    return row === selRow
+  }
+
+  private isInSameColAsSelection(index: number): boolean {
+    const col = index % this.gridSize
+    const selCol = this.selectedCellIndex % this.gridSize
+    return col === selCol
+  }
+
+  private isInSameBoxAsSelection(index: number): boolean {
+    const boxRow = Math.floor(Math.floor(index / this.gridSize) / this.boxRows)
+    const selBoxRow = Math.floor(Math.floor(this.selectedCellIndex / this.gridSize) / this.boxRows)
+    const boxCol = Math.floor((index % this.gridSize) / this.boxCols)
+    const selBoxCol = Math.floor((this.selectedCellIndex % this.gridSize) / this.boxCols)
+    return boxRow === selBoxRow && boxCol === selBoxCol
   }
 
   private getCellTextColor(index: number): string {
@@ -693,6 +727,19 @@ export struct SudokuCard {
           .fontSize(this.digitFontSize)
           .fontWeight(this.isGiven(index) ? FontWeight.Bold : FontWeight.Medium)
           .fontColor(this.getCellTextColor(index))
+      } else if (!this.isSelected(index) && !this.isConflict(index) && !this.isAnswered && !this.isCompleted) {
+        // 空格 affordance: 极淡的 · 提示「这里可填」, 不抢夺数字视觉
+        Text('·')
+          .fontSize(Math.floor(this.digitFontSize * 0.5))
+          .fontColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '30' : '25'))
+      }
+      // 选中格边框环 (在文字层之上, Win Pop 之下)
+      if (this.isSelected(index) && !this.isAnswered) {
+        Column()
+          .width('100%')
+          .height('100%')
+          .borderRadius(3)
+          .border({ width: 2, color: this.themePrimary, style: BorderStyle.Solid })
       }
       // Win Pop 边框
       if (this.hasWon && !this.isAnswered && this.winPopIndex >= 0 && index <= this.winPopIndex) {
@@ -823,6 +870,8 @@ export struct SudokuCard {
     .padding(10)
     .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '10' : '08'))
     .borderRadius(10)
+    // .animation() 必须在 .border() 之前: ArkUI 仅对链式调用后续的属性变化触发过渡
+    .animation({ duration: 600, curve: Curve.EaseInOut })
     .border({
       width: 1,
       color: this.isNewBest
@@ -830,7 +879,6 @@ export struct SudokuCard {
         : withColorAlpha(this.themePrimary, this.isDarkMode ? '22' : '18'),
       style: BorderStyle.Solid
     })
-    .animation({ duration: 600, curve: Curve.EaseInOut })
   }
 
   @Builder
