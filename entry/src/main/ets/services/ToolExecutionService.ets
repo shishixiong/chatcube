@@ -45,6 +45,9 @@ import { generatePuzzle } from '../utils/HuarongdaoPuzzleGenerator'
 import { generateMaze } from '../utils/MazeGame'
 import { generateSudoku, getDifficultyConfig } from '../utils/SudokuGenerator'
 import { validateAndNormalizeCategorization } from '../utils/CategorizationValidation'
+import { validateMathQuizArgs } from '../utils/MathQuizValidation'
+import { validateEnglishQuizArgs } from '../utils/EnglishQuizValidation'
+import { validatePictureVocabArgs } from '../utils/PictureVocabValidation'
 import { ServiceRegistry } from './ServiceRegistry'
 import { modelSupportsVision } from './registry/ModelAbilityRegistry'
 import { RequestMessage, AIApiConfig } from './AIApiService'
@@ -567,6 +570,26 @@ export class ToolExecutionService {
     }
     toolCall.permissionLevel = ToolPermissionLevel.READ
 
+    // 预校验 (categorization 同款模式): 阻止「答案不在选项 / comparison 方向反 /
+    // time 答案与钟面不一致」等坏题进入 pending 态渲染给孩子,
+    // 失败直接回 error ToolResult, AI 据 message 自我修正重出。
+    const mathValidation = validateMathQuizArgs(toolCall.arguments)
+    if (!mathValidation.ok) {
+      console.warn('ToolExecutionService', `math_quiz validation failed: ${mathValidation.error}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: 'validation_failed',
+          message: mathValidation.error,
+          should_retry: true
+        }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
     toolCall.approvalState = 'pending'
 
     let answerJson: string | null = null
@@ -638,6 +661,26 @@ export class ToolExecutionService {
       toolCall.sourceLabel = '内置工具'
     }
     toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 0. 预校验 (categorization 同款模式): phonics 的 letter_options 缺正确字母 /
+    //    word/sentence 缺 image_prompt 等坏题在进入 pending 态和图片管线之前拦截,
+    //    失败直接回 error ToolResult, AI 据 message 自我修正重出。
+    const englishValidation = validateEnglishQuizArgs(toolCall.arguments)
+    if (!englishValidation.ok) {
+      console.warn('ToolExecutionService', `english_quiz validation failed: ${englishValidation.error}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: 'validation_failed',
+          message: englishValidation.error,
+          should_retry: true
+        }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
 
     // 1. 立即设置 pending 状态, 让卡片立即出现
     toolCall.approvalState = 'pending'
@@ -800,6 +843,26 @@ export class ToolExecutionService {
       toolCall.sourceLabel = '内置工具'
     }
     toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 0. 预校验 (categorization 同款模式): options 数量不对 / 缺正确答案等坏题
+    //    在进入 pending 态和图片生成之前拦截, 失败直接回 error ToolResult,
+    //    AI 据 message 自我修正重出。
+    const pvValidation = validatePictureVocabArgs(toolCall.arguments)
+    if (!pvValidation.ok) {
+      console.warn('ToolExecutionService', `picture_vocab validation failed: ${pvValidation.error}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: 'validation_failed',
+          message: pvValidation.error,
+          should_retry: true
+        }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
 
     // 1. 立即设置 pending 状态, 让卡片立即出现
     toolCall.approvalState = 'pending'
