@@ -41,7 +41,6 @@ import { ScrollToBottomButton } from '../components/ScrollToBottomButton'
 import { ScrollToBottomLoadingButton } from '../components/ScrollToBottomLoadingButton'
 import { SharePreviewSheet } from '../components/SharePreviewSheet'
 import { MessageMapSheet } from '../components/MessageMapSheet'
-import { NumberPuzzleCard, NumberPuzzleResult } from '../components/NumberPuzzleCard'
 import { MazeCard, MazeResult } from '../components/MazeCard'
 import { HandwritingCard, HandwritingResult } from '../components/HandwritingCard'
 import { ChatViewModel, TitleGenerationCallbacks } from '../viewmodels/ChatViewModel'
@@ -123,7 +122,7 @@ import {
   isSearchToolId,
   MATH_QUIZ_TOOL_ID,
   ENGLISH_QUIZ_TOOL_ID,
-  HUARONGDAO_TOOL_ID,
+  NUMBER_PUZZLE_TOOL_ID,
   HANDWRITING_PRACTICE_TOOL_ID,
   CATEGORIZATION_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
@@ -294,9 +293,6 @@ export struct ChatPage {
   private dismissedPendingToolCallId: string = ''
   @Local toolExecutionApprovalToolId: string = ''
   @Local toolExecutionApprovalIsWriteTool: boolean = false
-  @Local showNumberPuzzleSheet: boolean = false
-  @Local numberPuzzleSheetToolCall: ToolCall = new ToolCall()
-  @Local numberPuzzleAnswered: boolean = false
   @Local showHandwritingSheet: boolean = false
   @Local handwritingSheetToolCall: ToolCall = new ToolCall()
   @Local handwritingAnswered: boolean = false
@@ -2450,11 +2446,6 @@ export struct ChatPage {
           onAskUserAnswer: (toolCallId: string, answerJson: string): void => {
             this.handleAskUserAnswer(toolCallId, answerJson)
           },
-          onOpenNumberPuzzleSheet: (toolCall: ToolCall): void => {
-            this.numberPuzzleSheetToolCall = toolCall
-            this.numberPuzzleAnswered = false
-            this.showNumberPuzzleSheet = true
-          },
           onOpenHandwritingSheet: (toolCall: ToolCall): void => {
             this.handwritingSheetToolCall = toolCall
             this.handwritingAnswered = false
@@ -2796,39 +2787,6 @@ export struct ChatPage {
             }
           })
 
-        Column()
-          .width(0)
-          .height(0)
-          .bindSheet($$this.showNumberPuzzleSheet, this.NumberPuzzleSheetBuilder(), {
-            height: SheetSize.LARGE,
-            dragBar: true,
-            showClose: true,
-            blurStyle: BlurStyle.Thick,
-            backgroundColor: this.themeBackground,
-            preferType: SheetType.BOTTOM,
-            onDisappear: () => {
-              if (this.showNumberPuzzleSheet && !this.numberPuzzleAnswered) {
-                // Sheet dismissed without completing — send cancel result
-                const cancelResult: NumberPuzzleResult = {
-                  difficulty: 0,
-                  grid_size: '',
-                  time_seconds: 0,
-                  move_count: 0,
-                  completed: false
-                }
-                try {
-                  const parsed = JSON.parse(this.numberPuzzleSheetToolCall.arguments) as Record<string, Object>
-                  cancelResult.difficulty = (parsed['difficulty'] as number) ?? 0
-                } catch (_e) {
-                  // ignore
-                }
-                this.handleAskUserAnswer(this.numberPuzzleSheetToolCall.id, JSON.stringify(cancelResult))
-              }
-              this.showNumberPuzzleSheet = false
-            }
-          })
-
-        // Handwriting sheet
         Column()
           .width(0)
           .height(0)
@@ -3374,21 +3332,6 @@ export struct ChatPage {
       assistantAvatarCacheKey: this.assistantAvatarRenderTick,
       onClose: () => {
         this.showSharePreview = false
-      }
-    })
-  }
-
-  @Builder
-  NumberPuzzleSheetBuilder() {
-    NumberPuzzleCard({
-      toolCall: this.numberPuzzleSheetToolCall,
-      isAnswered: false,
-      answeredPayload: '',
-      largeSize: true,
-      onAnswer: (toolCallId: string, answerJson: string): void => {
-        this.numberPuzzleAnswered = true
-        this.handleAskUserAnswer(toolCallId, answerJson)
-        this.showNumberPuzzleSheet = false
       }
     })
   }
@@ -4785,14 +4728,14 @@ export struct ChatPage {
     this.applyPendingToolExecutionApproval(interaction)
   }
 
-  // 语音模式：互动工具（math_quiz / english_quiz / huarongdao / handwriting_practice / categorization）出现 pending 交互时自动朗读题目
+  // 语音模式：互动工具（math_quiz / english_quiz / number_puzzle / handwriting_practice / categorization）出现 pending 交互时自动朗读题目
   private tryAutoTtsForQuizInteraction(interaction: PendingToolInteractionSnapshot): void {
     if (!this.isVoiceMode || this.isRecording) {
       return
     }
     const isAutoTtsTool = interaction.toolId === MATH_QUIZ_TOOL_ID ||
       interaction.toolId === ENGLISH_QUIZ_TOOL_ID ||
-      interaction.toolId === HUARONGDAO_TOOL_ID ||
+      interaction.toolId === NUMBER_PUZZLE_TOOL_ID ||
       interaction.toolId === HANDWRITING_PRACTICE_TOOL_ID ||
       interaction.toolId === CATEGORIZATION_TOOL_ID
     if (!isAutoTtsTool) {
@@ -4874,7 +4817,7 @@ export struct ChatPage {
         if (question !== '') {
           quizText = questionType === 'sentence' ? ('请说出英语句子: ' + question) : ('请说出英语单词: ' + question)
         }
-      } else if (interaction.toolId === HUARONGDAO_TOOL_ID) {
+      } else if (interaction.toolId === NUMBER_PUZZLE_TOOL_ID) {
         // 数字华容道：按 difficulty 映射到 2-5 阶 gridSize，与 NumberPuzzleCard.ets:113-121 保持一致
         const rawDifficulty = (parsed['difficulty'] as number) ?? 3
         let gridSize = 3

@@ -9,7 +9,10 @@ export const CHILD_PROFILE_TOOL_ID: string = 'child_profile'
 export const MATH_VERIFY_TOOL_ID: string = 'math_verify'
 export const MATH_QUIZ_TOOL_ID: string = 'math_quiz'
 export const ENGLISH_QUIZ_TOOL_ID: string = 'english_quiz'
+// 旧版数字华容道工具名。已规范化为 NUMBER_PUZZLE_TOOL_ID, 但历史会话消息里
+// 持久化的 functionName 永远是 huarongdao, 渲染/分发守卫必须保留此 legacy 常量。
 export const HUARONGDAO_TOOL_ID: string = 'huarongdao'
+export const NUMBER_PUZZLE_TOOL_ID: string = 'number_puzzle'
 export const HANDWRITING_PRACTICE_TOOL_ID: string = 'handwriting_practice'
 export const CATEGORIZATION_TOOL_ID: string = 'categorization'
 export const VERTICAL_MATH_TOOL_ID: string = 'vertical_math'
@@ -101,6 +104,14 @@ export function isPictureVocabFunctionName(functionName: string): boolean {
 
 export function isHuarongdaoFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === HUARONGDAO_TOOL_ID
+}
+
+// number_puzzle (数字华容道) 的函数名识别; 含历史别名。
+// isHuarongdaoFunctionName 保留给历史会话的 legacy 消息渲染/分发。
+export function isNumberPuzzleFunctionName(functionName: string): boolean {
+  const normalized = normalizeToolFunctionName(functionName)
+  return normalized === NUMBER_PUZZLE_TOOL_ID ||
+    normalized === 'number_sliding_puzzle'
 }
 
 export function isMazeFunctionName(functionName: string): boolean {

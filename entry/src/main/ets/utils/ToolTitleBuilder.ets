@@ -215,7 +215,7 @@ export function buildToolTitle(toolCall: ToolCall): string {
     }
     return '英语看图说话'
   }
-  if (fn === 'huarongdao') {
+  if (fn === 'number_puzzle' || fn === 'huarongdao') { // huarongdao 为 legacy 历史会话工具名
     const difficulty = coerceNumber(args.difficulty)
     const labels = ['入门', '简单', '中等', '较难', '挑战']
     const label = difficulty >= 1 && difficulty <= 5 ? labels[difficulty - 1] : ''

@@ -26,7 +26,7 @@ import {
   MATH_VERIFY_TOOL_ID,
   MATH_QUIZ_TOOL_ID,
   ENGLISH_QUIZ_TOOL_ID,
-  HUARONGDAO_TOOL_ID,
+  NUMBER_PUZZLE_TOOL_ID,
   HANDWRITING_PRACTICE_TOOL_ID,
   CATEGORIZATION_TOOL_ID,
   VERTICAL_MATH_TOOL_ID,
@@ -61,7 +61,6 @@ import { getAppSettingsState } from '../state/AppSettingsState'
 import { getEffectiveOutputMode } from '../utils/ModelCapabilityDeriver'
 import { getChildProfileService, ChildProfileService, ChildKnowledgeProfile } from '../services/ChildProfileService'
 import { evaluateMathExpression } from '../utils/MathExpressionParser'
-import { generatePuzzle, HuarongdaoPuzzleState } from '../utils/HuarongdaoPuzzleGenerator'
 
 
 // search_web 工具参数接口
@@ -1694,37 +1693,38 @@ function createEnglishQuizToolConfig(): ToolConfig {
 }
 
 
-// ===== huarongdao 工具 =====
+// ===== number_puzzle 工具 =====
 // 数字华容道游戏工具：让小星老师以互动卡片形式给小朋友出数字滑块谜题。
 // 小朋友通过拖动/点击数字方块将乱序数字排列成正确顺序。
-// 交互由前端 HuarongdaoCard 组件处理，与 math_quiz/english_quiz 模式类似。
+// 交互由前端 NumberPuzzleCard 组件处理（卡片按 difficulty 自行洗牌），与 math_quiz/english_quiz 模式类似。
+// 历史会话里的 legacy 工具名是 huarongdao, 由 ToolExecutionService 分发层兼容。
 
-interface HuarongdaoArgs {
+interface NumberPuzzleArgs {
   difficulty: number
 }
 
-class HuarongdaoExecutor implements ToolExecutor {
+class NumberPuzzleExecutor implements ToolExecutor {
   async execute(_args: string): Promise<string> {
-    // huarongdao 工具的交互由前端 HuarongdaoCard 组件处理。
-    // 后端由 ToolExecutionService.handleHuarongdao 拦截处理谜题生成逻辑。
+    // number_puzzle 工具的交互由前端 NumberPuzzleCard 组件处理。
+    // 后端由 ToolExecutionService.handleNumberPuzzle 拦截处理。
     // 如果工具被直接调用（没有前端交互），返回提示信息。
     try {
-      const params = JSON.parse(_args) as HuarongdaoArgs
+      const params = JSON.parse(_args) as NumberPuzzleArgs
       const difficulty = Math.max(1, Math.min(5, params.difficulty ?? 1))
-      const state = generatePuzzle(difficulty)
+      // 简单预校验:返回提示让 AI 引导用户使用前端卡片
       return JSON.stringify({
-        grid_size: state.gridSize,
-        difficulty: state.difficulty,
-        tiles: state.tiles,
-        answered: false
+        difficulty: difficulty,
+        grid_size: difficulty === 1 ? '3×3' : `${difficulty}×${difficulty}`,
+        answered: false,
+        hint: '谜题已生成,请小朋友在卡片里拖动数字方块复原顺序。'
       })
     } catch (error) {
-      return JSON.stringify(new ErrorOutput(`huarongdao error: ${JSON.stringify(error)}`))
+      return JSON.stringify(new ErrorOutput(`number_puzzle error: ${JSON.stringify(error)}`))
     }
   }
 }
 
-function createHuarongdaoToolDefinition(): ToolDefinition {
+function createNumberPuzzleToolDefinition(): ToolDefinition {
   const rawSchemaJson: string = `{
     "type": "object",
     "properties": {
@@ -1741,7 +1741,7 @@ function createHuarongdaoToolDefinition(): ToolDefinition {
   parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
 
   const func = new ToolFunction(
-    HUARONGDAO_TOOL_ID,
+    NUMBER_PUZZLE_TOOL_ID,
     'Present a number sliding puzzle (数字华容道) to the child as an interactive game. A grid of numbered tiles is shuffled, and the child slides tiles into the empty space to arrange them in order. Difficulty directly maps to grid size: 1=3×3 (fallback, 8 numbers), 2=2×2 (toddler, 3 numbers), 3=3×3 (easy, 8 numbers), 4=4×4 (intermediate, 15 numbers), 5=5×5 (challenging, 24 numbers). Prefer difficulty 2-5 based on the child\'s logic_thinking and observation levels from child_profile. After completion or giving up, you receive result (moves, time, completed). Then call child_profile update to record logic_thinking, observation, and spatial_reasoning based on performance.',
     parameters
   )
@@ -1749,9 +1749,9 @@ function createHuarongdaoToolDefinition(): ToolDefinition {
   return new ToolDefinition(func)
 }
 
-function createHuarongdaoToolConfig(): ToolConfig {
+function createNumberPuzzleToolConfig(): ToolConfig {
   return new ToolConfig(
-    HUARONGDAO_TOOL_ID,
+    NUMBER_PUZZLE_TOOL_ID,
     '数字华容道',
     '以互动卡片形式给小朋友出数字滑块谜题, 小朋友拖动数字方块将乱序数字排列成正确顺序。',
     null,
@@ -1759,7 +1759,7 @@ function createHuarongdaoToolConfig(): ToolConfig {
     false,
     ToolSourceType.BUILTIN,
     'builtin',
-    HUARONGDAO_TOOL_ID,
+    NUMBER_PUZZLE_TOOL_ID,
     '内置工具',
     ToolPermissionLevel.READ
   )
@@ -2504,14 +2504,14 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
-  if (!registry.isToolRegistered(HUARONGDAO_TOOL_ID)) {
-    const huarongdaoTool = new RegisteredTool(
-      HUARONGDAO_TOOL_ID,
-      createHuarongdaoToolConfig(),
-      createHuarongdaoToolDefinition(),
-      new HuarongdaoExecutor()
+  if (!registry.isToolRegistered(NUMBER_PUZZLE_TOOL_ID)) {
+    const numberPuzzleTool = new RegisteredTool(
+      NUMBER_PUZZLE_TOOL_ID,
+      createNumberPuzzleToolConfig(),
+      createNumberPuzzleToolDefinition(),
+      new NumberPuzzleExecutor()
     )
-    registry.registerTool(huarongdaoTool)
+    registry.registerTool(numberPuzzleTool)
     registeredNow += 1
   }
 
@@ -2600,5 +2600,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, HUARONGDAO_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, GRANT_STAR_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, GRANT_STAR_TOOL_ID]
 }

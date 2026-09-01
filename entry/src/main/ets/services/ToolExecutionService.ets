@@ -16,7 +16,7 @@ import {
   SEARCH_WEB_TOOL_ID,
   MATH_QUIZ_TOOL_ID,
   ENGLISH_QUIZ_TOOL_ID,
-  HUARONGDAO_TOOL_ID,
+  NUMBER_PUZZLE_TOOL_ID,
   HANDWRITING_PRACTICE_TOOL_ID,
   CATEGORIZATION_TOOL_ID,
   VERTICAL_MATH_TOOL_ID,
@@ -27,6 +27,7 @@ import {
   isMathQuizFunctionName,
   isEnglishQuizFunctionName,
   isHuarongdaoFunctionName,
+  isNumberPuzzleFunctionName,
   isHandwritingPracticeFunctionName,
   isCategorizationFunctionName,
   isVerticalMathFunctionName,
@@ -41,7 +42,6 @@ import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
 import { getImageIndexService, ImageIndexService } from './ImageIndexService'
 import { ImageSource } from '../models/ImageIndexModels'
-import { generatePuzzle } from '../utils/HuarongdaoPuzzleGenerator'
 import { generateMaze } from '../utils/MazeGame'
 import { generateSudoku, getDifficultyConfig } from '../utils/SudokuGenerator'
 import { validateAndNormalizeCategorization } from '../utils/CategorizationValidation'
@@ -954,10 +954,11 @@ export class ToolExecutionService {
     )
   }
 
-  // huarongdao 特殊路径: 与 math_quiz/english_quiz 类似, 挂起等待 HuarongdaoCard 回答。
-  // 谜题生成在后台完成并注入 toolCall.arguments。
-  private async handleHuarongdao(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
-    toolCall.toolId = HUARONGDAO_TOOL_ID
+  // number_puzzle 特殊路径: 与 math_quiz/english_quiz 类似, 挂起等待 NumberPuzzleCard 回答。
+  // 卡片在 aboutToAppear 按 difficulty 自行洗牌, 这里不注入棋盘。
+  // 历史会话的 legacy 工具名 huarongdao 由分发层兼容路由到这里。
+  private async handleNumberPuzzle(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = NUMBER_PUZZLE_TOOL_ID
     if (toolCall.displayName.trim() === '') {
       toolCall.displayName = '数字华容道'
     }
@@ -967,30 +968,8 @@ export class ToolExecutionService {
     }
     toolCall.permissionLevel = ToolPermissionLevel.READ
 
-    // 1. 立即设置 pending 状态, 让卡片立即出现
+    // 立即设置 pending 状态, 让卡片立即出现
     toolCall.approvalState = 'pending'
-
-    // 2. 后台生成谜题并注入到 toolCall.arguments
-    try {
-      const parsed = JSON.parse(toolCall.arguments) as Record<string, Object>
-      const difficulty = (parsed['difficulty'] as number) ?? 1
-      const clampedDifficulty = Math.max(1, Math.min(5, difficulty))
-
-      console.info('ToolExecutionService',
-        `huarongdao puzzle generation start: difficulty=${clampedDifficulty}`)
-
-      const state = generatePuzzle(clampedDifficulty)
-
-      parsed['tiles'] = state.tiles as Object[]
-      parsed['grid_size'] = state.gridSize as Object
-      parsed['difficulty'] = clampedDifficulty as Object
-      toolCall.arguments = JSON.stringify(parsed)
-
-      console.info('ToolExecutionService',
-        `huarongdao puzzle generated: gridSize=${state.gridSize}, difficulty=${state.difficulty}`)
-    } catch (error) {
-      console.error('ToolExecutionService', `huarongdao puzzle generation exception: ${JSON.stringify(error)}`)
-    }
 
     let answerJson: string | null = null
     try {
@@ -1002,16 +981,16 @@ export class ToolExecutionService {
         }
         const snapshot = this.buildAskUserSnapshot(toolCall, context)
         snapshot.kind = PendingToolInteractionKind.ASK_USER
-        snapshot.toolId = HUARONGDAO_TOOL_ID
+        snapshot.toolId = NUMBER_PUZZLE_TOOL_ID
         this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
         this.publishPendingInteractionChanged()
       })
     } catch (error) {
-      console.error('ToolExecutionService', `huarongdao answer callback failed: ${JSON.stringify(error)}`)
+      console.error('ToolExecutionService', `number_puzzle answer callback failed: ${JSON.stringify(error)}`)
       toolCall.approvalState = 'denied'
       return new ToolResult(
         toolCall.id,
-        JSON.stringify({ error: `huarongdao 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        JSON.stringify({ error: `number_puzzle 失败: ${JSON.stringify(error)}`, cancelled: true }),
         true,
         toolCall.displayName,
         toolCall.sourceLabel
@@ -1019,7 +998,7 @@ export class ToolExecutionService {
     }
 
     if (this.isCancelled()) {
-      console.info('ToolExecutionService', 'huarongdao cancelled by external stop')
+      console.info('ToolExecutionService', 'number_puzzle cancelled by external stop')
       toolCall.approvalState = 'denied'
       return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
     }
@@ -1037,7 +1016,7 @@ export class ToolExecutionService {
 
     toolCall.approvalState = 'answered'
     toolCall.approvalReason = answerJson
-    console.info('ToolExecutionService', `huarongdao answered: ${toolCall.id}`)
+    console.info('ToolExecutionService', `number_puzzle answered: ${toolCall.id}`)
     this.recordStarEvent('number_puzzle', toolCall, context, answerJson)
     return new ToolResult(
       toolCall.id,
@@ -1048,7 +1027,7 @@ export class ToolExecutionService {
     )
   }
 
-  // maze 特殊路径: 与 number_puzzle/huarongdao 类似, 挂起等待 MazeCard 回答。
+  // maze 特殊路径: 与 number_puzzle 类似, 挂起等待 MazeCard 回答。
   // 迷宫生成在后台完成并注入 toolCall.arguments (cells 网格 + 起点终点 + 收藏星)。
   private async handleMaze(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
     toolCall.toolId = MAZE_TOOL_ID
@@ -1341,7 +1320,7 @@ export class ToolExecutionService {
     )
   }
 
-  // handwriting_practice 特殊路径: 与 huarongdao 类似, 挂起等待 HandwritingCard 回答。
+  // handwriting_practice 特殊路径: 与 number_puzzle 类似, 挂起等待 HandwritingCard 回答。
   // 孩子完成书写后调用 AI vision 评价, 将评价文字作为 ToolResult 返回。
   private async handleHandwriting(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
     toolCall.toolId = HANDWRITING_PRACTICE_TOOL_ID
@@ -1638,10 +1617,12 @@ export class ToolExecutionService {
       return await this.handleEnglishQuiz(toolCall, context)
     }
 
-    // === huarongdao 特殊路径 ===
-    // 数字华容道游戏互动工具, 由 HuarongdaoCard 收集小朋友的答案。
-    if (isHuarongdaoFunctionName(normalizedFunctionName)) {
-      return await this.handleHuarongdao(toolCall, context)
+    // === number_puzzle 特殊路径 ===
+    // 数字华容道游戏互动工具, 由 NumberPuzzleCard 收集小朋友的答案。
+    // isHuarongdaoFunctionName 是历史会话的 legacy 消息分发臂, 保留兼容。
+    if (isNumberPuzzleFunctionName(normalizedFunctionName) ||
+      isHuarongdaoFunctionName(normalizedFunctionName)) {
+      return await this.handleNumberPuzzle(toolCall, context)
     }
 
     // === categorization 特殊路径 ===

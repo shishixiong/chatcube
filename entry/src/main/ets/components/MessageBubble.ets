@@ -15,7 +15,7 @@ import { shouldShowAssistantMessageToolbar } from '../utils/MessageBubbleDisplay
 import { AskUserCard } from './AskUserCard'
 import { MathQuizCard } from './MathQuizCard'
 import { EnglishQuizCard } from './EnglishQuizCard'
-import { HuarongdaoCard } from './HuarongdaoCard'
+import { NumberPuzzleCard } from './NumberPuzzleCard'
 import { HandwritingCard, HandwritingResult } from './HandwritingCard'
 import { CategorizationCard, CategorizationResult } from './CategorizationCard'
 import { MazeCard } from './MazeCard'
@@ -41,7 +41,7 @@ import {
   getMarkdownTitleSizes
 } from '../utils/MarkdownTypographyUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isEnglishQuizFunctionName, isHuarongdaoFunctionName, isHandwritingPracticeFunctionName, isCategorizationFunctionName, isVerticalMathFunctionName, isMusicGenerationFunctionName, isMazeFunctionName, isSudokuFunctionName, isPictureVocabFunctionName } from '../utils/SearchToolIdentityUtils'
+import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isEnglishQuizFunctionName, isHuarongdaoFunctionName, isNumberPuzzleFunctionName, isHandwritingPracticeFunctionName, isCategorizationFunctionName, isVerticalMathFunctionName, isMusicGenerationFunctionName, isMazeFunctionName, isSudokuFunctionName, isPictureVocabFunctionName } from '../utils/SearchToolIdentityUtils'
 import { MessagePart, MessagePartKind, ToolPartStatus } from '../models/MessageParts'
 import {
   ensureMessageParts,
@@ -252,9 +252,6 @@ export struct MessageBubble {
   @Event onEnterMultiSelect: (messageId: string) => void = () => {}
   // ask_user 答复回调: 用户在 AskUserCard 点击提交后, 经此链路回到 ChatPage.handleAskUserAnswer
   @Event onAskUserAnswer: (toolCallId: string, answerJson: string) => void = () => {}
-  // huarongdao 数字华容道大屏模式入口 (与 NumberPuzzleCard.largeSize 配套),
-  // 由 ChatPage 实现 NumberPuzzleCard-style 全屏 sheet 打开逻辑
-  @Event onOpenNumberPuzzleSheet: (toolCall: ToolCall) => void = () => {}
   // 写字工具大屏模式入口 (handwriting 大屏 sheet)
   @Event onOpenHandwritingSheet: (toolCall: ToolCall) => void = () => {}
   @Event onOpenMazeSheet: (toolCall: ToolCall) => void = () => {}
@@ -2078,11 +2075,11 @@ export struct MessageBubble {
                   }
                 }, (toolCall: ToolCall, index: number) => 'english_quiz_' + toolCall.id + '_' + index.toString())
               }
-              // huarongdao 待答时保留独立互动卡片;提交后收缩到 timeline step 内。
+              // number_puzzle (含 legacy huarongdao 消息) 待答时保留独立互动卡片;提交后收缩到 timeline step 内。
               if (this.message.hasToolCalls()) {
                 ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
-                  if (this.shouldRenderHuarongdaoInteractionCard(toolCall, index)) {
-                    HuarongdaoCard({
+                  if (this.shouldRenderNumberPuzzleInteractionCard(toolCall, index)) {
+                    NumberPuzzleCard({
                       toolCall: toolCall,
                       isAnswered: false,
                       answeredPayload: toolCall.approvalReason,
@@ -2092,7 +2089,7 @@ export struct MessageBubble {
                     })
                       .margin({ bottom: 6 })
                   }
-                }, (toolCall: ToolCall, index: number) => 'huarongdao_' + toolCall.id + '_' + index.toString())
+                }, (toolCall: ToolCall, index: number) => 'number_puzzle_' + toolCall.id + '_' + index.toString())
               }
               // handwriting_practice 待答时显示紧凑横幅，点击打开全屏 sheet
               if (this.message.hasToolCalls()) {
@@ -2626,8 +2623,8 @@ export struct MessageBubble {
       // 英语看图说话: 已完成的可以展开查看答题详情
       return this.isSuccessfulToolStep(part)
     }
-    if (isHuarongdaoFunctionName(part.toolName)) {
-      // 数字华容道: 已完成的可以展开查看答题详情
+    if (isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName)) {
+      // 数字华容道 (含 legacy huarongdao): 已完成的可以展开查看答题详情
       return this.isSuccessfulToolStep(part)
     }
     if (isHandwritingPracticeFunctionName(part.toolName)) {
@@ -2702,7 +2699,7 @@ export struct MessageBubble {
       return true
     }
     // 默认行为: 图片生成/数学游戏/英语看图说话 成功后默认展开查看结果
-    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName)) {
+    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
     return false
@@ -2712,7 +2709,7 @@ export struct MessageBubble {
     const key = this.getToolStepKey(part)
     // 默认展开的工具类型: 图片生成、数学游戏、英语看图说话、数字华容道、迷宫等
     const isDefaultExpanded = this.isSuccessfulToolStep(part) &&
-      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName))
+      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName))
     const next: string[] = []
     let found = false
     let foundCollapsed = false
@@ -2789,8 +2786,10 @@ export struct MessageBubble {
     return !this.isAskUserToolCallAnswered(toolCall, index)
   }
 
-  private shouldRenderHuarongdaoInteractionCard(toolCall: ToolCall, index: number): boolean {
-    if (!isHuarongdaoFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
+  // number_puzzle (含 legacy huarongdao) 待答互动卡片守卫
+  private shouldRenderNumberPuzzleInteractionCard(toolCall: ToolCall, index: number): boolean {
+    if ((!isNumberPuzzleFunctionName(toolCall.functionName) && !isHuarongdaoFunctionName(toolCall.functionName)) ||
+      this.shouldHideToolCallCard(toolCall)) {
       return false
     }
     return !this.isAskUserToolCallAnswered(toolCall, index)
@@ -3189,8 +3188,8 @@ export struct MessageBubble {
       this.toggleToolStep(part)
       return
     }
-    // 数字华容道: 展开/折叠查看答题详情
-    if (isHuarongdaoFunctionName(part.toolName)) {
+    // 数字华容道 (含 legacy huarongdao): 展开/折叠查看答题详情
+    if (isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName)) {
       this.toggleToolStep(part)
       return
     }
@@ -3643,8 +3642,8 @@ export struct MessageBubble {
       this.MathQuizStepContent(step)
     } else if (isEnglishQuizFunctionName(step.toolName)) {
       this.EnglishQuizStepContent(step)
-    } else if (isHuarongdaoFunctionName(step.toolName)) {
-      this.HuarongdaoStepContent(step)
+    } else if (isNumberPuzzleFunctionName(step.toolName) || isHuarongdaoFunctionName(step.toolName)) {
+      this.NumberPuzzleStepContent(step)
     } else if (isHandwritingPracticeFunctionName(step.toolName)) {
       this.HandwritingStepContent(step)
     } else if (isCategorizationFunctionName(step.toolName)) {
@@ -4013,9 +4012,9 @@ export struct MessageBubble {
     .width('100%')
   }
 
-  // huarongdao 工具步骤: 已完成的数字华容道, 在 timeline 中显示简化的答题结果, 可展开查看详情
+  // number_puzzle (含 legacy huarongdao) 工具步骤: 已完成的数字华容道, 在 timeline 中显示简化的答题结果, 可展开查看详情
   @Builder
-  HuarongdaoStepContent(step: MessagePart) {
+  NumberPuzzleStepContent(step: MessagePart) {
     Column() {
       Row({ space: 6 }) {
         if (step.toolStatus === 'succeeded') {
@@ -4057,7 +4056,7 @@ export struct MessageBubble {
 
       // 展开时显示完整的答题卡片
       if (this.isToolStepExpanded(step) && step.toolResult !== '') {
-        HuarongdaoCard({
+        NumberPuzzleCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
           answeredPayload: step.toolResult,

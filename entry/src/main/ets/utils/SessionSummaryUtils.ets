@@ -81,6 +81,7 @@ export function inferSkillsFromToolCalls(messages: ChatMessage[]): string[] {
           set.add('english_vocab')
           break
         case 'number_puzzle':
+        case 'huarongdao': // legacy 历史会话工具名, 与 number_puzzle 同义
           set.add('logic_puzzle')
           break
         case 'handwriting_practice':
