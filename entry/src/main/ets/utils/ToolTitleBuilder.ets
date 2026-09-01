@@ -24,6 +24,7 @@ interface ToolArgumentDict {
   word?: string
   sentence?: string
   character?: string
+  theme?: string
   question_type?: string
   difficulty?: number
 }
@@ -219,6 +220,10 @@ export function buildToolTitle(toolCall: ToolCall): string {
   if (fn === 'pinyin_quiz') {
     const character = coerceString(args.character)
     return character !== '' ? `拼音认读: ${character}` : '拼音题'
+  }
+  if (fn === 'matching_pairs' || fn === 'match_pairs') {
+    const theme = coerceString(args.theme)
+    return theme !== '' ? `连一连: ${truncate(theme)}` : '连一连'
   }
   if (fn === 'number_puzzle' || fn === 'huarongdao') { // huarongdao 为 legacy 历史会话工具名
     const difficulty = coerceNumber(args.difficulty)

@@ -35,6 +35,7 @@ import {
   PICTURE_VOCAB_TOOL_ID,
   LISTENING_QUIZ_TOOL_ID,
   PINYIN_QUIZ_TOOL_ID,
+  MATCHING_PAIRS_TOOL_ID,
   GRANT_STAR_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { getPinyinCharsJoined } from './PinyinData'
@@ -2586,6 +2587,127 @@ function createPinyinQuizToolConfig(): ToolConfig {
 }
 
 
+// ===== matching_pairs 工具 =====
+// 连一连配对游戏：左列右列各 4-5 项，孩子先点左边再点右边配对。
+// 训练观察力 (observation)。纯点击交互 (无拖拽), 洗牌在卡片端种子化完成。
+// 交互由前端 MatchingPairsCard 组件处理。
+
+interface MatchingPairsArgs {
+  theme: string
+  instruction?: string
+  left_label?: string
+  right_label?: string
+  pairs: MatchingPairsPairArg[]
+  difficulty: number
+  skill_key: string
+}
+
+interface MatchingPairsPairArg {
+  left: string
+  right: string
+  left_emoji?: string
+  right_emoji?: string
+}
+
+class MatchingPairsExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // matching_pairs 工具的交互由前端 MatchingPairsCard 组件处理。
+    // 后台由 ToolExecutionService.handleMatchingPairs 拦截处理。
+    try {
+      const params = JSON.parse(_args) as MatchingPairsArgs
+      return JSON.stringify({
+        answered: false,
+        theme: params.theme ?? '',
+        instruction: params.instruction ?? '',
+        left_label: params.left_label ?? '',
+        right_label: params.right_label ?? '',
+        pairs: params.pairs ?? [],
+        difficulty: params.difficulty ?? 1,
+        skill_key: 'observation'
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`matching_pairs error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createMatchingPairsToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "theme": {
+        "type": "string",
+        "description": "配对主题, 如「动物和它的家」「字和拼音」「表情和名字」。"
+      },
+      "instruction": {
+        "type": "string",
+        "description": "可选：给孩子的玩法说明。缺省用「把左边和右边配成一对吧！」。"
+      },
+      "left_label": {
+        "type": "string",
+        "description": "左列的列头文字, 如「动物」「汉字」。"
+      },
+      "right_label": {
+        "type": "string",
+        "description": "右列的列头文字, 如「它的家」「拼音」。"
+      },
+      "pairs": {
+        "type": "array",
+        "minItems": 4,
+        "maxItems": 5,
+        "description": "4-5 个配对对象, 每个 {left, right, left_emoji?, right_emoji?}。left 与 left 之间、right 与 right 之间不能重复 (重复使配对歧义)。emoji 可选, 传了会在按钮上显示。",
+        "items": {
+          "type": "object",
+          "properties": {
+            "left": { "type": "string", "minLength": 1 },
+            "right": { "type": "string", "minLength": 1 },
+            "left_emoji": { "type": "string" },
+            "right_emoji": { "type": "string" }
+          },
+          "required": ["left", "right"]
+        }
+      },
+      "difficulty": {
+        "type": "number",
+        "description": "Difficulty 1-3. 1=4 对且配对明显, 2=5 对, 3=5 对且语义距离近 (易混淆)。"
+      },
+      "skill_key": {
+        "type": "string",
+        "description": "固定填 observation。"
+      }
+    },
+    "required": ["theme", "pairs", "difficulty", "skill_key"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    MATCHING_PAIRS_TOOL_ID,
+    'Present a matching pairs game (连一连): show two columns of 4-5 items each and the child taps one item on the left then one on the right to form pairs (e.g. animal to its home, character to its pinyin, emoji to its name). Use this INSTEAD of listing matching pairs in plain text — the child needs interactive practice. Provide 4-5 pairs; left values must be unique among themselves and right values too, otherwise pairing is ambiguous. skill_key is always observation.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createMatchingPairsToolConfig(): ToolConfig {
+  return new ToolConfig(
+    MATCHING_PAIRS_TOOL_ID,
+    '连一连',
+    '左列右列各 4-5 项, 小朋友先点左边再点右边配对, 训练观察与配对能力。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    MATCHING_PAIRS_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
 // 注册所有内置工具
 export function registerBuiltinTools(): void {
   const registry = getToolRegistry()
@@ -2822,6 +2944,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(MATCHING_PAIRS_TOOL_ID)) {
+    const matchingPairsTool = new RegisteredTool(
+      MATCHING_PAIRS_TOOL_ID,
+      createMatchingPairsToolConfig(),
+      createMatchingPairsToolDefinition(),
+      new MatchingPairsExecutor()
+    )
+    registry.registerTool(matchingPairsTool)
+    registeredNow += 1
+  }
+
   console.info(
     'BuiltinTools',
     `Builtin tools ready: total=${registry.getToolCount()}, newlyRegistered=${registeredNow}`
@@ -2830,5 +2963,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, GRANT_STAR_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, GRANT_STAR_TOOL_ID]
 }

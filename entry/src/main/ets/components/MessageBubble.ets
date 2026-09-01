@@ -23,6 +23,7 @@ import { SudokuCard } from './SudokuCard'
 import { PictureVocabCard } from './PictureVocabCard'
 import { ListeningQuizCard } from './ListeningQuizCard'
 import { PinyinQuizCard } from './PinyinQuizCard'
+import { MatchingPairsCard } from './MatchingPairsCard'
 import { VerticalMathCard } from './VerticalMathCard'
 import { HtmlPreviewCard } from './HtmlPreviewCard'
 import { MermaidPreviewCard } from './MermaidPreviewCard'
@@ -43,7 +44,7 @@ import {
   getMarkdownTitleSizes
 } from '../utils/MarkdownTypographyUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isEnglishQuizFunctionName, isHuarongdaoFunctionName, isNumberPuzzleFunctionName, isHandwritingPracticeFunctionName, isCategorizationFunctionName, isVerticalMathFunctionName, isMusicGenerationFunctionName, isMazeFunctionName, isSudokuFunctionName, isPictureVocabFunctionName, isListeningQuizFunctionName, isPinyinQuizFunctionName } from '../utils/SearchToolIdentityUtils'
+import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isEnglishQuizFunctionName, isHuarongdaoFunctionName, isNumberPuzzleFunctionName, isHandwritingPracticeFunctionName, isCategorizationFunctionName, isVerticalMathFunctionName, isMusicGenerationFunctionName, isMazeFunctionName, isSudokuFunctionName, isPictureVocabFunctionName, isListeningQuizFunctionName, isPinyinQuizFunctionName, isMatchingPairsFunctionName } from '../utils/SearchToolIdentityUtils'
 import { MessagePart, MessagePartKind, ToolPartStatus } from '../models/MessageParts'
 import {
   ensureMessageParts,
@@ -2238,6 +2239,22 @@ export struct MessageBubble {
                   }
                 }, (toolCall: ToolCall, index: number) => 'pinyin_quiz_' + toolCall.id + '_' + index.toString())
               }
+              // matching_pairs 待答时显示独立互动卡片;提交后收缩到 timeline step 内。
+              if (this.message.hasToolCalls()) {
+                ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
+                  if (this.shouldRenderMatchingPairsInteractionCard(toolCall, index)) {
+                    MatchingPairsCard({
+                      toolCall: toolCall,
+                      isAnswered: false,
+                      answeredPayload: '',
+                      onAnswer: (toolCallId: string, answerJson: string): void => {
+                        this.onAskUserAnswer(toolCallId, answerJson)
+                      }
+                    })
+                      .margin({ bottom: 6 })
+                  }
+                }, (toolCall: ToolCall, index: number) => 'matching_pairs_' + toolCall.id + '_' + index.toString())
+              }
             }
 
 
@@ -2684,6 +2701,9 @@ export struct MessageBubble {
     if (isPinyinQuizFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
+    if (isMatchingPairsFunctionName(part.toolName)) {
+      return this.isSuccessfulToolStep(part)
+    }
     if (isVerticalMathFunctionName(part.toolName)) {
       // 竖式计算: 已完成的可以展开查看答题详情
       return this.isSuccessfulToolStep(part)
@@ -2739,7 +2759,7 @@ export struct MessageBubble {
       return true
     }
     // 默认行为: 图片生成/数学游戏/英语看图说话 成功后默认展开查看结果
-    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isListeningQuizFunctionName(part.toolName) || isPinyinQuizFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName)) {
+    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isListeningQuizFunctionName(part.toolName) || isPinyinQuizFunctionName(part.toolName) || isMatchingPairsFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
     return false
@@ -2749,7 +2769,7 @@ export struct MessageBubble {
     const key = this.getToolStepKey(part)
     // 默认展开的工具类型: 图片生成、数学游戏、英语看图说话、数字华容道、迷宫等
     const isDefaultExpanded = this.isSuccessfulToolStep(part) &&
-      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isListeningQuizFunctionName(part.toolName) || isPinyinQuizFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName))
+      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isListeningQuizFunctionName(part.toolName) || isPinyinQuizFunctionName(part.toolName) || isMatchingPairsFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName))
     const next: string[] = []
     let found = false
     let foundCollapsed = false
@@ -2888,6 +2908,13 @@ export struct MessageBubble {
 
   private shouldRenderPinyinQuizInteractionCard(toolCall: ToolCall, index: number): boolean {
     if (!isPinyinQuizFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
+      return false
+    }
+    return !this.isAskUserToolCallAnswered(toolCall, index)
+  }
+
+  private shouldRenderMatchingPairsInteractionCard(toolCall: ToolCall, index: number): boolean {
+    if (!isMatchingPairsFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
       return false
     }
     return !this.isAskUserToolCallAnswered(toolCall, index)
@@ -3277,6 +3304,11 @@ export struct MessageBubble {
     }
     // 拼音题: 展开/折叠查看答题结果
     if (isPinyinQuizFunctionName(part.toolName)) {
+      this.toggleToolStep(part)
+      return
+    }
+    // 连一连: 展开/折叠查看答题结果
+    if (isMatchingPairsFunctionName(part.toolName)) {
       this.toggleToolStep(part)
       return
     }
@@ -3722,6 +3754,8 @@ export struct MessageBubble {
       this.ListeningQuizStepContent(step)
     } else if (isPinyinQuizFunctionName(step.toolName)) {
       this.PinyinQuizStepContent(step)
+    } else if (isMatchingPairsFunctionName(step.toolName)) {
+      this.MatchingPairsStepContent(step)
     } else if (isVerticalMathFunctionName(step.toolName)) {
       this.VerticalMathStepContent(step)
     } else if (isImageGenerationFunctionName(step.toolName) && this.isToolStepClickable(step)) {
@@ -4513,6 +4547,61 @@ export struct MessageBubble {
 
       if (this.isToolStepExpanded(step) && step.toolResult !== '') {
         PinyinQuizCard({
+          toolCall: this.buildToolCallFromStep(step),
+          isAnswered: true,
+          answeredPayload: step.toolResult,
+          onAnswer: (_toolCallId: string, _answerJson: string): void => {}
+        })
+          .margin({ top: 8 })
+      }
+    }
+    .width('100%')
+  }
+
+  // matching_pairs 工具步骤: 已完成的连一连, 在 timeline 中显示简化结果, 可展开查看详情
+  @Builder
+  MatchingPairsStepContent(step: MessagePart) {
+    Column() {
+      Row({ space: 6 }) {
+        if (step.toolStatus === 'succeeded') {
+          SymbolGlyph($r('sys.symbol.checkmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_success')])
+        } else if (step.toolStatus === 'failed' || step.toolStatus === 'denied') {
+          SymbolGlyph($r('sys.symbol.xmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_error')])
+        } else {
+          Column()
+            .width(8)
+            .height(8)
+            .borderRadius(4)
+            .backgroundColor(this.themePrimary)
+        }
+
+        Text(this.buildToolStepTitle(step))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+
+        if (this.isToolStepClickable(step)) {
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(12)
+            .fontColor([$r('app.color.text_tertiary')])
+            .rotate({ angle: this.isToolStepExpanded(step) ? 0 : -90 })
+            .animation({ duration: 200, curve: Curve.EaseOut })
+        }
+      }
+      .width('100%')
+      .onClick(() => {
+        if (this.isToolStepClickable(step)) {
+          this.handleToolStepClick(step)
+        }
+      })
+
+      if (this.isToolStepExpanded(step) && step.toolResult !== '') {
+        MatchingPairsCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
           answeredPayload: step.toolResult,

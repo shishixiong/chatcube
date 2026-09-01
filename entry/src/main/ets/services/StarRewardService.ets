@@ -144,6 +144,25 @@ export class StarRewardService {
       const correct = payload['correct']
       return correct === true ? 1 : 0
     }
+    if (activityType === 'matching_pairs') {
+      const completed = payload['completed']
+      if (completed !== true) {
+        return 0
+      }
+      // 连一连: 镜像 categorization——全对 (mistakes=0) 按难度授星, 有失误 1 星, 放弃 0 星。
+      // 用本地映射 {1:1, 2:2, 3:3} (全局 DIFFICULTY_STARS 只有 2-5 键)。
+      const mistakes = (payload['mistakes'] as number) ?? -1
+      if (mistakes !== 0) {
+        return 1
+      }
+      const difficulty = (payload['difficulty'] as number) ?? 0
+      const MATCHING_DIFFICULTY_STARS: Record<number, number> = {
+        1: 1,
+        2: 2,
+        3: 3
+      }
+      return MATCHING_DIFFICULTY_STARS[difficulty] ?? 1
+    }
     return 0
   }
 

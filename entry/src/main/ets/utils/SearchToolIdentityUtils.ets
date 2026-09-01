@@ -22,6 +22,7 @@ export const SUDOKU_TOOL_ID: string = 'sudoku'
 export const PICTURE_VOCAB_TOOL_ID: string = 'picture_vocab'
 export const LISTENING_QUIZ_TOOL_ID: string = 'listening_quiz'
 export const PINYIN_QUIZ_TOOL_ID: string = 'pinyin_quiz'
+export const MATCHING_PAIRS_TOOL_ID: string = 'matching_pairs'
 
 
 export function normalizeToolFunctionName(raw: string): string {
@@ -114,6 +115,12 @@ export function isPinyinQuizFunctionName(functionName: string): boolean {
   const normalized = normalizeToolFunctionName(functionName)
   return normalized === PINYIN_QUIZ_TOOL_ID ||
     normalized === 'pinyin_game'
+}
+
+export function isMatchingPairsFunctionName(functionName: string): boolean {
+  const normalized = normalizeToolFunctionName(functionName)
+  return normalized === MATCHING_PAIRS_TOOL_ID ||
+    normalized === 'match_pairs'
 }
 
 export function isHuarongdaoFunctionName(functionName: string): boolean {

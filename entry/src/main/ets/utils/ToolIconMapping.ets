@@ -40,6 +40,9 @@ const HUARONGDAO_KEYWORDS: string[] = [
 const PINYIN_KEYWORDS: string[] = [
   'pinyin_quiz', 'pinyin_game', 'pinyin'
 ]
+const MATCHING_PAIRS_KEYWORDS: string[] = [
+  'matching_pairs', 'match_pairs'
+]
 
 function matchesAny(name: string, keywords: string[]): boolean {
   for (let i = 0; i < keywords.length; i++) {
@@ -104,6 +107,9 @@ export function resolveToolSymbol(functionName: string): Resource {
   }
   if (matchesAny(name, PINYIN_KEYWORDS)) {
     return $r('sys.symbol.character_textbox')
+  }
+  if (matchesAny(name, MATCHING_PAIRS_KEYWORDS)) {
+    return $r('sys.symbol.link')
   }
   return $r('sys.symbol.wrench_and_screwdriver')
 }

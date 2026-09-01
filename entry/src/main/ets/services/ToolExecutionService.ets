@@ -25,6 +25,7 @@ import {
   PICTURE_VOCAB_TOOL_ID,
   LISTENING_QUIZ_TOOL_ID,
   PINYIN_QUIZ_TOOL_ID,
+  MATCHING_PAIRS_TOOL_ID,
   isAskUserFunctionName,
   isMathQuizFunctionName,
   isEnglishQuizFunctionName,
@@ -38,6 +39,7 @@ import {
   isPictureVocabFunctionName,
   isListeningQuizFunctionName,
   isPinyinQuizFunctionName,
+  isMatchingPairsFunctionName,
   isScrapeWebFunctionName,
   isSearchWebFunctionName,
   isGrantStarFunctionName
@@ -54,6 +56,7 @@ import { validateEnglishQuizArgs } from '../utils/EnglishQuizValidation'
 import { validatePictureVocabArgs } from '../utils/PictureVocabValidation'
 import { validateListeningQuizArgs } from '../utils/ListeningQuizValidation'
 import { validatePinyinQuizArgs } from '../utils/PinyinQuizValidation'
+import { validateAndNormalizeMatchingPairs } from '../utils/MatchingPairsGame'
 import { ServiceRegistry } from './ServiceRegistry'
 import { modelSupportsVision } from './registry/ModelAbilityRegistry'
 import { RequestMessage, AIApiConfig } from './AIApiService'
@@ -1508,6 +1511,96 @@ export class ToolExecutionService {
     )
   }
 
+  // matching_pairs 特殊路径: 镜像 categorization, 挂起等待 MatchingPairsCard 回答。
+  // 洗牌在卡片端种子化完成, 无后台工作。
+  private async handleMatchingPairs(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = MATCHING_PAIRS_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '连一连'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 预校验: pairs 数量 / left·right 重复等非法数据在进入 pending 态之前拦截,
+    // 失败直接回 error ToolResult, AI 收到错误后可据 message 自我修正重出。
+    const matchingValidation = validateAndNormalizeMatchingPairs(toolCall.arguments)
+    if (!matchingValidation.ok) {
+      console.warn('ToolExecutionService', `matching_pairs validation failed: ${matchingValidation.error}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: 'validation_failed',
+          message: matchingValidation.error,
+          should_retry: true
+        }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'pending'
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = MATCHING_PAIRS_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `matching_pairs answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `matching_pairs 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'matching_pairs cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未完成配对' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `matching_pairs answered: ${toolCall.id}`)
+    this.recordStarEvent('matching_pairs', toolCall, context, answerJson)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
   // handwriting_practice 特殊路径: 与 number_puzzle 类似, 挂起等待 HandwritingCard 回答。
   // 孩子完成书写后调用 AI vision 评价, 将评价文字作为 ToolResult 返回。
   private async handleHandwriting(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
@@ -1859,6 +1952,12 @@ export class ToolExecutionService {
     // 拼音题互动工具, 由 PinyinQuizCard 收集小朋友的选项。
     if (isPinyinQuizFunctionName(normalizedFunctionName)) {
       return await this.handlePinyinQuiz(toolCall, context)
+    }
+
+    // === matching_pairs 特殊路径 ===
+    // 连一连配对互动工具, 由 MatchingPairsCard 收集小朋友的配对结果。
+    if (isMatchingPairsFunctionName(normalizedFunctionName)) {
+      return await this.handleMatchingPairs(toolCall, context)
     }
 
     // 通过函数名获取工具 ID
