@@ -125,6 +125,9 @@ import {
   NUMBER_PUZZLE_TOOL_ID,
   HANDWRITING_PRACTICE_TOOL_ID,
   CATEGORIZATION_TOOL_ID,
+  MAZE_TOOL_ID,
+  SUDOKU_TOOL_ID,
+  PICTURE_VOCAB_TOOL_ID,
   PINYIN_QUIZ_TOOL_ID,
   MATCHING_PAIRS_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
@@ -4730,7 +4733,7 @@ export struct ChatPage {
     this.applyPendingToolExecutionApproval(interaction)
   }
 
-  // 语音模式：互动工具（math_quiz / english_quiz / number_puzzle / handwriting_practice / categorization / pinyin_quiz / matching_pairs）出现 pending 交互时自动朗读题目
+  // 语音模式：互动工具（math_quiz / english_quiz / number_puzzle / handwriting_practice / categorization / maze / sudoku / picture_vocab / pinyin_quiz / matching_pairs）出现 pending 交互时自动朗读题目
   private tryAutoTtsForQuizInteraction(interaction: PendingToolInteractionSnapshot): void {
     if (!this.isVoiceMode || this.isRecording) {
       return
@@ -4740,6 +4743,9 @@ export struct ChatPage {
       interaction.toolId === NUMBER_PUZZLE_TOOL_ID ||
       interaction.toolId === HANDWRITING_PRACTICE_TOOL_ID ||
       interaction.toolId === CATEGORIZATION_TOOL_ID ||
+      interaction.toolId === MAZE_TOOL_ID ||
+      interaction.toolId === SUDOKU_TOOL_ID ||
+      interaction.toolId === PICTURE_VOCAB_TOOL_ID ||
       interaction.toolId === PINYIN_QUIZ_TOOL_ID ||
       interaction.toolId === MATCHING_PAIRS_TOOL_ID
     if (!isAutoTtsTool) {
@@ -4880,6 +4886,33 @@ export struct ChatPage {
             quizText += '请把它们放到' + binNames.join('、') + '。'
           }
         }
+      } else if (interaction.toolId === MAZE_TOOL_ID) {
+        // 走迷宫：difficulty 1=4×4, 2=6×6, 3=8×8 (与 MazeCard 一致)
+        const rawDifficulty = (parsed['difficulty'] as number) ?? 1
+        let gridSize = 4
+        if (rawDifficulty === 2) {
+          gridSize = 6
+        } else if (rawDifficulty >= 3) {
+          gridSize = 8
+        }
+        quizText = '我们来玩走迷宫，' + gridSize + ' 乘 ' + gridSize + ' 的格子。点击旁边的格子，带着小星星走出迷宫，走到小房子那里吧！'
+      } else if (interaction.toolId === SUDOKU_TOOL_ID) {
+        // 数独：difficulty 1=4×4, 2=6×6, 3-5=9×9 (与 SudokuCard 一致)
+        const rawDifficulty = (parsed['difficulty'] as number) ?? 1
+        let gridSize = 4
+        if (rawDifficulty === 2) {
+          gridSize = 6
+        } else if (rawDifficulty >= 3) {
+          gridSize = 9
+        }
+        quizText = '我们来玩数独，' + gridSize + ' 乘 ' + gridSize + ' 的格子。每行、每列、每个小宫格里的数字都不能重复哦。'
+      } else if (interaction.toolId === PICTURE_VOCAB_TOOL_ID) {
+        // 看图识词：只读引导语和 question。不读 correct_answer/options——读出正确词即泄底,
+        // 孩子看屏幕上的图片选答案。
+        const mode = ((parsed['mode'] as string) ?? 'en').trim()
+        const question = ((parsed['question'] as string) ?? '').trim()
+        const modeHint = mode === 'zh' ? '请看图片，选出正确的汉字。' : '请看图片，选出正确的英文单词。'
+        quizText = question !== '' ? (modeHint + ' ' + question) : modeHint
       } else if (interaction.toolId === PINYIN_QUIZ_TOOL_ID) {
         // 拼音题：不朗读 character 本身——TTS 读出汉字即读出读音，会直接泄底。
         // 只播任务引导，孩子看屏幕上的字选拼音。
