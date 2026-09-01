@@ -109,13 +109,21 @@ MVVM 分层（`entry/src/main/ets/`）：
 
 | 组件 | 工具名 | 用途 |
 |------|--------|------|
-| `MathQuizCard` | `math_verify` | 数学题选择/验证 |
-| `EnglishQuizCard` | — | 英文题 |
-| `CategorizationCard` | `categorization_helper` | 分类小管家 |
-| `HuarongdaoCard` | `huarongdao` | 华容道（铺满固定棋盘） |
-| `NumberPuzzleCard` | `number_puzzle` | 数字华容道（2–5×5 随机打乱） |
-| `HandwritingCard` | `handwriting` | 学写字（笔画+米字格+轨迹评分） |
+| `MathQuizCard` | `math_quiz` | 数学题选择/验证（5 题型，含竖式帮助 sheet） |
+| `EnglishQuizCard` | `english_quiz` | 英文题（含 phonics） |
+| `VerticalMathCard` | `vertical_math` | 竖式计算演示 |
+| `CategorizationCard` | `categorization` | 分类小管家 |
+| `NumberPuzzleCard` | `number_puzzle` | 数字华容道（2–5×5 随机打乱；旧名 `huarongdao` 已规范化） |
+| `HandwritingCard` | `handwriting_practice` | 学写字（笔画+米字格+轨迹评分） |
+| `MazeCard` | `maze` | 走迷宫 |
+| `SudokuCard` | `sudoku` | 数独（5 难度） |
+| `PictureVocabCard` | `picture_vocab` | 看图识词（en/zh） |
+| `ListeningQuizCard` | `listening_quiz` | 英语听力辨音（TTS 朗读） |
+| `PinyinQuizCard` | `pinyin_quiz` | 拼音认读（看字选拼音，内置字表） |
+| `MatchingPairsCard` | `matching_pairs` | 连一连观察配对 |
 | `AskUserCard` | `ask_user` | AI 反问收集偏好 |
+
+出题类工具（math_quiz / english_quiz / picture_vocab / listening_quiz / pinyin_quiz / matching_pairs / categorization）参数在渲染前经 `utils/*Validation.ets` 预校验，坏题以 `should_retry` 回传 LLM 自行修正。
 
 完整设计文档见 `docs/superpowers/specs/`。
 
