@@ -32,6 +32,7 @@ import {
   VERTICAL_MATH_TOOL_ID,
   MAZE_TOOL_ID,
   SUDOKU_TOOL_ID,
+  PICTURE_VOCAB_TOOL_ID,
   GRANT_STAR_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { i18n } from '@kit.LocalizationKit'
@@ -2264,6 +2265,119 @@ function createGrantStarToolConfig(): ToolConfig {
 }
 
 
+// ===== picture_vocab 工具 =====
+// 看图识词工具：出示一张图片让小朋友从 4 个选项中选出对应的英文单词或汉字。
+// 图片由 AI 先调 image_generation 生成后传入 image 字段（base64 或 file_path），
+// 也可只传 image_prompt 由 handler 调图片生成 API 兜底。
+// 交互由前端 PictureVocabCard 组件处理，与 english_quiz 模式类似。
+
+interface PictureVocabArgs {
+  mode: string
+  image_prompt: string
+  correct_answer: string
+  options: string[]
+  question?: string
+  difficulty: number
+  skill_key: string
+  image?: string
+}
+
+class PictureVocabExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // picture_vocab 工具的交互由前端 PictureVocabCard 组件处理。
+    // 后台由 ToolExecutionService.handlePictureVocab 拦截处理图片生成/缓存逻辑。
+    try {
+      const params = JSON.parse(_args) as PictureVocabArgs
+      return JSON.stringify({
+        answered: false,
+        mode: params.mode ?? 'en',
+        correct_answer: params.correct_answer ?? '',
+        options: params.options ?? [],
+        question: params.question ?? '',
+        difficulty: params.difficulty ?? 1,
+        skill_key: params.skill_key ?? '',
+        image: params.image ?? '',
+        image_prompt: params.image_prompt ?? ''
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`picture_vocab error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createPictureVocabToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "mode": {
+        "type": "string",
+        "enum": ["en", "zh"],
+        "description": "识词模式：en=看图选英文单词（options 为英文单词），zh=看图选汉字（options 为汉字）。根据教学目标选择，英语课用 en，识字课用 zh。"
+      },
+      "image_prompt": {
+        "type": "string",
+        "description": "Detailed English prompt for generating the image. Should be child-friendly, colorful, and clearly depict a single recognizable object/concept. e.g. 'A bright red apple on a wooden table, children illustration style, colorful, simple background'"
+      },
+      "image": {
+        "type": "string",
+        "description": "可选：若已先调 image_generation 生成了图片，直接传入返回的 base64 或 file_path，避免重复生成。未传时 handler 会用 image_prompt 兜底生成。"
+      },
+      "correct_answer": {
+        "type": "string",
+        "description": "正确答案。mode=en 时为英文单词（如 apple），mode=zh 时为汉字（如 苹）。必须出现在 options 中。"
+      },
+      "options": {
+        "type": "array",
+        "items": { "type": "string", "minLength": 1 },
+        "minItems": 4,
+        "maxItems": 4,
+        "description": "恰好 4 个选项字符串，必须包含 correct_answer。mode=en 时为 4 个英文单词，mode=zh 时为 4 个汉字。distractor 选取同类或形近词，避免过于明显。"
+      },
+      "question": {
+        "type": "string",
+        "description": "可选：给孩子的题目提示语。未传时默认 mode=en 用「What is this?」、mode=zh 用「这是什么？」。"
+      },
+      "difficulty": {
+        "type": "number",
+        "description": "Difficulty level 1-5. 1=very easy (common objects like apple/cat), 5=harder (less common or abstract). Base on child profile."
+      },
+      "skill_key": {
+        "type": "string",
+        "description": "The child profile skill dimension: mode=en 用 english_vocab，mode=zh 用 chinese_writing。"
+      }
+    },
+    "required": ["mode", "image_prompt", "correct_answer", "options", "difficulty", "skill_key"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    PICTURE_VOCAB_TOOL_ID,
+    'Present a picture vocabulary quiz: show an image and let the child choose the correct English word or Chinese character from 4 options. Use this INSTEAD of plain-text vocabulary questions — plain-text questions cannot grade answers or record stars/skill progress, only this tool can. Recommended flow: first call image_generation with a child-friendly image_prompt, then pass the result to the image field; or just pass image_prompt and the handler will generate the image. Set mode to en for English vocabulary or zh for Chinese character recognition. Provide exactly 4 options including the correct_answer, with plausible distractors (same category or visually/semantically similar). Set difficulty based on the child\'s english_vocab or chinese_writing level from child_profile.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createPictureVocabToolConfig(): ToolConfig {
+  return new ToolConfig(
+    PICTURE_VOCAB_TOOL_ID,
+    '看图识词',
+    '出示图片让小朋友从 4 个选项中选出对应的英文单词或汉字, 训练词汇识记能力。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    PICTURE_VOCAB_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
 // 注册所有内置工具
 export function registerBuiltinTools(): void {
   const registry = getToolRegistry()
@@ -2467,6 +2581,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(PICTURE_VOCAB_TOOL_ID)) {
+    const pictureVocabTool = new RegisteredTool(
+      PICTURE_VOCAB_TOOL_ID,
+      createPictureVocabToolConfig(),
+      createPictureVocabToolDefinition(),
+      new PictureVocabExecutor()
+    )
+    registry.registerTool(pictureVocabTool)
+    registeredNow += 1
+  }
+
   console.info(
     'BuiltinTools',
     `Builtin tools ready: total=${registry.getToolCount()}, newlyRegistered=${registeredNow}`
@@ -2475,5 +2600,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, HUARONGDAO_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, GRANT_STAR_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, HUARONGDAO_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, GRANT_STAR_TOOL_ID]
 }

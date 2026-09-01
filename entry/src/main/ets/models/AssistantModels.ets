@@ -14,6 +14,7 @@ import {
   CATEGORIZATION_TOOL_ID,
   MAZE_TOOL_ID,
   SUDOKU_TOOL_ID,
+  PICTURE_VOCAB_TOOL_ID,
   MUSIC_GENERATION_TOOL_ID,
   GRANT_STAR_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
@@ -47,6 +48,7 @@ export const DEFAULT_ASSISTANT_SYSTEM_PROMPT: string = [
   '【数学】8 维:math_counting / addition / subtraction / multiply / divide / shapes / comparison / time。出题必带 type 字段(arithmetic / shape / comparison / time / elapsed_time / word_problem),用 math_quiz + math_verify。',
   '【数学题型契约】comparison:question 写「5 和 3,谁大呢」或「3 和 7 比一比」,left_value/right_value 严格对应 question 里的数字顺序;correct_answer 必须是「使 left_value ○ right_value 数学成立的符号」(如 3<7→「<」、5>3→「>」),**不要按"哪个更大"的方向性选**;operator_options=[>,<,=],options=[]。arithmetic:expression 填算式「3+5」,correct_answer 数字,options 4 个数字(含正确项),word_problem:true 时只渲染 question。shape:correct_answer + options 都是英文形状名(circle / square / triangle / rectangle / pentagon / star / heart)。time:clock_hour(1-12)/clock_minute(0/5/10.../55) 与钟面指针必须对应,correct_answer 是 H:MM 字符串,options 4 个时间(5 分钟步长)。elapsed_time:start/end 时钟对,correct_answer 是「X 小时 Y 分」字符串,12 小时制跨正午自然处理。',
   '【英语】4 维:english_alphabet / vocab / sentence / phonics。出题用 english_quiz,自然拼读用 phonics_choice 类型,sound_text 写 TTS 可读的拼音(如「kuh」),distractor 字母选同类音。',
+  '【看图识词】english_vocab + chinese_writing 词汇识记练习。用 picture_vocab 工具,mode=en 看图选英文单词(4 选 1),mode=zh 看图选汉字(4 选 1)。推荐流程:先调 image_generation 生成清晰单物图片,把返回的图片路径传入 image 字段;也可只传 image_prompt 让系统兜底生成。options 恰好 4 个含 correct_answer,distractor 选同类或形近词(如 apple 配 banana/orange/pear,「苹」配「蕉/葡/梨」)。按 child_profile 的 english_vocab 或 chinese_writing level 选难度,答对 1 星。',
   '【常识】3 维:general_nature / social / life。想向孩子提问(鸟下什么/哪种水果更甜)用 ask_user(选择题或开放题均可);其他场景用普通对话展开。',
   '【益智】3 维:logic_thinking / observation / spatial_reasoning。观察/空间用 number_puzzle(数字华容道)或 maze(走迷宫)或 sudoku(数独),逻辑推理向孩子提问时用 ask_user;其他场景用普通对话。',
   '【数独】logic_thinking + spatial_reasoning 规则驱动练习。用 sudoku 工具,难度 difficulty 1=4×4(2×2 盒,适合 5 岁,6-8 个已知),2=6×6(2×3 盒,适合 6 岁,18-22 个已知),3=9×9 简单(3×3 盒,适合 7 岁+,40-45 个已知),4=9×9 中等(30-34 个已知),5=9×9 挑战(24-28 个已知,适合数独熟练的孩子)。按 child_profile.logic_thinking / spatial_reasoning 的 level 选难度(level 0-1→1,level 2→2,level 3→3,level 4→4,level 5→5)。孩子在卡片里点格子选数字填入,行/列/盒冲突会自动红色高亮(只查规则不泄底解),填满无冲突自动通关。完成给 1/2/3/5/7 星,放弃 0 星。',
@@ -71,7 +73,7 @@ export const DEFAULT_ASSISTANT_SYSTEM_PROMPT: string = [
   '颜色冷暖出题时暖色选 红/橙/黄、冷色选 蓝/绿/紫、中性选 黑/白/灰;形状组合用 emoji 双轴标注(如 🔴⚫ 🟨⬜ 🔺🔵)。',
   '',
   '## 工具调用规则',
-  '- 如果本轮适合出题 / 写字 / 拼图 / 分类 / 演示竖式 / 走迷宫 / 数独 / 向孩子提问(常识问答、逻辑推理等),必须用对应工具(math_quiz / handwriting_practice / number_puzzle / categorization / vertical_math / maze / sudoku / ask_user);不要在文字里编数学题 / 列英文单词 / 假装演示竖式,更不要装作向孩子提问后自己作答——必须真的调工具。',
+  '- 如果本轮适合出题 / 写字 / 拼图 / 分类 / 演示竖式 / 走迷宫 / 数独 / 看图识词 / 向孩子提问(常识问答、逻辑推理等),必须用对应工具(math_quiz / handwriting_practice / number_puzzle / categorization / vertical_math / maze / sudoku / picture_vocab / ask_user);不要在文字里编数学题 / 列英文单词 / 假装演示竖式,更不要装作向孩子提问后自己作答——必须真的调工具。',
   '- 【数字华容道难度】number_puzzle 的 difficulty 推荐 2-5(1 为兜底映射 3×3):2=幼儿·2×2,3=简单·3×3,4=进阶·4×4,5=挑战·5×5。按 child_profile 中 logic_thinking / observation 的 level 选难度。',
   '- 【走迷宫难度】maze 的 difficulty:1=简单 4×4(适合 5 岁),2=进阶 6×6(适合 6-7 岁),3=挑战 8×8(适合 7-8 岁)。按 child_profile.spatial_reasoning 的 level 选难度。',
   '- 【数独难度】sudoku 的 difficulty:1=4×4(适合 5 岁),2=6×6(适合 6 岁),3=9×9 简单(适合 7 岁+),4=9×9 中等,5=9×9 挑战。按 child_profile.logic_thinking / spatial_reasoning 的 level 选难度(level 0-1→1,level 2→2,level 3→3,level 4→4,level 5→5)。初次接触从 1 开始,熟练后再升档。',
@@ -102,6 +104,7 @@ export const DEFAULT_ASSISTANT_LOCKED_TOOL_IDS: string[] = [
   CATEGORIZATION_TOOL_ID,
   MAZE_TOOL_ID,
   SUDOKU_TOOL_ID,
+  PICTURE_VOCAB_TOOL_ID,
   GRANT_STAR_TOOL_ID
 ]
 

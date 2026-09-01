@@ -132,6 +132,10 @@ export class StarRewardService {
     if (activityType === 'chat_correct') {
       return 1
     }
+    if (activityType === 'picture_vocab') {
+      const correct = payload['correct']
+      return correct === true ? 1 : 0
+    }
     return 0
   }
 

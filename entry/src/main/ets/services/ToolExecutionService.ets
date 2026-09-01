@@ -22,6 +22,7 @@ import {
   VERTICAL_MATH_TOOL_ID,
   MAZE_TOOL_ID,
   SUDOKU_TOOL_ID,
+  PICTURE_VOCAB_TOOL_ID,
   isAskUserFunctionName,
   isMathQuizFunctionName,
   isEnglishQuizFunctionName,
@@ -31,6 +32,7 @@ import {
   isVerticalMathFunctionName,
   isMazeFunctionName,
   isSudokuFunctionName,
+  isPictureVocabFunctionName,
   isScrapeWebFunctionName,
   isSearchWebFunctionName,
   isGrantStarFunctionName
@@ -786,6 +788,109 @@ export class ToolExecutionService {
     )
   }
 
+  // picture_vocab 特殊路径: 看图识词互动工具, 由 PictureVocabCard 收集小朋友的选择。
+  // 图片优先用 AI 传入的 image 字段 (base64 或 file_path), 未传时用 image_prompt 兜底生成。
+  private async handlePictureVocab(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = PICTURE_VOCAB_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '看图识词'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 1. 立即设置 pending 状态, 让卡片立即出现
+    toolCall.approvalState = 'pending'
+
+    // 2. 后台解析图片: 优先用 AI 传入的 image, 未传时用 image_prompt 兜底生成
+    try {
+      const parsed = JSON.parse(toolCall.arguments) as Record<string, Object>
+      const imageField = (parsed['image'] as string) ?? ''
+      const imagePrompt = (parsed['image_prompt'] as string) ?? ''
+      const correctAnswer = (parsed['correct_answer'] as string) ?? ''
+      const mode = (parsed['mode'] as string) ?? 'en'
+
+      if (imageField !== '') {
+        parsed['image_path'] = imageField as Object
+        toolCall.arguments = JSON.stringify(parsed)
+        console.info('ToolExecutionService', `picture_vocab: using AI-provided image for "${correctAnswer}"`)
+      } else if (imagePrompt !== '') {
+        const imageIndex = getImageIndexService()
+        const pvKey = `pv:${mode}:${correctAnswer.toLowerCase().trim()}`
+        console.info('ToolExecutionService', `picture_vocab: generating image for key="${pvKey}"`)
+        const generated = await imageIndex.generateAndStore(ImageSource.ENGLISH_QUIZ, pvKey, imagePrompt)
+        if (generated !== null && generated.filePath !== '') {
+          parsed['image_path'] = generated.filePath as Object
+          toolCall.arguments = JSON.stringify(parsed)
+          console.info('ToolExecutionService', `picture_vocab: image generation SUCCESS: path="${generated.filePath}"`)
+        } else {
+          console.error('ToolExecutionService', 'picture_vocab: image generation FAILED')
+        }
+      } else {
+        console.warn('ToolExecutionService', 'picture_vocab: no image and no image_prompt, card will show loading')
+      }
+    } catch (error) {
+      console.error('ToolExecutionService', `picture_vocab image resolution exception: ${JSON.stringify(error)}`)
+    }
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = PICTURE_VOCAB_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `picture_vocab answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `picture_vocab 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'picture_vocab cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未回答该题目' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `picture_vocab answered: ${toolCall.id}`)
+    this.recordStarEvent('picture_vocab', toolCall, context, answerJson)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
   // huarongdao 特殊路径: 与 math_quiz/english_quiz 类似, 挂起等待 HuarongdaoCard 回答。
   // 谜题生成在后台完成并注入 toolCall.arguments。
   private async handleHuarongdao(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
@@ -1504,6 +1609,12 @@ export class ToolExecutionService {
     // 数独互动工具, 由 SudokuCard 收集孩子的填数 / 完成结果。
     if (isSudokuFunctionName(normalizedFunctionName)) {
       return await this.handleSudoku(toolCall, context)
+    }
+
+    // === picture_vocab 特殊路径 ===
+    // 看图识词互动工具, 由 PictureVocabCard 收集小朋友的选项。
+    if (isPictureVocabFunctionName(normalizedFunctionName)) {
+      return await this.handlePictureVocab(toolCall, context)
     }
 
     // 通过函数名获取工具 ID

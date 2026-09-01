@@ -16,6 +16,7 @@ export const VERTICAL_MATH_TOOL_ID: string = 'vertical_math'
 export const GRANT_STAR_TOOL_ID: string = 'grant_star'
 export const MAZE_TOOL_ID: string = 'maze'
 export const SUDOKU_TOOL_ID: string = 'sudoku'
+export const PICTURE_VOCAB_TOOL_ID: string = 'picture_vocab'
 
 
 export function normalizeToolFunctionName(raw: string): string {
@@ -88,6 +89,14 @@ export function isMathQuizFunctionName(functionName: string): boolean {
 
 export function isEnglishQuizFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === ENGLISH_QUIZ_TOOL_ID
+}
+
+export function isPictureVocabFunctionName(functionName: string): boolean {
+  const normalized = normalizeToolFunctionName(functionName)
+  return normalized === PICTURE_VOCAB_TOOL_ID ||
+    normalized === 'picture_vocabulary' ||
+    normalized === 'image_vocab' ||
+    normalized === 'look_and_choose'
 }
 
 export function isHuarongdaoFunctionName(functionName: string): boolean {
