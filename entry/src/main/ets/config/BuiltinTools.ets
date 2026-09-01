@@ -33,6 +33,7 @@ import {
   MAZE_TOOL_ID,
   SUDOKU_TOOL_ID,
   PICTURE_VOCAB_TOOL_ID,
+  LISTENING_QUIZ_TOOL_ID,
   GRANT_STAR_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { i18n } from '@kit.LocalizationKit'
@@ -2378,6 +2379,111 @@ function createPictureVocabToolConfig(): ToolConfig {
 }
 
 
+// ===== listening_quiz 工具 =====
+// 听力题工具：TTS 朗读一个英文单词/字母，小朋友从 4 个英文选项中选出听到的那个。
+// 无图片管线（与 english_quiz 的区别），卡片自动播放一次 + 重播按钮。
+// 交互由前端 ListeningQuizCard 组件处理，与 english_quiz 模式类似。
+
+interface ListeningQuizArgs {
+  word: string
+  question: string
+  correct_answer: string
+  options: string[]
+  difficulty: number
+  skill_key: string
+  sound_text?: string
+}
+
+class ListeningQuizExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // listening_quiz 工具的交互由前端 ListeningQuizCard 组件处理。
+    // 后台由 ToolExecutionService.handleListeningQuiz 拦截处理。
+    try {
+      const params = JSON.parse(_args) as ListeningQuizArgs
+      return JSON.stringify({
+        answered: false,
+        word: params.word ?? '',
+        question: params.question ?? '',
+        correct_answer: params.correct_answer ?? '',
+        options: params.options ?? [],
+        difficulty: params.difficulty ?? 1,
+        skill_key: params.skill_key ?? 'english_vocab',
+        sound_text: params.sound_text ?? ''
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`listening_quiz error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createListeningQuizToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "word": {
+        "type": "string",
+        "description": "要朗读给小朋友听的英文单词或字母（TTS 用）。如 apple、cat、字母 b。"
+      },
+      "sound_text": {
+        "type": "string",
+        "description": "可选：TTS 实际朗读的文本。缺省用 word。phonics 场景可传读音提示如「b says buh」。"
+      },
+      "question": {
+        "type": "string",
+        "description": "给孩子的题目提示语，如「听一听，是哪个单词？」。"
+      },
+      "correct_answer": {
+        "type": "string",
+        "description": "正确答案，必须出现在 options 中，且与 word 一致（听词选词）。"
+      },
+      "options": {
+        "type": "array",
+        "items": { "type": "string", "minLength": 1 },
+        "minItems": 4,
+        "maxItems": 4,
+        "description": "恰好 4 个英文单词/字母选项，必须包含 correct_answer。distractor 选发音相近或同类词，如 cat/car/cap/can。"
+      },
+      "difficulty": {
+        "type": "number",
+        "description": "Difficulty level 1-5. 1=single letters or very common words, 5=longer or similar-sounding words. Base on child profile."
+      },
+      "skill_key": {
+        "type": "string",
+        "description": "The child profile skill dimension: 字母听力用 english_alphabet，单词听力用 english_vocab，phonics 辨音用 english_phonics。"
+      }
+    },
+    "required": ["word", "question", "correct_answer", "options", "difficulty", "skill_key"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    LISTENING_QUIZ_TOOL_ID,
+    'Present a listening quiz: the app speaks an English word or letter aloud (via TTS) and the child picks the one they heard from 4 options. Use this INSTEAD of asking the child to read a word in plain text — listening practice trains different skills than reading. The card auto-plays the audio once and offers a replay button; you do NOT need to call any TTS tool yourself. Provide exactly 4 options including the correct_answer (which must equal word), with similar-sounding distractors (cat/car/cap/can). Set skill_key to english_alphabet for letter sounds, english_vocab for words, or english_phonics for phonics discrimination.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createListeningQuizToolConfig(): ToolConfig {
+  return new ToolConfig(
+    LISTENING_QUIZ_TOOL_ID,
+    '听力题',
+    'TTS 朗读英文单词或字母, 小朋友从 4 个选项中选出听到的那个, 训练英语听力辨音能力。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    LISTENING_QUIZ_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
 // 注册所有内置工具
 export function registerBuiltinTools(): void {
   const registry = getToolRegistry()
@@ -2592,6 +2698,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(LISTENING_QUIZ_TOOL_ID)) {
+    const listeningQuizTool = new RegisteredTool(
+      LISTENING_QUIZ_TOOL_ID,
+      createListeningQuizToolConfig(),
+      createListeningQuizToolDefinition(),
+      new ListeningQuizExecutor()
+    )
+    registry.registerTool(listeningQuizTool)
+    registeredNow += 1
+  }
+
   console.info(
     'BuiltinTools',
     `Builtin tools ready: total=${registry.getToolCount()}, newlyRegistered=${registeredNow}`
@@ -2600,5 +2717,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, GRANT_STAR_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, GRANT_STAR_TOOL_ID]
 }

@@ -136,6 +136,10 @@ export class StarRewardService {
       const correct = payload['correct']
       return correct === true ? 1 : 0
     }
+    if (activityType === 'listening_quiz') {
+      const correct = payload['correct']
+      return correct === true ? 1 : 0
+    }
     return 0
   }
 

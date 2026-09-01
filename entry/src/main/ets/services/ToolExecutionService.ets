@@ -23,6 +23,7 @@ import {
   MAZE_TOOL_ID,
   SUDOKU_TOOL_ID,
   PICTURE_VOCAB_TOOL_ID,
+  LISTENING_QUIZ_TOOL_ID,
   isAskUserFunctionName,
   isMathQuizFunctionName,
   isEnglishQuizFunctionName,
@@ -34,6 +35,7 @@ import {
   isMazeFunctionName,
   isSudokuFunctionName,
   isPictureVocabFunctionName,
+  isListeningQuizFunctionName,
   isScrapeWebFunctionName,
   isSearchWebFunctionName,
   isGrantStarFunctionName
@@ -48,6 +50,7 @@ import { validateAndNormalizeCategorization } from '../utils/CategorizationValid
 import { validateMathQuizArgs } from '../utils/MathQuizValidation'
 import { validateEnglishQuizArgs } from '../utils/EnglishQuizValidation'
 import { validatePictureVocabArgs } from '../utils/PictureVocabValidation'
+import { validateListeningQuizArgs } from '../utils/ListeningQuizValidation'
 import { ServiceRegistry } from './ServiceRegistry'
 import { modelSupportsVision } from './registry/ModelAbilityRegistry'
 import { RequestMessage, AIApiConfig } from './AIApiService'
@@ -954,6 +957,97 @@ export class ToolExecutionService {
     )
   }
 
+  // listening_quiz 特殊路径: 与 english_quiz 类似但无图片管线。
+  // TTS 朗读由前端 ListeningQuizCard 自行调用, 这里只挂起等待回答。
+  private async handleListeningQuiz(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = LISTENING_QUIZ_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '听力题'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 0. 预校验 (categorization 同款模式): word 空 / options 数量不对 / 缺正确答案等坏题
+    //    在进入 pending 态之前拦截, 失败直接回 error ToolResult, AI 据 message 自我修正重出。
+    const listeningValidation = validateListeningQuizArgs(toolCall.arguments)
+    if (!listeningValidation.ok) {
+      console.warn('ToolExecutionService', `listening_quiz validation failed: ${listeningValidation.error}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: 'validation_failed',
+          message: listeningValidation.error,
+          should_retry: true
+        }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    // 1. 立即设置 pending 状态, 让卡片立即出现
+    toolCall.approvalState = 'pending'
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = LISTENING_QUIZ_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `listening_quiz answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `listening_quiz 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'listening_quiz cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未回答该题目' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `listening_quiz answered: ${toolCall.id}`)
+    this.recordStarEvent('listening_quiz', toolCall, context, answerJson)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
   // number_puzzle 特殊路径: 与 math_quiz/english_quiz 类似, 挂起等待 NumberPuzzleCard 回答。
   // 卡片在 aboutToAppear 按 difficulty 自行洗牌, 这里不注入棋盘。
   // 历史会话的 legacy 工具名 huarongdao 由分发层兼容路由到这里。
@@ -1659,6 +1753,12 @@ export class ToolExecutionService {
     // 看图识词互动工具, 由 PictureVocabCard 收集小朋友的选项。
     if (isPictureVocabFunctionName(normalizedFunctionName)) {
       return await this.handlePictureVocab(toolCall, context)
+    }
+
+    // === listening_quiz 特殊路径 ===
+    // 听力题互动工具, 由 ListeningQuizCard 收集小朋友的选项。
+    if (isListeningQuizFunctionName(normalizedFunctionName)) {
+      return await this.handleListeningQuiz(toolCall, context)
     }
 
     // 通过函数名获取工具 ID

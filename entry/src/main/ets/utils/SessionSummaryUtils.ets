@@ -78,6 +78,7 @@ export function inferSkillsFromToolCalls(messages: ChatMessage[]): string[] {
           set.add('math_addition')
           break
         case 'english_quiz':
+        case 'listening_quiz':
           set.add('english_vocab')
           break
         case 'number_puzzle':
