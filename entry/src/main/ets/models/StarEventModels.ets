@@ -7,7 +7,7 @@
  * - 读取: ChatPage 标题栏菜单项 / TodayStarDetailSheet
  */
 
-export type StarActivityType = 'math_quiz' | 'english_quiz' | 'number_puzzle' | 'handwriting_practice' | 'categorization' | 'maze' | 'sudoku' | 'picture_vocab' | 'listening_quiz' | 'chat_correct'
+export type StarActivityType = 'math_quiz' | 'english_quiz' | 'number_puzzle' | 'handwriting_practice' | 'categorization' | 'maze' | 'sudoku' | 'picture_vocab' | 'listening_quiz' | 'pinyin_quiz' | 'chat_correct'
 
 export interface StarEventInsert {
   createdAt: number
@@ -45,6 +45,7 @@ export interface TodayStarSummaryByType {
   sudoku: StarTypeBucket
   picture_vocab: StarTypeBucket
   listening_quiz: StarTypeBucket
+  pinyin_quiz: StarTypeBucket
   chat_correct: StarTypeBucket
 }
 
@@ -78,6 +79,7 @@ export function createEmptyTodayStarSummary(): TodayStarSummary {
     sudoku: createEmptyBucket(),
     picture_vocab: createEmptyBucket(),
     listening_quiz: createEmptyBucket(),
+    pinyin_quiz: createEmptyBucket(),
     chat_correct: createEmptyBucket()
   }
   return { total: 0, byType: byType }
@@ -101,6 +103,7 @@ export interface StarActivityMetaMap {
   sudoku: StarActivityMeta
   picture_vocab: StarActivityMeta
   listening_quiz: StarActivityMeta
+  pinyin_quiz: StarActivityMeta
   chat_correct: StarActivityMeta
 }
 
@@ -160,6 +163,13 @@ const META_LISTENING: StarActivityMeta = {
   grantedHint: '听力答对',
   unit: '题'
 }
+const META_PINYIN: StarActivityMeta = {
+  emoji: '🔤',
+  shortLabel: '拼音',
+  longLabel: '拼音认读',
+  grantedHint: '拼音答对',
+  unit: '题'
+}
 const META_CHAT_CORRECT: StarActivityMeta = {
   emoji: '💬',
   shortLabel: '聊天',
@@ -185,11 +195,12 @@ const metaRecord: StarActivityMetaMap = {
   sudoku: META_SUDOKU,
   picture_vocab: META_PICTURE_VOCAB,
   listening_quiz: META_LISTENING,
+  pinyin_quiz: META_PINYIN,
   chat_correct: META_CHAT_CORRECT
 }
 export const STAR_ACTIVITY_META: StarActivityMetaMap = metaRecord
 
-const activityTypes: StarActivityType[] = ['math_quiz', 'english_quiz', 'number_puzzle', 'handwriting_practice', 'categorization', 'maze', 'sudoku', 'picture_vocab', 'listening_quiz', 'chat_correct']
+const activityTypes: StarActivityType[] = ['math_quiz', 'english_quiz', 'number_puzzle', 'handwriting_practice', 'categorization', 'maze', 'sudoku', 'picture_vocab', 'listening_quiz', 'pinyin_quiz', 'chat_correct']
 export const STAR_ACTIVITY_TYPES: StarActivityType[] = activityTypes
 
 export function getBucketFromSummary(summary: TodayStarSummary, type: StarActivityType): StarTypeBucket {
@@ -221,6 +232,9 @@ export function getBucketFromSummary(summary: TodayStarSummary, type: StarActivi
   if (type === 'listening_quiz') {
     return byType.listening_quiz
   }
+  if (type === 'pinyin_quiz') {
+    return byType.pinyin_quiz
+  }
   return byType.number_puzzle
 }
 
@@ -251,6 +265,9 @@ export function getActivityMeta(type: StarActivityType): StarActivityMeta {
   }
   if (type === 'listening_quiz') {
     return META_LISTENING
+  }
+  if (type === 'pinyin_quiz') {
+    return META_PINYIN
   }
   return META_PUZZLE
 }
@@ -286,6 +303,9 @@ export function getActivitySymbol(type: StarActivityType): Resource {
   }
   if (type === 'listening_quiz') {
     return $r('sys.symbol.speaker_wave_2')
+  }
+  if (type === 'pinyin_quiz') {
+    return $r('sys.symbol.character_textbox')
   }
   return $r('sys.symbol.lightbulb')
 }

@@ -23,6 +23,7 @@ interface ToolArgumentDict {
   prompt?: string
   word?: string
   sentence?: string
+  character?: string
   question_type?: string
   difficulty?: number
 }
@@ -214,6 +215,10 @@ export function buildToolTitle(toolCall: ToolCall): string {
       return `英语看图: ${truncate(sentence)}`
     }
     return '英语看图说话'
+  }
+  if (fn === 'pinyin_quiz') {
+    const character = coerceString(args.character)
+    return character !== '' ? `拼音认读: ${character}` : '拼音题'
   }
   if (fn === 'number_puzzle' || fn === 'huarongdao') { // huarongdao 为 legacy 历史会话工具名
     const difficulty = coerceNumber(args.difficulty)

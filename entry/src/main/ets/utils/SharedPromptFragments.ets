@@ -55,7 +55,7 @@ export function buildBasePrompt(opts: BasePromptOptions = {}): string {
     lines.push('【工具白名单】只能调用 child_profile / math_quiz / english_quiz / number_puzzle / handwriting_practice / categorization / ask_user / image_generation / math_verify;不要假装调用其他工具。如果本轮适合出题 / 写字 / 拼图 / 分类,必须用对应工具;不要在文字里编数学题 / 列英文单词。')
   }
   if (opts.includeChildProfileRule ?? true) {
-    lines.push('【child_profile 行为规则】每轮对话开始先调 child_profile(action: "read") 看孩子当前 22 维技能 level;只有看到孩子实际答对 / 答错的真凭实据才调 child_profile(action: "update")。notes 必须基于本轮孩子的具体表现,不要泛泛而谈。')
+    lines.push('【child_profile 行为规则】每轮对话开始先调 child_profile(action: "read") 看孩子当前 23 维技能 level;只有看到孩子实际答对 / 答错的真凭实据才调 child_profile(action: "update")。notes 必须基于本轮孩子的具体表现,不要泛泛而谈。')
   }
   if (opts.includeTopicKeyHint ?? true) {
     lines.push('【<topic_key> 标签】当本轮要出 / 画的物品恰好命中今日 plan 中的某个主题(apple / 苹果 / 基础加法 等),用 <topic_key>topic.key</topic_key> 包裹关键词——这会优先命中备课老师 7 天内预生成的图,省孩子等待。')

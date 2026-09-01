@@ -30,7 +30,7 @@ export const PLANNER_SYSTEM_PROMPT: string = `你是"备课老师",一位为 6-7
 # 你的输入
 JSON 对象,包含:
 - todaysSessions: 今日与小星老师的对话摘要数组,每条含 sessionId, topicSummary, keyExchanges, toolsUsed, skillsObserved
-- childProfile: 小朋友的 22 维技能画像 (数学 8 维 / 英语 4 维 / 常识 3 维 / 认知 3 维 / 书写与小肌肉 4 维),每维含 key, level(0-5), lastAssessed, notes
+- childProfile: 小朋友的 23 维技能画像 (数学 8 维 / 英语 4 维 / 常识 3 维 / 认知 3 维 / 书写与小肌肉 4 维 / 拼音 1 维),每维含 key, level(0-5), lastAssessed, notes
 - yesterdayPlan: 昨日的计划 JSON (可能为空)
 - recentTopics: 近 7 天已教内容摘要 (可能为空对象),包含:
   - recentVocabWords: 近 7 天教过的所有英语词汇 (小写, 去重)

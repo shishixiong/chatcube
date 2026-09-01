@@ -4,7 +4,7 @@
  * 把 0-5 的技能 level 渲染为 5 个 8vp 圆点 (实心 = 已达, 空心 = 未达)。
  *
  * 复用:
- * - pages/LearningProfilePage.ets 的 22 维技能行
+ * - pages/LearningProfilePage.ets 的 23 维技能行
  * - pages/LearningTomorrowPlanPage.ets 的 math 教学点 targetSkillLevel
  *
  * Props:

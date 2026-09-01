@@ -34,8 +34,10 @@ import {
   SUDOKU_TOOL_ID,
   PICTURE_VOCAB_TOOL_ID,
   LISTENING_QUIZ_TOOL_ID,
+  PINYIN_QUIZ_TOOL_ID,
   GRANT_STAR_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
+import { getPinyinCharsJoined } from './PinyinData'
 import { i18n } from '@kit.LocalizationKit'
 import {
   GeneratedMedia,
@@ -1241,7 +1243,7 @@ function createChildProfileToolDefinition(): ToolDefinition {
           "properties": {
             "key": {
               "type": "string",
-              "description": "Skill dimension key: math_counting, math_addition, math_subtraction, math_multiply, math_divide, math_shapes, math_comparison, math_time, english_alphabet, english_vocab, english_sentence, english_phonics, general_nature, general_social, general_life, logic_thinking, observation, spatial_reasoning, fine_motor, english_writing, chinese_writing, categorization"
+              "description": "Skill dimension key: math_counting, math_addition, math_subtraction, math_multiply, math_divide, math_shapes, math_comparison, math_time, english_alphabet, english_vocab, english_sentence, english_phonics, general_nature, general_social, general_life, logic_thinking, observation, spatial_reasoning, fine_motor, english_writing, chinese_writing, pinyin, categorization"
             },
             "level": {
               "type": "number",
@@ -2484,6 +2486,106 @@ function createListeningQuizToolConfig(): ToolConfig {
 }
 
 
+// ===== pinyin_quiz 工具 =====
+// 拼音题工具：给小朋友看一个汉字，从 4 个带调拼音中选出正确读音（字→拼音单向）。
+// 汉字必须在 PinyinData 字典内（字典是标准答案键），字典外字符预校验直接拒绝。
+// 交互由前端 PinyinQuizCard 组件处理。
+
+interface PinyinQuizArgs {
+  character: string
+  question?: string
+  correct_answer: string
+  options: string[]
+  difficulty: number
+  skill_key: string
+}
+
+class PinyinQuizExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // pinyin_quiz 工具的交互由前端 PinyinQuizCard 组件处理。
+    // 后台由 ToolExecutionService.handlePinyinQuiz 拦截处理。
+    try {
+      const params = JSON.parse(_args) as PinyinQuizArgs
+      return JSON.stringify({
+        answered: false,
+        character: params.character ?? '',
+        question: params.question ?? '',
+        correct_answer: params.correct_answer ?? '',
+        options: params.options ?? [],
+        difficulty: params.difficulty ?? 1,
+        skill_key: 'pinyin'
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`pinyin_quiz error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createPinyinQuizToolDefinition(): ToolDefinition {
+  const supportedChars = getPinyinCharsJoined()
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "character": {
+        "type": "string",
+        "description": "要考的汉字，必须是单个汉字且在支持字表内：${supportedChars}。字典外字符会被拒绝。"
+      },
+      "question": {
+        "type": "string",
+        "description": "可选：给孩子的题目提示语。缺省用「这个字怎么读？」。"
+      },
+      "correct_answer": {
+        "type": "string",
+        "description": "正确拼音（带声调），如「shān」。必须与字典读音一致且出现在 options 中。"
+      },
+      "options": {
+        "type": "array",
+        "items": { "type": "string", "minLength": 1 },
+        "minItems": 4,
+        "maxItems": 4,
+        "description": "恰好 4 个带调拼音选项，互不相同，必须包含 correct_answer。distractor 选形近字或韵母相近的读音，如 山 shān 配 shǎn/shàn/sān。"
+      },
+      "difficulty": {
+        "type": "number",
+        "description": "Difficulty 1-3. 1=声母韵母差异明显，3=仅声调不同。"
+      },
+      "skill_key": {
+        "type": "string",
+        "description": "固定填 pinyin。"
+      }
+    },
+    "required": ["character", "correct_answer", "options", "difficulty", "skill_key"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    PINYIN_QUIZ_TOOL_ID,
+    'Present a Chinese pinyin quiz: show the child a single Chinese character and they pick the correct pinyin reading (with tone marks) from 4 options. Use this INSTEAD of asking the child to read pinyin in plain text. The character MUST come from the supported char list in the character parameter description. distractors should be similar-looking or similar-sounding pinyin. skill_key is always pinyin.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createPinyinQuizToolConfig(): ToolConfig {
+  return new ToolConfig(
+    PINYIN_QUIZ_TOOL_ID,
+    '拼音题',
+    '给小朋友看一个汉字, 从 4 个带调拼音中选出正确读音, 训练拼音认读能力。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    PINYIN_QUIZ_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
 // 注册所有内置工具
 export function registerBuiltinTools(): void {
   const registry = getToolRegistry()
@@ -2709,6 +2811,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(PINYIN_QUIZ_TOOL_ID)) {
+    const pinyinQuizTool = new RegisteredTool(
+      PINYIN_QUIZ_TOOL_ID,
+      createPinyinQuizToolConfig(),
+      createPinyinQuizToolDefinition(),
+      new PinyinQuizExecutor()
+    )
+    registry.registerTool(pinyinQuizTool)
+    registeredNow += 1
+  }
+
   console.info(
     'BuiltinTools',
     `Builtin tools ready: total=${registry.getToolCount()}, newlyRegistered=${registeredNow}`
@@ -2717,5 +2830,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, GRANT_STAR_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, GRANT_STAR_TOOL_ID]
 }

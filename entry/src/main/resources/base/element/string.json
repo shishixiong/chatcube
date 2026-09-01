@@ -3357,6 +3357,10 @@
       "value": "英语"
     },
     {
+      "name": "learning_skill_section_chinese",
+      "value": "语文"
+    },
+    {
       "name": "learning_skill_section_general",
       "value": "常识"
     },

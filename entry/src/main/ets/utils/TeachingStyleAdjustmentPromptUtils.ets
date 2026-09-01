@@ -7,7 +7,7 @@
  * - isValidEvaluatorJson: JSON 合法性校验
  *
  * 与 LessonPlanPromptUtils 区别:
- * - 输入: 评估老师读周级趋势 (4 指标) + childProfile (22 维) + 今日 sessions 摘要
+ * - 输入: 评估老师读周级趋势 (4 指标) + childProfile (23 维) + 今日 sessions 摘要
  * - 输出: 4 维度教学风格调整 (difficultyTendency / feedbackTone / weakStrongBalance / learningPace)
  *   + 4 个 rationale 字符串 + confidence
  *
@@ -42,7 +42,7 @@ JSON 对象,包含:
   - topicInterests: 主题平均轮次 + 趋势 (rising/falling/stable)
   - attention: 平均轮次 / 中位时长 / 早退率 (<5 轮) / 平均会话间隔
   - topImprovements / topRegressions / topStruggling: 各自前 3 个 key
-- childProfile: 22 维技能画像 (每维 key, label, level 0-5, lastAssessed, notes)
+- childProfile: 23 维技能画像 (每维 key, label, level 0-5, lastAssessed, notes)
 - todaysSessions: 今日小星老师会话摘要数组 (sessionId, topicSummary, keyExchanges, toolsUsed, skillsObserved)
 - evaluationDate: 评估日期, YYYY-MM-DD
 

@@ -55,6 +55,7 @@ const SKILL_DEFINITIONS: [string, string][] = [
   ['fine_motor', '精细动作'],
   ['english_writing', '英文书写'],
   ['chinese_writing', '中文书写'],
+  ['pinyin', '拼音认读'],
   ['categorization', '分类归纳']
 ]
 

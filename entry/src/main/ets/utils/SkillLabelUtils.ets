@@ -1,7 +1,7 @@
 /**
  * 技能维度本地化标签工具
  *
- * 单一职责: 把 22 维技能 key (math_addition / english_vocab / general_nature 等)
+ * 单一职责: 把 23 维技能 key (math_addition / english_vocab / general_nature 等)
  * 解析成家长可读的中文标签, 跨 LearningProfilePage / LearningTomorrowPlanPage 复用。
  *
  * 数据源: ChildProfileService.SKILL_DEFINITIONS 的 label 字段(已含中文)。
@@ -50,7 +50,7 @@ function findSkillDefinition(key: string): SkillDimension | null {
   return null
 }
 
-// 22 维技能的 group 推断, 避免引入额外 group 表。命名规则: "<domain>_<...>"
+// 23 维技能的 group 推断, 避免引入额外 group 表。命名规则: "<domain>_<...>"
 function inferSkillGroup(key: string): string {
   if (key.startsWith('math_')) {
     return '数学'
@@ -66,6 +66,9 @@ function inferSkillGroup(key: string): string {
   }
   if (key === 'fine_motor' || key === 'chinese_writing') {
     return '书写'
+  }
+  if (key === 'pinyin') {
+    return '语文'
   }
   if (key === 'categorization') {
     return '认知'

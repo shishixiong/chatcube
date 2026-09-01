@@ -58,6 +58,15 @@ const SKILL_GROUPS: LearningSkillGroup[] = [
     ]
   },
   {
+    sectionKey: 'chinese',
+    sectionTitle: $r('app.string.learning_skill_section_chinese'),
+    sectionIcon: $r('sys.symbol.character_textbox'),
+    keys: [
+      'pinyin',
+      'chinese_writing'
+    ]
+  },
+  {
     sectionKey: 'general',
     sectionTitle: $r('app.string.learning_skill_section_general'),
     sectionIcon: $r('sys.symbol.leaf'),
@@ -65,8 +74,7 @@ const SKILL_GROUPS: LearningSkillGroup[] = [
       'general_nature',
       'general_social',
       'general_life',
-      'fine_motor',
-      'chinese_writing'
+      'fine_motor'
     ]
   },
   {
