@@ -124,7 +124,9 @@ import {
   ENGLISH_QUIZ_TOOL_ID,
   NUMBER_PUZZLE_TOOL_ID,
   HANDWRITING_PRACTICE_TOOL_ID,
-  CATEGORIZATION_TOOL_ID
+  CATEGORIZATION_TOOL_ID,
+  PINYIN_QUIZ_TOOL_ID,
+  MATCHING_PAIRS_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { MessagePartKind } from '../models/MessageParts'
 import { normalizeAssistantAvatarValue } from '../components/AssistantAvatar'
@@ -4728,7 +4730,7 @@ export struct ChatPage {
     this.applyPendingToolExecutionApproval(interaction)
   }
 
-  // 语音模式：互动工具（math_quiz / english_quiz / number_puzzle / handwriting_practice / categorization）出现 pending 交互时自动朗读题目
+  // 语音模式：互动工具（math_quiz / english_quiz / number_puzzle / handwriting_practice / categorization / pinyin_quiz / matching_pairs）出现 pending 交互时自动朗读题目
   private tryAutoTtsForQuizInteraction(interaction: PendingToolInteractionSnapshot): void {
     if (!this.isVoiceMode || this.isRecording) {
       return
@@ -4737,7 +4739,9 @@ export struct ChatPage {
       interaction.toolId === ENGLISH_QUIZ_TOOL_ID ||
       interaction.toolId === NUMBER_PUZZLE_TOOL_ID ||
       interaction.toolId === HANDWRITING_PRACTICE_TOOL_ID ||
-      interaction.toolId === CATEGORIZATION_TOOL_ID
+      interaction.toolId === CATEGORIZATION_TOOL_ID ||
+      interaction.toolId === PINYIN_QUIZ_TOOL_ID ||
+      interaction.toolId === MATCHING_PAIRS_TOOL_ID
     if (!isAutoTtsTool) {
       return
     }
@@ -4875,6 +4879,27 @@ export struct ChatPage {
           if (binNames.length > 0) {
             quizText += '请把它们放到' + binNames.join('、') + '。'
           }
+        }
+      } else if (interaction.toolId === PINYIN_QUIZ_TOOL_ID) {
+        // 拼音题：不朗读 character 本身——TTS 读出汉字即读出读音，会直接泄底。
+        // 只播任务引导，孩子看屏幕上的字选拼音。
+        const question = ((parsed['question'] as string) ?? '').trim()
+        if (question !== '') {
+          quizText = question
+        } else {
+          quizText = '我们来认拼音。请看屏幕上的字，选出它的正确读音。'
+        }
+      } else if (interaction.toolId === MATCHING_PAIRS_TOOL_ID) {
+        // 连一连：只读主题/玩法引导。不逐项朗读 pairs——字↔拼音 主题下,
+        // TTS 读出左项汉字就等于说出答案;孩子看屏幕配对即可。
+        const theme = ((parsed['theme'] as string) ?? '').trim()
+        const instruction = ((parsed['instruction'] as string) ?? '').trim()
+        if (instruction !== '') {
+          quizText = instruction
+        } else if (theme !== '') {
+          quizText = '我们来玩连一连：' + theme + '。先点左边，再点右边，把它们配成一对吧。'
+        } else {
+          quizText = '我们来玩连一连。先点左边，再点右边，把它们配成一对吧。'
         }
       }
     } catch (_e) {}
