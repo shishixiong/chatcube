@@ -3,7 +3,6 @@ import {
   VerticalMathOperation,
   VerticalMathValidationError,
   VerticalMathStep,
-  VerticalMathBoardRow,
   VerticalMathHighlight,
   VerticalMathOverlay,
   validateVerticalMathInputs,
@@ -27,11 +26,10 @@ export default function verticalMathSolverTest() {
       expect(step.overlays.length).assertEqual(0)
     })
 
-    it('creates a typed carry overlay', 0, () => {
+    it('creates a typed overlay with defaults', 0, () => {
       const overlay: VerticalMathOverlay = new VerticalMathOverlay()
-      expect(overlay.kind).assertEqual('carry_path')
-      expect(overlay.sourceColumn).assertEqual(-1)
-      expect(overlay.targetColumn).assertEqual(-1)
+      expect(overlay.kind).assertEqual('partial_band')
+      expect(overlay.rowIndex).assertEqual(-1)
       expect(overlay.startColumn).assertEqual(-1)
       expect(overlay.endColumn).assertEqual(-1)
       expect(overlay.value).assertEqual('')
@@ -109,9 +107,10 @@ export default function verticalMathSolverTest() {
       expect(s.columnCount).assertEqual(2)
       // no standalone alignment step — first step is units computation
       expect(s.steps[0].title).assertEqual('个位相加')
-      const carrySteps = s.steps.filter((step: VerticalMathStep) =>
-        step.rows.some((row: VerticalMathBoardRow) => row.topMark === '1'))
-      expect(carrySteps.length).assertEqual(1)
+      // exactly one distinct carry column accumulated through the final snapshot
+      const finalCarryColumns: number[] = s.steps[s.steps.length - 1].rows[0].carryColumns ?? []
+      expect(finalCarryColumns.length).assertEqual(1)
+      expect(finalCarryColumns.includes(0)).assertEqual(true)
       expect(s.steps[s.steps.length - 1].showResultRow).assertEqual(true)
       expect(s.finalRow?.cells.join('')).assertEqual('75')
     })
@@ -146,16 +145,16 @@ export default function verticalMathSolverTest() {
       const s = solveVerticalAdd(100, 200)
       expect(s.result).assertEqual(300)
       expect(s.steps.every((step: VerticalMathStep) =>
-        !step.rows.some((row: VerticalMathBoardRow) => row.topMark === '1'))).assertEqual(true)
+        (step.rows[0].carryColumns?.length ?? 0) === 0)).assertEqual(true)
     })
 
     it('999 + 1 = 1000 (carry cascades)', 0, () => {
       const s = solveVerticalAdd(999, 1)
       expect(s.result).assertEqual(1000)
       expect(s.columnCount).assertEqual(4)
-      const carrySteps = s.steps.filter((step: VerticalMathStep) =>
-        step.rows.some((row: VerticalMathBoardRow) => row.topMark === '1'))
-      expect(carrySteps.length >= 3).assertEqual(true)
+      // carries cascade: 3 distinct carry columns accumulated by the final snapshot
+      const finalCarryColumns: number[] = s.steps[s.steps.length - 1].rows[0].carryColumns ?? []
+      expect(finalCarryColumns.length >= 3).assertEqual(true)
     })
 
     it('0 + 0 = 0', 0, () => {
@@ -229,6 +228,29 @@ export default function verticalMathSolverTest() {
       const s = solveVerticalSubtract(999, 999)
       expect(s.result).assertEqual(0)
       expect(s.columnCount).assertEqual(3)
+    })
+
+    it('narrates a lent column from the original digit without another borrow', 0, () => {
+      const s = solveVerticalSubtract(52, 18)
+      // Ones borrows from tens; the tens step must spell out 5 − 1 − 1 ＝ 3,
+      // never "4 − 1" with the decremented value appearing out of nowhere.
+      expect(s.steps[1].narration.includes('5 − 1 − 1 ＝ 3')).assertEqual(true)
+      expect(s.steps[1].narration.includes('先减去借走的 1')).assertEqual(true)
+    })
+
+    it('narrates a lent column that needs another borrow as a full chain', 0, () => {
+      const s = solveVerticalSubtract(352, 178)
+      // Tens: lent 1 to ones (5→4), then 4 < 7 borrows from hundreds.
+      expect(s.steps[1].narration.includes('5 − 1 ＝ 4，不够减 7')).assertEqual(true)
+      expect(s.steps[1].narration.includes('从百位借 1')).assertEqual(true)
+      expect(s.steps[1].narration.includes('14 − 7 ＝ 7')).assertEqual(true)
+      // A plain borrow step (no prior lend) keeps the simple wording.
+      expect(s.steps[0].narration.includes('2 不够减 8')).assertEqual(true)
+    })
+
+    it('narrates plain columns without a lend or borrow', 0, () => {
+      const s = solveVerticalSubtract(489, 25)
+      expect(s.steps[1].narration.includes('8 − 2 ＝ 6，没有借位')).assertEqual(true)
     })
 
     it('marks only the donor column and keeps original digits', 0, () => {
@@ -368,7 +390,7 @@ export default function verticalMathSolverTest() {
           .assertEqual(expectedRows[index])
       }
       expect(s.steps.every((step: VerticalMathStep) =>
-        !step.rows.some((row: VerticalMathBoardRow) => row.topMark === '1'))).assertEqual(true)
+        (step.rows[0].carryColumns?.length ?? 0) === 0)).assertEqual(true)
     })
 
     it('5 × 3 = 15 (single digit × single digit)', 0, () => {
@@ -500,7 +522,7 @@ export default function verticalMathSolverTest() {
           (overlay: VerticalMathOverlay): boolean => overlay.kind === 'division_lane'
         )
         expect(lanes.length).assertEqual(1)
-        expect(lanes[0].targetColumn).assertEqual(index)
+        expect(lanes[0].endColumn).assertEqual(index)
         expect(lanes[0].startColumn <= lanes[0].endColumn).assertEqual(true)
       }
     })

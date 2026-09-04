@@ -4,6 +4,7 @@ import {
   resolveVerticalMathPalette
 } from '../../utils/VerticalMathColors'
 import {
+  VerticalMathOperation,
   VerticalMathSolution,
   VerticalMathBoardRow,
   VerticalMathHighlight,
@@ -73,6 +74,14 @@ export struct VerticalMathBoard {
     return this.solution.steps[index].showFinalLine === true
   }
 
+  // The answer row that celebrates on the final step: ADD/SUB/MUL keep the
+  // result/total on the last row; DIV puts the quotient on row 3 (product and
+  // remainder rows follow below it).
+  private getAnswerRowIndex(): number {
+    if (this.solution.operation === VerticalMathOperation.DIVIDE) return 3
+    return this.getCurrentRows().length - 1
+  }
+
   private getCellSize(): number {
     return this.compact ? 36 : 44
   }
@@ -106,13 +115,38 @@ export struct VerticalMathBoard {
     return this.getCarryColumns(row).length > 0 || this.getBorrowColumns(row).length > 0
   }
 
+  // The previous step's rowA — used to tell freshly-added carry/borrow marks from
+  // historical ones so only new chips pop in (历史标记保持静止).
+  private getPreviousRowA(): VerticalMathBoardRow | null {
+    if (this.visibleStepCount <= 1 || this.solution.steps.length === 0) return null
+    const index: number = Math.min(this.visibleStepCount - 1, this.solution.steps.length - 1)
+    if (index <= 0) return null
+    return this.solution.steps[index - 1].rows[0] ?? null
+  }
+
+  private isFreshMark(column: number, isCarry: boolean): boolean {
+    const previous: VerticalMathBoardRow | null = this.getPreviousRowA()
+    if (previous === null) return true
+    const previousColumns: number[] = isCarry
+      ? this.getCarryColumns(previous)
+      : this.getBorrowColumns(previous)
+    return !previousColumns.includes(column)
+  }
+
+  private resolveMarkTransition(isFresh: boolean): TransitionEffect {
+    if (!isFresh || this.reduceMotion) return TransitionEffect.IDENTITY
+    return TransitionEffect.OPACITY
+      .combine(TransitionEffect.scale({ x: 0.3, y: 0.3 }))
+      .animation({ duration: 260, curve: Curve.EaseOut })
+  }
+
   private shouldShowLine(rowIndex: number): boolean {
     const rows: VerticalMathBoardRow[] = this.getCurrentRows()
     return rowIndex === 2 || (this.getShowFinalLine() && rowIndex === rows.length - 2)
   }
 
   @Builder
-  private TopMarkAt(mark: string, column: number, isActive: boolean = false) {
+  private TopMarkAt(mark: string, column: number, isActive: boolean = false, isFresh: boolean = false) {
     Row() {
       Text(mark)
         .fontSize(this.compact ? 15 : 18)
@@ -127,27 +161,7 @@ export struct VerticalMathBoard {
     .width(this.getCellSize() * (this.solution.columnCount + 1))
     .padding({ left: this.getTopMarkOffset(column) })
     .justifyContent(FlexAlign.Start)
-  }
-
-  private resolveTopMarkColumn(row: VerticalMathBoardRow): number {
-    return row.topMarkColumn === undefined ? 0 : row.topMarkColumn
-  }
-
-  @Builder
-  private TopMark(row: VerticalMathBoardRow) {
-    if (this.hasPersistentTopMarks(row)) {
-      Stack() {
-        ForEach(this.getCarryColumns(row), (column: number) => {
-          this.TopMarkAt('+1', column, column === this.getActiveColumn())
-        }, (column: number) => `carry_${column}`)
-        ForEach(this.getBorrowColumns(row), (column: number) => {
-          this.TopMarkAt('-1', column, column === this.getActiveColumn())
-        }, (column: number) => `borrow_${column}`)
-      }
-    } else if (row.topMark !== undefined && row.topMark !== '') {
-      this.TopMarkAt(row.topMark, this.resolveTopMarkColumn(row),
-        this.resolveTopMarkColumn(row) === this.getActiveColumn())
-    }
+    .transition(this.resolveMarkTransition(isFresh))
   }
 
   @Builder
@@ -155,10 +169,10 @@ export struct VerticalMathBoard {
     if (this.hasPersistentTopMarks(sourceRow)) {
       Stack() {
         ForEach(this.getCarryColumns(sourceRow), (column: number) => {
-          this.TopMarkAt('+1', column, column === this.getActiveColumn())
+          this.TopMarkAt('+1', column, column === this.getActiveColumn(), this.isFreshMark(column, true))
         }, (column: number) => `carry_${column}`)
         ForEach(this.getBorrowColumns(sourceRow), (column: number) => {
-          this.TopMarkAt('-1', column, column === this.getActiveColumn())
+          this.TopMarkAt('-1', column, column === this.getActiveColumn(), this.isFreshMark(column, false))
         }, (column: number) => `borrow_${column}`)
       }
     }
@@ -176,7 +190,9 @@ export struct VerticalMathBoard {
             overlays: this.getCurrentOverlays(),
             cellSize: this.getCellSize(),
             columnCount: this.solution.columnCount,
-            isDarkMode: this.isDarkMode
+            isDarkMode: this.isDarkMode,
+            reduceMotion: this.reduceMotion,
+            celebrate: this.getShowFinalLine() && rowIndex === this.getAnswerRowIndex()
           })
           if (rowIndex === 1) {
             this.PersistentMarkerRow(this.getCurrentRows()[0])
@@ -215,7 +231,7 @@ export struct VerticalMathBoard {
     ForEach(this.getCurrentOverlays(), (overlay: VerticalMathOverlay, index: number) => {
       this.RelationOverlay(overlay)
     }, (overlay: VerticalMathOverlay, index: number) =>
-      `${overlay.kind}_${overlay.sourceColumn}_${overlay.targetColumn}_${index}`)
+      `${overlay.kind}_${overlay.startColumn}_${overlay.endColumn}_${index}`)
   }
 
   build() {

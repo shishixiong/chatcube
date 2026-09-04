@@ -18,20 +18,15 @@ export class VerticalMathHighlight {
 export class VerticalMathBoardRow {
   cells: string[] = []            // length = columnCount; '' = blank cell
   operator?: string               // leading glyph ('+', '-', '×', '÷', '＋'), or undefined
-  topMark?: string                // optional small glyph above the row ('-1' for borrow, '+1' for add carry)
-  topMarkColumn?: number          // which column the topMark belongs to
-  topMarkRowIndex?: number        // visual row index used by carry row injection
   carryColumns?: number[]         // all carry columns accumulated through this snapshot
   borrowColumns?: number[]        // all borrow columns accumulated through this snapshot
 }
 
 export type VerticalMathOverlayKind =
-  'carry_path' | 'borrow_bridge' | 'partial_band' | 'division_lane'
+  'partial_band' | 'division_lane'
 
 export class VerticalMathOverlay {
-  kind: VerticalMathOverlayKind = 'carry_path'
-  sourceColumn: number = -1
-  targetColumn: number = -1
+  kind: VerticalMathOverlayKind = 'partial_band'
   rowIndex: number = -1
   startColumn: number = -1
   endColumn: number = -1
@@ -189,9 +184,10 @@ function getPlaceValueLabel(columnCount: number, column: number): string {
  * Structure:
  * - initialRows: [A row, B row with '+' operator, line spacer]
  * - steps[0..N-1]: one per column, right-to-left. When a column produces a carry
- *   (digitA + digitB + carryIn >= 10), the row for the NEXT column to the left
- *   carries a `topMark` of '+1'. The active column is highlighted yellow ('active'),
- *   already-resolved result columns are mint ('done').
+ *   (digitA + digitB + carryIn >= 10), the column to the LEFT is accumulated into
+ *   rowA's `carryColumns` and stays visible on every later snapshot. The active
+ *   column is highlighted yellow ('active'), already-resolved result columns are
+ *   mint ('done').
  */
 export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
   const digitsA: number = Math.max(1, String(a).length)
@@ -230,13 +226,9 @@ export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
 
     const rowA: VerticalMathBoardRow = { cells: cloneCells(aCells) }
     const rowB: VerticalMathBoardRow = { cells: cloneCells(bCells), operator: '+' }
-    // Keep the legacy single mark on the generation step, while carryColumns
-    // retains every carry for this and all later snapshots.
+    // carryColumns retains every carry for this and all later snapshots.
     if (carryOut > 0 && col - 1 >= 0) {
       carryColumns.add(col - 1)
-      rowA.topMark = '+1'
-      rowA.topMarkColumn = col - 1
-      rowA.topMarkRowIndex = 0
     }
     if (carryColumns.size > 0) {
       rowA.carryColumns = Array.from(carryColumns)
@@ -328,17 +320,21 @@ export function solveVerticalAdd(a: number, b: number): VerticalMathSolution {
  * Structure:
  * - initialRows: [A row, B row with '-' operator, line spacer]
  * - steps[0..N-1]: one per column, right-to-left (first step is units, no alignment step).
- *   When a column needs to borrow (digitA < digitB + carryIn), each step's donor
+ *   When a column needs to borrow (digitA < digitB), each step's donor
  *   column is accumulated into the row's `borrowColumns` array, so all past donors
- *   remain visible through every later snapshot. Each per-step operand-A row shows
- *   the ORIGINAL digits (unmutated) so the number stays visually intact. The active
- *   column is highlighted yellow ('active'), already-resolved result columns are mint ('done').
+ *   remain visible through every later snapshot as '-1' markers — that marker alone
+ *   expresses the borrow; the operand digits themselves are never rewritten on
+ *   screen (no strikethrough / small digits). Each per-step operand-A row shows
+ *   the ORIGINAL digits (unmutated). The active column is highlighted
+ *   yellow ('active'), already-resolved result columns are mint ('done').
+ *   Narration on a previously-lent column spells out the chain from the ORIGINAL
+ *   digit ("5 − 1 − 1 ＝ 3"), never from the decremented value.
  * - final step: reveals the second line + result row and retains accumulated borrow markers.
  *
  * Borrow convention: When a borrow is needed, walk left to find a non-zero donor
  * digit in aBorrowed, decrement it by 1, and add 10 to dA. aBorrowed is internal
- * math state only — it drives the result digits and the donor bridge overlay, but
- * is never rendered (rowA.cells uses the original aCells).
+ * math state only — it drives the result digits and the narration, but is never
+ * rendered (rowA.cells uses the original aCells).
  */
 export function solveVerticalSubtract(a: number, b: number): VerticalMathSolution {
   const digitsA: number = Math.max(1, String(a).length)
@@ -362,18 +358,22 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
   // Digit-by-digit, right to left. aBorrowed tracks "what A looks like now"
   // after borrow decrements have been applied to the higher-order digits.
   // aBorrowed is internal math state only — it computes the result digits and
-  // identifies the donor column, but is never rendered.
+  // the narration, but is never rendered.
   const aBorrowed: string[] = cloneCells(aCells)
   const resultCells: string[] = emptyCells(columnCount)
-  let carryIn: number = 0
   const accumulatedBorrowColumns: Set<number> = new Set<number>()
 
   for (let col = columnCount - 1; col >= 0; col--) {
+    // Original digit + "was this column already lent from?" — captured before this
+    // step's own borrow walk so the narration can spell out the full chain from
+    // the ORIGINAL digit ("5 − 1 − 1 ＝ 3") instead of the decremented value.
+    const originalDA: number = aCells[col] === ' ' ? 0 : Number(aCells[col])
+    const wasLent: boolean = aBorrowed[col] !== aCells[col]
     const dA: number = aBorrowed[col] === ' ' ? 0 : Number(aBorrowed[col])
     const dB: number = bCells[col] === ' ' ? 0 : Number(bCells[col])
     let localDA: number = dA
     let donorColumn: number = -1
-    if (localDA < dB + carryIn) {
+    if (localDA < dB) {
       // Walk left to find a non-zero digit in aBorrowed to borrow from.
       // Intermediate zero digits become 9 (they lent 1 to their left neighbor).
       // These mutations are internal math state only (not rendered).
@@ -393,8 +393,7 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
     if (donorColumn >= 0) {
       accumulatedBorrowColumns.add(donorColumn)
     }
-    const resultDigit: number = localDA - dB - carryIn
-    carryIn = 0
+    const resultDigit: number = localDA - dB
     resultCells[col] = String(resultDigit)
 
     // Left-trim leading '0's with spaces so per-step result rows match the final
@@ -423,8 +422,8 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
       }
     }
 
-    // Per-step operand-A row shows the ORIGINAL digits (never mutated). Every
-    // donor encountered so far remains visible through persistent '-1' markers.
+    // Per-step operand-A row shows the ORIGINAL digits (never rewritten on
+    // screen — the persistent '-1' marker alone expresses the borrow).
     const rowA: VerticalMathBoardRow = { cells: cloneCells(aCells) }
     if (accumulatedBorrowColumns.size > 0) {
       rowA.borrowColumns = Array.from(accumulatedBorrowColumns)
@@ -461,9 +460,21 @@ export function solveVerticalSubtract(a: number, b: number): VerticalMathSolutio
     const placeLabel: string = getPlaceValueLabel(columnCount, col)
     const overlays: VerticalMathOverlay[] = []
 
-    const narration: string = donorColumn >= 0
-      ? `${dA} 不够减 ${dB}，从${getPlaceValueLabel(columnCount, donorColumn)}借 1，${localDA} − ${dB} ＝ ${resultDigit}。`
-      : `${localDA} − ${dB} ＝ ${resultDigit}，没有借位。`
+    // Narration always works from the ORIGINAL digit so no decremented value
+    // appears out of nowhere. A previously-lent column shows the full chain:
+    // no new borrow → "5 − 1 − 1 ＝ 3"; needs another borrow → "5 − 1 ＝ 4，不够减…"。
+    let narration: string
+    if (donorColumn >= 0 && wasLent) {
+      narration = `${originalDA} − 1 ＝ ${dA}，不够减 ${dB}，` +
+        `从${getPlaceValueLabel(columnCount, donorColumn)}借 1，${localDA} − ${dB} ＝ ${resultDigit}。`
+    } else if (donorColumn >= 0) {
+      narration = `${dA} 不够减 ${dB}，` +
+        `从${getPlaceValueLabel(columnCount, donorColumn)}借 1，${localDA} − ${dB} ＝ ${resultDigit}。`
+    } else if (wasLent) {
+      narration = `${originalDA} − 1 − ${dB} ＝ ${resultDigit}（先减去借走的 1）。`
+    } else {
+      narration = `${localDA} − ${dB} ＝ ${resultDigit}，没有借位。`
+    }
 
     const step: VerticalMathStep = new VerticalMathStep()
     step.title = `第 ${columnCount - col} 位相减`
@@ -604,8 +615,12 @@ export function solveVerticalMultiply(a: number, b: number): VerticalMathSolutio
       mulOverlays.push(band)
     }
     const placeLabel: string = `${positionLabel}位`
+    // 部分积占最右 productText.length 列。digit×b ≤ 9×9 = 81,最多两位,
+    // 单位积说"个位",两位积说"十位和个位"。
+    const productText: string = String(products[index])
+    const placement: string = productText.length === 1 ? '个位' : '十位和个位'
     const narration: string = index === 0
-      ? `${positionLabel}：${digits[index]}×${b}=${products[index]}，部分积放在十位和个位。`
+      ? `${positionLabel}：${digits[index]}×${b}=${products[index]}，部分积放在${placement}。`
       : `${positionLabel}：${digits[index]}×${b}=${products[index]}，部分积向左移动${index}格。`
     const mulStep: VerticalMathStep = new VerticalMathStep()
     mulStep.title = `${positionLabel}：${digits[index]}×${b}=${products[index]}`
@@ -810,8 +825,6 @@ export function solveVerticalDivide(a: number, b: number): VerticalMathSolution 
     const divOverlays: VerticalMathOverlay[] = []
     const lane: VerticalMathOverlay = new VerticalMathOverlay()
     lane.kind = 'division_lane'
-    lane.sourceColumn = windowStartColumn
-    lane.targetColumn = i
     lane.rowIndex = 0
     lane.startColumn = windowStartColumn
     lane.endColumn = i

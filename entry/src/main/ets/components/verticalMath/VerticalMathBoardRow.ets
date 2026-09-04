@@ -18,6 +18,35 @@ export struct VerticalMathBoardRowView {
   @Param cellSize: number = 36
   @Param columnCount: number = 1
   @Param isDarkMode: boolean = false
+  @Param reduceMotion: boolean = false
+  @Param celebrate: boolean = false        // final step: answer row pops + green glow
+
+  @Local celebrationScale: number = 1.0
+  @Local celebrationGlow: number = 0
+
+  aboutToAppear(): void {
+    if (this.celebrate && !this.reduceMotion) {
+      // Answer-reveal pulse: grow with a success glow, then settle back.
+      this.getUIContext().keyframeAnimateTo({ iterations: 1 }, [
+        {
+          duration: 140,
+          curve: Curve.EaseOut,
+          event: () => {
+            this.celebrationScale = 1.12
+            this.celebrationGlow = 14
+          }
+        },
+        {
+          duration: 280,
+          curve: Curve.EaseInOut,
+          event: () => {
+            this.celebrationScale = 1.0
+            this.celebrationGlow = 0
+          }
+        }
+      ])
+    }
+  }
 
   private get palette(): VerticalMathPalette {
     return resolveVerticalMathPalette(this.isDarkMode)
@@ -67,6 +96,20 @@ export struct VerticalMathBoardRowView {
     return this.palette.ink
   }
 
+  // Reveal animation: rows ≥ 2 hold freshly-written digits (result / partial
+  // product / quotient / product / remainder) — the active-highlighted cell in
+  // those rows is exactly the digit written THIS step, so it alone pops in when
+  // the board remounts per step. Operand rows (0/1) use 'active' only as a
+  // "current column" cursor over old content, so they stay static.
+  private resolveRevealTransition(colIndex: number): TransitionEffect {
+    if (this.rowIndex < 2 || !this.isActiveCell(colIndex) || this.reduceMotion) {
+      return TransitionEffect.IDENTITY
+    }
+    return TransitionEffect.scale({ x: 0.4, y: 0.4 })
+      .combine(TransitionEffect.OPACITY)
+      .animation({ duration: 240, curve: Curve.EaseOut })
+  }
+
   @Builder
   private CellGlyph(text: string, colIndex: number) {
     Stack() {
@@ -86,6 +129,7 @@ export struct VerticalMathBoardRowView {
     .height(this.cellSize)
     .backgroundColor(this.getCellBackgroundColor(colIndex))
     .borderRadius(8)
+    .transition(this.resolveRevealTransition(colIndex))
     .shadow({
       radius: this.isActiveCell(colIndex) ? 3 : 0,
       color: this.isActiveCell(colIndex) ? '#22000000' : Color.Transparent,
@@ -112,5 +156,11 @@ export struct VerticalMathBoardRowView {
     }
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.Start)
+    .scale({ x: this.celebrationScale, y: this.celebrationScale })
+    .shadow({
+      radius: this.celebrationGlow,
+      color: this.celebrationGlow > 0 ? this.palette.success : Color.Transparent,
+      offsetY: 0
+    })
   }
 }
