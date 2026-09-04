@@ -24,6 +24,10 @@ export class AppStorageKeys {
   static readonly TOP_AVOID_HEIGHT: string = 'topAvoidHeight'
   static readonly BOTTOM_AVOID_HEIGHT: string = 'bottomAvoidHeight'
   static readonly SPEAKING_MESSAGE_ID: string = 'speakingMessageId'
+  // 语音交互模式（ChatPage 本地 @Local isVoiceMode 的跨组件镜像）。
+  // 互动卡片（如 VerticalMathCard 步进朗读）在交互时刻直接 AppStorage.get 读取，
+  // 不走 observeAppUiState 监听，所以 raw setOrCreate 即可。值：1 开 / 0 关。
+  static readonly VOICE_MODE_ENABLED: string = 'voice_mode_enabled'
   static readonly WINDOW_WIDTH_VP: string = 'window_width_vp'
   static readonly WINDOW_HEIGHT_VP: string = 'window_height_vp'
   static readonly LAYOUT_SIZE_CLASS: string = 'layout_size_class'

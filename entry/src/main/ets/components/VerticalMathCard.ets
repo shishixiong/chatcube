@@ -11,6 +11,8 @@ import {
   VerticalMathStep
 } from '../utils/VerticalMathSolver'
 import { getAppUiState } from '../state/AppUiState'
+import { AppStorageKeys } from '../config/AppStorageKeys'
+import { ServiceRegistry } from '../services/ServiceRegistry'
 import {
   VerticalMathPalette,
   resolveVerticalMathPalette
@@ -181,6 +183,7 @@ export struct VerticalMathCard {
     if (this.solution === null || this.hasAnswered) return
     if (this.visibleStepCount < this.solution.steps.length) {
       this.visibleStepCount++
+      this.speakStepNarration(this.visibleStepCount - 1)
       return
     }
     this.submitResult()
@@ -189,11 +192,36 @@ export struct VerticalMathCard {
   private handlePrev() {
     if (this.visibleStepCount > 0) {
       this.visibleStepCount--
+      // 回退后正在播的旁白已过时，直接停掉
+      ServiceRegistry.tts().stop()
     }
   }
 
   private handleReset() {
     this.visibleStepCount = 0
+    ServiceRegistry.tts().stop()
+  }
+
+  // 语音模式（ChatPage 镜像到 AppStorage 的标量）下，孩子点"下一步"时
+  // 朗读当前步的旁白——孩子可以听着讲解逐步完成竖式。
+  // 读方是交互时刻的一次性 get，不做监听，raw AppStorage 语义即可。
+  private isVoicePlaybackEnabled(): boolean {
+    return AppStorage.get<number>(AppStorageKeys.VOICE_MODE_ENABLED) === 1
+  }
+
+  private speakStepNarration(stepIndex: number): void {
+    if (!this.isVoicePlaybackEnabled()) return
+    if (this.solution === null || stepIndex < 0 || stepIndex >= this.solution.steps.length) return
+    const narration: string = this.solution.steps[stepIndex].narration
+    if (narration === '') return
+    // 步骤旁白接管所有在播语音（如引入卡片的消息正文自动朗读），
+    // 让孩子听到的是刚前进到的这一步。
+    ServiceRegistry.tts().stop()
+    ServiceRegistry.tts().speak(narration, {
+      onStart: () => {},
+      onComplete: () => {},
+      onError: (_error: string) => {}
+    }).catch((_e: Error) => {})
   }
 
   private handleInputA(value: string) {

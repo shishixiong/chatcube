@@ -125,6 +125,7 @@ import {
   NUMBER_PUZZLE_TOOL_ID,
   HANDWRITING_PRACTICE_TOOL_ID,
   CATEGORIZATION_TOOL_ID,
+  VERTICAL_MATH_TOOL_ID,
   MAZE_TOOL_ID,
   SUDOKU_TOOL_ID,
   PICTURE_VOCAB_TOOL_ID,
@@ -457,6 +458,15 @@ export struct ChatPage {
   }
 
   aboutToAppear(): void {
+    // 同步语音模式镜像键（供互动卡片读取）。若已有实例写过（如导航栈里
+    // 存在前一个 ChatPage），以已存值为准，避免后进页面把别处关掉的
+    // 语音模式重置回默认开。
+    const storedVoiceMode: number | undefined = AppStorage.get<number>(AppStorageKeys.VOICE_MODE_ENABLED)
+    if (storedVoiceMode === 0) {
+      this.isVoiceMode = false
+    } else {
+      AppStorage.setOrCreate(AppStorageKeys.VOICE_MODE_ENABLED, 1)
+    }
     if (this.routeParams === null && this.routeParamsSeed !== null) {
       this.routeParams = this.routeParamsSeed
       this.applyRouteDisplaySeed(this.routeParamsSeed)
@@ -4280,6 +4290,15 @@ export struct ChatPage {
     this.getStopFlow().stopCurrentTask()
   }
 
+  // isVoiceMode 是 ChatPage 本地状态；镜像到 AppStorage 供互动卡片
+  // (如 VerticalMathCard 的步进朗读) 在交互时刻直接读取。
+  // 读方不做 observeAppUiState 监听，raw setOrCreate 即可（避开
+  // UIUtils.addMonitor 对 @Trace 不生效的坑）。
+  private setVoiceMode(value: boolean): void {
+    this.isVoiceMode = value
+    AppStorage.setOrCreate(AppStorageKeys.VOICE_MODE_ENABLED, value ? 1 : 0)
+  }
+
   // 语音模式切换
   handleVoiceModeToggle(): void {
     if (this.isSending || this.isRecording || this.isEditingMessage) {
@@ -4290,7 +4309,7 @@ export struct ChatPage {
       const context = this.getUIContext().getHostContext() as common.UIAbilityContext
       ServiceRegistry.speechRecognition().checkPermission(context).then((granted: boolean) => {
         if (granted) {
-          this.isVoiceMode = !this.isVoiceMode
+          this.setVoiceMode(!this.isVoiceMode)
         } else {
           this.showChatSnack($r('app.string.voice_permission_denied'), 2000, SnackBarTone.WARNING)
         }
@@ -4300,7 +4319,7 @@ export struct ChatPage {
       if (this.speakingMessageId !== '') {
         this.handleTTSStop()
       }
-      this.isVoiceMode = false
+      this.setVoiceMode(false)
     }
   }
 
@@ -4312,7 +4331,7 @@ export struct ChatPage {
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext
     ServiceRegistry.speechRecognition().checkPermission(context).then((granted: boolean) => {
       if (!granted) {
-        this.isVoiceMode = false
+        this.setVoiceMode(false)
         this.showChatSnack($r('app.string.voice_permission_denied'), 2000, SnackBarTone.WARNING)
       }
     })
@@ -4733,7 +4752,7 @@ export struct ChatPage {
     this.applyPendingToolExecutionApproval(interaction)
   }
 
-  // 语音模式：互动工具（math_quiz / english_quiz / number_puzzle / handwriting_practice / categorization / maze / sudoku / picture_vocab / pinyin_quiz / matching_pairs）出现 pending 交互时自动朗读题目
+  // 语音模式：互动工具（math_quiz / english_quiz / number_puzzle / handwriting_practice / categorization / vertical_math / maze / sudoku / picture_vocab / pinyin_quiz / matching_pairs）出现 pending 交互时自动朗读题目
   private tryAutoTtsForQuizInteraction(interaction: PendingToolInteractionSnapshot): void {
     if (!this.isVoiceMode || this.isRecording) {
       return
@@ -4743,6 +4762,7 @@ export struct ChatPage {
       interaction.toolId === NUMBER_PUZZLE_TOOL_ID ||
       interaction.toolId === HANDWRITING_PRACTICE_TOOL_ID ||
       interaction.toolId === CATEGORIZATION_TOOL_ID ||
+      interaction.toolId === VERTICAL_MATH_TOOL_ID ||
       interaction.toolId === MAZE_TOOL_ID ||
       interaction.toolId === SUDOKU_TOOL_ID ||
       interaction.toolId === PICTURE_VOCAB_TOOL_ID ||
@@ -4885,6 +4905,29 @@ export struct ChatPage {
           if (binNames.length > 0) {
             quizText += '请把它们放到' + binNames.join('、') + '。'
           }
+        }
+      } else if (interaction.toolId === VERTICAL_MATH_TOOL_ID) {
+        // 竖式计算：完整参数时读出算式 + 步进引导；参数不全时卡片是自由输入
+        // 表单，读输入引导。逐步讲解由卡片内的 StepNarrator 文字呈现，
+        // 不逐句 TTS（整段读太长，且节奏应由孩子按"下一步"控制）。
+        const operation = ((parsed['operation'] as string) ?? '').trim()
+        const operandA = parsed['operand_a']
+        const operandB = parsed['operand_b']
+        let opLabel = ''
+        if (operation === 'add') {
+          opLabel = '加'
+        } else if (operation === 'subtract') {
+          opLabel = '减'
+        } else if (operation === 'multiply') {
+          opLabel = '乘'
+        } else if (operation === 'divide') {
+          opLabel = '除以'
+        }
+        if (opLabel !== '' && typeof operandA === 'number' && typeof operandB === 'number') {
+          quizText = '我们来看竖式计算：' + operandA + ' ' + opLabel + ' ' + operandB +
+            '。按下一步按钮，一步一步看竖式是怎么算的。'
+        } else {
+          quizText = '我们来做竖式练习。在卡片里输入两个数字，选好运算符号，开始算吧。'
         }
       } else if (interaction.toolId === MAZE_TOOL_ID) {
         // 走迷宫：difficulty 1=4×4, 2=6×6, 3=8×8 (与 MazeCard 一致)
