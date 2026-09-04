@@ -88,6 +88,26 @@ export struct PictureVocabCard {
     }
   }
 
+  // handlePictureVocab 在后台生成图片后注入 image_path 到 arguments (ToolCall.arguments 是 @Trace),
+  // 卡片此时已渲染在"图片加载中"态, 需要监听变更后重新解析, 否则永远停留在加载中
+  // (镜像 EnglishQuizCard.onArgumentsChanged 模式)。
+  @Monitor('toolCall.arguments')
+  onArgumentsChanged(): void {
+    if (this.isAnswered) {
+      return
+    }
+    try {
+      const parsed = JSON.parse(this.toolCall.arguments) as Record<string, Object>
+      const imagePath = (parsed['image_path'] as string) ?? (parsed['image'] as string) ?? ''
+      if (imagePath !== '' && imagePath !== this.displayImagePath) {
+        this.quiz.imagePath = imagePath
+        this.displayImagePath = imagePath
+        this.isImageLoading = false
+        this.imageLoadFailed = false
+      }
+    } catch (_e) {}
+  }
+
   private parseQuiz(): PictureVocabQuestion {
     const result: PictureVocabQuestion = {
       mode: 'en',
