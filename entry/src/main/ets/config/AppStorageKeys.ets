@@ -38,6 +38,9 @@ export class AppStorageKeys {
   static readonly SETTING_HAND_ADAPTIVE_NEW_CHAT: string = 'setting_hand_adaptive_new_chat'
   static readonly SETTING_HAND_ADAPTIVE_UNSUPPORTED: string = 'setting_hand_adaptive_unsupported'
   static readonly HOLDING_HAND_STATUS: string = 'holding_hand_status'
+  // 儿童模式（kids mode）激活标志: Preferences kids_mode_enabled 的响应式镜像。
+  // ChatPage 据此裁剪成人入口（模型选择/标题菜单）。写入必须走 setAppUiStateValue。
+  static readonly KIDS_MODE_ACTIVE: string = 'kids_mode_active'
 
   // 主题键
   static readonly COLOR_THEME: string = 'color_theme'

@@ -35,6 +35,7 @@ export class AppUiState {
   @Trace settingHandAdaptiveNewChat: boolean = false
   @Trace settingHandAdaptiveUnsupported: boolean = false
   @Trace holdingHandStatus: number = HOLDING_HAND_STATUS_UNKNOWN
+  @Trace kidsModeActive: boolean = false      // 儿童模式激活（Preferences 镜像, Index 启动时写入）
   @Trace colorTheme: string = ''
   @Trace themePrimary: string = '#4E6F9E'
   @Trace themePrimaryLight: string = '#D8E2EE'
@@ -161,6 +162,9 @@ function applyAppUiStateValue<T extends string | number | boolean>(state: AppUiS
       return
     case AppStorageKeys.HOLDING_HAND_STATUS:
       state.holdingHandStatus = value as number
+      return
+    case AppStorageKeys.KIDS_MODE_ACTIVE:
+      state.kidsModeActive = value as boolean
       return
     case AppStorageKeys.COLOR_THEME:
       state.colorTheme = value as string
@@ -315,6 +319,8 @@ function createAppUiStateFromStorage(): AppUiState {
     readStorageValue<boolean>(AppStorageKeys.SETTING_HAND_ADAPTIVE_UNSUPPORTED, false))
   applyAppUiStateValue(state, AppStorageKeys.HOLDING_HAND_STATUS,
     readStorageValue<number>(AppStorageKeys.HOLDING_HAND_STATUS, HOLDING_HAND_STATUS_UNKNOWN))
+  applyAppUiStateValue(state, AppStorageKeys.KIDS_MODE_ACTIVE,
+    readStorageValue<boolean>(AppStorageKeys.KIDS_MODE_ACTIVE, false))
   applyAppUiStateValue(state, AppStorageKeys.COLOR_THEME, readStorageValue<string>(AppStorageKeys.COLOR_THEME, ''))
   applyAppUiStateValue(state, AppStorageKeys.THEME_PRIMARY,
     readStorageValue<string>(AppStorageKeys.THEME_PRIMARY, state.themePrimary))
@@ -420,6 +426,7 @@ export function syncAppUiStateFromStorage(): void {
   state.settingHandAdaptiveNewChat = freshState.settingHandAdaptiveNewChat
   state.settingHandAdaptiveUnsupported = freshState.settingHandAdaptiveUnsupported
   state.holdingHandStatus = freshState.holdingHandStatus
+  state.kidsModeActive = freshState.kidsModeActive
   state.colorTheme = freshState.colorTheme
   state.themePrimary = freshState.themePrimary
   state.themePrimaryLight = freshState.themePrimaryLight
@@ -535,6 +542,8 @@ function resolveAppUiStatePath(path: string): string {
       return 'settingHandAdaptiveUnsupported'
     case AppStorageKeys.HOLDING_HAND_STATUS:
       return 'holdingHandStatus'
+    case AppStorageKeys.KIDS_MODE_ACTIVE:
+      return 'kidsModeActive'
     case AppStorageKeys.COLOR_THEME:
       return 'colorTheme'
     case AppStorageKeys.THEME_PRIMARY:

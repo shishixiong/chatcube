@@ -82,6 +82,9 @@ export class PreferenceKeys {
   // 分类小管家引导已观看标记 (true = 已看过, false 或无值 = 首次玩, 显示引导气泡)
   static readonly CATEGORIZATION_TUTORIAL_SEEN: string = 'categorization_tutorial_seen'
 
+  // 儿童模式开关 (true = 冷启动直达儿童主屏, 成人壳收进算术题家长门后)
+  static readonly KIDS_MODE_ENABLED: string = 'kids_mode_enabled'
+
   // 搜索服务配置
   static readonly SEARCH_SERVICE_ENABLED: string = 'search_service_enabled'
   static readonly SEARCH_CONVERSATION_ENABLED: string = 'search_conversation_enabled'
@@ -553,6 +556,16 @@ export class PreferencesService {
   // 设置分类小管家引导已观看
   async setCategorizationTutorialSeen(seen: boolean): Promise<void> {
     await this.setBoolean(PreferenceKeys.CATEGORIZATION_TUTORIAL_SEEN, seen)
+  }
+
+  // 获取儿童模式开关
+  async getKidsModeEnabled(): Promise<boolean> {
+    return await this.getBoolean(PreferenceKeys.KIDS_MODE_ENABLED, false)
+  }
+
+  // 设置儿童模式开关
+  async setKidsModeEnabled(enabled: boolean): Promise<void> {
+    await this.setBoolean(PreferenceKeys.KIDS_MODE_ENABLED, enabled)
   }
 }
 
