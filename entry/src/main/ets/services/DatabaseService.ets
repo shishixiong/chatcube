@@ -3208,6 +3208,26 @@ export class DatabaseService {
     return events
   }
 
+  /**
+   * 按会话聚合累计星星数（儿童模式主屏会话卡片徽章用）。
+   * - 复用 getStarEventsSince(0) client-side 聚合, 与 StarRewardService.getAllTimeStarTotal 的 MVP 策略一致
+   * - session_id 为空的事件跳过; 查询失败时 getStarEventsSince 内部已吞错返回 [], 本方法随之返回空 Map
+   *   → UI 层优雅降级为不显示徽章
+   */
+  async getStarTotalsBySession(): Promise<Map<string, number>> {
+    const totals: Map<string, number> = new Map()
+    const events: StarEventRow[] = await this.getStarEventsSince(0)
+    for (let i = 0; i < events.length; i++) {
+      const sessionId: string = events[i].sessionId
+      if (sessionId === '') {
+        continue
+      }
+      const previous: number = totals.get(sessionId) ?? 0
+      totals.set(sessionId, previous + events[i].stars)
+    }
+    return totals
+  }
+
   async deleteStarEventsOlderThan(cutoffMs: number): Promise<number> {
     await this.waitForInitialization()
     if (this.rdbStore === null) {
