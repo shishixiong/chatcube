@@ -126,6 +126,7 @@ import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { parseOpenNewChatWithPromptPayload } from '../config/PresetPrompts'
 import { HOLDING_HAND_STATUS_UNKNOWN, isExplicitHoldingHandStatus } from '../utils/HandAdaptiveUtils'
+import { KidsHomeView } from '../components/kids/KidsHomeView'
 
 @Entry
 @ComponentV2
@@ -142,6 +143,16 @@ struct Index {
   private static readonly TAB_SETTINGS: number = INDEX_TAB_SETTINGS
   @Local currentTabIndex: number = Index.TAB_CHAT
   @Local sessions: ChatSession[] = []
+  // 儿童模式三态:
+  // - kidsModeEnabled: Preferences 开关的本地镜像
+  // - parentalGateUnlocked: 家长门解锁态（纯内存, 冷启动重置 → "本次运行内解锁"）
+  // - kidsRootActive: 当前是否渲染儿童主屏。与 unlocked 分离的原因: 过门解锁后家长可进入
+  //   成人壳自由操作, 但孩子随时可能拿回设备——成人壳提供"回到儿童界面"入口（Step 6c）,
+  //   点击后 kidsRootActive 复位, 儿童主屏恢复为唯一可见 UI（unlocked 保持 true 不再弹门）。
+  @Local kidsModeEnabled: boolean = false
+  private parentalGateUnlocked: boolean = false
+  @Local kidsRootActive: boolean = false
+  @Local kidsStarRefreshTick: number = 0
   @Local isLoading: boolean = false
   @Local currentThemeMode: ThemeMode = ThemeMode.SYSTEM
   @Local currentLanguage: AppLanguage = AppLanguage.SYSTEM
@@ -887,6 +898,7 @@ struct Index {
 
   aboutToAppear(): void {
     this.registerAppUiStateObservers()
+    this.loadKidsModeEnabled()
     this.chatTabNavStack.setInterception({
       didShow: (_from: NavDestinationContext | "navBar", to: NavDestinationContext | "navBar",
         _operation: NavigationOperation, _isAnimated: boolean): void => {
@@ -897,6 +909,7 @@ struct Index {
           this.showCompactTabsFromNonScrollChange()
           this.refreshSessionListProjection()
           this.loadSessions()
+          this.kidsStarRefreshTick = this.kidsStarRefreshTick + 1
           this.processInAppTaskAlertPayload(this.inAppTaskAlertPayload)
           // 切回聊天列表时尊重 cooldown, 避免同一个 pending 工具调用每次切 Tab 都打扰用户。
           this.processPendingToolInteractionAlert(false)
@@ -1281,6 +1294,100 @@ struct Index {
       this.chatTabNavStack.replacePath({ name: Index.CHAT_DETAIL_EMPTY_ROUTE })
     }
     this.refreshSessionListProjection()
+  }
+
+  private isKidsUiActive(): boolean {
+    return this.kidsRootActive
+  }
+
+  private loadKidsModeEnabled(): void {
+    this.preferencesService.getKidsModeEnabled().then((enabled: boolean): void => {
+      this.kidsModeEnabled = enabled
+      this.kidsRootActive = enabled
+      setAppUiStateValue(AppStorageKeys.KIDS_MODE_ACTIVE, enabled)
+      if (enabled) {
+        this.loadSessions()
+      }
+    }).catch((error: Object): void => {
+      console.error('Index', `Failed to load kids mode flag: ${JSON.stringify(error)}`)
+      this.kidsModeEnabled = false
+      this.kidsRootActive = false
+      setAppUiStateValue(AppStorageKeys.KIDS_MODE_ACTIVE, false)
+    })
+  }
+
+  private handleKidsOpenSession(sessionId: string): void {
+    this.openChatRoute({ sessionId: sessionId } as ChatPageRouteParams)
+  }
+
+  private handleKidsNewChat(): void {
+    // 儿童模式新建会话必须落在小星老师上——家长可能把"当前助手"切成了自定义助手
+    if (this.currentAssistantId !== DEFAULT_ASSISTANT_ID) {
+      this.switchAssistant(DEFAULT_ASSISTANT_ID).then((): void => {
+        this.openChatRoute({} as ChatPageRouteParams)
+      }).catch((error: Object): void => {
+        console.error('Index', `Failed to switch to default assistant for kids chat: ${JSON.stringify(error)}`)
+        this.openChatRoute({} as ChatPageRouteParams)
+      })
+      return
+    }
+    this.openChatRoute({} as ChatPageRouteParams)
+  }
+
+  private handleKidsGatePassed(): void {
+    this.parentalGateUnlocked = true
+    this.kidsRootActive = false
+  }
+
+  /** 成人壳「回到儿童界面」入口（Task 8 面板行调用）: 无需再过门, 直接复位儿童主屏 */
+  handleBackToKidsHome(): void {
+    if (!this.kidsModeEnabled) {
+      return
+    }
+    // 清掉成人壳可能推入的 chat 详情路由, 避免儿童主屏被压在栈底
+    if (this.chatTabNavStack.size() > 0) {
+      this.chatTabNavStack.clear(false)
+    }
+    this.currentTabIndex = Index.TAB_CHAT
+    this.kidsRootActive = true
+  }
+
+  /** Task 8 的设置面板行调用: 确认后翻转开关 */
+  confirmKidsModeToggle(): void {
+    const enabling: boolean = !this.kidsModeEnabled
+    this.getUIContext().showAlertDialog({
+      title: enabling ? '开启儿童模式' : '关闭儿童模式',
+      message: enabling
+        ? '开启后，下次启动将直接进入儿童界面，返回管理界面需要通过算术题验证。'
+        : '关闭后，下次启动将恢复正常界面。',
+      primaryButton: {
+        value: '取消',
+        action: (): void => {}
+      },
+      secondaryButton: {
+        value: enabling ? '开启' : '关闭',
+        action: (): void => {
+          this.applyKidsModeToggled(enabling)
+        }
+      }
+    })
+  }
+
+  private applyKidsModeToggled(enabled: boolean): void {
+    this.kidsModeEnabled = enabled
+    setAppUiStateValue(AppStorageKeys.KIDS_MODE_ACTIVE, enabled)
+    this.preferencesService.setKidsModeEnabled(enabled).catch((error: Object): void => {
+      console.error('Index', `Failed to persist kids mode flag: ${JSON.stringify(error)}`)
+    })
+    if (enabled) {
+      // 家长刚在成人壳里开启, 本次运行内保持解锁 + 停留在成人壳,
+      // 避免"开完把自己锁在门外"（spec §6.2）; 下次冷启动 kidsRootActive=true 生效
+      this.parentalGateUnlocked = true
+      this.kidsRootActive = false
+      return
+    }
+    this.parentalGateUnlocked = false
+    this.kidsRootActive = false
   }
 
   private refreshSettingsState(): void {
@@ -1921,7 +2028,9 @@ struct Index {
 
   build() {
     Stack() {
-      if (this.isExpandedLayout()) {
+      if (this.isKidsUiActive()) {
+        this.KidsRoot()
+      } else if (this.isExpandedLayout()) {
         this.ExpandedRoot()
       } else {
         this.CompactRoot()
@@ -2507,6 +2616,29 @@ struct Index {
     .onClick(() => {
       this.expandSearch()
     })
+  }
+
+  @Builder
+  private KidsRoot() {
+    Navigation(this.chatTabNavStack) {
+      KidsHomeView({
+        sessions: this.sessions,
+        starRefreshTick: this.kidsStarRefreshTick,
+        topInsetVp: this.px2vp(this.topAvoidHeight),
+        themeBackground: this.themeBackground,
+        onOpenSession: (sessionId: string): void => this.handleKidsOpenSession(sessionId),
+        onNewChat: (): void => this.handleKidsNewChat(),
+        onGatePassed: (): void => this.handleKidsGatePassed()
+      })
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(this.themeBackground)
+    .mode(this.getChatNavigationMode())
+    .navBarWidth(this.isChatSplitLayout() ? this.getExpandedChatListWidth() : this.windowWidthVp)
+    .hideTitleBar(true)
+    .hideToolBar(true)
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
   }
 
   @Builder
