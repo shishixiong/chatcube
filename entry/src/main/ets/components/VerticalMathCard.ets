@@ -13,6 +13,7 @@ import {
 import { getAppUiState } from '../state/AppUiState'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { ServiceRegistry } from '../services/ServiceRegistry'
+import { normalizeMathSymbolsForTts } from '../utils/TtsTextUtils'
 import {
   VerticalMathPalette,
   resolveVerticalMathPalette
@@ -214,10 +215,13 @@ export struct VerticalMathCard {
     if (this.solution === null || stepIndex < 0 || stepIndex >= this.solution.steps.length) return
     const narration: string = this.solution.steps[stepIndex].narration
     if (narration === '') return
+    // TTS 引擎读不出 − × ÷ ＝ 等符号, 转成中文读法再朗读
+    // (屏幕上的 StepNarrator 仍显示符号形式)。
+    const ttsText: string = normalizeMathSymbolsForTts(narration)
     // 步骤旁白接管所有在播语音（如引入卡片的消息正文自动朗读），
     // 让孩子听到的是刚前进到的这一步。
     ServiceRegistry.tts().stop()
-    ServiceRegistry.tts().speak(narration, {
+    ServiceRegistry.tts().speak(ttsText, {
       onStart: () => {},
       onComplete: () => {},
       onError: (_error: string) => {}

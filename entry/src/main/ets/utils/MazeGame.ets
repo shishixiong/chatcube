@@ -5,6 +5,8 @@
  * - generateMaze: 递归回溯 DFS 生成完美迷宫(无环、唯一解)
  * - canMove: 检测玩家能否向某方向移动
  * - movePlayer: 计算新位置
+ * - getNeighborPosition: 计算某方向的相邻格坐标(仅边界校验, 不校验墙)
+ * - solveMaze: BFS 求任意两格间最短路径(完美迷宫中即唯一路径), 用于放弃后揭示正确路线
  * - findDeadEnds: 找出死胡同(3 面墙)用于放收藏星
  * - getDifficultyLabel: 难度档位标签
  * - getGridSizeLabel: 网格尺寸标签
@@ -298,6 +300,109 @@ export function movePlayer(
     return null
   }
   if (!canMove(cells[from.row][from.col], direction)) {
+    return null
+  }
+  return { row: newRow, col: newCol }
+}
+
+/**
+ * BFS 求从 from 到 to 的最短路径(完美迷宫中任意两格路径唯一)
+ * - 返回包含起点与终点的位置数组
+ * - 不可达或参数越界返回 null
+ */
+export function solveMaze(
+  cells: MazeCell[][],
+  from: MazePosition,
+  to: MazePosition
+): MazePosition[] | null {
+  const rows: number = cells.length
+  if (rows === 0) {
+    return null
+  }
+  const cols: number = cells[0].length
+  if (cols === 0) {
+    return null
+  }
+  if (from.row < 0 || from.col < 0 || to.row < 0 || to.col < 0) {
+    return null
+  }
+  if (from.row >= rows || from.col >= cols || to.row >= rows || to.col >= cols) {
+    return null
+  }
+
+  // prev[i] = 前驱格的一维索引 (r * cols + c); -1 表示未访问, 起点指向自身
+  const total: number = rows * cols
+  const prev: number[] = new Array<number>(total).fill(-1)
+  const fromIndex: number = from.row * cols + from.col
+  const toIndex: number = to.row * cols + to.col
+  prev[fromIndex] = fromIndex
+
+  const queue: number[] = [fromIndex]
+  let head: number = 0
+  while (head < queue.length) {
+    const current: number = queue[head]
+    head += 1
+    if (current === toIndex) {
+      break
+    }
+    const r: number = Math.floor(current / cols)
+    const c: number = current % cols
+    const cell: MazeCell = cells[r][c]
+    // 四方向显式展开(ArkTS 严格模式不允许 walls[dir] 动态查找)
+    if (!cell.walls.top && r > 0 && prev[current - cols] === -1) {
+      prev[current - cols] = current
+      queue.push(current - cols)
+    }
+    if (!cell.walls.right && c < cols - 1 && prev[current + 1] === -1) {
+      prev[current + 1] = current
+      queue.push(current + 1)
+    }
+    if (!cell.walls.bottom && r < rows - 1 && prev[current + cols] === -1) {
+      prev[current + cols] = current
+      queue.push(current + cols)
+    }
+    if (!cell.walls.left && c > 0 && prev[current - 1] === -1) {
+      prev[current - 1] = current
+      queue.push(current - 1)
+    }
+  }
+
+  if (prev[toIndex] === -1) {
+    return null
+  }
+
+  // 从终点回溯到起点, 再反转
+  const reversed: number[] = []
+  let cursor: number = toIndex
+  while (cursor !== fromIndex) {
+    reversed.push(cursor)
+    cursor = prev[cursor]
+  }
+  reversed.push(fromIndex)
+
+  const path: MazePosition[] = []
+  for (let i = reversed.length - 1; i >= 0; i--) {
+    const idx: number = reversed[i]
+    path.push({ row: Math.floor(idx / cols), col: idx % cols })
+  }
+  return path
+}
+
+/**
+ * 计算从 from 朝 direction 方向的相邻格坐标
+ * - 仅做边界校验, 不校验中间是否有墙(供撞墙反馈等 UI 用途)
+ * - 越界返回 null
+ */
+export function getNeighborPosition(
+  from: MazePosition,
+  direction: Direction,
+  rows: number,
+  cols: number
+): MazePosition | null {
+  const delta: MazePosition = directionDelta(direction)
+  const newRow: number = from.row + delta.row
+  const newCol: number = from.col + delta.col
+  if (newRow < 0 || newRow >= rows || newCol < 0 || newCol >= cols) {
     return null
   }
   return { row: newRow, col: newCol }

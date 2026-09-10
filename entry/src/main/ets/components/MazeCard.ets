@@ -1,10 +1,13 @@
 /**
- * MazeCard - 走迷宫互动卡片 (Paper Map v1)
+ * MazeCard - 走迷宫互动卡片 (Paper Map v2)
  *
  * 设计语言: 儿童绘本纸面地图
  * - 纸面背景 (#F5EFE3 暖米黄), 深墨蓝墙线 (#1F3A52)
- * - 金色小星星玩家 (玩家位置), 紫色小屋锚点 (终点)
- * - 死胡同藏星星 (呼吸动画 + 收集旋转)
+ * - 兔子玩家 (🐰 玩家位置), 小屋锚点 (🏠 终点)
+ * - 死胡同藏胡萝卜 (🥕 收集时放大上浮淡出)
+ * - 移动: 点按相邻格 或 在棋盘上滑动(与数字华容道手势一致)
+ * - 足迹: 走过的格子留墨蓝小圆点, 帮孩子认路
+ * - 放弃后: 绿色高亮从当前位置到终点的正确路线 (solveMaze BFS)
  * - 撞墙抖动 + 玩家移动弹簧动画
  *
  * 公共 API 保持家族一致: toolCall / isAnswered / answeredPayload / largeSize / onAnswer
@@ -21,14 +24,18 @@ import {
   MazeDifficulty,
   Direction,
   generateMaze,
-  canMove as mazeCanMove,
   movePlayer as mazeMovePlayer,
+  getNeighborPosition,
+  solveMaze,
   isAtGoal,
   collectStar as mazeCollectStar,
   getDifficultyLabel,
   getGridSizeLabel,
   getGridDimensions
 } from '../utils/MazeGame'
+
+// 滑动手势触发阈值 (vp), 与 NumberPuzzleCard 保持一致
+const SWIPE_MIN_OFFSET: number = 10
 
 export interface MazeResult {
   difficulty: number
@@ -75,7 +82,16 @@ export struct MazeCard {
   @Local wallBumpKey: string = ''          // 撞墙抖动键 (格式 "r,c")
   @Local wallBumpAxis: 'h' | 'v' = 'h'     // 抖动方向
   @Local wallBumpStep: number = 0          // 抖动阶段 (0=静止, 1-4=抖动幅度)
-  @Local collectedKey: string = ''         // 刚被收集的星位置 (用于旋转动画)
+  @Local collectedKey: string = ''         // 刚被收集的胡萝卜位置 (用于飞出动画)
+  @Local collectFly: boolean = false       // 收集动画阶段 (false=定格, true=放大上浮淡出)
+  // 已收集胡萝卜键集合 (Set 需整体重赋值才能触发 @Local 响应)
+  // 必要性: cell.hasStar 是 @Builder 形参的普通字段, 非响应式; mazeCollectStar 的原地修改
+  // 无法触发 ForEach 重新渲染该格, 导致胡萝卜永久残留。collectedKeys 是 @Local Set, 可靠。
+  @Local collectedKeys: Set<string> = new Set<string>()
+
+  // 足迹与提示路线 (key 格式 "r,c"; Set 需整体重赋值才能触发 @Local 响应)
+  @Local visitedKeys: Set<string> = new Set<string>()
+  @Local hintKeys: Set<string> = new Set<string>()
 
   private timerId: number = -1
   private static readonly SUCCESS_GREEN: string = '#22C55E'
@@ -162,6 +178,11 @@ export struct MazeCard {
     return 24
   }
 
+  // 足迹圆点尺寸: 随单元格缩放, 保持"纸上小圆点"的轻盈感
+  private get trailDotSize(): number {
+    return Math.max(4, Math.round(this.cellSize * 0.14))
+  }
+
   private difficultyToRows(d: number): number {
     if (d >= 3) return 8
     if (d >= 2) return 6
@@ -173,11 +194,6 @@ export struct MazeCard {
     const diffLabel: string = getDifficultyLabel(this.difficulty)
     const sizeLabel: string = getGridSizeLabel(this.difficulty)
     return `${diffLabel} · ${sizeLabel}`
-  }
-
-  private get totalMazeSize(): number {
-    const dims = getGridDimensions(this.difficulty)
-    return dims.rows * (this.cellSize + this.cellGap * 2) + this.cellGap * 2
   }
 
   aboutToAppear(): void {
@@ -208,6 +224,10 @@ export struct MazeCard {
           const cellsRaw = args['cells']
           if (cellsRaw !== undefined && cellsRaw !== null) {
             this.maze = this.deserializeMaze(args)
+            // 历史放弃的局: 揭示正确路线, 与现场放弃体验一致
+            if (!this.hasWon && this.maze !== null) {
+              this.revealHint()
+            }
           }
         } catch (_e) {
           // 还原失败,使用空状态
@@ -224,6 +244,8 @@ export struct MazeCard {
           this.maze = generateMaze(dims.rows, dims.cols, 2)
         }
         this.startTimer()
+        // 起点计入足迹
+        this.markVisited(this.playerPos)
         // 初次渲染后开启入场动画, 避免首次出现玩家就有滑入效果
         this.shouldAnimate = true
       }
@@ -358,31 +380,122 @@ export struct MazeCard {
       return
     }
     const direction: Direction = dr === -1 ? 'top' : (dr === 1 ? 'bottom' : (dc === -1 ? 'left' : 'right'))
-    const currentCell: MazeCell = this.maze.cells[this.playerPos.row][this.playerPos.col]
-    if (!mazeCanMove(currentCell, direction)) {
-      // 撞墙: 抖动反馈
-      this.triggerWallBump(row, col, (direction === 'top' || direction === 'bottom') ? 'v' : 'h')
+    this.movePlayer(direction)
+  }
+
+  // 棋盘滑动手势: 水平/垂直分量大的方向移动一步(与数字华容道一致)
+  private handleBoardSwipe(offsetX: number, offsetY: number): void {
+    if (Math.abs(offsetX) < SWIPE_MIN_OFFSET && Math.abs(offsetY) < SWIPE_MIN_OFFSET) {
       return
     }
-    const newPos = mazeMovePlayer(this.maze.cells, this.playerPos, direction)
+    const direction: Direction = Math.abs(offsetX) > Math.abs(offsetY)
+      ? (offsetX > 0 ? 'right' : 'left')
+      : (offsetY > 0 ? 'bottom' : 'top')
+    this.movePlayer(direction)
+  }
+
+  // 统一移动入口: 点按相邻格与滑动手势共用
+  private movePlayer(direction: Direction): void {
+    if (this.isCompleted || this.maze === null) {
+      return
+    }
+    const newPos: MazePosition | null = mazeMovePlayer(this.maze.cells, this.playerPos, direction)
     if (newPos === null) {
+      // 撞墙或越界: 目标格存在则抖动该格提示
+      const target: MazePosition | null = getNeighborPosition(
+        this.playerPos, direction, this.maze.rows, this.maze.cols)
+      if (target !== null) {
+        this.triggerWallBump(target.row, target.col,
+          (direction === 'top' || direction === 'bottom') ? 'v' : 'h')
+      }
+      return
+    }
+    this.commitMove(newPos)
+  }
+
+  private commitMove(newPos: MazePosition): void {
+    if (this.maze === null) {
       return
     }
     this.moveCount += 1
+    this.markVisited(newPos)
     this.movePlayerVisually(newPos)
-    // 检查收集星
+    // 检查收集胡萝卜
     const landedCell: MazeCell = this.maze.cells[newPos.row][newPos.col]
     if (landedCell.hasStar && mazeCollectStar(landedCell)) {
       this.starsCollected += 1
-      this.collectedKey = newPos.row + ',' + newPos.col
+      // 记入已收集集合 (响应式): cell.hasStar 的原地修改不触发 @Builder 重渲染,
+      // 必须通过 collectedKeys Set 才能让该格的胡萝卜在视觉上消失
+      const collectedPosKey = newPos.row + ',' + newPos.col
+      const nextCollected: Set<string> = new Set<string>()
+      this.collectedKeys.forEach((k: string) => {
+        nextCollected.add(k)
+      })
+      nextCollected.add(collectedPosKey)
+      this.collectedKeys = nextCollected
+      this.collectedKey = collectedPosKey
+      this.collectFly = false
+      // 先定格渲染一帧, 再切换到飞出态触发动画
+      setTimeout((): void => {
+        this.collectFly = true
+      }, 30)
       setTimeout((): void => {
         this.collectedKey = ''
-      }, 350)
+        this.collectFly = false
+      }, 400)
     }
     // 检查终点
     if (isAtGoal(landedCell)) {
       this.handleWin()
     }
+  }
+
+  // 足迹: Set 需整体重赋值才能触发 @Local 响应
+  private markVisited(pos: MazePosition): void {
+    const key: string = pos.row + ',' + pos.col
+    if (this.visitedKeys.has(key)) {
+      return
+    }
+    const next: Set<string> = new Set<string>()
+    this.visitedKeys.forEach((k: string) => {
+      next.add(k)
+    })
+    next.add(key)
+    this.visitedKeys = next
+  }
+
+  // 放弃后揭示从当前位置到终点的正确路线
+  private revealHint(): void {
+    if (this.maze === null) {
+      return
+    }
+    const goalPos: MazePosition | null = this.findGoalPosition()
+    if (goalPos === null) {
+      return
+    }
+    const path: MazePosition[] | null = solveMaze(this.maze.cells, this.playerPos, goalPos)
+    if (path === null) {
+      return
+    }
+    const keys: Set<string> = new Set<string>()
+    for (let i = 0; i < path.length; i++) {
+      keys.add(path[i].row + ',' + path[i].col)
+    }
+    this.hintKeys = keys
+  }
+
+  private findGoalPosition(): MazePosition | null {
+    if (this.maze === null) {
+      return null
+    }
+    for (let r = 0; r < this.maze.rows; r++) {
+      for (let c = 0; c < this.maze.cols; c++) {
+        if (this.maze.cells[r][c].isGoal) {
+          return { row: r, col: c }
+        }
+      }
+    }
+    return null
   }
 
   private handleCellTouchDown(row: number, col: number): void {
@@ -462,6 +575,8 @@ export struct MazeCard {
     this.isCompleted = true
     this.hasWon = false
     this.stopTimer()
+    // 揭示正确路线: 让"换一局"同时成为一次看答案的学习机会
+    this.revealHint()
     const result: MazeResult = {
       difficulty: this.difficulty,
       grid_size: getGridSizeLabel(this.difficulty),
@@ -636,6 +751,15 @@ export struct MazeCard {
       // 阻止事件冒泡到外层 List(scroll)
       e.stopPropagation()
     })
+    .priorityGesture(
+      PanGesture({ direction: PanDirection.All, distance: SWIPE_MIN_OFFSET })
+        .onActionEnd((event: GestureEvent) => {
+          if (this.isCompleted) {
+            return
+          }
+          this.handleBoardSwipe(event.offsetX as number, event.offsetY as number)
+        })
+    )
   }
 
   private get shouldShowPlayer(): boolean {
@@ -657,6 +781,31 @@ export struct MazeCard {
         .width(this.cellSize)
         .height(this.cellSize)
         .backgroundColor(this.cellPathColor)
+
+      // 正确路线高亮(放弃后): 纸面上的一抹绿色标记
+      if (this.hintKeys.has(row + ',' + col)) {
+        Column()
+          .width(this.cellSize - 8)
+          .height(this.cellSize - 8)
+          .borderRadius(this.cellSize * 0.2)
+          .backgroundColor(withColorAlpha(MazeCard.SUCCESS_GREEN, this.isDarkMode ? '30' : '22'))
+          .position({ x: 4, y: 4 })
+      }
+
+      // 足迹小圆点: 走过的格子留痕, 起点终点不画; 胡萝卜格在收集后也画
+      // (收集前胡萝卜图标渲染在更上层会自然遮住圆点, 无需额外排除)
+      if (this.visitedKeys.has(row + ',' + col) && !cell.isStart && !cell.isGoal &&
+        (!cell.hasStar || this.collectedKeys.has(row + ',' + col))) {
+        Column()
+          .width(this.trailDotSize)
+          .height(this.trailDotSize)
+          .borderRadius(this.trailDotSize / 2)
+          .backgroundColor(withColorAlpha(this.wallColor, this.isDarkMode ? '32' : '24'))
+          .position({
+            x: (this.cellSize - this.trailDotSize) / 2,
+            y: (this.cellSize - this.trailDotSize) / 2
+          })
+      }
 
       // 墙条: 上、右、下、左(只在有墙时绘制)
       if (cell.walls.top) {
@@ -688,7 +837,7 @@ export struct MazeCard {
           .position({ x: 0, y: 0 })
       }
 
-      // 中心图标: 终点(小屋) / 隐藏胡萝卜 (玩家已提升为 MazePanel 顶层 overlay, 避免 transition 残影)
+      // 中心图标: 终点(小屋) / 胡萝卜 / 收集飞出动画 (玩家已提升为 MazePanel 顶层 overlay)
       if (cell.isGoal) {
         // 目的地印章: 虚线圆角包裹, 强化"纸面地图 + 终点标记"语义
         Column()
@@ -709,7 +858,8 @@ export struct MazeCard {
         .height(this.cellSize)
         .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Center)
-      } else if (cell.hasStar && this.collectedKey !== row + ',' + col) {
+      } else if (cell.hasStar && !this.collectedKeys.has(row + ',' + col)) {
+        // 胡萝卜 (未收集): collectedKeys 是 @Local Set, 修改后触发该格重渲染隐藏胡萝卜
         Column() {
           Text('🥕')
             .fontSize(this.starSize)
@@ -718,6 +868,23 @@ export struct MazeCard {
         .height(this.cellSize)
         .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Center)
+      } else if (this.collectedKey === row + ',' + col) {
+        // 收集飞出: 胡萝卜定格一帧后放大、上浮、淡出
+        Column() {
+          Text('🥕')
+            .fontSize(this.starSize)
+        }
+        .width(this.cellSize)
+        .height(this.cellSize)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+        .scale({
+          x: this.collectFly ? 1.6 : 1,
+          y: this.collectFly ? 1.6 : 1
+        })
+        .opacity(this.collectFly ? 0 : 1)
+        .translate({ y: this.collectFly ? -8 : 0 })
+        .animation({ duration: 300, curve: Curve.EaseOut })
       }
     }
     .width(this.cellSize)
@@ -737,7 +904,12 @@ export struct MazeCard {
       this.handleCellPress(row, col)
     })
     .onTouch((e: TouchEvent) => {
-      e.stopPropagation()
+      // 按下缩放反馈(事件继续冒泡至面板层统一拦截, 不阻断手势)
+      if (e.type === TouchType.Down) {
+        this.handleCellTouchDown(row, col)
+      } else if (e.type === TouchType.Up || e.type === TouchType.Cancel) {
+        this.handleCellTouchUp()
+      }
     })
   }
 
@@ -854,6 +1026,11 @@ export struct MazeCard {
           .onClick((): void => {
             this.handleGiveUp()
           })
+      } else if (!this.hasWon && this.hintKeys.size > 0) {
+        Text('💡 绿色格子就是正确路线')
+          .fontSize(12)
+          .fontColor($r('app.color.text_tertiary'))
+          .padding(8)
       }
     }
     .width('100%')
