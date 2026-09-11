@@ -172,6 +172,26 @@ export function isGrantStarFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === GRANT_STAR_TOOL_ID
 }
 
+// 互动出题/游戏类工具（渲染卡片并等待孩子作答）。
+// ChatViewModel.executeToolCallLoop 用它对单回合出题数设上限, 防止模型不间断连出题。
+// 注意: 只包含会挂起等待孩子交互的出题工具; grant_star / child_profile / math_verify
+// 等即时返回的后端工具不算, 搜索/生图/音乐也不属于"出题"。
+export function isInteractiveQuizFunctionName(functionName: string): boolean {
+  return isMathQuizFunctionName(functionName) ||
+    isEnglishQuizFunctionName(functionName) ||
+    isPictureVocabFunctionName(functionName) ||
+    isListeningQuizFunctionName(functionName) ||
+    isPinyinQuizFunctionName(functionName) ||
+    isMatchingPairsFunctionName(functionName) ||
+    isHuarongdaoFunctionName(functionName) ||
+    isNumberPuzzleFunctionName(functionName) ||
+    isHandwritingPracticeFunctionName(functionName) ||
+    isCategorizationFunctionName(functionName) ||
+    isVerticalMathFunctionName(functionName) ||
+    isMazeFunctionName(functionName) ||
+    isSudokuFunctionName(functionName)
+}
+
 
 export function getSearchToolIds(): string[] {
   return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID]

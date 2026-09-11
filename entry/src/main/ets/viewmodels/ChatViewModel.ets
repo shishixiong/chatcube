@@ -55,7 +55,8 @@ import {
 import {
   isScrapeWebFunctionName,
   isAskUserFunctionName,
-  isSearchToolFunctionName
+  isSearchToolFunctionName,
+  isInteractiveQuizFunctionName
 } from '../utils/SearchToolIdentityUtils'
 
 // 标题生成状态
@@ -168,6 +169,11 @@ export class ChatViewModel {
   private readonly MAX_TITLE_RETRY = 3
   // 最大工具步骤数，仅作为防无限循环兜底，不限制单个工具的调用次数
   private readonly MAX_TOOL_STEPS = 256
+  // 单回合（一条 AI 消息内）互动出题卡片上限。超出后新的出题调用不渲染卡片,
+  // 以带内拒绝结果回传, 指示模型用文字收尾——防止"答完一题立刻再出一题"的无限度连出题。
+  // 注意: 不能用"从请求里去掉 tools"的方式实现上限——DeepSeek 系模型的工具调用是带内
+  // DSML token, 请求无 tools 时服务端不解析, 原始 DSML 标记会泄漏进消息正文 (2026-09-11 实测)。
+  private readonly MAX_INTERACTIVE_QUIZZES_PER_TURN = 3
   // 取消令牌：用于停止”尚未开始发送的请求”（例如退出页面时）
   private cancelToken: number = 0
   // V2 流式渲染: 由 ChatPage 在 aboutToAppear 时通过 setStreamingUIContext 注入
@@ -3512,6 +3518,12 @@ ${limitedSearchContext}
     functionToolChoice?: string
   ): Promise<void> {
     let toolStepIndex = initialToolStepIndex
+    // Fix: functionToolChoice ('required') 只应在第一轮生效（强制首轮读 child_profile）。
+    // 曾经每轮原样传递, required 下模型每轮被迫调 ≥1 工具、无法以纯文本收尾,
+    // 导致 grant_star 刷屏 / 不间断出题直到 MAX_TOOL_STEPS。第 2 轮起还原 auto。
+    let roundFunctionToolChoice: string | undefined = functionToolChoice
+    // 本回合已发起的互动出题卡片数（Fix: 单回合出题上限）
+    let interactiveQuizCount = 0
     const pendingImageSaves: Promise<void>[] = []
     while (true) {
       if (isCancelledFn()) {
@@ -3722,11 +3734,12 @@ ${limitedSearchContext}
           },
           reasoningLevel,
           toolsEnabledInThisRound ? tools : undefined,
-          // functionToolChoice (string) 优先于 builtInResponsesToolChoice (object):
+          // roundFunctionToolChoice (string) 优先于 builtInResponsesToolChoice (object):
           // 二者互斥, 但类型不同 (string vs object), 在此合并为一个 OpenAIResponsesToolChoice 值
           // 传给 streamChatRequestWithTools。AIApiService.buildRequestBody 已正确分发到
           // Chat Completions 或 Responses 路径 (AIApiService.ets:2994-3002, 3200-3206)。
-          functionToolChoice ?? builtInResponsesToolChoice,
+          // 注意: roundFunctionToolChoice 只在第一轮非空, 之后为 undefined（还原 auto）。
+          roundFunctionToolChoice ?? builtInResponsesToolChoice,
           (toolCallDeltas: ToolCallDelta[]) => {
             if (isCancelledFn() || !toolsEnabledInThisRound || toolCallDeltas.length <= 0) {
               return
@@ -3827,6 +3840,33 @@ ${limitedSearchContext}
 
       // 有工具调用要执行
       console.info('ChatViewModel', `[Function Calling] Received ${toolCalls.length} tool calls`)
+      // 单回合出题上限: 超限的互动出题调用不执行/不渲染卡片, 以带内拒绝结果回传;
+      // 未超限的进入 executedCalls 正常执行。tools 列表始终保持完整下发(见常量注释)。
+      const executedCalls: ToolCall[] = []
+      const refusalByIndex: Map<number, ToolResult> = new Map()
+      for (let i = 0; i < toolCalls.length; i++) {
+        const call = toolCalls[i]
+        if (isInteractiveQuizFunctionName(call.functionName)) {
+          if (interactiveQuizCount >= this.MAX_INTERACTIVE_QUIZZES_PER_TURN) {
+            console.warn('ChatViewModel',
+              `Refused interactive quiz ${call.functionName}: turn limit ${this.MAX_INTERACTIVE_QUIZZES_PER_TURN} reached`)
+            refusalByIndex.set(i, new ToolResult(
+              call.id,
+              JSON.stringify({
+                error: 'quiz_limit_reached',
+                message: `本回合已出 ${this.MAX_INTERACTIVE_QUIZZES_PER_TURN} 道互动题, 达到上限。` +
+                  '请用一两句温暖的话总结本回合学习并自然结束, 不要再调用任何出题工具。'
+              }),
+              true,
+              call.displayName,
+              call.sourceLabel
+            ))
+            continue
+          }
+          interactiveQuizCount++
+        }
+        executedCalls.push(call)
+      }
       const latestUserQuery = this.getLatestUserQueryFromRequestMessages(requestMessages)
 
       // 同步 toolCalls 到 aiMessage.toolCalls 和 parts
@@ -3891,14 +3931,39 @@ ${limitedSearchContext}
         }
       }
 
-      // 执行工具调用
-      const toolResults = await this.toolExecutionService.executeToolCalls(
-        toolCalls,
-        new ToolExecutionContext(snapshotSessionId, snapshotSession !== null ? snapshotSession.title : '')
-      )
+      // 执行工具调用（仅未超限子集），随后按 toolCalls 顺序与拒绝结果对齐合并
+      const executedResults: ToolResult[] = executedCalls.length > 0
+        ? await this.toolExecutionService.executeToolCalls(
+          executedCalls,
+          new ToolExecutionContext(snapshotSessionId, snapshotSession !== null ? snapshotSession.title : '')
+        )
+        : []
       if (isCancelledFn()) {
         // stopGeneration 已经触发, 它内部会 destroy + unregister, 这里直接 return
         return
+      }
+
+      const toolResults: ToolResult[] = []
+      let executedCursor = 0
+      let lastExecutedQuizResultIndex = -1
+      for (let i = 0; i < toolCalls.length; i++) {
+        const refusal = refusalByIndex.get(i)
+        if (refusal !== undefined) {
+          toolResults.push(refusal)
+          continue
+        }
+        toolResults.push(executedResults[executedCursor])
+        executedCursor++
+        if (isInteractiveQuizFunctionName(toolCalls[i].functionName)) {
+          lastExecutedQuizResultIndex = toolResults.length - 1
+        }
+      }
+      // 本回合出题数刚达上限时, 在最后一题结果上附带状收尾指示,
+      // 让模型下一轮主动用文字收尾（若仍违规再出题, 才会触发上面的拒绝）
+      if (lastExecutedQuizResultIndex >= 0 && interactiveQuizCount >= this.MAX_INTERACTIVE_QUIZZES_PER_TURN) {
+        toolResults[lastExecutedQuizResultIndex].content +=
+          `\n[系统提示] 本回合互动出题已达上限（${this.MAX_INTERACTIVE_QUIZZES_PER_TURN} 题）。` +
+          '接下来请用一两句话总结本回合学习并收尾, 不要再调用出题工具。'
       }
 
       const cancelledToolMessage = this.getCancelledToolResultMessage(toolResults)
@@ -4008,6 +4073,8 @@ ${limitedSearchContext}
       }
 
       toolStepIndex++
+      // 'required' 只约束第一轮; 后续轮还原 auto, 允许模型以纯文本收尾
+      roundFunctionToolChoice = undefined
     }
   }
 
