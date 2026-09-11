@@ -131,7 +131,9 @@ export struct IndexSettingsPanel {
     }
     return [
       {
-        key: 'learning_center',
+        // key 携带 kidsModeEnabled: 面板常驻挂载时切换开关, 外层 ForEach 按 key diff,
+        // 固定 key 会复用旧子树导致 subtitle / kids_mode_back 行不刷新（review fix）
+        key: this.kidsModeEnabled ? 'learning_center:on' : 'learning_center:off',
         title: $r('app.string.settings_learning_center'),
         items: learningItems
       } as SettingsGroupModel,
