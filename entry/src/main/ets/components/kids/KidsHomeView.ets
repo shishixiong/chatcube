@@ -50,8 +50,9 @@ export struct KidsHomeView {
   }
 
   private kidsSessions(): ChatSession[] {
+    // 严格只放行 assistantId === 'default': '' 是遗留成人时代会话, 不对儿童可见（spec §2）
     return this.sessions.filter((session: ChatSession): boolean =>
-      session.assistantId === DEFAULT_ASSISTANT_ID || session.assistantId === '')
+      session.assistantId === DEFAULT_ASSISTANT_ID)
   }
 
   private starCountFor(sessionId: string): number {

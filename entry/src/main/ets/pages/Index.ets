@@ -152,6 +152,8 @@ struct Index {
   @Local kidsModeEnabled: boolean = false
   private parentalGateUnlocked: boolean = false
   @Local kidsRootActive: boolean = false
+  // 冷启动防闪现守卫: prefs 异步读取完成前不挂载成人壳（与 onboardingActive 默认 true 同思路）
+  @Local kidsModeLoaded: boolean = false
   @Local kidsStarRefreshTick: number = 0
   @Local isLoading: boolean = false
   @Local currentThemeMode: ThemeMode = ThemeMode.SYSTEM
@@ -795,6 +797,10 @@ struct Index {
 
   onOpenNewChat(): void {
     if (this.openNewChatTimestamp > 0) {
+      // 儿童模式深链守卫: 当前助手非小星老师时不推成人 ChatPage 到儿童导航栈
+      if (this.isKidsUiActive() && this.currentAssistantId !== DEFAULT_ASSISTANT_ID) {
+        return
+      }
       this.openChatRoute({} as ChatPageRouteParams)
     }
   }
@@ -802,6 +808,10 @@ struct Index {
   onOpenNewChatWithPrompt(): void {
     const payload = parseOpenNewChatWithPromptPayload(this.openNewChatWithPromptPayload)
     if (payload === null || payload.ts <= 0 || payload.text === '') {
+      return
+    }
+    // 儿童模式深链守卫: 同上
+    if (this.isKidsUiActive() && this.currentAssistantId !== DEFAULT_ASSISTANT_ID) {
       return
     }
     this.openChatRoute({ initialDraft: payload.text } as ChatPageRouteParams)
@@ -1300,18 +1310,43 @@ struct Index {
     return this.kidsRootActive
   }
 
+  /**
+   * 儿童模式深链守卫: 仅放行小星老师（assistantId === DEFAULT_ASSISTANT_ID）名下的会话。
+   * 会话尚未加载（冷启动竞态）或属于成人助手时返回 false → 调用方跳过导航（不清 payload,
+   * 待 sessions 加载或家长过门后的下一次触发再处理）。'' 视为遗留成人会话, 不放行（与
+   * KidsHomeView.kidsSessions 过滤口径一致）。
+   */
+  private isKidsAllowedSessionId(sessionId: string): boolean {
+    if (sessionId === '') {
+      return false
+    }
+    for (let i = 0; i < this.sessions.length; i++) {
+      if (this.sessions[i].id === sessionId) {
+        return this.sessions[i].assistantId === DEFAULT_ASSISTANT_ID
+      }
+    }
+    return false
+  }
+
   private loadKidsModeEnabled(): void {
     this.preferencesService.getKidsModeEnabled().then((enabled: boolean): void => {
       this.kidsModeEnabled = enabled
       this.kidsRootActive = enabled
+      this.kidsModeLoaded = true
       setAppUiStateValue(AppStorageKeys.KIDS_MODE_ACTIVE, enabled)
       if (enabled) {
-        this.loadSessions()
+        // 冷启动时 aboutToAppear 里的深链处理可能因 sessions 尚未加载而被守卫跳过,
+        // 加载完成后重试一次（成人会话仍会被 isKidsAllowedSessionId 拦截）
+        this.loadSessions().then((): void => {
+          this.handleOpenSessionPayload(this.openSessionPayload)
+        })
       }
     }).catch((error: Object): void => {
       console.error('Index', `Failed to load kids mode flag: ${JSON.stringify(error)}`)
       this.kidsModeEnabled = false
       this.kidsRootActive = false
+      // 读取失败也必须解除守卫, 否则会永久停留在占位屏（成人壳无法出现）
+      this.kidsModeLoaded = true
       setAppUiStateValue(AppStorageKeys.KIDS_MODE_ACTIVE, false)
     })
   }
@@ -1635,12 +1670,20 @@ struct Index {
       console.error('Index', 'Failed to parse openSession payload')
       return
     }
+    // 儿童模式深链守卫: 非小星老师会话不打开（不清 payload, 下次触发再评估）
+    if (this.isKidsUiActive() && !this.isKidsAllowedSessionId(payload.sessionId)) {
+      return
+    }
     this.openChatRoute({ sessionId: payload.sessionId } as ChatPageRouteParams)
     setAppUiStateValue(AppStorageKeys.OPEN_SESSION_PAYLOAD, '')
   }
 
   private handleOpenImageGeneration(): void {
     if (this.openImageGenerationTick <= 0) {
+      return
+    }
+    // 儿童模式下设置页不可达: 跳过（不清 tick）
+    if (this.isKidsUiActive()) {
       return
     }
     if (!(this.currentTabIndex === Index.TAB_SETTINGS &&
@@ -1670,6 +1713,10 @@ struct Index {
       console.error('Index', 'Failed to parse in-app alert payload')
       return
     }
+    // 儿童模式深链守卫: 非小星老师会话不弹「查看」snackbar（不清 payload, onPageShow/didShow 会重试）
+    if (this.isKidsUiActive() && !this.isKidsAllowedSessionId(payload.sessionId)) {
+      return
+    }
     const opts = new SnackBarDisplayOptions()
     opts.message = payload.message
     opts.duration = 5000
@@ -1684,6 +1731,10 @@ struct Index {
 
   private handleImageGenerationAlertPayload(payloadText: string): void {
     if (payloadText === '') {
+      return
+    }
+    // 儿童模式下设置页不可达: 跳过整个 alert（不清 payload, 家长过门后可再处理）
+    if (this.isKidsUiActive()) {
       return
     }
     if (this.isImageGenerationPageActive()) {
@@ -1723,6 +1774,10 @@ struct Index {
   private shouldPromptPendingToolInteraction(interaction: PendingToolInteractionSnapshot,
     forcePrompt: boolean): boolean {
     if (interaction.sessionId === '') {
+      return false
+    }
+    // 儿童模式深链守卫: 成人助手会话的 pending 交互不弹「查看」, 留待家长过门后再提示
+    if (this.isKidsUiActive() && !this.isKidsAllowedSessionId(interaction.sessionId)) {
       return false
     }
     if (this.activeChatSessionId === interaction.sessionId) {
@@ -2028,7 +2083,13 @@ struct Index {
 
   build() {
     Stack() {
-      if (this.isKidsUiActive()) {
+      if (!this.kidsModeLoaded) {
+        // 儿童模式偏好未决前渲染中性占位, 避免成人壳闪现（spec §2: 成人外壳不挂载）
+        Column()
+          .width('100%')
+          .height('100%')
+          .backgroundColor(this.themeBackground)
+      } else if (this.isKidsUiActive()) {
         this.KidsRoot()
       } else if (this.isExpandedLayout()) {
         this.ExpandedRoot()
