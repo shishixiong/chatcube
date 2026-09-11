@@ -67,3 +67,21 @@ export function shouldAutoGreetToday(args: AutoGreetPredicateArgs): boolean {
 export const GREETING_SYSTEM_HINT: string =
   '这是今日与孩子的第一次对话,请先用 1 句温暖的话主动打招呼,' +
   '可结合「今日教学目标」或孩子的「强项」自然切入,然后等孩子回复。'
+
+/**
+ * 按小时返回时段问候语 (儿童主屏问候行用)。
+ * 分段: <12 早上好; 12-13 中午好; 14-17 下午好; ≥18 晚上好。
+ * @param hour 0-23 的本地小时数 (调用方传入, 便于测试)
+ */
+export function getDayPartGreeting(hour: number): string {
+  if (hour < 12) {
+    return '早上好'
+  }
+  if (hour < 14) {
+    return '中午好'
+  }
+  if (hour < 18) {
+    return '下午好'
+  }
+  return '晚上好'
+}

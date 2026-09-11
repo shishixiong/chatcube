@@ -1,56 +1,83 @@
 import { withColorAlpha } from '../../utils/ColorAlphaUtils'
-import { getAppUiState } from '../../state/AppUiState'
+import {
+  KIDS_SURFACE,
+  KIDS_FG,
+  KIDS_SUBTLE,
+  KIDS_BORDER,
+  KIDS_STAR,
+  KIDS_ON_GOLD,
+  KIDS_ACCENT
+} from './KidsBrandTokens'
 
 /**
- * 儿童主屏图形化会话卡片: 主题色头像块 + 星星徽章 + 相对时间。
- * 刻意不渲染文字标题/消息预览（spec §4.2）; title 仅用于无障碍朗读。
+ * 儿童主屏会话卡片（竖版，2 列网格用）。
+ *
+ * 对照 docs/kids-home-prototype.html 的 `.sess`：
+ * 上排 = 分类色图标块 + 金色星星徽章（>0 才显示），
+ * 中排 = 会话标题（13.5fp 加粗），底排 = 相对时间。
+ * 恒定暖色令牌（KidsBrandTokens），不随深色模式切换。
  */
 @ComponentV2
 export struct KidsSessionCard {
   @Param sessionTitle: string = ''
   @Param starCount: number = 0
   @Param timeLabel: string = ''
-  @Param themeColor: string = '#FF9F43'
+  @Param themeColor: string = KIDS_ACCENT
   @Event onTap: () => void = () => {}
 
-  private isDark(): boolean {
-    return getAppUiState().isDarkMode
-  }
-
   build() {
-    Row({ space: 14 }) {
-      Text('⭐')
-        .fontSize(32)
-        .width(60)
-        .height(60)
-        .textAlign(TextAlign.Center)
-        .borderRadius(18)
-        .backgroundColor(withColorAlpha(this.themeColor, this.isDark() ? '33' : '1A'))
+    Column() {
+      // 上排: 图标块 + 星星徽章
+      Row() {
+        Text('⭐')
+          .fontSize(20)
+          .width(40)
+          .height(40)
+          .textAlign(TextAlign.Center)
+          .borderRadius(13)
+          .backgroundColor(withColorAlpha(this.themeColor, '29'))
 
-      Column({ space: 6 }) {
+        Blank()
+
         if (this.starCount > 0) {
           Text(`⭐ ${this.starCount}`)
-            .fontSize(13)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.text_primary'))
-            .padding({ left: 10, right: 10, top: 3, bottom: 3 })
-            .borderRadius(10)
-            .backgroundColor(withColorAlpha(this.themeColor, this.isDark() ? '2E' : '14'))
+            .fontSize(11)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(KIDS_ON_GOLD)
+            .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+            .borderRadius(999)
+            .backgroundColor(withColorAlpha(KIDS_STAR, '38'))
         }
-
-        Text(this.timeLabel)
-          .fontSize(12)
-          .fontColor($r('app.color.text_tertiary'))
       }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Blank()
+
+      // 中排: 会话标题
+      Text(this.sessionTitle.length > 0 ? this.sessionTitle : '和小星老师的学习')
+        .fontSize(13.5)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(KIDS_FG)
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
+
+      // 底排: 相对时间
+      Text(this.timeLabel)
+        .fontSize(11)
+        .fontColor(KIDS_SUBTLE)
+        .margin({ top: 4 })
+        .width('100%')
     }
     .width('100%')
+    .height(118)
     .padding(14)
-    .borderRadius(20)
-    .backgroundColor(getAppUiState().themeAiBubble)
-    .border({ width: 1, color: $r('app.color.divider') })
-    .accessibilityText(`和小星老师的会话，获得 ${this.starCount} 颗星，${this.timeLabel}`)
+    .borderRadius(18)
+    .backgroundColor(KIDS_SURFACE)
+    .border({ width: 1, color: KIDS_BORDER })
+    .alignItems(HorizontalAlign.Start)
+    .accessibilityText(`和小星老师的会话「${this.sessionTitle}」，获得 ${this.starCount} 颗星，${this.timeLabel}`)
     .onClick((): void => {
       this.onTap()
     })

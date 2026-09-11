@@ -285,6 +285,16 @@ export class StarRewardService {
     return summary.total
   }
 
+  /**
+   * 取 sinceMs (含) 之后的星星总数——儿童主屏「本周 +N」徽章用
+   * (sinceMs = getStartOfWeekMs(Date.now()))。查询失败由调用方兜底为 0。
+   */
+  async getStarsSinceMs(sinceMs: number): Promise<number> {
+    const events = await this.database.getStarEventsSince(sinceMs)
+    const summary = this.aggregateEvents(events)
+    return summary.total
+  }
+
   private aggregateEvents(events: StarEventRow[]): TodayStarSummary {
     const summary = createEmptyTodayStarSummary()
     for (let i = 0; i < events.length; i++) {

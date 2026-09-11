@@ -1,5 +1,9 @@
 import { describe, it, expect } from '@ohos/hypium'
-import { shouldAutoGreetToday, GREETING_SYSTEM_HINT } from '../../../../main/ets/utils/GreetingUtils'
+import {
+  shouldAutoGreetToday,
+  getDayPartGreeting,
+  GREETING_SYSTEM_HINT
+} from '../../../../main/ets/utils/GreetingUtils'
 
 /**
  * GreetingUtils 单元测试
@@ -68,6 +72,36 @@ export default function greetingUtilsTest() {
         lastGreetDate: '2026-06-17',
         todayYmd: '2026-06-17'
       })).assertFalse()
+    })
+  })
+
+  describe('getDayPartGreeting', () => {
+    it('morning returns 早上好', 0, () => {
+      expect(getDayPartGreeting(7)).assertEqual('早上好')
+    })
+
+    it('noon returns 中午好', 0, () => {
+      expect(getDayPartGreeting(12)).assertEqual('中午好')
+    })
+
+    it('afternoon returns 下午好', 0, () => {
+      expect(getDayPartGreeting(15)).assertEqual('下午好')
+    })
+
+    it('evening returns 晚上好', 0, () => {
+      expect(getDayPartGreeting(20)).assertEqual('晚上好')
+    })
+
+    it('early morning (3) falls back to 早上好', 0, () => {
+      expect(getDayPartGreeting(3)).assertEqual('早上好')
+    })
+
+    it('boundary hour 11 is 上午 (早上好)', 0, () => {
+      expect(getDayPartGreeting(11)).assertEqual('早上好')
+    })
+
+    it('boundary hour 18 is 晚上好', 0, () => {
+      expect(getDayPartGreeting(18)).assertEqual('晚上好')
     })
   })
 

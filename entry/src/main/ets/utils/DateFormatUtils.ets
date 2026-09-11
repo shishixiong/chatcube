@@ -108,3 +108,16 @@ export function getIsoWeekday(timestamp: number): number {
  * 索引 0='一', 1='二', ..., 6='日'
  */
 export const WEEKDAY_SHORT_LABELS_ZH: string[] = ['一', '二', '三', '四', '五', '六', '日']
+
+/**
+ * 取 timestamp 所在自然周（ISO, 周一为一周之始）的本地 00:00:00.000 时间戳
+ * 供儿童主屏「本周 +N 星星」徽章查询周一起点
+ * @param timestamp 时间戳 (ms)
+ * @returns 本周一 0 点时间戳 (ms)
+ */
+export function getStartOfWeekMs(timestamp: number): number {
+  const d = new Date(timestamp)
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() - getIsoWeekday(timestamp))
+  return d.getTime()
+}

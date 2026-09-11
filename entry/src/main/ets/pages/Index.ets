@@ -127,6 +127,7 @@ import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { parseOpenNewChatWithPromptPayload } from '../config/PresetPrompts'
 import { HOLDING_HAND_STATUS_UNKNOWN, isExplicitHoldingHandStatus } from '../utils/HandAdaptiveUtils'
 import { KidsHomeView } from '../components/kids/KidsHomeView'
+import { KIDS_BG } from '../components/kids/KidsBrandTokens'
 
 @Entry
 @ComponentV2
@@ -1355,18 +1356,26 @@ struct Index {
     this.openChatRoute({ sessionId: sessionId } as ChatPageRouteParams)
   }
 
-  private handleKidsNewChat(): void {
+  /**
+   * 儿童模式新建小星老师会话。
+   * initialPrompt 非空时（活动八宫格点击）随路由参数带入 ChatPage,
+   * 由现有 autoSendInitialPrompt 链路自动发送引导语。
+   */
+  private handleKidsNewChat(initialPrompt: string = ''): void {
+    const params: ChatPageRouteParams = initialPrompt.trim().length > 0 ?
+    { initialPrompt: initialPrompt.trim() } as ChatPageRouteParams :
+    {} as ChatPageRouteParams
     // 儿童模式新建会话必须落在小星老师上——家长可能把"当前助手"切成了自定义助手
     if (this.currentAssistantId !== DEFAULT_ASSISTANT_ID) {
       this.switchAssistant(DEFAULT_ASSISTANT_ID).then((): void => {
-        this.openChatRoute({} as ChatPageRouteParams)
+        this.openChatRoute(params)
       }).catch((error: Object): void => {
         console.error('Index', `Failed to switch to default assistant for kids chat: ${JSON.stringify(error)}`)
-        this.openChatRoute({} as ChatPageRouteParams)
+        this.openChatRoute(params)
       })
       return
     }
-    this.openChatRoute({} as ChatPageRouteParams)
+    this.openChatRoute(params)
   }
 
   private handleKidsGatePassed(): void {
@@ -2686,15 +2695,14 @@ struct Index {
         sessions: this.sessions,
         starRefreshTick: this.kidsStarRefreshTick,
         topInsetVp: this.px2vp(this.topAvoidHeight),
-        themeBackground: this.themeBackground,
         onOpenSession: (sessionId: string): void => this.handleKidsOpenSession(sessionId),
-        onNewChat: (): void => this.handleKidsNewChat(),
+        onNewChat: (initialPrompt: string): void => this.handleKidsNewChat(initialPrompt),
         onGatePassed: (): void => this.handleKidsGatePassed()
       })
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(this.themeBackground)
+    .backgroundColor(KIDS_BG)
     .mode(this.getChatNavigationMode())
     .navBarWidth(this.isChatSplitLayout() ? this.getExpandedChatListWidth() : this.windowWidthVp)
     .hideTitleBar(true)
