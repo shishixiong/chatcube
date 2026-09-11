@@ -4985,6 +4985,13 @@ struct Index {
       sidebarMode: this.isSettingsSplitMode(),
       selectedRouteName: this.currentSettingsRouteName,
       highlightSelection: this.isSettingsSplitMode(),
+      kidsModeEnabled: this.kidsModeEnabled,
+      onToggleKidsMode: (): void => {
+        this.confirmKidsModeToggle()
+      },
+      onBackToKidsHome: (): void => {
+        this.handleBackToKidsHome()
+      },
       onOpenModelManage: (): void => {
         this.openSettingsDestination(SettingsRouteName.MODEL_MANAGE)
       },

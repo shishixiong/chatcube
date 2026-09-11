@@ -36,6 +36,9 @@ export struct IndexSettingsPanel {
   @Param sidebarMode: boolean = false
   @Param selectedRouteName: string = ''
   @Param highlightSelection: boolean = false
+  @Param kidsModeEnabled: boolean = false
+  @Event onToggleKidsMode: () => void = () => {}
+  @Event onBackToKidsHome: () => void = () => {}
   @Event onOpenModelManage: () => void = () => {}
   @Event onOpenDefaultModel: () => void = () => {}
   @Event onOpenImageGeneration: () => void = () => {}
@@ -78,40 +81,59 @@ export struct IndexSettingsPanel {
   }
 
   private buildGroups(): SettingsGroupModel[] {
+    const learningItems: SettingsListItemModel[] = [
+      {
+        key: 'kids_mode',
+        icon: $r('sys.symbol.person_2_fill'),
+        title: $r('app.string.kids_mode_title'),
+        subtitle: this.kidsModeEnabled
+          ? $r('app.string.kids_mode_subtitle_on')
+          : $r('app.string.kids_mode_subtitle_off'),
+        action: (): void => { this.onToggleKidsMode() }
+      } as SettingsListItemModel,
+      {
+        key: SettingsRouteName.LEARNING_PROFILE,
+        icon: $r('sys.symbol.person_2_fill'),
+        title: $r('app.string.learning_profile_title'),
+        subtitle: $r('app.string.learning_profile_desc'),
+        action: (): void => { this.onOpenLearningProfile() }
+      } as SettingsListItemModel,
+      {
+        key: SettingsRouteName.LEARNING_TOMORROW_PLAN,
+        icon: $r('sys.symbol.calendar'),
+        title: $r('app.string.learning_tomorrow_plan_title'),
+        subtitle: $r('app.string.learning_tomorrow_plan_desc'),
+        action: (): void => { this.onOpenLearningTomorrowPlan() }
+      } as SettingsListItemModel,
+      {
+        key: SettingsRouteName.LEARNING_ENGLISH_IMAGES,
+        icon: $r('sys.symbol.picture'),
+        title: $r('app.string.learning_english_images_title'),
+        subtitle: $r('app.string.learning_english_images_desc'),
+        action: (): void => { this.onOpenLearningEnglishImages() }
+      } as SettingsListItemModel,
+      {
+        key: SettingsRouteName.LEARNING_DAILY_EVALUATION,
+        icon: $r('sys.symbol.lightbulb_max'),
+        title: $r('app.string.learning_daily_evaluation_title'),
+        subtitle: $r('app.string.learning_daily_evaluation_desc'),
+        action: (): void => { this.onOpenLearningDailyEvaluation() }
+      } as SettingsListItemModel
+    ]
+    if (this.kidsModeEnabled) {
+      learningItems.splice(1, 0, {
+        key: 'kids_mode_back',
+        icon: $r('sys.symbol.arrow_clockwise'),
+        title: $r('app.string.kids_mode_back_title'),
+        subtitle: $r('app.string.kids_mode_back_desc'),
+        action: (): void => { this.onBackToKidsHome() }
+      } as SettingsListItemModel)
+    }
     return [
       {
         key: 'learning_center',
         title: $r('app.string.settings_learning_center'),
-        items: [
-          {
-            key: SettingsRouteName.LEARNING_PROFILE,
-            icon: $r('sys.symbol.person_2_fill'),
-            title: $r('app.string.learning_profile_title'),
-            subtitle: $r('app.string.learning_profile_desc'),
-            action: (): void => { this.onOpenLearningProfile() }
-          } as SettingsListItemModel,
-          {
-            key: SettingsRouteName.LEARNING_TOMORROW_PLAN,
-            icon: $r('sys.symbol.calendar'),
-            title: $r('app.string.learning_tomorrow_plan_title'),
-            subtitle: $r('app.string.learning_tomorrow_plan_desc'),
-            action: (): void => { this.onOpenLearningTomorrowPlan() }
-          } as SettingsListItemModel,
-          {
-            key: SettingsRouteName.LEARNING_ENGLISH_IMAGES,
-            icon: $r('sys.symbol.picture'),
-            title: $r('app.string.learning_english_images_title'),
-            subtitle: $r('app.string.learning_english_images_desc'),
-            action: (): void => { this.onOpenLearningEnglishImages() }
-          } as SettingsListItemModel,
-          {
-            key: SettingsRouteName.LEARNING_DAILY_EVALUATION,
-            icon: $r('sys.symbol.lightbulb_max'),
-            title: $r('app.string.learning_daily_evaluation_title'),
-            subtitle: $r('app.string.learning_daily_evaluation_desc'),
-            action: (): void => { this.onOpenLearningDailyEvaluation() }
-          } as SettingsListItemModel
-        ]
+        items: learningItems
       } as SettingsGroupModel,
       {
         key: 'creation',

@@ -3771,6 +3771,26 @@
     {
       "name": "english_image_import_save_failed",
       "value": "保存失败，请重试"
+    },
+    {
+      "name": "kids_mode_title",
+      "value": "儿童模式"
+    },
+    {
+      "name": "kids_mode_subtitle_on",
+      "value": "已开启 · 下次启动直接进入儿童界面"
+    },
+    {
+      "name": "kids_mode_subtitle_off",
+      "value": "开启后孩子进入专属学习界面，管理需算术题验证"
+    },
+    {
+      "name": "kids_mode_back_title",
+      "value": "回到儿童界面"
+    },
+    {
+      "name": "kids_mode_back_desc",
+      "value": "立即返回儿童主屏，无需再次验证"
     }
   ]
 }
