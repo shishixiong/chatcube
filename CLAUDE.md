@@ -43,6 +43,7 @@ MVVM 分层（`entry/src/main/ets/`）：
 ```
 ├── pages/          # 页面（NavDestination），通过 router_map.json 注册
 ├── components/     # 可复用 UI 组件，按功能域分子目录（chat/, index/, provider/, settings/ 等）
+│   └── kids/       # 儿童模式主屏组件（KidsHomeView / KidsSessionCard / ParentalGateSheet）
 ├── viewmodels/     # ViewModel 层，业务逻辑和状态管理
 ├── services/       # 服务层单例；通过 ServiceRegistry.ets 静态门面统一访问
 │   ├── registry/   # 模型/服务商能力注册子命名空间（ProviderProfileRegistry, ModelAbilityRegistry, ModelProfileRegistry）

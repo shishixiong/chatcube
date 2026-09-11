@@ -19,7 +19,7 @@ App 外壳是成人 AI 客户端：底部三 tab（助手/对话/设置）里，
 |---|---|
 | 启动行为 | 儿童模式开启后，**冷启动直接落在儿童主屏**，成人外壳不挂载 |
 | 家长门形式 | **随机算术题**（两位数×一位数 / 三位数±两位数），无需记忆、无重置流程，幼儿算不出 |
-| 解锁时长 | **本次 App 进程内解锁**——过门一次后可自由往返；冷启动自动回到儿童主屏（解锁状态纯内存，不持久化） |
+| 解锁时长 | **本次 App 进程内解锁**——过门一次后进入成人壳，本次运行内不再验证；成人壳中可经设置「回到儿童界面」行**免过门**返回儿童主屏；冷启动自动回到儿童主屏（解锁状态纯内存，不持久化）。实现为三态模型（见 §3 / §5.1），而非单一的 `enabled && !unlocked` 表达式 |
 | 会话列表范围 | 儿童主屏**只显示小星老师会话**（`assistantId === DEFAULT_ASSISTANT_ID`，即 `'default'`，见 `models/AssistantModels.ets:26`） |
 | 会话列表形态 | **图形化**：主题色渐变卡片 + 大 emoji 头像 + 星星数徽章 + 相对时间，**不用文字标题做主视觉** |
 | ChatPage | **复用现有 ChatPage**，儿童模式下隐藏顶栏成人入口（模型选择、助手切换、会话管理菜单），聊天功能全保留 |
@@ -28,13 +28,26 @@ App 外壳是成人 AI 客户端：底部三 tab（助手/对话/设置）里，
 ## 3. 架构总览
 
 ```
-pages/Index.ets  (改动 ≈30 行)
-  └─ build() 顶层分支：
-       isKidsUiActive() === true  →  HdsNavigation(this.chatTabNavStack) { KidsHomeView(...) }
-       isKidsUiActive() === false →  现有内容原样（HdsTabs 三 tab / expanded 布局）
+pages/Index.ets
+  └─ build() 顶层分支（Index.ets:2031）：
+       isKidsUiActive() === true  →  KidsRoot(): Navigation(this.chatTabNavStack) { KidsHomeView(...) }
+       isKidsUiActive() === false →  现有内容原样（ExpandedRoot / CompactRoot）
 
-  isKidsUiActive = kidsModeEnabled && !parentalGateUnlocked
-  parentalGateUnlocked：Index 内存字段（非持久化），过门置 true，冷启动自然重置
+  // 三态模型（Index.ets:152-154）：
+  @Local kidsModeEnabled: boolean    // Preferences 开关的本地镜像（持久开关）
+  private parentalGateUnlocked: boolean  // 家长门解锁态（纯内存, 冷启动重置；防重复验证）
+  @Local kidsRootActive: boolean     // 当前是否渲染儿童主屏（渲染分支标志）
+
+  isKidsUiActive() { return this.kidsRootActive }   // 不再等于 enabled && !unlocked
+
+  状态迁移：
+    loadKidsModeEnabled()      启动读 Preferences → kidsModeEnabled = kidsRootActive = enabled，
+                               并 setAppUiStateValue(KIDS_MODE_ACTIVE, enabled)
+    handleKidsGatePassed()     过门答对 → parentalGateUnlocked = true; kidsRootActive = false（进成人壳）
+    handleBackToKidsHome()     成人壳「回到儿童界面」行 → kidsRootActive = true（无需再过门，
+                               unlocked 保持 true；先 chatTabNavStack.clear + 复位 TAB_CHAT）
+    applyKidsModeToggled(true) 设置里开启 → unlocked = true; kidsRootActive = false（本次运行留成人壳）
+    applyKidsModeToggled(false)设置里关闭 → unlocked = false; kidsRootActive = false
 
 components/kids/  (新目录)
   ├─ KidsHomeView.ets       儿童主屏（@ComponentV2）
@@ -44,7 +57,7 @@ components/kids/  (新目录)
 utils/ParentalGateMath.ets  纯函数：出题 + 校验（ArkUI-free，hypium 可测）
 ```
 
-**关键点：儿童分支必须自带 Navigation 宿主。** `chatTabNavStack` 的 `HdsNavigation` 宿主（Index.ets:2514）挂在 ChatTab 内容里；儿童模式下三 tab 不挂载，栈失去宿主，`pushPath(ChatPage)` 无处渲染。因此儿童分支用同一个 `chatTabNavStack` 包一层 `HdsNavigation`，`KidsHomeView` 作为栈的 navBar 内容：
+**关键点：儿童分支必须自带 Navigation 宿主。** `chatTabNavStack` 的 `HdsNavigation` 宿主（Index.ets:2514）挂在 ChatTab 内容里；儿童模式下三 tab 不挂载，栈失去宿主，`pushPath(ChatPage)` 无处渲染。因此儿童分支 `KidsRoot()` 用同一个 `chatTabNavStack` 包一层原生 `Navigation`（`.hideTitleBar(true)` + `.hideToolBar(true)`，复用 `getChatNavigationMode()` / split-layout navBarWidth），`KidsHomeView` 作为栈的 navBar 内容：
 
 - 打开会话 = 现有 `pushPath({ name: CHAT_PAGE_ROUTE, param })` 原样调用（含现有 interception、split-layout 逻辑）
 - ChatPage 返回键 pop 回 KidsHomeView
@@ -100,7 +113,7 @@ utils/ParentalGateMath.ets  纯函数：出题 + 校验（ArkUI-free，hypium �
   - 三位数 ± 两位数（如 482−57，差 > 0）
 - 输入：自绘数字键盘（样式参照 `VerticalMathNumberPad` 但不复用组件——它绑定竖式回调）或 `TextInput(InputType.Number)` + 确认键，**取实现简单者，plan 阶段定**
 - 答错：红色抖动反馈 + `generate()` **换新题**（防同一题穷举试错）
-- 答对：关 sheet → 回调 Index 置 `parentalGateUnlocked = true` → Index 重渲染成人壳
+- 答对：关 sheet → 回调 Index `handleKidsGatePassed()`：置 `parentalGateUnlocked = true` 且 `kidsRootActive = false` → Index 重渲染成人壳
 - 关闭（✕ / 拖拽）：不解锁，停留在儿童主屏
 
 ### 4.4 utils/ParentalGateMath.ets（纯函数）
@@ -120,14 +133,17 @@ ArkUI-free，全量 hypium 单测覆盖（§8）。
 
 ## 5. 状态与持久化
 
-### 5.1 状态字段
+### 5.1 状态字段（三态模型）
+
+> **v1 修订（2026-09-11）**：原设计的两态表达式 `isKidsUiActive = kidsModeEnabled && !parentalGateUnlocked` 会导致过门后孩子无法回到儿童主屏（渲染分支在本次运行内永久关闭）。实现改为三态：`kidsModeEnabled`（持久开关）/ `parentalGateUnlocked`（防重复验证）/ `kidsRootActive`（当前渲染分支），配合成人壳设置面板的「回到儿童界面」行（见 §6.2）闭合回路。
 
 | 项 | 方案 |
 |---|---|
-| `kidsModeEnabled`（持久化） | `PreferencesService` 新键（加入 `PreferenceKeys` 常量，命名风格随现有键）`kids_mode_enabled`，boolean，默认 false；`getBoolean/putBoolean` 现成 API（PreferencesService.ets:297） |
-| 全局响应式镜像 | `AppUiState` 新增 `@Trace kidsModeActive: boolean` + 对应 `AppStorageKeys` 键，经 `setAppUiStateValue` 写入——**ChatPage 靠它裁剪成人入口**（不依赖 Index 传参）。MEMORY 已知坑：必须用 `setAppUiStateValue`，不能裸 `AppStorage.setOrCreate` |
-| `parentalGateUnlocked`（内存） | Index 私有字段，不持久化、不进 AppUiState |
-| 启动加载 | Index `aboutToAppear` 读 Preferences → 写本地字段 + `setAppUiStateValue`；读取失败默认 false（成人壳，绝不把孩子锁死） |
+| `kidsModeEnabled`（持久化 + Index `@Local` 镜像） | `PreferencesService` 键 `kids_mode_enabled`，boolean，默认 false；Index 持有 `@Local kidsModeEnabled` 镜像驱动设置面板行（副标题/「回到儿童界面」行显隐） |
+| 全局响应式镜像 | `AppUiState` 新增 `@Trace kidsModeActive: boolean` + `AppStorageKeys.KIDS_MODE_ACTIVE`，经 `setAppUiStateValue` 写入——**ChatPage 靠它裁剪成人入口**（不依赖 Index 传参）。注意：它是 `kids_mode_enabled` 的镜像（启动加载与开关翻转时写入，过门解锁**不**改变它），即儿童模式开启期间 ChatPage 始终裁剪。MEMORY 已知坑：必须用 `setAppUiStateValue`，不能裸 `AppStorage.setOrCreate` |
+| `parentalGateUnlocked`（内存） | Index 私有字段（非响应式），不持久化、不进 AppUiState；过门置 true，仅用于"本次运行内不再弹门" |
+| `kidsRootActive`（内存，`@Local`） | Index 渲染分支标志：`build()` 顶层 `isKidsUiActive()` 直接返回它。冷启动 = enabled；过门 → false；「回到儿童界面」→ true（无需再过门）；开关翻转 → false |
+| 启动加载 | Index `loadKidsModeEnabled()` 读 Preferences → 写 `kidsModeEnabled` / `kidsRootActive` + `setAppUiStateValue`；读取失败默认 false（成人壳，绝不把孩子锁死） |
 
 ### 5.2 每会话星星数（新查询）
 
@@ -152,23 +168,25 @@ async getStarTotalsBySession(): Promise<Map<string, number>>
 ### 6.1 ChatPage（读 `AppUiState.kidsModeActive`）
 
 **隐藏（凡通向服务商/模型/助手/会话管理的触点）：**
-- 顶栏模型选择入口（ChatPage.ets:~2378 触发 `isModelSelectorVisible = true` 的按钮）
-- 顶栏助手头像/名称的切换 sheet 入口（头像仍显示，仅不可点）
-- 会话设置/重命名/删除等管理菜单入口
+- 顶栏模型选择入口：`ChatTitleStackBuilder` 传 `modelSelectEnabled: !this.kidsModeActive`——模型名仍显示但不可点、无 chevron
+- 标题栏管理菜单：`getTitleBarMenuItems()` 中消息地图 / 重命名标题 / 重新生成标题 / 删除会话 4 项包在 `if (!this.kidsModeActive)` 内，儿童模式下菜单只剩「今日小明星」
+- ~~顶栏助手头像/名称的切换 sheet 入口~~ **（v1 修正：该入口不存在）**——经 grep 验证，ChatPage 标题栏**没有**助手切换 sheet 入口；助手切换只存在于 Index / 助手编辑页，而儿童模式下成人外壳（含这些页面）根本不挂载，故 ChatPage 侧无需任何处理
 
 **保留：** 输入、发送、停止、工具卡片渲染、语音、全部聊天功能。
 
 > 具体触点清单在 plan 阶段逐个 grep ChatPage 顶栏 Builder 确认，原则不变：**管理面隐藏，聊天本体不动**。
 
-### 6.2 设置开关（成人壳 SettingsTab）
+### 6.2 设置开关（成人壳设置面板）
 
-- 新增「儿童模式」行（现有设置列表中，分组位置 plan 阶段定），Toggle 开关
-- **开启**：弹确认对话框——「开启后下次启动将直接进入儿童界面，返回需通过算术题验证」；确认后：
-  1. 写 Preferences `kids_mode_enabled = true`
+- 「儿童模式」行位于 `IndexSettingsPanel` 的「学习中心」（`learning_center`）分组首行（key `'kids_mode'`，普通列表行而非 Toggle 组件），副标题按 `kidsModeEnabled` 显示"开启后孩子进入专属学习界面…"/"已开启…"
+- **开启**：点击行 → Index `confirmKidsModeToggle()` 弹 `showAlertDialog` 确认——「开启后，下次启动将直接进入儿童界面，返回管理界面需要通过算术题验证」；确认后 `applyKidsModeToggled(true)`：
+  1. 写 Preferences `kids_mode_enabled = true`（异步，失败仅记日志）
   2. `setAppUiStateValue(KIDS_MODE_ACTIVE, true)`
-  3. Index 置 `parentalGateUnlocked = true`（**避免家长开完开关把自己锁在门外**——本次运行内仍可自由使用成人壳）
-  4. UI 保持成人壳；下次冷启动生效直达儿童主屏
-- **关闭**：Toggle off → 写回 Preferences + AppUiState，立即恢复普通启动行为
+  3. `parentalGateUnlocked = true` 且 `kidsRootActive = false`（**避免家长开完开关把自己锁在门外**——本次运行内停留在成人壳）
+  4. 下次冷启动 `loadKidsModeEnabled()` 置 `kidsRootActive = true` 生效，直达儿童主屏
+- **关闭**：同一行点击 → 确认对话框 → `applyKidsModeToggled(false)`：写回 Preferences + AppUiState，`parentalGateUnlocked` / `kidsRootActive` 均复位 false，立即恢复普通启动行为
+- **「回到儿童界面」行**（三态模型的回路闭合点）：同在 `learning_center` 分组（splice 到 index 1），**仅 `kidsModeEnabled === true` 时显示**；icon 用 `sys.symbol.arrow_clockwise`（原拟 `arrow_uturn_left` symbol 不存在）；点击 → Index `handleBackToKidsHome()`：校验 enabled → `chatTabNavStack.clear(false)` 清掉成人壳可能推入的详情路由 → 复位 `TAB_CHAT` → `kidsRootActive = true`，**立即回儿童主屏、不弹算术题**（本次运行 `parentalGateUnlocked` 保持 true，再进成人壳无需重验）
+- ForEach key 携带开关态（`learning_center:on` / `learning_center:off`）：面板常驻挂载时切换开关，固定 key 会复用旧子树导致副标题 / 「回到儿童界面」行不刷新
 
 ## 7. 错误处理
 
@@ -202,7 +220,7 @@ async getStarTotalsBySession(): Promise<Map<string, number>>
 
 | 文件 | 改动 |
 |---|---|
-| `pages/Index.ets` | build() 顶层分支 + `HdsNavigation(chatTabNavStack){KidsHomeView}` + `parentalGateUnlocked` 字段 + 启动读 Preferences（≈30 行） |
+| `pages/Index.ets` | build() 顶层分支 + `KidsRoot(): Navigation(chatTabNavStack){KidsHomeView}` + 三态字段（`kidsModeEnabled` / `parentalGateUnlocked` / `kidsRootActive`）+ 启动读 Preferences + `handleKidsGatePassed` / `handleBackToKidsHome` / `confirmKidsModeToggle` |
 | `components/kids/KidsHomeView.ets` | **新建** |
 | `components/kids/KidsSessionCard.ets` | **新建** |
 | `components/kids/ParentalGateSheet.ets` | **新建** |
@@ -211,8 +229,9 @@ async getStarTotalsBySession(): Promise<Map<string, number>>
 | `config/AppStorageKeys.ets` | `KIDS_MODE_ACTIVE` 键 |
 | `services/PreferencesService.ets` | `PreferenceKeys` 新键 + 读写封装（随现有模式） |
 | `services/DatabaseService.ets` | `getStarTotalsBySession()` |
-| `pages/ChatPage.ets` | 顶栏成人入口按 `kidsModeActive` 隐藏 |
-| SettingsTab 设置列表（Index.ets 或对应组件） | 「儿童模式」行 + 确认对话框 |
+| `pages/ChatPage.ets` + `components/ChatNavigationTitleContent.ets` | 顶栏成人入口按 `kidsModeActive` 隐藏（标题菜单裁剪 + `modelSelectEnabled` 传参） |
+| `components/index/IndexSettingsPanel.ets` | 「儿童模式」行 + 「回到儿童界面」行（learning_center 分组，key 携带开关态） |
+| `entry/src/main/resources/{base,zh_CN}/element/string.json` | 各 5 个 `kids_mode_*` 字符串 |
 | `entry/src/ohosTest/ets/test/utils/ParentalGateMath.test.ets` | **新建** |
 
 ## 10. 明确不做（YAGNI）
