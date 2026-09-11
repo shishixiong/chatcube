@@ -24,6 +24,7 @@ export struct ChatNavigationTitleContent {
   @Param editTitleRequestTick: number = 0
   @Param contentStartInset: number = 56
   @Param contentEndInset: number = 96
+  @Param modelSelectEnabled: boolean = true
 
   @Event onModelSelect: () => void = () => {}
   @Event onRegenerateTitle: () => void = () => {}
@@ -165,7 +166,9 @@ export struct ChatNavigationTitleContent {
 
   private openModelSelector(): void {
     if (!this.isEditingTitle) {
-      this.onModelSelect()
+      if (this.modelSelectEnabled) {
+        this.onModelSelect()
+      }
     }
   }
 
@@ -310,16 +313,18 @@ export struct ChatNavigationTitleContent {
                 .lineHeight(14)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-              Row() {
-                SymbolGlyph($r('sys.symbol.chevron_down'))
-                  .fontSize(14)
-                  .fontWeight(FontWeight.Bold)
-                  .fontColor([this.getModelIdentityChevronColor()])
+              if (this.modelSelectEnabled) {
+                Row() {
+                  SymbolGlyph($r('sys.symbol.chevron_down'))
+                    .fontSize(14)
+                    .fontWeight(FontWeight.Bold)
+                    .fontColor([this.getModelIdentityChevronColor()])
+                }
+                .width(16)
+                .height(16)
+                .justifyContent(FlexAlign.Center)
+                .alignItems(VerticalAlign.Center)
               }
-              .width(16)
-              .height(16)
-              .justifyContent(FlexAlign.Center)
-              .alignItems(VerticalAlign.Center)
             }
             .width('100%')
             .height(16)

@@ -357,6 +357,9 @@ export struct ChatPage {
   private get themePrimary(): string {
     return getAppUiState().themePrimary
   }
+  private get kidsModeActive(): boolean {
+    return getAppUiState().kidsModeActive
+  }
   private get themeBackground(): string {
     return getAppUiState().themeBackground
   }
@@ -2309,43 +2312,45 @@ export struct ChatPage {
         }
       }
     })
-    menus.push({
-      content: {
-        label: $r('app.string.message_map_menu_entry'),
-        icon: this.createTitleBarSymbolIcon($r('sys.symbol.map'), 20),
-        action: () => {
-          this.handleOpenMessageMap()
+    if (!this.kidsModeActive) {
+      menus.push({
+        content: {
+          label: $r('app.string.message_map_menu_entry'),
+          icon: this.createTitleBarSymbolIcon($r('sys.symbol.map'), 20),
+          action: () => {
+            this.handleOpenMessageMap()
+          }
         }
-      }
-    })
-    menus.push({
-      content: {
-        label: $r('app.string.edit_chat_title'),
-        icon: this.createTitleBarSymbolIcon($r('sys.symbol.square_and_pencil'), 20),
-        action: () => {
-          this.requestTitleEditFromMenu()
+      })
+      menus.push({
+        content: {
+          label: $r('app.string.edit_chat_title'),
+          icon: this.createTitleBarSymbolIcon($r('sys.symbol.square_and_pencil'), 20),
+          action: () => {
+            this.requestTitleEditFromMenu()
+          }
         }
-      }
-    })
-    menus.push({
-      content: {
-        label: $r('app.string.regenerate_title'),
-        icon: this.createTitleBarSymbolIcon($r('sys.symbol.arrow_clockwise'), 20),
-        isEnabled: !this.isTitleGenerating && !this.isSending,
-        action: () => {
-          void this.handleRegenerateTitle()
+      })
+      menus.push({
+        content: {
+          label: $r('app.string.regenerate_title'),
+          icon: this.createTitleBarSymbolIcon($r('sys.symbol.arrow_clockwise'), 20),
+          isEnabled: !this.isTitleGenerating && !this.isSending,
+          action: () => {
+            void this.handleRegenerateTitle()
+          }
         }
-      }
-    })
-    menus.push({
-      content: {
-        label: $r('app.string.delete_chat'),
-        icon: this.createTitleBarSymbolIcon($r('sys.symbol.trash'), 20),
-        action: () => {
-          this.handleDeleteChat()
+      })
+      menus.push({
+        content: {
+          label: $r('app.string.delete_chat'),
+          icon: this.createTitleBarSymbolIcon($r('sys.symbol.trash'), 20),
+          action: () => {
+            this.handleDeleteChat()
+          }
         }
-      }
-    })
+      })
+    }
     return menus
   }
 
@@ -2373,6 +2378,7 @@ export struct ChatPage {
       editTitleRequestTick: this.titleEditRequestTick,
       contentStartInset: this.getTitleStackContentStartInset(),
       contentEndInset: this.getTitleStackContentEndInset(),
+      modelSelectEnabled: !this.kidsModeActive,
       onModelSelect: (): void => {
         this.safeStopInputSession()
         this.isModelSelectorVisible = true
