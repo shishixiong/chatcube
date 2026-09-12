@@ -16,8 +16,8 @@ import { CardShellState } from './CardShellState'
 
 @ComponentV2
 export struct CardShell {
-  @Param config: CardShellConfig
-  @Param state: CardShellState
+  @Require @Param config: CardShellConfig
+  @Require @Param state: CardShellState
   /** 历史会话只读态(payload 已回传) */
   @Param isAnswered: boolean = false
   /** 答错反馈显示的正确答案; '' 不渲染该行 */
