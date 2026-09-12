@@ -13,6 +13,9 @@
 import { ToolCall } from '../models/ChatModels'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { CardShell } from './cardshell/CardShell'
+import { CardShellConfig } from './cardshell/CardShellTypes'
+import { CardShellState } from './cardshell/CardShellState'
 
 interface PictureVocabQuestion {
   mode: string
@@ -58,12 +61,20 @@ export struct PictureVocabCard {
     skillKey: ''
   }
 
+  @Local shellConfig: CardShellConfig = {
+    title: '看图识词',
+    subtitle: '',
+    icon: $r('sys.symbol.translate'),
+    stem: '',
+    hasAudio: false,
+    usesConfirm: true,
+    feedbackTitleCorrect: '答对啦！真棒！',
+    correctAnswerLabel: '正确答案'
+  }
+  private shellState: CardShellState = new CardShellState()
+
   private get themePrimary(): string {
     return getAppUiState().themePrimary
-  }
-
-  private get themeAiBubble(): string {
-    return getAppUiState().themeAiBubble
   }
 
   private get isDarkMode(): boolean {
@@ -85,6 +96,21 @@ export struct PictureVocabCard {
       } catch (e) {
         console.warn('PictureVocabCard', `failed to parse answeredPayload: ${JSON.stringify(e)}`)
       }
+    }
+
+    this.shellConfig = {
+      title: this.quiz.mode === 'zh' ? '看图识字' : '看图识词',
+      subtitle: '',
+      icon: $r('sys.symbol.translate'),
+      stem: this.getQuestionText(),
+      hasAudio: false,
+      usesConfirm: true,
+      feedbackTitleCorrect: '答对啦！真棒！',
+      correctAnswerLabel: '正确答案'
+    }
+    if (this.showResult) {
+      this.shellState.submitted = true
+      this.shellState.isCorrect = this.isCorrect
     }
   }
 
@@ -243,6 +269,7 @@ export struct PictureVocabCard {
       return
     }
     this.selectedOption = opt
+    this.shellState.hasSelection = true
   }
 
   private handleConfirm(): void {
@@ -255,6 +282,8 @@ export struct PictureVocabCard {
 
     this.showResult = true
     this.isCorrect = isCorrect
+    this.shellState.submitted = true
+    this.shellState.isCorrect = isCorrect
 
     const payload: PictureVocabAnswerPayload = {
       answered: true,
@@ -275,51 +304,23 @@ export struct PictureVocabCard {
     this.selectedOption = ''
     this.showResult = false
     this.isCorrect = false
+    this.shellState.hasSelection = false
+    this.shellState.submitted = false
+    this.shellState.isCorrect = false
   }
 
   build() {
-    Column({ space: 10 }) {
-      // 标题行
-      Row() {
-        SymbolGlyph($r('sys.symbol.translate'))
-          .fontSize(18)
-          .fontColor([this.themePrimary])
-        Text(this.quiz.mode === 'zh' ? '看图识字' : '看图识词')
-          .fontSize(15)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .margin({ left: 6 })
-      }
-      .width('100%')
-
-      // 题目提示语
-      Text(this.getQuestionText())
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_primary'))
-        .width('100%')
-
-      // 图片区域
+    CardShell({
+      config: this.shellConfig,
+      state: this.shellState,
+      isAnswered: this.isAnswered,
+      correctAnswerText: this.quiz.correctAnswer,
+      onConfirm: (): void => { this.handleConfirm() },
+      onRetry: (): void => { this.handleRetry() }
+    }) {
       this.ImageArea()
-
-      // 选项按钮区域
       this.OptionsArea()
-
-      // 确认按钮（选中后且未提交时显示）
-      if (this.selectedOption !== '' && !this.showResult && !this.isAnswered) {
-        this.ConfirmButton()
-      }
-
-      // 结果反馈
-      if (this.showResult || this.isAnswered) {
-        this.ResultFeedback()
-      }
     }
-    .width('100%')
-    .padding(12)
-    .backgroundColor(this.themeAiBubble)
-    .borderRadius(12)
-    .border({ width: 1, color: $r('app.color.divider') })
   }
 
   @Builder
@@ -395,84 +396,5 @@ export struct PictureVocabCard {
       .width('100%')
     }
   }
-
-  @Builder
-  ConfirmButton() {
-    Row() {
-      Text('确认')
-        .fontSize(15)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(Color.White)
-    }
-    .width('100%')
-    .height(44)
-    .justifyContent(FlexAlign.Center)
-    .backgroundColor(this.themePrimary)
-    .borderRadius(10)
-    .onClick(() => {
-      this.handleConfirm()
-    })
-  }
-
-  @Builder
-  ResultFeedback() {
-    Column({ space: 8 }) {
-      if (this.isCorrect) {
-        Row({ space: 6 }) {
-          Text('🌟')
-            .fontSize(22)
-          Text('答对了！好厉害！')
-            .fontSize(15)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Color.Green)
-        }
-        .width('100%')
-      } else {
-        Column({ space: 6 }) {
-          Row({ space: 6 }) {
-            Text('💪')
-              .fontSize(20)
-            Text('再试试看～')
-              .fontSize(15)
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.text_primary'))
-          }
-          .width('100%')
-
-          Row({ space: 4 }) {
-            Text('正确答案：')
-              .fontSize(13)
-              .fontColor($r('app.color.text_secondary'))
-            Text(this.quiz.correctAnswer)
-              .fontSize(15)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(Color.Green)
-          }
-          .width('100%')
-
-          if (!this.isAnswered) {
-            Row() {
-              Text('换一个答案')
-                .fontSize(14)
-                .fontColor(this.themePrimary)
-            }
-            .width('100%')
-            .height(38)
-            .justifyContent(FlexAlign.Center)
-            .backgroundColor(withColorAlpha(this.themePrimary, '1F'))
-            .borderRadius(8)
-            .onClick(() => {
-              this.handleRetry()
-            })
-          }
-        }
-        .width('100%')
-      }
-    }
-    .width('100%')
-    .padding(10)
-    .backgroundColor(withColorAlpha(this.isCorrect ? '#22C55E' : '#FF6B6B', '1A'))
-    .borderRadius(8)
-    .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
-  }
 }
+
