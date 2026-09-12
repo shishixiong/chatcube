@@ -17,6 +17,9 @@ import { ToolCall } from '../models/ChatModels'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { ServiceRegistry } from '../services/ServiceRegistry'
+import { CardShell } from './cardshell/CardShell'
+import { CardShellConfig } from './cardshell/CardShellTypes'
+import { CardShellState } from './cardshell/CardShellState'
 
 interface ListeningQuizQuestion {
   word: string
@@ -61,16 +64,35 @@ export struct ListeningQuizCard {
     soundText: ''
   }
 
+  @Local shellConfig: CardShellConfig = {
+    title: '听力题',
+    subtitle: '',
+    icon: $r('sys.symbol.speaker_wave_2'),
+    stem: '',
+    hasAudio: true,
+    usesConfirm: true,
+    feedbackTitleCorrect: '答对啦！真棒！',
+    correctAnswerLabel: '正确答案'
+  }
+  private shellState: CardShellState = new CardShellState()
+
   private get themePrimary(): string {
     return getAppUiState().themePrimary
   }
 
-  private get themeAiBubble(): string {
-    return getAppUiState().themeAiBubble
-  }
-
   aboutToAppear(): void {
     this.quiz = this.parseQuiz()
+
+    this.shellConfig = {
+      title: '听力题',
+      subtitle: '',
+      icon: $r('sys.symbol.speaker_wave_2'),
+      stem: this.getQuestionText(),
+      hasAudio: true,
+      usesConfirm: true,
+      feedbackTitleCorrect: '答对啦！真棒！',
+      correctAnswerLabel: '正确答案'
+    }
 
     if (this.isAnswered && this.answeredPayload !== '') {
       try {
@@ -83,6 +105,8 @@ export struct ListeningQuizCard {
       } catch (e) {
         console.warn('ListeningQuizCard', `failed to parse answeredPayload: ${JSON.stringify(e)}`)
       }
+      this.shellState.submitted = true
+      this.shellState.isCorrect = this.isCorrect
       return
     }
 
@@ -148,19 +172,23 @@ export struct ListeningQuizCard {
       return
     }
     this.isPlayingSound = true
+    this.shellState.isPlaying = true
     this.ttsFailed = false
     ServiceRegistry.tts().speak(this.quiz.soundText, {
       onStart: () => {},
       onComplete: () => {
         this.isPlayingSound = false
+        this.shellState.isPlaying = false
       },
       onError: (error: string) => {
         this.isPlayingSound = false
+        this.shellState.isPlaying = false
         this.ttsFailed = true
         console.error('ListeningQuizCard', `TTS error: ${error}`)
       }
     }).catch((e: Error) => {
       this.isPlayingSound = false
+      this.shellState.isPlaying = false
       this.ttsFailed = true
       console.error('ListeningQuizCard', `TTS speak failed: ${e.message}`)
     })
@@ -219,6 +247,7 @@ export struct ListeningQuizCard {
       return
     }
     this.selectedOption = opt
+    this.shellState.hasSelection = true
   }
 
   private handleConfirm(): void {
@@ -230,6 +259,8 @@ export struct ListeningQuizCard {
 
     this.showResult = true
     this.isCorrect = isCorrect
+    this.shellState.submitted = true
+    this.shellState.isCorrect = isCorrect
 
     const payload: ListeningQuizAnswerPayload = {
       answered: true,
@@ -250,110 +281,44 @@ export struct ListeningQuizCard {
     this.selectedOption = ''
     this.showResult = false
     this.isCorrect = false
+    this.shellState.hasSelection = false
+    this.shellState.submitted = false
+    this.shellState.isCorrect = false
   }
 
   build() {
-    Column({ space: 10 }) {
-      // 标题行
-      Row() {
-        SymbolGlyph($r('sys.symbol.speaker_wave_2'))
-          .fontSize(18)
-          .fontColor([this.themePrimary])
-        Text('听力题')
-          .fontSize(15)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .margin({ left: 6 })
-      }
-      .width('100%')
-
-      // 题目提示语
-      Text(this.getQuestionText())
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_primary'))
-        .width('100%')
-
-      // 播放区
-      this.SoundArea()
-
-      // 选项按钮区域
+    CardShell({
+      config: this.shellConfig,
+      state: this.shellState,
+      isAnswered: this.isAnswered,
+      correctAnswerText: this.quiz.correctAnswer,
+      onConfirm: (): void => { this.handleConfirm() },
+      onRetry: (): void => { this.handleRetry() },
+      onRequestReplay: (): void => { this.handlePlaySound() }
+    }) {
+      this.TtsFallbackArea()
       this.OptionsArea()
-
-      // 确认按钮（选中后且未提交时显示）
-      if (this.selectedOption !== '' && !this.showResult && !this.isAnswered) {
-        this.ConfirmButton()
-      }
-
-      // 结果反馈
-      if (this.showResult || this.isAnswered) {
-        this.ResultFeedback()
-      }
     }
-    .width('100%')
-    .padding(12)
-    .backgroundColor(this.themeAiBubble)
-    .borderRadius(12)
-    .border({ width: 1, color: $r('app.color.divider') })
   }
 
   @Builder
-  SoundArea() {
-    Column({ space: 8 }) {
-      Row() {
-        Column() {
-          if (this.isPlayingSound) {
-            LoadingProgress()
-              .width(30)
-              .height(30)
-              .color(Color.White)
-          } else {
-            SymbolGlyph($r('sys.symbol.speaker_wave_2'))
-              .fontSize(30)
-              .fontColor([Color.White])
-          }
+  TtsFallbackArea() {
+    if (this.ttsFailed && !this.isAnswered && !this.showResult) {
+      Column({ space: 6 }) {
+        Text('声音播放失败')
+          .fontSize(12)
+          .fontColor($r('app.color.status_error'))
+        Row() {
+          Text(this.showWordText ? '隐藏文字' : '显示文字')
+            .fontSize(14)
+            .fontColor(this.themePrimary)
         }
-        .width(64)
-        .height(64)
-        .borderRadius(32)
-        .justifyContent(FlexAlign.Center)
-        .backgroundColor(this.themePrimary)
-        .shadow({ radius: 4, color: '#20000000', offsetY: 2 })
-        .onClick(() => {
-          this.handlePlaySound()
-        })
-        .animation({ duration: 150, curve: Curve.EaseOut })
-      }
-      .width('100%')
-      .justifyContent(FlexAlign.Center)
-
-      // 播放中提示 / 重播提示
-      Text(this.isPlayingSound ? '正在播放...' : '点上面的按钮再听一遍')
-        .fontSize(12)
-        .fontColor($r('app.color.text_tertiary'))
-
-      // TTS 失败兜底: 显示文字开关 (风险 R5)
-      if (this.ttsFailed && !this.isAnswered && !this.showResult) {
-        Column({ space: 6 }) {
-          Text('声音播放失败')
-            .fontSize(12)
-            .fontColor($r('app.color.status_error'))
-          Row() {
-            Text(this.showWordText ? '隐藏文字' : '显示文字')
-              .fontSize(14)
-              .fontColor(this.themePrimary)
-          }
-          .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-          .backgroundColor(withColorAlpha(this.themePrimary, '1F'))
-          .borderRadius(8)
-          .onClick(() => {
-            this.showWordText = !this.showWordText
-          })
-        }
-        .width('100%')
-        .padding(8)
-        .backgroundColor(withColorAlpha('#FF6B6B', '1A'))
+        .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+        .backgroundColor(withColorAlpha(this.themePrimary, '1F'))
         .borderRadius(8)
+        .onClick(() => {
+          this.showWordText = !this.showWordText
+        })
 
         if (this.showWordText) {
           Text(this.quiz.soundText)
@@ -364,11 +329,11 @@ export struct ListeningQuizCard {
             .textAlign(TextAlign.Center)
         }
       }
+      .width('100%')
+      .padding(8)
+      .backgroundColor(withColorAlpha('#FF6B6B', '1A'))
+      .borderRadius(8)
     }
-    .width('100%')
-    .padding(10)
-    .backgroundColor($r('app.color.surface'))
-    .borderRadius(10)
   }
 
   @Builder
@@ -400,85 +365,5 @@ export struct ListeningQuizCard {
       }
       .width('100%')
     }
-  }
-
-  @Builder
-  ConfirmButton() {
-    Row() {
-      Text('确认')
-        .fontSize(15)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(Color.White)
-    }
-    .width('100%')
-    .height(44)
-    .justifyContent(FlexAlign.Center)
-    .backgroundColor(this.themePrimary)
-    .borderRadius(10)
-    .onClick(() => {
-      this.handleConfirm()
-    })
-  }
-
-  @Builder
-  ResultFeedback() {
-    Column({ space: 8 }) {
-      if (this.isCorrect) {
-        Row({ space: 6 }) {
-          Text('🌟')
-            .fontSize(22)
-          Text('听对了！好厉害！')
-            .fontSize(15)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Color.Green)
-        }
-        .width('100%')
-      } else {
-        Column({ space: 6 }) {
-          Row({ space: 6 }) {
-            Text('💪')
-              .fontSize(20)
-            Text('再听听看～')
-              .fontSize(15)
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.text_primary'))
-          }
-          .width('100%')
-
-          Row({ space: 4 }) {
-            Text('听到的是：')
-              .fontSize(13)
-              .fontColor($r('app.color.text_secondary'))
-            Text(this.quiz.correctAnswer)
-              .fontSize(15)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(Color.Green)
-          }
-          .width('100%')
-
-          if (!this.isAnswered) {
-            Row() {
-              Text('换一个答案')
-                .fontSize(14)
-                .fontColor(this.themePrimary)
-            }
-            .width('100%')
-            .height(38)
-            .justifyContent(FlexAlign.Center)
-            .backgroundColor(withColorAlpha(this.themePrimary, '1F'))
-            .borderRadius(8)
-            .onClick(() => {
-              this.handleRetry()
-            })
-          }
-        }
-        .width('100%')
-      }
-    }
-    .width('100%')
-    .padding(10)
-    .backgroundColor(withColorAlpha(this.isCorrect ? '#22C55E' : '#FF6B6B', '1A'))
-    .borderRadius(8)
-    .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
   }
 }
