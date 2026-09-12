@@ -13,6 +13,9 @@
 import { ToolCall } from '../models/ChatModels'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { CardShell } from './cardshell/CardShell'
+import { CardShellConfig } from './cardshell/CardShellTypes'
+import { CardShellState } from './cardshell/CardShellState'
 import {
   MathQuizQuestion,
   MathQuizAnswerPayload,
@@ -91,12 +94,20 @@ export struct MathQuizCard {
   @Local isNewBestStreak: boolean = false
   @Local streakLoaded: boolean = false
 
+  @Local shellConfig: CardShellConfig = {
+    title: '数学小游戏',
+    subtitle: '',
+    icon: $r('sys.symbol.checkmark'),
+    stem: '',
+    hasAudio: false,
+    usesConfirm: true,
+    feedbackTitleCorrect: '答对啦！真棒！',
+    correctAnswerLabel: '正确答案'
+  }
+  private shellState: CardShellState = new CardShellState()
+
   private get themePrimary(): string {
     return getAppUiState().themePrimary
-  }
-
-  private get themeAiBubble(): string {
-    return getAppUiState().themeAiBubble
   }
 
   private get isDarkMode(): boolean {
@@ -118,6 +129,26 @@ export struct MathQuizCard {
     }
     // 异步加载连胜 (fire-and-forget, 由 streakLoaded 守卫竞态)
     this.loadStreak(this.quiz.skillKey)
+
+    // 重建外壳配置 (题面在 slot 内, stem 保持 '')
+    this.shellConfig = {
+      title: '数学小游戏',
+      subtitle: '',
+      icon: $r('sys.symbol.checkmark'),
+      stem: '',
+      hasAudio: false,
+      usesConfirm: true,
+      feedbackTitleCorrect: '答对啦！真棒！',
+      correctAnswerLabel: '正确答案'
+    }
+    if (this.showResult) {
+      this.shellState.submitted = true
+      this.shellState.isCorrect = this.isCorrect
+    }
+    if (this.isAnswered) {
+      this.shellState.headPill = '已回答'
+      this.shellState.headPillColor = '#4CAF50'
+    }
   }
 
   private handleSelectOption(option: string | number): void {
@@ -125,6 +156,7 @@ export struct MathQuizCard {
       return
     }
     this.selectedOption = option
+    this.shellState.hasSelection = true
     // 选完后不再直接提交, 由"确认"按钮触发, 给小朋友留出反悔/检查的时间
   }
 
@@ -149,6 +181,8 @@ export struct MathQuizCard {
     this.showResult = true
     this.isCorrect = isCorrect
     this.correctAnswerValue = quiz.correctAnswer
+    this.shellState.submitted = true
+    this.shellState.isCorrect = isCorrect
 
     // 构建 payload 回传
     const payload: MathQuizAnswerPayload = {
@@ -178,6 +212,9 @@ export struct MathQuizCard {
     this.showResult = false
     this.isCorrect = false
     this.correctAnswerValue = 0
+    this.shellState.hasSelection = false
+    this.shellState.submitted = false
+    this.shellState.isCorrect = false
   }
 
   private async loadStreak(skillKey: string): Promise<void> {
@@ -190,13 +227,17 @@ export struct MathQuizCard {
         PreferenceKeys.MATH_QUIZ_STREAK_CURRENT_PREFIX + skillKey,
         0
       )
+      this.syncHeadBadge()
       this.bestStreak = await ServiceRegistry.preferences().getNumber(
         PreferenceKeys.MATH_QUIZ_STREAK_BEST_PREFIX + skillKey,
         0
       )
+      this.syncHeadBadge()
     } catch (_e) {
       this.currentStreak = 0
+      this.syncHeadBadge()
       this.bestStreak = 0
+      this.syncHeadBadge()
     } finally {
       this.streakLoaded = true
     }
@@ -227,6 +268,7 @@ export struct MathQuizCard {
     if (!correct) {
       // 答错: 重置当前连胜, 最佳不变
       this.currentStreak = 0
+      this.syncHeadBadge()
       this.isNewBestStreak = false
       await this.saveStreak(skillKey, 0, this.bestStreak)
       return
@@ -234,9 +276,22 @@ export struct MathQuizCard {
     const newCurrent = this.currentStreak + 1
     const isNewBest = newCurrent > this.bestStreak
     this.currentStreak = newCurrent
+    this.syncHeadBadge()
     this.bestStreak = Math.max(this.bestStreak, newCurrent)
+    this.syncHeadBadge()
     this.isNewBestStreak = isNewBest
+    if (isNewBest) {
+      this.shellState.headPill = '新纪录'
+      this.shellState.headPillColor = '#FF6B35'
+    }
     await this.saveStreak(skillKey, newCurrent, this.bestStreak)
+  }
+
+  // 连胜徽章同步到外壳 head: 当前连胜 > 0 显示 🔥 N, 否则最佳 > 0 显示 🏆 最佳 N, 否则不渲染
+  private syncHeadBadge(): void {
+    this.shellState.headBadge = this.currentStreak > 0
+      ? `🔥 ${this.currentStreak}`
+      : (this.bestStreak > 0 ? `🏆 最佳 ${this.bestStreak}` : '')
   }
 
   private getOptionState(opt: string | number): string {
@@ -410,51 +465,16 @@ export struct MathQuizCard {
   }
 
   build() {
-    Column({ space: 10 }) {
-      // 标题行
-      Row() {
-        SymbolGlyph($r('sys.symbol.checkmark'))
-          .fontSize(14)
-          .fontColor([this.themePrimary])
-        Text('数学小游戏')
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
-          .margin({ left: 6 })
-        Blank()
-        this.StreakIndicator()
-        if (this.isNewBestStreak) {
-          Text('新纪录')
-            .fontSize(10)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(Color.White)
-            .backgroundColor('#FF6B35')
-            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-            .borderRadius(6)
-        } else if (this.isAnswered) {
-          Text('已回答')
-            .fontSize(10)
-            .fontColor(Color.White)
-            .backgroundColor($r('app.color.status_success'))
-            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-            .borderRadius(6)
-        }
-      }
-      .width('100%')
-
-      // 题目区域
+    CardShell({
+      config: this.shellConfig,
+      state: this.shellState,
+      isAnswered: this.isAnswered,
+      correctAnswerText: String(this.correctAnswerValue),
+      onConfirm: (): void => { this.handleConfirm() },
+      onRetry: (): void => { this.handleRetry() }
+    }) {
       this.QuizContent()
-
-      // 结果反馈
-      if (this.showResult || this.isAnswered) {
-        this.ResultFeedback()
-      }
     }
-    .width('100%')
-    .padding(12)
-    .backgroundColor(this.themeAiBubble)
-    .borderRadius(12)
-    .border({ width: 1, color: $r('app.color.divider') })
   }
 
   @Builder
@@ -496,41 +516,6 @@ export struct MathQuizCard {
       this.handleSelectOption(opt)
     })
     .animation({ duration: 150, curve: Curve.EaseOut })
-  }
-
-  @Builder
-  ConfirmButton() {
-    Row() {
-      Text('确认')
-        .fontSize(15)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(Color.White)
-    }
-    .width('100%')
-    .height(40)
-    .justifyContent(FlexAlign.Center)
-    .backgroundColor(this.themePrimary)
-    .borderRadius(10)
-    .onClick(() => {
-      this.handleConfirm()
-    })
-    .animation({ duration: 150, curve: Curve.EaseOut })
-  }
-
-  @Builder
-  StreakIndicator() {
-    if (this.currentStreak > 0) {
-      Text(`🔥 ${this.currentStreak}`)
-        .fontSize(11)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.themePrimary)
-        .margin({ right: 6 })
-    } else if (this.bestStreak > 0) {
-      Text(`🏆 最佳 ${this.bestStreak}`)
-        .fontSize(11)
-        .fontColor($r('app.color.text_tertiary'))
-        .margin({ right: 6 })
-    }
   }
 
   @Builder
@@ -610,11 +595,6 @@ export struct MathQuizCard {
             .columnsGap(10)
             .rowsGap(10)
             .width('100%')
-
-            // 确认按钮: 选中后才出现
-            if (this.selectedOption !== -1 && !this.showResult && !this.isAnswered) {
-              this.ConfirmButton()
-            }
           }
           .width('100%')
         }
@@ -709,10 +689,6 @@ export struct MathQuizCard {
           .columnsGap(10)
           .rowsGap(10)
           .width('100%')
-
-          if (this.selectedOption !== -1 && !this.showResult && !this.isAnswered) {
-            this.ConfirmButton()
-          }
         }
         .width('100%')
       }
@@ -786,10 +762,6 @@ export struct MathQuizCard {
           }, (op: string | number) => `op_${op}`)
         }
         .width('100%')
-
-        if (this.selectedOption !== -1 && !this.showResult && !this.isAnswered) {
-          this.ConfirmButton()
-        }
       }
     }
     .width('100%')
@@ -929,10 +901,6 @@ export struct MathQuizCard {
           .columnsGap(10)
           .rowsGap(10)
           .width('100%')
-
-          if (this.selectedOption !== -1 && !this.showResult && !this.isAnswered) {
-            this.ConfirmButton()
-          }
         }
         .width('100%')
       }
@@ -1000,10 +968,6 @@ export struct MathQuizCard {
           .columnsGap(10)
           .rowsGap(10)
           .width('100%')
-
-          if (this.selectedOption !== -1 && !this.showResult && !this.isAnswered) {
-            this.ConfirmButton()
-          }
         }
         .width('100%')
       }
@@ -1012,73 +976,5 @@ export struct MathQuizCard {
     .padding(12)
     .backgroundColor(this.getCardBackgroundColor())
     .borderRadius(10)
-  }
-
-  @Builder
-  ResultFeedback() {
-    if (this.showResult) {
-      if (this.isCorrect) {
-        Row({ space: 6 }) {
-          SymbolGlyph($r('sys.symbol.checkmark_circle'))
-            .fontSize(16)
-            .fontColor(['#4CAF50'])
-          Text('答对了, 真棒!')
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
-            .fontColor('#4CAF50')
-        }
-        .width('100%')
-      } else {
-        Row({ space: 6 }) {
-          SymbolGlyph($r('sys.symbol.info_circle'))
-            .fontSize(16)
-            .fontColor(['#FF9F43'])
-          Text(`答案是 ${this.correctAnswerValue}`)
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
-            .fontColor('#FF9F43')
-          if (!this.isAnswered) {
-            Text('再试一次 ↻')
-              .fontSize(14)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.themePrimary)
-              .margin({ left: 4 })
-              .onClick(() => {
-                this.handleRetry()
-              })
-          }
-        }
-        .width('100%')
-      }
-    } else if (this.isAnswered) {
-      // 从 answeredPayload 中解析结果
-      ForEach([parseMathQuizAnswer(this.answeredPayload)], (prev: MathQuizAnswerPayload | null) => {
-        if (prev !== null) {
-          if (prev.correct) {
-            Row({ space: 6 }) {
-              SymbolGlyph($r('sys.symbol.checkmark_circle'))
-                .fontSize(16)
-                .fontColor(['#4CAF50'])
-              Text('答对了, 真棒!')
-                .fontSize(14)
-                .fontWeight(FontWeight.Medium)
-                .fontColor('#4CAF50')
-            }
-            .width('100%')
-          } else {
-            Row({ space: 6 }) {
-              SymbolGlyph($r('sys.symbol.info_circle'))
-                .fontSize(16)
-                .fontColor(['#FF9F43'])
-              Text(`答案是 ${prev.correct_answer}`)
-                .fontSize(14)
-                .fontWeight(FontWeight.Medium)
-                .fontColor('#FF9F43')
-            }
-            .width('100%')
-          }
-        }
-      }, (_: MathQuizAnswerPayload | null) => 'result')
-    }
   }
 }
