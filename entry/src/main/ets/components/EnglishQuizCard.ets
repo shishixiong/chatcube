@@ -14,7 +14,7 @@ import { ToolCall } from '../models/ChatModels'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { CardShell } from './cardshell/CardShell'
-import { CardShellConfig } from './cardshell/CardShellTypes'
+import { CardShellConfig, CardShellCopy } from './cardshell/CardShellTypes'
 import { CardShellState } from './cardshell/CardShellState'
 import { SpeechRecognitionCallback } from '../services/SpeechRecognitionService'
 import { ServiceRegistry } from '../services/ServiceRegistry'
@@ -845,7 +845,7 @@ export struct EnglishQuizCard {
           SymbolGlyph($r('sys.symbol.speaker_wave_2_fill'))
             .fontSize(20)
             .fontColor([Color.White])
-          Text(this.isPlayingSound ? '播放中...' : '听一听')
+          Text(this.isPlayingSound ? CardShellCopy.PLAYING : CardShellCopy.REPLAY)
             .fontSize(16)
             .fontWeight(FontWeight.Medium)
             .fontColor(Color.White)
