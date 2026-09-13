@@ -469,7 +469,9 @@ export struct MathQuizCard {
       config: this.shellConfig,
       state: this.shellState,
       isAnswered: this.isAnswered,
-      correctAnswerText: String(this.correctAnswerValue),
+      // showResult=true 才持有真实正确答案; answeredPayload 解析失败时保持 0, 传 '' 让
+      // shell 跳过「正确答案」行 (CardShell 对 '' 不渲染该行), 与迁移前行为一致
+      correctAnswerText: this.showResult ? String(this.correctAnswerValue) : '',
       onConfirm: (): void => { this.handleConfirm() },
       onRetry: (): void => { this.handleRetry() }
     }) {

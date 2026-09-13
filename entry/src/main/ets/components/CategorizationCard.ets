@@ -187,7 +187,8 @@ export struct CategorizationCard {
     this.items = v.items
     this.difficulty = v.difficulty
     this.placedItems = this.createPlacedArray(this.items.length)
-    // 最佳成绩两个分支都需要: 未回答时给新纪录检测用, 已回答时给在线视图展示「最佳 X:Y」
+    // 最佳成绩两个分支都需要: 未回答时给新纪录检测用; 已回答时在线视图由
+    // loadBestScores 完成后重建反馈区, 在 feedbackDetail 末尾展示「最佳 X:Y · 0 错」
     this.loadBestScores(this.difficulty)
     if (this.isAnswered) {
       this.parseAnsweredPayload()
@@ -268,7 +269,8 @@ export struct CategorizationCard {
     }
   }
 
-  // 异步读最佳成绩。已回答/未回答两个分支都需要, 让在线视图也能展示「最佳 X:Y · 0 错」
+  // 异步读最佳成绩。未回答时供新纪录检测; 已回答(在线恢复)时加载完成后经
+  // syncShellStateIfSettled 重建反馈区, 补上 feedbackDetail 的「最佳 X:Y · 0 错」行
   private async loadBestScores(difficulty: number): Promise<void> {
     try {
       const prefs = getPreferencesService()
@@ -283,11 +285,15 @@ export struct CategorizationCard {
       this.bestTimeSeconds = results[0]
       this.bestPerfectSeconds = results[1]
       this.bestScoresLoaded = true
+      // 加载晚于 shell 状态构建时(在线恢复路径 / 极快通关), 重建一次补上最佳成绩行
+      this.syncShellStateIfSettled()
     } catch (_e) {
       this.bestTimeSeconds = -1
       this.bestPerfectSeconds = -1
       // 加载失败也要解除守卫, 否则 saveBestScoresIfImproved 永远不写
       this.bestScoresLoaded = true
+      // 失败路径 bestPerfectSeconds=-1, 重建后最佳成绩行自然缺席
+      this.syncShellStateIfSettled()
       hilog.warn(DOMAIN, TAG, 'failed to load best scores')
     }
   }
@@ -316,10 +322,9 @@ export struct CategorizationCard {
         this.bestPerfectSeconds = this.elapsedSeconds
       }
       this.isNewBest = isNewBestTime || isNewBestPerfect
-      // 异步写回完成后升级头部药丸 —— 原 WinBanner 的 '新纪录' 药丸同样在保存完成后才出现
-      if (this.isNewBest) {
-        this.shellState.headPill = '新纪录'
-      }
+      // 异步写回完成后重建反馈区 —— 原 WinBanner 的 '新纪录' 药丸与最佳成绩行
+      // 同样在保存完成后才出现(响应式读取); 迁移后需重建快照字符串
+      this.syncShellStateIfSettled()
     } catch (_e) {
       // 持久化失败不阻塞 UI
       hilog.warn(DOMAIN, TAG, 'failed to save best scores')
@@ -476,8 +481,21 @@ export struct CategorizationCard {
     this.shellState.feedbackTitle = '分类完成！'
     this.shellState.feedbackDetail =
       `${this.correctCount}/${this.items.length} · ${this.formatBestTime(this.elapsedSeconds)} · 失败 ${this.wrongAttempts} 次`
+    // 原 WinBanner 的最佳成绩行(全对王): 仅在已加载到有效最佳 (>= 0) 时追加, 与迁移前条件渲染一致
+    if (this.bestPerfectSeconds >= 0) {
+      this.shellState.feedbackDetail += `\n最佳 ${this.formatBestTime(this.bestPerfectSeconds)} · 0 错`
+    }
     this.shellState.headPill = this.isNewBest ? '新纪录' : '已完成'
     this.shellState.headPillColor = '#4CAF50'
+  }
+
+  // loadBestScores / saveBestScoresIfImproved 异步完成后调用:
+  // 若终局状态已构建 (hasWon), 重建反馈区 —— 原 WinBanner 响应式读取 bestPerfectSeconds,
+  // 迁移后 feedbackDetail 是快照字符串, 需重建才能补上/刷新「最佳 X:Y · 0 错」行。
+  private syncShellStateIfSettled(): void {
+    if (this.hasWon) {
+      this.syncWinShellState()
+    }
   }
 
   // 已答恢复同步: 按 hasWon 恢复终局。恢复路径不跑 saveBestScoresIfImproved,
