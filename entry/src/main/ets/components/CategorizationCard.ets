@@ -2,10 +2,10 @@
  * CategorizationCard - 分类小管家互动卡片
  *
  * 设计语言对齐 NumberPuzzleCard / MathQuizCard 卡片族:
- * - 圆形徽章标题, 主题色调暖色琥珀
+ * - CardShell 统一外壳 (head/stem/feedback), direct 模式 (usesConfirm: false)
  * - 物品圆球 + 桶虚线轮廓, 拖拽或"先点物品再点桶"两种交互
  * - 双卡片统计 (时间 / 进度)
- * - 完成横幅 (绿色) / 放弃药丸 (橙色)
+ * - 完成反馈横幅 (绿色) / 放弃药丸 (橙色) 由 shellState 驱动
  * - 严格的输入校验: 桶数 2-3、物品数 4/6/9、bin_index 合法、每桶 ≥2 物品
  *
  * 公共 API: toolCall / isAnswered / answeredPayload / largeSize / onAnswer
@@ -19,10 +19,12 @@ import { getPreferencesService, PreferenceKeys } from '../services/PreferencesSe
 import { validateAndNormalizeCategorization, NormalizedCategorizationData } from '../utils/CategorizationValidation'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { curves } from '@kit.ArkUI'
+import { CardShell } from './cardshell/CardShell'
+import { CardShellConfig } from './cardshell/CardShellTypes'
+import { CardShellState } from './cardshell/CardShellState'
 
 const DOMAIN = 0x0002
 const TAG = 'CategorizationCard'
-const SUCCESS_GREEN: string = '#22C55E'
 const GIVEUP_ORANGE: string = '#FF9F43'
 const ERROR_RED: string = '#FF3B30'
 
@@ -135,6 +137,19 @@ export struct CategorizationCard {
   // 防止在 loadBestScores 完成前 saveBestScoresIfImproved 用 stale -1 覆盖已有最佳
   @Local bestScoresLoaded: boolean = false
 
+  // CardShell 外壳配置/状态 (direct 模式: usesConfirm=false, 完成态由 state.submitted 驱动)
+  @Local shellConfig: CardShellConfig = {
+    title: '分类小管家',
+    subtitle: '',
+    icon: $r('sys.symbol.folder'),
+    stem: '',
+    hasAudio: false,
+    usesConfirm: false,
+    feedbackTitleCorrect: '分类完成！',
+    correctAnswerLabel: ''
+  }
+  private shellState: CardShellState = new CardShellState()
+
   // 非响应式
   private timerId: number = -1
   private shakeTimerId: number = -1
@@ -178,11 +193,26 @@ export struct CategorizationCard {
       this.parseAnsweredPayload()
       // 在线视图: 视为已看过引导 (不会显示气泡)
       this.isFirstPlay = false
+      // 恢复路径同步 shell 终局状态 (按 hasWon; 解析失败走 validationError 分支不同步)
+      if (this.validationError === '') {
+        this.syncOutcomeShellState()
+      }
     } else {
       this.shuffleItems()
       this.startTimer()
       this.startItemAnim()
       this.loadTutorialState()
+    }
+    // 校验通过后重建 shell 配置 (subtitle/stem 依赖已解析的题面数据)
+    this.shellConfig = {
+      title: '分类小管家',
+      subtitle: `${this.theme} · ${this.getDifficultyLabel()} · ${this.items.length}件 ${this.bins.length}桶`,
+      icon: $r('sys.symbol.folder'),
+      stem: this.instruction,
+      hasAudio: false,
+      usesConfirm: false,
+      feedbackTitleCorrect: '分类完成！',
+      correctAnswerLabel: ''
     }
   }
 
@@ -286,6 +316,10 @@ export struct CategorizationCard {
         this.bestPerfectSeconds = this.elapsedSeconds
       }
       this.isNewBest = isNewBestTime || isNewBestPerfect
+      // 异步写回完成后升级头部药丸 —— 原 WinBanner 的 '新纪录' 药丸同样在保存完成后才出现
+      if (this.isNewBest) {
+        this.shellState.headPill = '新纪录'
+      }
     } catch (_e) {
       // 持久化失败不阻塞 UI
       hilog.warn(DOMAIN, TAG, 'failed to save best scores')
@@ -433,6 +467,30 @@ export struct CategorizationCard {
     }, WRONG_DROP_SHAKE_MS)
   }
 
+  // ================ shell 状态同步 ================
+  // 判胜同步: 反馈横幅 + 头部药丸。注意调用时 isNewBest 通常还是 false
+  // (saveBestScoresIfImproved 异步写回后才置 true, 届时单独升级为 '新纪录')。
+  private syncWinShellState(): void {
+    this.shellState.submitted = true
+    this.shellState.isCorrect = true
+    this.shellState.feedbackTitle = '分类完成！'
+    this.shellState.feedbackDetail =
+      `${this.correctCount}/${this.items.length} · ${this.formatBestTime(this.elapsedSeconds)} · 失败 ${this.wrongAttempts} 次`
+    this.shellState.headPill = this.isNewBest ? '新纪录' : '已完成'
+    this.shellState.headPillColor = '#4CAF50'
+  }
+
+  // 已答恢复同步: 按 hasWon 恢复终局。恢复路径不跑 saveBestScoresIfImproved,
+  // isNewBest 恒 false, 药丸固定 '已完成' / '已放弃'。
+  private syncOutcomeShellState(): void {
+    if (this.hasWon) {
+      this.syncWinShellState()
+    } else {
+      this.shellState.headPill = '已放弃'
+      this.shellState.headPillColor = '#FF9F43'
+    }
+  }
+
   private evaluateWin(): void {
     let allPlaced = true
     for (let i = 0; i < this.placedItems.length; i++) {
@@ -447,6 +505,7 @@ export struct CategorizationCard {
     this.stopTimer()
     this.isCompleted = true
     this.hasWon = true
+    this.syncWinShellState()
     this.submitResult(true)
     // 异步持久化最佳成绩, 不阻塞 onAnswer 回传 (race-guard 防止 stale -1 覆盖)
     this.saveBestScoresIfImproved()
@@ -459,6 +518,9 @@ export struct CategorizationCard {
     this.stopTimer()
     this.isCompleted = true
     this.hasWon = false
+    // 放弃只改头部药丸, 不置 submitted —— 与原行为一致 (WinBanner 仅 hasWon 时渲染)
+    this.shellState.headPill = '已放弃'
+    this.shellState.headPillColor = '#FF9F43'
     this.submitResult(false)
   }
 
@@ -632,17 +694,27 @@ export struct CategorizationCard {
 
   // ================ 主 build ================
   build() {
-    Column({ space: this.largeSize ? 20 : 10 }) {
-      if (this.validationError !== '') {
+    if (this.validationError !== '') {
+      // 坏题兜底分支: 保留原卡片底色 (不走 shell, 避免罕见路径视觉回归)
+      Column() {
         this.ErrorPlaceholder()
-      } else {
-        this.HeaderRow()
-        if (this.hasWon) {
-          this.WinBanner()
-        }
-        if (this.instruction !== '') {
-          this.InstructionRow()
-        }
+      }
+      .width('100%')
+      .padding(this.largeSize ? 24 : 14)
+      .backgroundColor(this.largeSize ? Color.Transparent : this.themeAiBubble)
+      .borderRadius(this.largeSize ? 0 : 14)
+      .border(this.largeSize
+        ? { width: 0, color: Color.Transparent, style: BorderStyle.Solid }
+        : { width: 1, color: $r('app.color.divider'), style: BorderStyle.Solid })
+      .onTouch((e: TouchEvent) => e.stopPropagation())
+    } else {
+      CardShell({
+        config: this.shellConfig,
+        state: this.shellState,
+        isAnswered: false,
+        largeSize: this.largeSize,
+        blockTouch: true
+      }) {
         this.BinRow()
         this.ItemsLayer()
         this.StatsGrid()
@@ -651,114 +723,9 @@ export struct CategorizationCard {
         }
       }
     }
-    .width('100%')
-    .padding(this.largeSize ? 24 : 14)
-    .backgroundColor(this.largeSize ? Color.Transparent : this.themeAiBubble)
-    .borderRadius(this.largeSize ? 0 : 14)
-    .border(this.largeSize
-      ? { width: 0, color: Color.Transparent, style: BorderStyle.Solid }
-      : { width: 1, color: $r('app.color.divider'), style: BorderStyle.Solid })
-    .alignItems(HorizontalAlign.Start)
-    .onTouch((e: TouchEvent) => e.stopPropagation())
   }
 
   // ================ 子区块 ================
-  @Builder
-  HeaderRow() {
-    Row() {
-      Column() {
-        SymbolGlyph($r('sys.symbol.folder'))
-          .fontSize(15)
-          .fontColor([this.themePrimary])
-      }
-      .width(32)
-      .height(32)
-      .borderRadius(16)
-      .backgroundColor(withColorAlpha(this.themePrimary, '18'))
-      .justifyContent(FlexAlign.Center)
-
-      Column() {
-        Text('分类小管家')
-          .fontSize(15)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-        Text(`${this.theme} · ${this.getDifficultyLabel()} · ${this.items.length}件 ${this.bins.length}桶`)
-          .fontSize(11)
-          .fontColor($r('app.color.text_tertiary'))
-          .margin({ top: 2 })
-      }
-      .alignItems(HorizontalAlign.Start)
-      .margin({ left: 10 })
-      .layoutWeight(1)
-
-      if (this.isCompleted) {
-        Text(this.hasWon ? '已完成' : '已放弃')
-          .fontSize(10)
-          .fontColor(Color.White)
-          .backgroundColor(this.hasWon ? $r('app.color.status_success') : GIVEUP_ORANGE)
-          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-          .borderRadius(6)
-      }
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Center)
-  }
-
-  @Builder
-  WinBanner() {
-    Row({ space: 10 }) {
-      Text('🎉')
-        .fontSize(24)
-      Column() {
-        Text('分类完成！')
-          .fontSize(15)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.status_success'))
-        Text(`${this.correctCount}/${this.items.length} · ${this.formatBestTime(this.elapsedSeconds)} · 失败 ${this.wrongAttempts} 次`)
-          .fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
-          .margin({ top: 2 })
-        if (this.bestPerfectSeconds >= 0) {
-          Text(`最佳 ${this.formatBestTime(this.bestPerfectSeconds)} · 0 错`)
-            .fontSize(12)
-            .fontColor($r('app.color.text_secondary'))
-            .margin({ top: 2 })
-        }
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-      if (this.isNewBest) {
-        Text('新纪录')
-          .fontSize(10)
-          .fontColor(Color.White)
-          .backgroundColor($r('app.color.status_success'))
-          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-          .borderRadius(6)
-      }
-    }
-    .width('100%')
-    .padding(12)
-    .backgroundColor(withColorAlpha(SUCCESS_GREEN, this.isDarkMode ? '18' : '0C'))
-    .borderRadius(12)
-    .border({
-      width: 1,
-      color: withColorAlpha(SUCCESS_GREEN, this.isDarkMode ? '38' : '28'),
-      style: BorderStyle.Solid
-    })
-  }
-
-  @Builder
-  InstructionRow() {
-    Row() {
-      Text(this.instruction)
-        .fontSize(12)
-        .fontColor($r('app.color.text_secondary'))
-        .layoutWeight(1)
-    }
-    .width('100%')
-    .padding({ left: 4, right: 4 })
-  }
-
   @Builder
   BinRow() {
     Row({ space: 10 }) {
