@@ -13,6 +13,9 @@
 import { ToolCall } from '../models/ChatModels'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { CardShell } from './cardshell/CardShell'
+import { CardShellConfig } from './cardshell/CardShellTypes'
+import { CardShellState } from './cardshell/CardShellState'
 import { SpeechRecognitionCallback } from '../services/SpeechRecognitionService'
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import { getImageIndexService, ImageIndexService } from '../services/ImageIndexService'
@@ -75,12 +78,20 @@ export struct EnglishQuizCard {
   @Local isPlayingSound: boolean = false    // TTS 播放中
   private imageLoadTimer: number = -1
 
+  @Local shellConfig: CardShellConfig = {
+    title: '英语小游戏',
+    subtitle: '',
+    icon: $r('sys.symbol.square_and_pencil'),
+    stem: '',
+    hasAudio: false,
+    usesConfirm: true,
+    feedbackTitleCorrect: '答对啦！真棒！',
+    correctAnswerLabel: '正确答案'
+  }
+  private shellState: CardShellState = new CardShellState()
+
   private get themePrimary(): string {
     return getAppUiState().themePrimary
-  }
-
-  private get themeAiBubble(): string {
-    return getAppUiState().themeAiBubble
   }
 
   private get isDarkMode(): boolean {
@@ -100,11 +111,28 @@ export struct EnglishQuizCard {
         if (prev.question_type === 'phonics_choice') {
           this.selectedLetter = prev.child_answer
         }
+        this.shellState.submitted = true
+        this.shellState.isCorrect = prev.correct
       }
+      this.shellState.headPill = '已回答'
+      this.shellState.headPillColor = '#4CAF50'
     }
 
     // 读取 phonics_choice 题型字段 (letter_options / sound_text)
     const quiz = this.parseQuiz()
+
+    // 重建外壳配置 (题面在 slot 内, stem 保持 ''; 标题按题型区分)
+    this.shellConfig = {
+      title: quiz.questionType === 'phonics_choice' ? '自然拼读' : '英语小游戏',
+      subtitle: '',
+      icon: $r('sys.symbol.square_and_pencil'),
+      stem: '',
+      hasAudio: false,
+      usesConfirm: true,
+      feedbackTitleCorrect: '答对啦！真棒！',
+      correctAnswerLabel: '正确答案'
+    }
+
     if (quiz.questionType === 'phonics_choice') {
       this.letterOptions = quiz.letterOptions
       this.soundText = quiz.soundText
@@ -461,6 +489,8 @@ export struct EnglishQuizCard {
     this.showResult = true
     this.isCorrect = correct
     this.correctAnswerText = quiz.correctAnswer
+    this.shellState.submitted = true
+    this.shellState.isCorrect = correct
 
     // 构建 payload 回传
     const payload: EnglishQuizAnswerPayload = {
@@ -490,6 +520,9 @@ export struct EnglishQuizCard {
     this.inputText = ''
     this.recognitionPreview = ''
     this.selectedLetter = ''
+    this.shellState.hasSelection = false
+    this.shellState.submitted = false
+    this.shellState.isCorrect = false
   }
 
   /**
@@ -510,6 +543,10 @@ export struct EnglishQuizCard {
     this.showResult = true
     this.isCorrect = correct
     this.correctAnswerText = quiz.correctAnswer
+    // 字母点选是直提路径(同语音直提): 同步外壳状态, 立即出反馈且不渲染确认按钮
+    this.shellState.hasSelection = true
+    this.shellState.submitted = true
+    this.shellState.isCorrect = correct
 
     const payload: EnglishQuizAnswerPayload = {
       answered: true,
@@ -620,62 +657,26 @@ export struct EnglishQuizCard {
   }
 
   build() {
-    Column({ space: 10 }) {
-      // 标题行
-      Row() {
-        SymbolGlyph($r('sys.symbol.square_and_pencil'))
-          .fontSize(14)
-          .fontColor([this.themePrimary])
-        Text(this.parseQuiz().questionType === 'phonics_choice' ? '自然拼读' : '英语小游戏')
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
-          .margin({ left: 6 })
-        Blank()
-        if (this.isAnswered) {
-          Text('已回答')
-            .fontSize(10)
-            .fontColor(Color.White)
-            .backgroundColor($r('app.color.status_success'))
-            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-            .borderRadius(6)
-        }
-      }
-      .width('100%')
-
+    CardShell({
+      config: this.shellConfig,
+      state: this.shellState,
+      isAnswered: this.isAnswered,
+      correctAnswerText: this.correctAnswerText,
+      onConfirm: (): void => { this.handleSubmit() },
+      onRetry: (): void => { this.handleRetry() }
+    }) {
       if (this.parseQuiz().questionType === 'phonics_choice') {
-        // phonics_choice: 听音 + 字母选项
         this.PhonicsContent()
-
-        // 字母选项网格 (未回答时)
         if (!this.isAnswered && !this.showResult) {
           this.LetterOptionsGrid()
         }
-
-        // 结果反馈
-        if (this.showResult || this.isAnswered) {
-          this.ResultFeedback()
-        }
       } else {
-        // 现有 word / sentence 题型
         this.QuizContent()
-
-        // 输入区域（未回答时）
         if (!this.isAnswered && !this.showResult) {
           this.InputArea()
         }
-
-        // 结果反馈
-        if (this.showResult || this.isAnswered) {
-          this.ResultFeedback()
-        }
       }
     }
-    .width('100%')
-    .padding(12)
-    .backgroundColor(this.themeAiBubble)
-    .borderRadius(12)
-    .border({ width: 1, color: $r('app.color.divider') })
   }
 
   @Builder
@@ -814,7 +815,7 @@ export struct EnglishQuizCard {
           .width('100%')
       }
 
-      // 文字输入框
+      // 文字输入框 (提交入口统一为外壳确认按钮, 键盘 onSubmit 保留为快捷路径)
       Row({ space: 8 }) {
         TextInput({ text: this.inputText, placeholder: '输入英语答案...' })
           .layoutWeight(1)
@@ -824,106 +825,13 @@ export struct EnglishQuizCard {
           .borderRadius(10)
           .onChange((value: string) => {
             this.inputText = value
+            this.shellState.hasSelection = value.trim() !== ''
           })
           .onSubmit(() => {
             this.handleSubmit()
           })
-
-        Button('提交')
-          .height(40)
-          .padding({ left: 16, right: 16 })
-          .fontSize(14)
-          .fontColor(Color.White)
-          .backgroundColor(this.inputText.trim() !== '' ? this.themePrimary : $r('app.color.text_tertiary'))
-          .enabled(this.inputText.trim() !== '')
-          .borderRadius(10)
-          .onClick(() => {
-            this.handleSubmit()
-          })
       }
       .width('100%')
-    }
-    .width('100%')
-  }
-
-  @Builder
-  ResultFeedback() {
-    Column({ space: 6 }) {
-      if (this.showResult) {
-        if (this.isCorrect) {
-          Row({ space: 6 }) {
-            SymbolGlyph($r('sys.symbol.checkmark_circle'))
-              .fontSize(16)
-              .fontColor(['#4CAF50'])
-            Text('Great job! 答对了!')
-              .fontSize(14)
-              .fontWeight(FontWeight.Medium)
-              .fontColor('#4CAF50')
-          }
-          .width('100%')
-        } else {
-          Row({ space: 6 }) {
-            SymbolGlyph($r('sys.symbol.xmark_circle'))
-              .fontSize(16)
-              .fontColor(['#FF9F43'])
-            Text(`正确答案是: ${this.correctAnswerText}`)
-              .fontSize(14)
-              .fontWeight(FontWeight.Medium)
-              .fontColor('#FF9F43')
-            if (!this.isAnswered) {
-              Text('再试一次 ↻')
-                .fontSize(14)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.themePrimary)
-                .margin({ left: 4 })
-                .onClick(() => {
-                  this.handleRetry()
-                })
-            }
-          }
-          .width('100%')
-        }
-      } else if (this.isAnswered) {
-        // 从 answeredPayload 中解析结果
-        ForEach([this.parsePreviousAnswer()], (prev: EnglishQuizAnswerPayload | null) => {
-          if (prev !== null) {
-            if (prev.correct) {
-              Row({ space: 6 }) {
-                SymbolGlyph($r('sys.symbol.checkmark_circle'))
-                  .fontSize(16)
-                  .fontColor(['#4CAF50'])
-                Text('Great job! 答对了!')
-                  .fontSize(14)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor('#4CAF50')
-              }
-              .width('100%')
-            } else {
-              Column({ space: 4 }) {
-                Row({ space: 6 }) {
-                  SymbolGlyph($r('sys.symbol.xmark_circle'))
-                    .fontSize(16)
-                    .fontColor(['#FF9F43'])
-                  Text(`你的回答: ${prev.child_answer}`)
-                    .fontSize(13)
-                    .fontColor('#FF9F43')
-                }
-                .width('100%')
-                Row({ space: 6 }) {
-                  SymbolGlyph($r('sys.symbol.checkmark_circle'))
-                    .fontSize(16)
-                    .fontColor(['#4CAF50'])
-                  Text(`正确答案: ${prev.correct_answer}`)
-                    .fontSize(13)
-                    .fontColor('#4CAF50')
-                }
-                .width('100%')
-              }
-              .width('100%')
-            }
-          }
-        }, (_: EnglishQuizAnswerPayload | null) => 'result')
-      }
     }
     .width('100%')
   }
