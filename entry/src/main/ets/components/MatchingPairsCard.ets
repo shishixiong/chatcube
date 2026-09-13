@@ -1,6 +1,7 @@
 /**
  * MatchingPairsCard - 连一连配对互动卡片 (v2 连线版)
  *
+ * CardShell 统一外壳 (head/stem/feedback), direct 模式 (usesConfirm: false)。
  * 解析 toolCall.arguments 中的配对参数, 以游戏化方式展示:
  * - 双列布局: 左列原序, 右列种子化洗牌 (shuffleRightColumn)
  * - 列间"连线通道" (lane): 配对成功画一条彩色贝塞尔"电线" + 两端圆点,
@@ -29,6 +30,9 @@ import {
   shuffleRightColumn,
   validateAndNormalizeMatchingPairs
 } from '../utils/MatchingPairsGame'
+import { CardShell } from './cardshell/CardShell'
+import { CardShellConfig } from './cardshell/CardShellTypes'
+import { CardShellState } from './cardshell/CardShellState'
 
 interface MatchingPairsAnswerPayload {
   completed: boolean
@@ -91,6 +95,19 @@ export struct MatchingPairsCard {
   @Local prevTotal: number = 0
   @Local prevMistakes: number = 0
 
+  // CardShell 外壳配置/状态 (direct 模式: usesConfirm=false, 完成态由 state.submitted 驱动)
+  @Local shellConfig: CardShellConfig = {
+    title: '连一连',
+    subtitle: '',
+    icon: $r('sys.symbol.link'),
+    stem: '',
+    hasAudio: false,
+    usesConfirm: false,
+    feedbackTitleCorrect: '全部配对成功！',
+    correctAnswerLabel: ''
+  }
+  private shellState: CardShellState = new CardShellState()
+
   private wrongTimerId: number = -1
 
   private get themePrimary(): string {
@@ -134,9 +151,28 @@ export struct MatchingPairsCard {
         this.isCompleted = true
         // 已答态: 全部标记为已配对 (原序), 连线按原序配色
         this.matchedOrder = parsed.pairs
+        // 恢复路径同步 shell 终局状态 (按 hasWon)
+        this.shellState.submitted = true
+        this.shellState.isCorrect = this.hasWon()
+        this.shellState.feedbackTitle = this.getBannerTitle()
+        this.shellState.feedbackDetail = this.getBannerSub()
+        this.shellState.headPill = this.getStatusLabel()
+        this.shellState.headPillColor = this.getStatusColor()
       } catch (e) {
         console.warn('MatchingPairsCard', `failed to parse answeredPayload: ${(e as Error).message ?? String(e)}`)
       }
+    }
+
+    // 校验通过后重建 shell 配置 (subtitle/stem 依赖已解析的题面数据)
+    this.shellConfig = {
+      title: '连一连',
+      subtitle: this.getSubtitle(),
+      icon: $r('sys.symbol.link'),
+      stem: this.getInstructionText(),
+      hasAudio: false,
+      usesConfirm: false,
+      feedbackTitleCorrect: '全部配对成功！',
+      correctAnswerLabel: ''
     }
   }
 
@@ -328,6 +364,13 @@ export struct MatchingPairsCard {
       return
     }
     this.isCompleted = true
+    // 判胜同步 shell 终局状态 (反馈横幅 + 头部药丸)
+    this.shellState.submitted = true
+    this.shellState.isCorrect = true
+    this.shellState.feedbackTitle = this.getBannerTitle()
+    this.shellState.feedbackDetail = this.getBannerSub()
+    this.shellState.headPill = '已完成'
+    this.shellState.headPillColor = SUCCESS_GREEN
     const payload: MatchingPairsAnswerPayload = {
       completed: true,
       correct: this.originalPairs.length,
@@ -346,6 +389,13 @@ export struct MatchingPairsCard {
     }
     this.isCompleted = true
     this.gaveUp = true
+    // 放弃同步 shell 终局状态 —— 与 CategorizationCard 不同, 本卡放弃也显示反馈横幅 (保持原行为)
+    this.shellState.submitted = true
+    this.shellState.isCorrect = false
+    this.shellState.feedbackTitle = this.getBannerTitle()
+    this.shellState.feedbackDetail = this.getBannerSub()
+    this.shellState.headPill = '已放弃'
+    this.shellState.headPillColor = GIVEUP_ORANGE
     const payload: MatchingPairsAnswerPayload = {
       completed: false,
       correct: this.matchedOrder.length,
@@ -382,10 +432,6 @@ export struct MatchingPairsCard {
     return this.hasWon() ? SUCCESS_GREEN : GIVEUP_ORANGE
   }
 
-  private getBannerEmoji(): string {
-    return this.hasWon() ? '🎉' : '💪'
-  }
-
   private getBannerTitle(): string {
     if (this.hasWon()) {
       const misses = this.isAnswered ? this.prevMistakes : this.mistakes
@@ -402,32 +448,30 @@ export struct MatchingPairsCard {
   }
 
   build() {
-    Column({ space: 10 }) {
-      this.HeaderRow()
-
-      if (!this.quizOk) {
-        // 坏题兜底 (handler 已预校验拦截, 极少走到)
+    if (!this.quizOk) {
+      // 坏题兜底 (handler 已预校验拦截, 极少走到); 保留原卡片底色
+      Column() {
         Text(this.quizError !== '' ? this.quizError : '题目参数有误')
           .fontSize(13)
           .fontColor($r('app.color.status_error'))
           .width('100%')
           .padding(8)
-      } else {
-        // 玩法说明
-        Text(this.getInstructionText())
-          .fontSize(14)
-          .fontColor($r('app.color.text_secondary'))
-          .maxLines(2)
-          .width('100%')
-
-        // 双列配对区 (含连线通道)
+      }
+      .width('100%')
+      .padding(12)
+      .backgroundColor(this.themeAiBubble)
+      .borderRadius(12)
+      .border({ width: 1, color: $r('app.color.divider') })
+    } else {
+      CardShell({
+        config: this.shellConfig,
+        state: this.shellState,
+        isAnswered: false
+      }) {
         this.BoardArea()
-
         if (!this.isFinished()) {
           this.ProgressRow()
         }
-
-        // 放弃入口
         if (!this.isFinished()) {
           Row() {
             Text('不玩了')
@@ -439,55 +483,8 @@ export struct MatchingPairsCard {
             this.handleGiveUp()
           })
         }
-
-        // 结果反馈
-        if (this.isFinished()) {
-          this.ResultFeedback()
-        }
       }
     }
-    .width('100%')
-    .padding(12)
-    .backgroundColor(this.themeAiBubble)
-    .borderRadius(12)
-    .border({ width: 1, color: $r('app.color.divider') })
-  }
-
-  @Builder
-  HeaderRow() {
-    Row({ space: 8 }) {
-      Stack() {
-        Text('🔗')
-          .fontSize(14)
-      }
-      .width(28)
-      .height(28)
-      .borderRadius(14)
-      .backgroundColor(withColorAlpha(this.themePrimary, '18'))
-
-      Column({ space: 1 }) {
-        Text('连一连')
-          .fontSize(15)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-        Text(this.getSubtitle())
-          .fontSize(11)
-          .fontColor($r('app.color.text_tertiary'))
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-
-      if (this.isFinished()) {
-        Text(this.getStatusLabel())
-          .fontSize(10)
-          .fontColor(this.getStatusColor())
-          .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-          .borderRadius(9)
-          .border({ width: 1, color: withColorAlpha(this.getStatusColor(), '59') })
-      }
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Center)
   }
 
   @Builder
@@ -775,69 +772,5 @@ export struct MatchingPairsCard {
       return 2
     }
     return 1
-  }
-
-  @Builder
-  ResultFeedback() {
-    Column({ space: 8 }) {
-      // 结果横幅
-      Row({ space: 8 }) {
-        Text(this.getBannerEmoji())
-          .fontSize(22)
-        Column({ space: 2 }) {
-          Text(this.getBannerTitle())
-            .fontSize(14)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(this.hasWon() ? SUCCESS_GREEN : $r('app.color.text_primary'))
-          Text(this.getBannerSub())
-            .fontSize(11)
-            .fontColor($r('app.color.text_tertiary'))
-        }
-        .alignItems(HorizontalAlign.Start)
-        .layoutWeight(1)
-      }
-      .width('100%')
-      .padding(10)
-      .borderRadius(10)
-      .backgroundColor(withColorAlpha(this.hasWon() ? SUCCESS_GREEN : GIVEUP_ORANGE,
-        this.isDarkMode ? '18' : '0C'))
-      .border({
-        width: 1,
-        color: withColorAlpha(this.hasWon() ? SUCCESS_GREEN : GIVEUP_ORANGE,
-          this.isDarkMode ? '38' : '28')
-      })
-      .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
-
-      // 配对答案一览 (已答态, 圆点颜色与连线一致)
-      if (this.isAnswered) {
-        Column({ space: 6 }) {
-          ForEach(this.originalPairs, (pair: MatchingPair, index: number) => {
-            Row({ space: 6 }) {
-              Circle({ width: 6, height: 6 })
-                .fill(WIRE_COLORS[index % WIRE_COLORS.length])
-              Text(this.getLeftDisplay(pair))
-                .fontSize(13)
-                .fontColor($r('app.color.text_secondary'))
-              Text('—')
-                .fontSize(13)
-                .fontColor($r('app.color.text_tertiary'))
-              Text(this.getRightDisplay(pair))
-                .fontSize(13)
-                .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.text_primary'))
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-                .layoutWeight(1)
-            }
-            .width('100%')
-          }, (pair: MatchingPair) => pair.left + '_answer')
-        }
-        .width('100%')
-        .padding(8)
-        .borderRadius(8)
-        .backgroundColor(withColorAlpha(this.themePrimary, '0D'))
-      }
-    }
-    .width('100%')
   }
 }
