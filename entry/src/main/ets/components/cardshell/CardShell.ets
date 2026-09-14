@@ -43,6 +43,13 @@ export struct CardShell {
     return getAppUiState().themeAiBubble
   }
 
+  private get giveUpLabelText(): string {
+    if (this.config.giveUpLabel !== undefined && this.config.giveUpLabel !== '') {
+      return this.config.giveUpLabel
+    }
+    return CardShellCopy.GIVE_UP
+  }
+
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
   }
@@ -324,7 +331,7 @@ export struct CardShell {
     if (this.config.usesGiveUp === true && !this.state.isFinished && !this.isAnswered) {
       Row() {
         Blank()
-        Text(this.config.giveUpLabel ?? CardShellCopy.GIVE_UP)
+        Text(this.giveUpLabelText)
           .fontSize(12)
           .fontColor($r('app.color.text_tertiary'))
           .padding(8)
