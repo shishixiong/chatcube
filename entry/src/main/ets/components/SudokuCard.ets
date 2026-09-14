@@ -25,6 +25,9 @@ import {
   reconstructBoardFromPayload,
   gridSizeLabel
 } from '../utils/SudokuGenerator'
+import { CardShell } from './cardshell/CardShell'
+import { CardShellConfig, CardShellCopy } from './cardshell/CardShellTypes'
+import { CardShellState } from './cardshell/CardShellState'
 
 export interface SudokuResult {
   difficulty: number
@@ -74,9 +77,23 @@ export struct SudokuCard {
   @Local isGenerating: boolean = true
   @Local pressedDigitKey: number = -99 // -99 = none, -1 = erase, 1..N = digit
 
+  @Local shellConfig: CardShellConfig = {
+    title: '数独',
+    subtitle: '',
+    icon: $r('sys.symbol.dot_grid_2x2'),
+    stem: '',
+    hasAudio: false,
+    usesConfirm: false,
+    feedbackTitleCorrect: '太棒了！填好了',
+    correctAnswerLabel: '',
+    feedbackAboveSlot: true,
+    usesGiveUp: true,
+    giveUpLabel: ''
+  }
+  private shellState: CardShellState = new CardShellState()
+
   private timerId: number = -1
   private winPopTimerId: number = -1
-  private readonly SUCCESS_GREEN: string = '#22C55E'
   private readonly CONFLICT_RED: string = '#F87171'
 
   private get themePrimary(): string {
@@ -131,6 +148,40 @@ export struct SudokuCard {
     }
   }
 
+  // subtitle 依赖 parseArgs/parsePreviousResult 之后才稳定的 difficulty, 必须整体重赋值触发响应
+  private rebuildShellConfig(): void {
+    this.shellConfig = {
+      title: '数独',
+      subtitle: this.difficultyLabel,
+      icon: $r('sys.symbol.dot_grid_2x2'),
+      stem: '',
+      hasAudio: false,
+      usesConfirm: false,
+      feedbackTitleCorrect: '太棒了！填好了',
+      correctAnswerLabel: '',
+      feedbackAboveSlot: true,
+      usesGiveUp: true,
+      giveUpLabel: ''
+    }
+  }
+
+  // 外壳状态同步: 药丸门控 isCompleted 单条件(与迁移前一致, payload 解析失败不显示药丸);
+  // 横幅标题无 isAnswered 变体, feedbackTitle 恒 ''
+  private syncShellState(): void {
+    this.shellState.submitted = this.hasWon
+    this.shellState.isFinished = this.isCompleted
+    this.shellState.isCorrect = this.hasWon
+    this.shellState.feedbackTitle = ''
+    this.shellState.feedbackDetail = `${this.formatTime(this.elapsedSeconds)} · ${this.mistakeCount} 失误`
+    this.shellState.feedbackBadge = (this.isNewBestTime || this.isNewBestMistakes) ? '新纪录' : ''
+    if (this.isCompleted) {
+      this.shellState.headPill = this.hasWon ? '已完成' : '已放弃'
+      this.shellState.headPillColor = this.hasWon ? '#4CAF50' : '#FF9F43'
+    } else {
+      this.shellState.headPill = ''
+    }
+  }
+
   aboutToAppear(): void {
     const parsed = this.parseArgs()
     if (parsed !== null) {
@@ -147,6 +198,8 @@ export struct SudokuCard {
     } else if (parsed !== null) {
       this.startGame()
     }
+    this.rebuildShellConfig()
+    this.syncShellState()
     this.loadBestScores(this.difficulty)
   }
 
@@ -251,6 +304,9 @@ export struct SudokuCard {
       }
       this.isNewBestTime = isNewBestTime
       this.isNewBestMistakes = isNewBestMistakes
+      if (isNewBestTime || isNewBestMistakes) {
+        this.shellState.feedbackBadge = '新纪录'
+      }
     } catch (_e) {
       // ignore persistence errors
     }
@@ -444,6 +500,7 @@ export struct SudokuCard {
     }
     this.onAnswer(this.toolCall.id, JSON.stringify(result))
     this.saveBestScoresIfImproved()
+    this.syncShellState()
   }
 
   private triggerWinPop(): void {
@@ -480,6 +537,7 @@ export struct SudokuCard {
       completed: false
     }
     this.onAnswer(this.toolCall.id, JSON.stringify(result))
+    this.syncShellState()
   }
 
   private formatTime(seconds: number): string {
@@ -576,108 +634,18 @@ export struct SudokuCard {
   }
 
   build() {
-    Column({ space: this.largeSize ? 14 : 10 }) {
-      this.HeaderRow()
-
-      if (this.hasWon) {
-        this.WinBanner()
+    CardShell({
+      config: this.shellConfig,
+      state: this.shellState,
+      isAnswered: this.isAnswered,
+      largeSize: this.largeSize,
+      onGiveUp: () => {
+        this.handleGiveUp()
       }
-
+    }) {
       this.BoardPanel()
-
       this.StatsGrid()
-
-      this.ActionRow()
     }
-    .width('100%')
-    .padding(this.largeSize ? 20 : 14)
-    .backgroundColor(this.largeSize ? Color.Transparent : this.themeAiBubble)
-    .borderRadius(this.largeSize ? 0 : 14)
-    .border(this.largeSize
-      ? { width: 0, color: Color.Transparent, style: BorderStyle.Solid }
-      : { width: 1, color: $r('app.color.divider'), style: BorderStyle.Solid })
-  }
-
-  @Builder
-  HeaderRow() {
-    Row() {
-      Column() {
-        SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
-          .fontSize(15)
-          .fontColor([this.themePrimary])
-      }
-      .width(32)
-      .height(32)
-      .borderRadius(16)
-      .backgroundColor(withColorAlpha(this.themePrimary, '18'))
-      .justifyContent(FlexAlign.Center)
-
-      Column() {
-        Text('数独')
-          .fontSize(15)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-        Text(this.difficultyLabel)
-          .fontSize(11)
-          .fontColor($r('app.color.text_tertiary'))
-          .margin({ top: 2 })
-      }
-      .alignItems(HorizontalAlign.Start)
-      .margin({ left: 10 })
-      .layoutWeight(1)
-
-      if (this.isCompleted) {
-        Text(this.hasWon ? '已完成' : '已放弃')
-          .fontSize(10)
-          .fontColor(this.hasWon ? $r('app.color.status_success') : Color.White)
-          .backgroundColor(this.hasWon
-            ? withColorAlpha(this.SUCCESS_GREEN, this.isDarkMode ? '20' : '14')
-            : withColorAlpha('#FF9F43', this.isDarkMode ? '20' : '14'))
-          .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-          .borderRadius(10)
-      }
-    }
-    .width('100%')
-    .justifyContent(FlexAlign.Start)
-    .alignItems(VerticalAlign.Center)
-  }
-
-  @Builder
-  WinBanner() {
-    Row() {
-      Text('🎉')
-        .fontSize(26)
-        .margin({ right: 8 })
-
-      Column() {
-        Text('太棒了！填好了')
-          .fontSize(13)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.status_success'))
-        Text(`${this.formatTime(this.elapsedSeconds)} · ${this.mistakeCount} 失误`)
-          .fontSize(11)
-          .fontColor($r('app.color.text_secondary'))
-          .margin({ top: 2 })
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-
-      if (this.isNewBestTime || this.isNewBestMistakes) {
-        Text('新纪录')
-          .fontSize(10)
-          .fontColor(Color.White)
-          .backgroundColor(this.SUCCESS_GREEN)
-          .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-          .borderRadius(10)
-      }
-    }
-    .width('100%')
-    .padding(12)
-    .backgroundColor(withColorAlpha(this.SUCCESS_GREEN, this.isDarkMode ? '18' : '0C'))
-    .borderRadius(12)
-    .border({ width: 1, color: withColorAlpha(this.SUCCESS_GREEN, this.isDarkMode ? '38' : '28'), style: BorderStyle.Solid })
-    .justifyContent(FlexAlign.SpaceBetween)
-    .alignItems(VerticalAlign.Center)
   }
 
   @Builder
@@ -751,7 +719,7 @@ export struct SudokuCard {
           .width('100%')
           .height('100%')
           .borderRadius(4)
-          .border({ width: 2, color: this.SUCCESS_GREEN, style: BorderStyle.Solid })
+          .border({ width: 2, color: CardShellCopy.SUCCESS_GREEN, style: BorderStyle.Solid })
       }
     }
     .width(this.cellSize)
@@ -904,24 +872,9 @@ export struct SudokuCard {
     .border({
       width: 1,
       color: (isTime ? this.isNewBestTime : this.isNewBestMistakes)
-        ? withColorAlpha(this.SUCCESS_GREEN, '60')
+        ? withColorAlpha(CardShellCopy.SUCCESS_GREEN, '60')
         : withColorAlpha(this.themePrimary, this.isDarkMode ? '22' : '18'),
       style: BorderStyle.Solid
     })
-  }
-
-  @Builder
-  ActionRow() {
-    Row() {
-      if (!this.hasWon && !this.isAnswered && !this.isCompleted) {
-        Text('放弃本局')
-          .fontSize(12)
-          .fontColor($r('app.color.text_tertiary'))
-          .padding({ left: 8, right: 8, top: 8, bottom: 8 })
-          .onClick(() => this.handleGiveUp())
-      }
-    }
-    .width('100%')
-    .justifyContent(FlexAlign.End)
   }
 }
