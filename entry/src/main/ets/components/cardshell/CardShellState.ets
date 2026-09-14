@@ -26,4 +26,8 @@ export class CardShellState {
   @Trace headPill: string = ''
   /** 头部状态药丸背景色(#RRGGBB) */
   @Trace headPillColor: string = '#FF6B35'
+  /** 反馈横幅右侧徽章, 如 '新纪录'; '' 不渲染 */
+  @Trace feedbackBadge: string = ''
+  /** 整局结束(胜或弃), 驱动放弃动作隐藏; 与 submitted 分离——放弃时不显示横幅 */
+  @Trace isFinished: boolean = false
 }

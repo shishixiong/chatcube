@@ -1,7 +1,8 @@
 /**
  * CardShell - 互动卡片统一外壳
  *
- * 7 区固定顺序: head → stem → replay(可选) → slot(卡片自绘) → feedback → actions。
+ * 7 区固定顺序: head → [feedbackAboveSlot 时: celebration] → stem → replay(可选)
+ * → slot(卡片自绘) → [默认: feedback] → actions。
  * 卡片通过 config 声明静态配置, 通过 CardShellState 传递响应式状态,
  * 通过 @Event 接收确认/重试/重听。外壳不含任何游戏判定逻辑。
  *
@@ -31,6 +32,8 @@ export struct CardShell {
   @Event onConfirm: () => void = () => {}
   @Event onRetry: () => void = () => {}
   @Event onRequestReplay: () => void = () => {}
+  /** 放弃本局(棋盘卡); 带默认值, 不传的卡片零影响 */
+  @Event onGiveUp: () => void = () => {}
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
@@ -40,13 +43,22 @@ export struct CardShell {
     return getAppUiState().themeAiBubble
   }
 
+  private get isDarkMode(): boolean {
+    return getAppUiState().isDarkMode
+  }
+
   build() {
     Column({ space: 10 }) {
       this.HeadRegion()
+      if (this.config.feedbackAboveSlot === true) {
+        this.CelebrationRegion()
+      }
       this.StemRegion()
       this.ReplayRegion()
       this.slot()
-      this.FeedbackRegion()
+      if (this.config.feedbackAboveSlot !== true) {
+        this.FeedbackRegion()
+      }
       this.ActionsRegion()
     }
     .width('100%')
@@ -168,6 +180,50 @@ export struct CardShell {
     }
   }
 
+  // ================ celebration: 棋盘卡庆祝横幅(feedbackAboveSlot) ====
+  // 门控仅看 submitted(不含 isAnswered): 放弃局及放弃局的历史恢复都不显示横幅,
+  // 与迁移前三卡的 if (hasWon) 门控一致; 恢复路径由卡片按 hasWon 写 submitted。
+  @Builder
+  CelebrationRegion() {
+    if (this.state.submitted) {
+      Row({ space: 10 }) {
+        Text('🎉')
+          .fontSize(26)
+        Column() {
+          Text(this.state.feedbackTitle !== '' ? this.state.feedbackTitle : this.config.feedbackTitleCorrect)
+            .fontSize(15)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.status_success'))
+          if (this.state.feedbackDetail !== '') {
+            Text(this.state.feedbackDetail)
+              .fontSize(12)
+              .fontColor($r('app.color.text_secondary'))
+              .margin({ top: 2 })
+          }
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        if (this.state.feedbackBadge !== '') {
+          Text(this.state.feedbackBadge)
+            .fontSize(10)
+            .fontColor(Color.White)
+            .backgroundColor(CardShellCopy.SUCCESS_GREEN)
+            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+            .borderRadius(6)
+        }
+      }
+      .width('100%')
+      .padding(12)
+      .backgroundColor(withColorAlpha(CardShellCopy.SUCCESS_GREEN, this.isDarkMode ? '18' : '0C'))
+      .borderRadius(12)
+      .border({
+        width: 1,
+        color: withColorAlpha(CardShellCopy.SUCCESS_GREEN, this.isDarkMode ? '38' : '28'),
+        style: BorderStyle.Solid
+      })
+    }
+  }
+
   // ================ feedback: 对/错统一横幅 ========================
   @Builder
   FeedbackRegion() {
@@ -264,6 +320,19 @@ export struct CardShell {
       .onClick(() => {
         this.onConfirm()
       })
+    }
+    if (this.config.usesGiveUp === true && !this.state.isFinished && !this.isAnswered) {
+      Row() {
+        Blank()
+        Text(this.config.giveUpLabel ?? CardShellCopy.GIVE_UP)
+          .fontSize(12)
+          .fontColor($r('app.color.text_tertiary'))
+          .padding(8)
+          .onClick(() => {
+            this.onGiveUp()
+          })
+      }
+      .width('100%')
     }
   }
 }

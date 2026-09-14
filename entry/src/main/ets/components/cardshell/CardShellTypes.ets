@@ -23,6 +23,12 @@ export interface CardShellConfig {
   feedbackTitleCorrect: string
   /** 答错反馈的正确答案前缀, 如 '正确答案' / '正确读音' */
   correctAnswerLabel: string
+  /** true 时反馈横幅渲染在 head 之后、slot 之前(棋盘卡庆祝横幅位); 默认 false */
+  feedbackAboveSlot?: boolean
+  /** true 时 actions 区渲染放弃文字链; 默认 false */
+  usesGiveUp?: boolean
+  /** 放弃文字链文案覆写; '' 或不传用 CardShellCopy.GIVE_UP('放弃本局') */
+  giveUpLabel?: string
 }
 
 /** 统一交互文案 — spec §6 文案表的唯一落地处 */
@@ -34,4 +40,7 @@ export class CardShellCopy {
   static readonly REPLAY_HINT: string = '点一下，再听一遍'
   static readonly PLAYING_HINT: string = '正在播放题目音频'
   static readonly FEEDBACK_CORRECT: string = '答对啦！真棒！'
+  static readonly GIVE_UP: string = '放弃本局'
+  /** WinBanner / 新纪录 / best-stat 共用成功绿 (Tailwind green-500) */
+  static readonly SUCCESS_GREEN: string = '#22C55E'
 }
