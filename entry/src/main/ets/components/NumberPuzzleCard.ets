@@ -6,7 +6,7 @@
  * - 空位: 虚线轮廓 + 极淡填充, 引导孩子发现"洞"
  * - 计时/步数: 双卡片网格 + 最佳成绩 (持久化到 PreferencesService)
  * - 完成态: 庆祝横幅 + 错位高亮 + 新纪录徽章
- * - 操作: 精简为"放弃本局"文字链, 不再占据 50% 宽度
+ * - 外壳: 迁移到 CardShell 统一外壳 (头部/庆祝横幅/放弃链), 卡片自绘棋盘与统计区
  *
  * 公共 API 保持稳定: toolCall / isAnswered / answeredPayload / largeSize / onAnswer,
  * 以及导出的 NumberPuzzleResult 接口. 内部行为增强, 调用方零改动.
@@ -16,6 +16,9 @@ import { ToolCall } from '../models/ChatModels'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { getPreferencesService, PreferenceKeys } from '../services/PreferencesService'
+import { CardShell } from './cardshell/CardShell'
+import { CardShellConfig, CardShellCopy } from './cardshell/CardShellTypes'
+import { CardShellState } from './cardshell/CardShellState'
 
 export interface NumberPuzzleResult {
   difficulty: number
@@ -49,17 +52,26 @@ export struct NumberPuzzleCard {
   // 防止在 loadBestScores 完成前 saveBestScoresIfImproved 用 stale -1 覆盖已有最佳成绩
   @Local bestScoresLoaded: boolean = false
 
+  @Local shellConfig: CardShellConfig = {
+    title: '数字华容道',
+    subtitle: '',
+    icon: $r('sys.symbol.lightbulb'),
+    stem: '',
+    hasAudio: false,
+    usesConfirm: false,
+    feedbackTitleCorrect: '太棒了！拼好了',
+    correctAnswerLabel: '',
+    feedbackAboveSlot: true,
+    usesGiveUp: true,
+    giveUpLabel: ''
+  }
+  private shellState: CardShellState = new CardShellState()
+
   private timerId: number = -1
   private winPopTimerId: number = -1
-  // WinBanner / "新纪录" / best-stat 边框共用的成功绿 (Tailwind green-500, 与琥珀 tile 调色板协调)
-  private readonly SUCCESS_GREEN: string = '#22C55E'
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
-  }
-
-  private get themeAiBubble(): string {
-    return getAppUiState().themeAiBubble
   }
 
   private get isDarkMode(): boolean {
@@ -120,6 +132,39 @@ export struct NumberPuzzleCard {
     }
   }
 
+  // subtitle 依赖 parseDifficulty/parsePreviousResult 之后才稳定的 gridSize, 必须整体重赋值触发响应
+  private rebuildShellConfig(): void {
+    this.shellConfig = {
+      title: '数字华容道',
+      subtitle: this.difficultyLabel,
+      icon: $r('sys.symbol.lightbulb'),
+      stem: '',
+      hasAudio: false,
+      usesConfirm: false,
+      feedbackTitleCorrect: '太棒了！拼好了',
+      correctAnswerLabel: '',
+      feedbackAboveSlot: true,
+      usesGiveUp: true,
+      giveUpLabel: ''
+    }
+  }
+
+  // 外壳状态同步: submitted=hasWon(胜才显示庆祝横幅), isFinished=isCompleted(隐藏放弃链)
+  private syncShellState(): void {
+    this.shellState.submitted = this.hasWon
+    this.shellState.isFinished = this.isCompleted
+    this.shellState.isCorrect = this.hasWon
+    this.shellState.feedbackTitle = this.isAnswered ? '已完成' : ''
+    this.shellState.feedbackDetail = `${this.formatTime(this.elapsedSeconds)} · ${this.moveCount} 步`
+    this.shellState.feedbackBadge = this.isNewBest ? '新纪录' : ''
+    if (this.isAnswered || this.isCompleted) {
+      this.shellState.headPill = this.hasWon ? '已完成' : '已放弃'
+      this.shellState.headPillColor = this.hasWon ? '#4CAF50' : '#FF9F43'
+    } else {
+      this.shellState.headPill = ''
+    }
+  }
+
   aboutToAppear(): void {
     this.parseDifficulty()
     if (this.isAnswered) {
@@ -127,6 +172,8 @@ export struct NumberPuzzleCard {
     } else {
       this.shuffleGameBoard()
     }
+    this.rebuildShellConfig()
+    this.syncShellState()
     this.loadBestScores(this.gridSize)
   }
 
@@ -206,6 +253,9 @@ export struct NumberPuzzleCard {
         this.bestMoves = this.moveCount
       }
       this.isNewBest = isNewBestTime || isNewBestMoves
+      if (this.isNewBest) {
+        this.shellState.feedbackBadge = '新纪录'
+      }
     } catch (_e) {
       // ignore persistence errors
     }
@@ -359,6 +409,7 @@ export struct NumberPuzzleCard {
 
     // Fire-and-forget: persist best scores in background
     this.saveBestScoresIfImproved()
+    this.syncShellState()
   }
 
   private triggerWinPop(): void {
@@ -395,6 +446,7 @@ export struct NumberPuzzleCard {
       completed: false
     }
     this.onAnswer(this.toolCall.id, JSON.stringify(result))
+    this.syncShellState()
   }
 
   private updateAnim(index: number): TransitionEffect | undefined {
@@ -483,7 +535,7 @@ export struct NumberPuzzleCard {
 
   private getStatCardBorderColor(): ResourceColor {
     if (this.isNewBest) {
-      return withColorAlpha(this.SUCCESS_GREEN, '60')
+      return withColorAlpha(CardShellCopy.SUCCESS_GREEN, '60')
     }
     return withColorAlpha(this.themePrimary, this.isDarkMode ? '22' : '18')
   }
@@ -507,106 +559,18 @@ export struct NumberPuzzleCard {
   }
 
   build() {
-    Column({ space: this.largeSize ? 14 : 10 }) {
-      this.HeaderRow()
-
-      if (this.hasWon) {
-        this.WinBanner()
+    CardShell({
+      config: this.shellConfig,
+      state: this.shellState,
+      isAnswered: this.isAnswered,
+      largeSize: this.largeSize,
+      onGiveUp: () => {
+        this.handleGiveUp()
       }
-
+    }) {
       this.BoardPanel()
-
       this.StatsGrid()
-
-      this.ActionRow()
     }
-    .width('100%')
-    .padding(this.largeSize ? 20 : 14)
-    .backgroundColor(this.largeSize ? Color.Transparent : this.themeAiBubble)
-    .borderRadius(this.largeSize ? 0 : 14)
-    .border(this.largeSize
-      ? { width: 0, color: Color.Transparent, style: BorderStyle.Solid }
-      : { width: 1, color: $r('app.color.divider'), style: BorderStyle.Solid })
-  }
-
-  @Builder
-  HeaderRow() {
-    Row() {
-      // 圆形徽章里的灯泡
-      Column() {
-        SymbolGlyph($r('sys.symbol.lightbulb'))
-          .fontSize(15)
-          .fontColor([this.themePrimary])
-      }
-      .width(32)
-      .height(32)
-      .borderRadius(16)
-      .backgroundColor(withColorAlpha(this.themePrimary, '18'))
-      .justifyContent(FlexAlign.Center)
-
-      Column() {
-        Text('数字华容道')
-          .fontSize(15)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-        Text(this.difficultyLabel)
-          .fontSize(11)
-          .fontColor($r('app.color.text_tertiary'))
-          .margin({ top: 2 })
-      }
-      .alignItems(HorizontalAlign.Start)
-      .margin({ left: 10 })
-
-      Blank()
-
-      if (this.isAnswered || this.isCompleted) {
-        Text(this.hasWon ? '已完成' : '已放弃')
-          .fontSize(10)
-          .fontColor(Color.White)
-          .backgroundColor(this.hasWon ? $r('app.color.status_success') : '#FF9F43')
-          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-          .borderRadius(6)
-      }
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Center)
-  }
-
-  @Builder
-  WinBanner() {
-    Row({ space: 10 }) {
-      Text('🎉')
-        .fontSize(26)
-      Column() {
-        Text(this.isAnswered ? '已完成' : '太棒了！拼好了')
-          .fontSize(15)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.status_success'))
-        Text(`${this.formatTime(this.elapsedSeconds)} · ${this.moveCount} 步`)
-          .fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
-          .margin({ top: 2 })
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-      if (this.isNewBest) {
-        Text('新纪录')
-          .fontSize(10)
-          .fontColor(Color.White)
-          .backgroundColor($r('app.color.status_success'))
-          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-          .borderRadius(6)
-      }
-    }
-    .width('100%')
-    .padding(12)
-    .backgroundColor(withColorAlpha(this.SUCCESS_GREEN, this.isDarkMode ? '18' : '0C'))
-    .borderRadius(12)
-    .border({
-      width: 1,
-      color: withColorAlpha(this.SUCCESS_GREEN, this.isDarkMode ? '38' : '28'),
-      style: BorderStyle.Solid
-    })
   }
 
   @Builder
@@ -775,20 +739,5 @@ export struct NumberPuzzleCard {
       style: BorderStyle.Solid
     })
     .animation({ duration: 600, curve: Curve.EaseInOut })
-  }
-
-  @Builder
-  ActionRow() {
-    Row() {
-      Blank()
-      if (!this.hasWon && !this.isAnswered && !this.isCompleted) {
-        Text('放弃本局')
-          .fontSize(12)
-          .fontColor($r('app.color.text_tertiary'))
-          .padding(8)
-          .onClick(() => this.handleGiveUp())
-      }
-    }
-    .width('100%')
   }
 }
