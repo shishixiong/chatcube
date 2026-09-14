@@ -33,6 +33,9 @@ import {
   getGridSizeLabel,
   getGridDimensions
 } from '../utils/MazeGame'
+import { CardShell } from './cardshell/CardShell'
+import { CardShellConfig, CardShellCopy } from './cardshell/CardShellTypes'
+import { CardShellState } from './cardshell/CardShellState'
 
 // 滑动手势触发阈值 (vp), 与 NumberPuzzleCard 保持一致
 const SWIPE_MIN_OFFSET: number = 10
@@ -93,12 +96,22 @@ export struct MazeCard {
   @Local visitedKeys: Set<string> = new Set<string>()
   @Local hintKeys: Set<string> = new Set<string>()
 
-  private timerId: number = -1
-  private static readonly SUCCESS_GREEN: string = '#22C55E'
-
-  private get themeAiBubble(): string {
-    return getAppUiState().themeAiBubble
+  @Local shellConfig: CardShellConfig = {
+    title: '走迷宫',
+    subtitle: '',
+    icon: $r('sys.symbol.map'),
+    stem: '',
+    hasAudio: false,
+    usesConfirm: false,
+    feedbackTitleCorrect: '走出迷宫！',
+    correctAnswerLabel: '',
+    feedbackAboveSlot: true,
+    usesGiveUp: true,
+    giveUpLabel: ''
   }
+  private shellState: CardShellState = new CardShellState()
+
+  private timerId: number = -1
 
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
@@ -196,8 +209,47 @@ export struct MazeCard {
     return `${diffLabel} · ${sizeLabel}`
   }
 
+  // subtitle 依赖 parseAndInitialize 之后才稳定的 difficulty, 必须整体重赋值触发响应
+  private rebuildShellConfig(): void {
+    this.shellConfig = {
+      title: '走迷宫',
+      subtitle: this.difficultyLabel,
+      icon: $r('sys.symbol.map'),
+      stem: '',
+      hasAudio: false,
+      usesConfirm: false,
+      feedbackTitleCorrect: '走出迷宫！',
+      correctAnswerLabel: '',
+      feedbackAboveSlot: true,
+      usesGiveUp: true,
+      giveUpLabel: '走不出去了？换一局 →'
+    }
+  }
+
+  // 外壳状态同步: submitted=hasWon, isFinished=isCompleted; 明细带胡萝卜收集后缀
+  private syncShellState(): void {
+    this.shellState.submitted = this.hasWon
+    this.shellState.isFinished = this.isCompleted
+    this.shellState.isCorrect = this.hasWon
+    this.shellState.feedbackTitle = this.isAnswered ? '已完成' : ''
+    let detail: string = `${this.formatTime(this.elapsedSeconds)} · ${this.moveCount} 步`
+    if (this.maze !== null && this.maze.starsTotal > 0) {
+      detail += ` · 🥕${this.starsCollected}/${this.maze.starsTotal}`
+    }
+    this.shellState.feedbackDetail = detail
+    this.shellState.feedbackBadge = this.isNewBest ? '新纪录' : ''
+    if (this.isAnswered || this.isCompleted) {
+      this.shellState.headPill = this.hasWon ? '已完成' : '已放弃'
+      this.shellState.headPillColor = this.hasWon ? '#4CAF50' : '#FF9F43'
+    } else {
+      this.shellState.headPill = ''
+    }
+  }
+
   aboutToAppear(): void {
     this.parseAndInitialize()
+    this.rebuildShellConfig()
+    this.syncShellState()
   }
 
   aboutToDisappear(): void {
@@ -346,6 +398,7 @@ export struct MazeCard {
       this.bestTimeSeconds = Math.min(this.bestTimeSeconds < 0 ? timeSec : this.bestTimeSeconds, timeSec)
       this.bestMoves = Math.min(this.bestMoves < 0 ? moves : this.bestMoves, moves)
       this.bestStars = Math.max(this.bestStars < 0 ? stars : this.bestStars, stars)
+      this.shellState.feedbackBadge = '新纪录'
     }
   }
 
@@ -566,6 +619,7 @@ export struct MazeCard {
       this.elapsedSeconds, this.moveCount, this.starsCollected
     )
     this.onAnswer(this.toolCall.id, JSON.stringify(result))
+    this.syncShellState()
   }
 
   private handleGiveUp(): void {
@@ -587,6 +641,7 @@ export struct MazeCard {
       completed: false
     }
     this.onAnswer(this.toolCall.id, JSON.stringify(result))
+    this.syncShellState()
   }
 
   private formatTime(seconds: number): string {
@@ -599,105 +654,34 @@ export struct MazeCard {
   }
 
   build() {
-    Column({ space: this.largeSize ? 14 : 10 }) {
-      this.HeaderRow()
-
-      if (this.hasWon) {
-        this.WinBanner()
+    CardShell({
+      config: this.shellConfig,
+      state: this.shellState,
+      isAnswered: this.isAnswered,
+      largeSize: this.largeSize,
+      onGiveUp: () => {
+        this.handleGiveUp()
       }
-
+    }) {
       this.MazePanel()
-
       this.StatsGrid()
-
-      this.ActionRow()
+      this.HintCaption()
     }
-    .width('100%')
-    .padding(this.largeSize ? 20 : 14)
-    .backgroundColor(this.largeSize ? Color.Transparent : this.themeAiBubble)
-    .borderRadius(this.largeSize ? 0 : 14)
-    .border(this.largeSize
-      ? { width: 0, color: Color.Transparent, style: BorderStyle.Solid }
-      : { width: 1, color: $r('app.color.divider'), style: BorderStyle.Solid })
   }
 
+  // 放弃后的路线提示行 — 原操作区的 else 分支, 留 slot(Shell actions 区只渲染放弃链)
   @Builder
-  HeaderRow() {
-    Row() {
-      Column() {
-        SymbolGlyph($r('sys.symbol.map'))
-          .fontSize(15)
-          .fontColor([this.themeAiBubble === '#FFFDF8' ? '#FF9F43' : this.themeAiBubble])
-      }
-      .width(32)
-      .height(32)
-      .borderRadius(16)
-      .backgroundColor(withColorAlpha('#FF9F43', '18'))
-      .justifyContent(FlexAlign.Center)
-
-      Column() {
-        Text('走迷宫')
-          .fontSize(15)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-        Text(this.difficultyLabel)
-          .fontSize(11)
-          .fontColor($r('app.color.text_tertiary'))
-          .margin({ top: 2 })
-      }
-      .alignItems(HorizontalAlign.Start)
-      .margin({ left: 10 })
-
-      Blank()
-
-      if (this.isAnswered || this.isCompleted) {
-        Text(this.hasWon ? '已完成' : '已放弃')
-          .fontSize(10)
-          .fontColor(Color.White)
-          .backgroundColor(this.hasWon ? $r('app.color.status_success') : '#FF9F43')
-          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-          .borderRadius(6)
-      }
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Center)
-  }
-
-  @Builder
-  WinBanner() {
-    Row({ space: 10 }) {
-      Text('🎉')
-        .fontSize(26)
-      Column() {
-        Text(this.isAnswered ? '已完成' : '走出迷宫！')
-          .fontSize(15)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.status_success'))
-        Text(`${this.formatTime(this.elapsedSeconds)} · ${this.moveCount} 步${this.maze !== null && this.maze.starsTotal > 0 ? ' · 🥕' + this.starsCollected + '/' + this.maze.starsTotal : ''}`)
+  HintCaption() {
+    if (!this.hasWon && this.hintKeys.size > 0) {
+      Row() {
+        Blank()
+        Text('💡 绿色格子就是正确路线')
           .fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
-          .margin({ top: 2 })
+          .fontColor($r('app.color.text_tertiary'))
+          .padding(8)
       }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-      if (this.isNewBest) {
-        Text('新纪录')
-          .fontSize(10)
-          .fontColor(Color.White)
-          .backgroundColor($r('app.color.status_success'))
-          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-          .borderRadius(6)
-      }
+      .width('100%')
     }
-    .width('100%')
-    .padding(12)
-    .backgroundColor(withColorAlpha(MazeCard.SUCCESS_GREEN, this.isDarkMode ? '18' : '0C'))
-    .borderRadius(12)
-    .border({
-      width: 1,
-      color: withColorAlpha(MazeCard.SUCCESS_GREEN, this.isDarkMode ? '38' : '28'),
-      style: BorderStyle.Solid
-    })
   }
 
   @Builder
@@ -788,7 +772,7 @@ export struct MazeCard {
           .width(this.cellSize - 8)
           .height(this.cellSize - 8)
           .borderRadius(this.cellSize * 0.2)
-          .backgroundColor(withColorAlpha(MazeCard.SUCCESS_GREEN, this.isDarkMode ? '30' : '22'))
+          .backgroundColor(withColorAlpha(CardShellCopy.SUCCESS_GREEN, this.isDarkMode ? '30' : '22'))
           .position({ x: 4, y: 4 })
       }
 
@@ -942,7 +926,7 @@ export struct MazeCard {
       .border({
         width: 1,
         color: this.isNewBest
-          ? withColorAlpha(MazeCard.SUCCESS_GREEN, '60')
+          ? withColorAlpha(CardShellCopy.SUCCESS_GREEN, '60')
           : withColorAlpha(this.wallColor, this.isDarkMode ? '28' : '1C'),
         style: BorderStyle.Solid
       })
@@ -973,7 +957,7 @@ export struct MazeCard {
       .border({
         width: 1,
         color: this.isNewBest
-          ? withColorAlpha(MazeCard.SUCCESS_GREEN, '60')
+          ? withColorAlpha(CardShellCopy.SUCCESS_GREEN, '60')
           : withColorAlpha('#B45309', this.isDarkMode ? '28' : '1C'),
         style: BorderStyle.Solid
       })
@@ -1006,32 +990,10 @@ export struct MazeCard {
       .border({
         width: 1,
         color: this.isNewBest
-          ? withColorAlpha(MazeCard.SUCCESS_GREEN, '60')
+          ? withColorAlpha(CardShellCopy.SUCCESS_GREEN, '60')
           : withColorAlpha('#FF9F43', this.isDarkMode ? '22' : '18'),
         style: BorderStyle.Solid
       })
-    }
-    .width('100%')
-  }
-
-  @Builder
-  ActionRow() {
-    Row() {
-      Blank()
-      if (!this.hasWon && !this.isAnswered && !this.isCompleted) {
-        Text('走不出去了？换一局 →')
-          .fontSize(12)
-          .fontColor($r('app.color.text_tertiary'))
-          .padding(8)
-          .onClick((): void => {
-            this.handleGiveUp()
-          })
-      } else if (!this.hasWon && this.hintKeys.size > 0) {
-        Text('💡 绿色格子就是正确路线')
-          .fontSize(12)
-          .fontColor($r('app.color.text_tertiary'))
-          .padding(8)
-      }
     }
     .width('100%')
   }
