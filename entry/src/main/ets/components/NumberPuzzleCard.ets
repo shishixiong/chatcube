@@ -99,11 +99,11 @@ export struct NumberPuzzleCard {
       }
     }
     switch (this.gridSize) {
-      case 2: return 68
-      case 3: return 60
-      case 4: return 48
-      case 5: return 42
-      default: return 60
+      case 2: return 80
+      case 3: return 68
+      case 4: return 54
+      case 5: return 44
+      default: return 68
     }
   }
 
