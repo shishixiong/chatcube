@@ -57,6 +57,10 @@ export struct KidsHomeView {
   @Local starByDay: Map<string, number> = new Map()
   @Local showGateSheet: boolean = false
   @Local showStarDetailSheet: boolean = false
+  /** 按压反馈（spec §7: scale 0.98 + 60-80ms）: hero 卡 */
+  @Local heroPressed: boolean = false
+  /** 按压反馈: 当前按下的学科卡 id（'' = 无） */
+  @Local pressedSubjectId: string = ''
 
   @Monitor('starRefreshTick')
   onStarRefreshTickChanged(): void {
@@ -381,6 +385,15 @@ export struct KidsHomeView {
     .clip(true)
     .linearGradient({ angle: 135, colors: [[KIDS_ACCENT, 0], [KIDS_ACCENT_2, 1]] })
     .shadow({ radius: 28, color: '#66FF9F43', offsetY: 10 })
+    .scale(this.heroPressed ? { x: 0.98, y: 0.98 } : { x: 1, y: 1 })
+    .animation({ duration: 70, curve: Curve.EaseOut })
+    .onTouch((e: TouchEvent): void => {
+      if (e.type === TouchType.Down) {
+        this.heroPressed = true
+      } else if (e.type === TouchType.Up || e.type === TouchType.Cancel) {
+        this.heroPressed = false
+      }
+    })
     .onClick((): void => {
       // 一天一会话: 已有今日会话 -> 续接; 否则开新会话
       const today: ChatSession | null = this.todaySession()
@@ -481,6 +494,15 @@ export struct KidsHomeView {
     .border({ width: 1, color: KIDS_BORDER })
     .shadow({ radius: 8, color: '#1424211C', offsetY: 3 })
     .accessibilityText(`打开${item.label}`)
+    .scale(this.pressedSubjectId === item.id ? { x: 0.98, y: 0.98 } : { x: 1, y: 1 })
+    .animation({ duration: 70, curve: Curve.EaseOut })
+    .onTouch((e: TouchEvent): void => {
+      if (e.type === TouchType.Down) {
+        this.pressedSubjectId = item.id
+      } else if (e.type === TouchType.Up || e.type === TouchType.Cancel) {
+        this.pressedSubjectId = ''
+      }
+    })
     .onClick((): void => {
       this.onNewChat(item.startPrompt, item.assistantId)
     })

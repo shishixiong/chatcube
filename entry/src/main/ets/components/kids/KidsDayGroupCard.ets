@@ -28,6 +28,8 @@ export struct KidsDayGroupCard {
   @Param starBySession: Map<string, number> = new Map()
   @Event onOpenSession: (sessionId: string) => void = () => {}
   @Local expanded: boolean = false
+  /** 按压反馈（spec §7: 记录行 scale 0.98 + 60-80ms）: 当前按下的会话 id（'' = 无） */
+  @Local pressedSessionId: string = ''
 
   private visibleSessions(): ChatSession[] {
     if (this.expanded || this.group.sessions.length <= DAY_COLLAPSE_LIMIT) {
@@ -150,6 +152,15 @@ export struct KidsDayGroupCard {
     .border(showTopBorder ?
       { width: { top: 1 }, color: KIDS_BORDER } :
       { width: { top: 0 }, color: Color.Transparent })
+    .scale(this.pressedSessionId === session.id ? { x: 0.98, y: 0.98 } : { x: 1, y: 1 })
+    .animation({ duration: 70, curve: Curve.EaseOut })
+    .onTouch((e: TouchEvent): void => {
+      if (e.type === TouchType.Down) {
+        this.pressedSessionId = session.id
+      } else if (e.type === TouchType.Up || e.type === TouchType.Cancel) {
+        this.pressedSessionId = ''
+      }
+    })
     .onClick((): void => {
       this.onOpenSession(session.id)
     })
