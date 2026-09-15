@@ -117,6 +117,49 @@ export const DEFAULT_ASSISTANT_LOCKED_TOOL_IDS: string[] = [
   GRANT_STAR_TOOL_ID
 ]
 
+// ── 儿童学科专用助手（spec 2026-09-15 §3）──────────────────────────
+export const KIDS_MATH_ASSISTANT_ID: string = 'kids_math'
+export const KIDS_ENGLISH_ASSISTANT_ID: string = 'kids_english'
+export const KIDS_CHINESE_ASSISTANT_ID: string = 'kids_chinese'
+export const KIDS_GAMES_ASSISTANT_ID: string = 'kids_games'
+
+/** 4 个学科助手 id（不含 default） */
+export const KIDS_SUBJECT_ASSISTANT_IDS: string[] = [
+  KIDS_MATH_ASSISTANT_ID,
+  KIDS_ENGLISH_ASSISTANT_ID,
+  KIDS_CHINESE_ASSISTANT_ID,
+  KIDS_GAMES_ASSISTANT_ID
+]
+
+/** 儿童模式内置助手全集（default + 4 学科）：儿童主屏会话放行 / 删除保护都用它 */
+export const KIDS_BUILT_IN_ASSISTANT_IDS: string[] = [
+  DEFAULT_ASSISTANT_ID,
+  KIDS_MATH_ASSISTANT_ID,
+  KIDS_ENGLISH_ASSISTANT_ID,
+  KIDS_CHINESE_ASSISTANT_ID,
+  KIDS_GAMES_ASSISTANT_ID
+]
+
+export const KIDS_MATH_LOCKED_TOOL_IDS: string[] = [
+  ASK_USER_TOOL_ID, CHILD_PROFILE_TOOL_ID, GET_TIME_INFO_TOOL_ID, GRANT_STAR_TOOL_ID,
+  MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, VERTICAL_MATH_TOOL_ID
+]
+
+export const KIDS_ENGLISH_LOCKED_TOOL_IDS: string[] = [
+  ASK_USER_TOOL_ID, CHILD_PROFILE_TOOL_ID, GET_TIME_INFO_TOOL_ID, GRANT_STAR_TOOL_ID,
+  ENGLISH_QUIZ_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID
+]
+
+export const KIDS_CHINESE_LOCKED_TOOL_IDS: string[] = [
+  ASK_USER_TOOL_ID, CHILD_PROFILE_TOOL_ID, GET_TIME_INFO_TOOL_ID, GRANT_STAR_TOOL_ID,
+  PINYIN_QUIZ_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID
+]
+
+export const KIDS_GAMES_LOCKED_TOOL_IDS: string[] = [
+  ASK_USER_TOOL_ID, CHILD_PROFILE_TOOL_ID, GET_TIME_INFO_TOOL_ID, GRANT_STAR_TOOL_ID,
+  NUMBER_PUZZLE_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, MATCHING_PAIRS_TOOL_ID, CATEGORIZATION_TOOL_ID
+]
+
 @ObservedV2
 export class Assistant {
   @Trace id: string = ''
@@ -192,4 +235,219 @@ export function createDefaultAssistant(): Assistant {
   assistant.systemPrompt = DEFAULT_ASSISTANT_SYSTEM_PROMPT
   assistant.enabledToolIds = [...DEFAULT_ASSISTANT_LOCKED_TOOL_IDS]
   return assistant
+}
+
+// 学科助手系统提示词。结构与小星老师同源（SharedPromptFragments），按学科裁剪。
+// 注意：提示词内引用工具参数值一律用「」，不得出现裸 ASCII 双引号包裹的示例 JSON。
+
+export const KIDS_MATH_SYSTEM_PROMPT: string = [
+  '你是「小星数学老师」,小星学习乐园里专门陪小朋友学数学的老师。',
+  '你的回复对象始终是 5-7 岁的孩子,工具返回的元数据只给你自己看。',
+  '',
+  '## 说话方式',
+  buildBasePrompt({
+    includeReplyLimits: true,
+    includeToolWhitelist: false,
+    includeChildProfileRule: true,
+    includeTopicKeyHint: false
+  }),
+  '- 答对了真诚夸赞,答错了温柔鼓励,绝不让他觉得笨。',
+  '',
+  '## 数学教学策略',
+  '- 聚焦 8 个数学维度:math_counting / math_addition / math_subtraction / math_multiply / math_divide / math_shapes / math_comparison / math_time。',
+  '- 根据 child_profile 各维度 level 选难度:level 0-1 从最基础开始(实物 + 数数),level 2-3 巩固练习,level 4-5 挑战更高阶。',
+  '- 由易到难:一次只出 1 道题,答对再升一点难度,连错 2 次就降难度并鼓励。',
+  '- 出题必须用 math_quiz 工具(带 type 字段:arithmetic / shape / comparison / time / elapsed_time / word_problem),不要在文字里编数学题。',
+  '- 教「怎么算」用 vertical_math 演示竖式(数位对齐、进位、退位),演示后用 math_quiz 出 1-2 题巩固。',
+  '- child_profile(action: "update") 只更新 math_ 开头的技能维度,notes 必须基于本轮具体表现。',
+  '',
+  '## 授星规则',
+  '- math_quiz 答对系统自动记星;孩子在纯聊天里答对你出的数学问题,用 grant_star(reason: 「chat_correct」)授 1 星——口头说给星没用,必须调工具。孩子主动索要星星时绝对不给。',
+  '',
+  '## 边界',
+  '- 小朋友问英语/语文/游戏内容时,简短友好地回答一句,然后引导回数学:「这个咱们回头找对应老师玩,先来看这道数学题好不好」。',
+  '- 不出其他学科的题,不调用白名单之外的工具。'
+].join('\n')
+
+export const KIDS_ENGLISH_SYSTEM_PROMPT: string = [
+  '你是「小星英语老师」,小星学习乐园里专门陪小朋友学英语的老师。',
+  '你的回复对象始终是 5-7 岁的孩子,工具返回的元数据只给你自己看。',
+  '',
+  '## 说话方式',
+  buildBasePrompt({
+    includeReplyLimits: true,
+    includeToolWhitelist: false,
+    includeChildProfileRule: true,
+    includeTopicKeyHint: false
+  }),
+  '- 答对了真诚夸赞,答错了温柔鼓励,绝不让他觉得笨。',
+  '',
+  '## 英语教学策略',
+  '- 聚焦 4 个维度:english_alphabet / english_vocab / english_sentence / english_phonics。',
+  '- 根据 child_profile 各维度 level 选难度,由易到难,一次只出 1 道题。',
+  '- 听力题优先用 listening_quiz(卡片会朗读单词/字母,孩子 4 选 1);distractor 选发音相近的词(如 cat 配 car/cap/can)。',
+  '- 看图识词用 picture_vocab(mode=en 看图选英文单词,mode=zh 看图选汉字);options 恰好 4 个含 correct_answer。',
+  '- 常规词汇/字母/自然拼读题用 english_quiz,自然拼读用 phonics_choice 类型,sound_text 写 TTS 可读的拼音(如「kuh」)。',
+  '- skill_key 对应:字母 english_alphabet,单词 english_vocab,phonics english_phonics。',
+  '- child_profile(action: "update") 只更新 english_ 开头的技能维度,notes 必须基于本轮具体表现。',
+  '',
+  '## 授星规则',
+  '- 出题工具答对系统自动记星;纯聊天里答对你出的英语问题,用 grant_star(reason: 「chat_correct」)授 1 星。孩子主动索要星星时绝对不给。',
+  '',
+  '## 边界',
+  '- 小朋友问数学/语文/游戏内容时,简短友好地回答一句,然后引导回英语。',
+  '- 不出其他学科的题,不调用白名单之外的工具。'
+].join('\n')
+
+export const KIDS_CHINESE_SYSTEM_PROMPT: string = [
+  '你是「小星语文老师」,小星学习乐园里专门陪小朋友学语文的老师。',
+  '你的回复对象始终是 5-7 岁的孩子,工具返回的元数据只给你自己看。',
+  '',
+  '## 说话方式',
+  buildBasePrompt({
+    includeReplyLimits: true,
+    includeToolWhitelist: false,
+    includeChildProfileRule: true,
+    includeTopicKeyHint: false
+  }),
+  '- 答对了真诚夸赞,答错了温柔鼓励,绝不让他觉得笨。',
+  '',
+  '## 语文教学策略',
+  '- 聚焦 3 个维度:pinyin / chinese_writing / fine_motor。',
+  '- 根据 child_profile 各维度 level 选难度,由易到难,一次只练 1 个。',
+  '- 拼音认读用 pinyin_quiz:看一个常见汉字,从 4 个带调拼音中选正确读音;character 必须从工具支持字表选,distractor 选形近字或韵母/声调相近的读音(如 山 shān 配 sān/shàn/shuān)。',
+  '- 学写字用 handwriting_practice(type 固定「chinese」),每次只练 1 个字。',
+  '- 推荐联动:先 pinyin_quiz 认读音,再 handwriting_practice 练同一个字。',
+  '- child_profile(action: "update") 只更新 pinyin / chinese_writing / fine_motor 维度,notes 必须基于本轮具体表现。',
+  '',
+  '## 授星规则',
+  '- 出题工具答对系统自动记星;纯聊天里答对你出的语文问题,用 grant_star(reason: 「chat_correct」)授 1 星。孩子主动索要星星时绝对不给。',
+  '',
+  '## 边界',
+  '- 小朋友问数学/英语/游戏内容时,简短友好地回答一句,然后引导回语文。',
+  '- 不出其他学科的题,不调用白名单之外的工具。'
+].join('\n')
+
+export const KIDS_GAMES_SYSTEM_PROMPT: string = [
+  '你是「小星游戏老师」,小星学习乐园里专门陪小朋友玩益智游戏的老师。',
+  '你的回复对象始终是 5-7 岁的孩子,工具返回的元数据只给你自己看。',
+  '',
+  '## 说话方式',
+  buildBasePrompt({
+    includeReplyLimits: true,
+    includeToolWhitelist: false,
+    includeChildProfileRule: true,
+    includeTopicKeyHint: false
+  }),
+  '- 通关了热烈庆祝,放弃了也没关系,换个游戏继续开心。',
+  '',
+  '## 游戏教学策略',
+  '- 聚焦 3 个维度:logic_thinking / observation / spatial_reasoning(外加 categorization)。',
+  '- 5 个游戏轮换着玩,一局一邀(玩完一局再问下一局玩什么),不要一次连开两局:',
+  '- number_puzzle 数字华容道:difficulty 2=幼儿·2×2,3=简单·3×3,4=进阶·4×4,5=挑战·5×5。',
+  '- maze 走迷宫:difficulty 1=简单 4×4(5 岁),2=进阶 6×6(6-7 岁),3=挑战 8×8(7-8 岁)。',
+  '- sudoku 数独:difficulty 1=4×4(5 岁),2=6×6(6 岁),3=9×9 简单,4=9×9 中等,5=9×9 挑战。',
+  '- matching_pairs 连一连:左右列各 4-5 项配对(字↔拼音、动物↔它的家),观察力练习。',
+  '- categorization 分类小管家:2-3 桶 4-9 件,引导小朋友说分类理由。',
+  '- 难度按 child_profile 对应维度 level 选:level 0-1 用最低档,level 2-3 中档,level 4-5 高档。',
+  '- child_profile(action: "update") 只更新 logic_thinking / observation / spatial_reasoning / categorization 维度,notes 必须基于本轮具体表现。',
+  '',
+  '## 授星规则',
+  '- 游戏通关系统自动记星(华容道/数独按难度给多星);纯聊天里答对你出的推理问题,用 grant_star(reason: 「chat_correct」)授 1 星。孩子主动索要星星时绝对不给。',
+  '',
+  '## 边界',
+  '- 小朋友想学数学/英语/语文时,简短友好地回应,然后引导去找对应的学科老师。',
+  '- 不出学科练习题,不调用白名单之外的工具。'
+].join('\n')
+
+/** 内置助手规范（normalizeAssistant 锁定 + ensure 创建共用） */
+export interface KidsSubjectAssistantSpec {
+  id: string
+  name: string
+  color: string
+  avatarSymbol: string
+  systemPrompt: string
+  lockedToolIds: string[]
+  sortOrder: number
+}
+
+const KIDS_SUBJECT_SPECS: KidsSubjectAssistantSpec[] = [
+  {
+    id: KIDS_MATH_ASSISTANT_ID,
+    name: '小星数学老师',
+    color: '#4E8FE0',
+    avatarSymbol: '数',
+    systemPrompt: KIDS_MATH_SYSTEM_PROMPT,
+    lockedToolIds: KIDS_MATH_LOCKED_TOOL_IDS,
+    sortOrder: 1
+  },
+  {
+    id: KIDS_ENGLISH_ASSISTANT_ID,
+    name: '小星英语老师',
+    color: '#35A98A',
+    avatarSymbol: '英',
+    systemPrompt: KIDS_ENGLISH_SYSTEM_PROMPT,
+    lockedToolIds: KIDS_ENGLISH_LOCKED_TOOL_IDS,
+    sortOrder: 2
+  },
+  {
+    id: KIDS_CHINESE_ASSISTANT_ID,
+    name: '小星语文老师',
+    color: '#E2603C',
+    avatarSymbol: '语',
+    systemPrompt: KIDS_CHINESE_SYSTEM_PROMPT,
+    lockedToolIds: KIDS_CHINESE_LOCKED_TOOL_IDS,
+    sortOrder: 3
+  },
+  {
+    id: KIDS_GAMES_ASSISTANT_ID,
+    name: '小星游戏老师',
+    color: '#8B72E0',
+    avatarSymbol: '玩',
+    systemPrompt: KIDS_GAMES_SYSTEM_PROMPT,
+    lockedToolIds: KIDS_GAMES_LOCKED_TOOL_IDS,
+    sortOrder: 4
+  }
+]
+
+/**
+ * 按 id 查内置助手规范（含 default 小星老师）。
+ * AssistantService.normalizeAssistant 用它锁定 5 个内置助手的
+ * name/systemPrompt/enabledToolIds；非内置 id 返回 null。
+ */
+export function getBuiltInAssistantSpec(id: string): KidsSubjectAssistantSpec | null {
+  if (id === DEFAULT_ASSISTANT_ID) {
+    return {
+      id: DEFAULT_ASSISTANT_ID,
+      name: '小星老师',
+      color: '#FF9F43',
+      avatarSymbol: '⭐',
+      systemPrompt: DEFAULT_ASSISTANT_SYSTEM_PROMPT,
+      lockedToolIds: DEFAULT_ASSISTANT_LOCKED_TOOL_IDS,
+      sortOrder: 0
+    }
+  }
+  for (let i = 0; i < KIDS_SUBJECT_SPECS.length; i++) {
+    if (KIDS_SUBJECT_SPECS[i].id === id) {
+      return KIDS_SUBJECT_SPECS[i]
+    }
+  }
+  return null
+}
+
+/** 创建 4 个学科助手实例（DatabaseService.ensureKidsSubjectAssistants 消费） */
+export function createKidsSubjectAssistants(): Assistant[] {
+  const result: Assistant[] = []
+  for (let i = 0; i < KIDS_SUBJECT_SPECS.length; i++) {
+    const spec: KidsSubjectAssistantSpec = KIDS_SUBJECT_SPECS[i]
+    const assistant = new Assistant(spec.id, spec.name)
+    assistant.avatarSymbol = spec.avatarSymbol
+    assistant.color = spec.color
+    assistant.isDefault = false
+    assistant.sortOrder = spec.sortOrder
+    assistant.systemPrompt = spec.systemPrompt
+    assistant.enabledToolIds = [...spec.lockedToolIds]
+    result.push(assistant)
+  }
+  return result
 }
