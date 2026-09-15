@@ -68,10 +68,11 @@ export default function kidsSubjectUtilsTest() {
   describe('groupSessionsByDay', () => {
     it('groups today and yesterday with correct labels, newest day first', 0, () => {
       const now = new Date(2026, 8, 15, 14, 0, 0, 0).getTime()
+      // 入参契约：按 updatedAt 降序（调用方保证）
       const sessions: ChatSession[] = [
+        makeSession('c', 'default', new Date(2026, 8, 15, 11, 0, 0, 0).getTime()),
         makeSession('a', 'default', new Date(2026, 8, 15, 9, 20, 0, 0).getTime()),
-        makeSession('b', 'kids_math', new Date(2026, 8, 14, 18, 0, 0, 0).getTime()),
-        makeSession('c', 'default', new Date(2026, 8, 15, 11, 0, 0, 0).getTime())
+        makeSession('b', 'kids_math', new Date(2026, 8, 14, 18, 0, 0, 0).getTime())
       ]
       const groups: KidsDayGroup[] = groupSessionsByDay(sessions, now, 7)
       expect(groups.length).assertEqual(2)
