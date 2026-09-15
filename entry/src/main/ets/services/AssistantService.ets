@@ -1,4 +1,4 @@
-import { Assistant, DEFAULT_ASSISTANT_ID, DEFAULT_ASSISTANT_SYSTEM_PROMPT, DEFAULT_ASSISTANT_LOCKED_TOOL_IDS } from '../models/AssistantModels'
+import { Assistant, DEFAULT_ASSISTANT_ID, getBuiltInAssistantSpec, KIDS_BUILT_IN_ASSISTANT_IDS } from '../models/AssistantModels'
 import { ReasoningLevel } from '../models/ChatModels'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
@@ -123,11 +123,13 @@ export class AssistantService {
     assistant.name = assistant.name.trim() !== '' ? assistant.name.trim() : '未命名助手'
     assistant.avatarSymbol = assistant.avatarSymbol.trim() !== '' ? assistant.avatarSymbol.trim() : 'AI'
     assistant.color = assistant.color.trim() !== '' ? assistant.color.trim() : DEFAULT_PRIMARY_COLOR
-    if (assistant.id === DEFAULT_ASSISTANT_ID) {
-      assistant.isDefault = true
-      // 锁定系统提示词和工具白名单：默认助手（小星老师）的值不可被覆盖
-      assistant.systemPrompt = DEFAULT_ASSISTANT_SYSTEM_PROMPT
-      assistant.enabledToolIds = [...DEFAULT_ASSISTANT_LOCKED_TOOL_IDS]
+    const builtInSpec = getBuiltInAssistantSpec(assistant.id)
+    if (builtInSpec !== null) {
+      assistant.isDefault = assistant.id === DEFAULT_ASSISTANT_ID
+      // 锁定名称/系统提示词/工具白名单：5 个内置助手（小星老师 + 4 学科老师）不可被覆盖
+      assistant.name = builtInSpec.name
+      assistant.systemPrompt = builtInSpec.systemPrompt
+      assistant.enabledToolIds = [...builtInSpec.lockedToolIds]
     }
     if (assistant.temperature < 0) {
       assistant.temperature = 0
@@ -299,7 +301,7 @@ export class AssistantService {
   }
 
   async deleteAssistant(assistantId: string): Promise<boolean> {
-    if (assistantId === DEFAULT_ASSISTANT_ID || isPresetAssistant(assistantId)) {
+    if (KIDS_BUILT_IN_ASSISTANT_IDS.includes(assistantId) || isPresetAssistant(assistantId)) {
       return false
     }
     await this.store.ensureAssistantsInitialized()

@@ -18,7 +18,7 @@ import {
   CompactTabsFloatingStyleOptions
 } from '../utils/HdsTabsFloatingStyleHelper'
 import { ChatSession, ChatMessage, ModelProvider, ReasoningLevel, ToolConfig } from '../models/ChatModels'
-import { Assistant, DEFAULT_ASSISTANT_ID, DEFAULT_ASSISTANT_LOCKED_TOOL_IDS } from '../models/AssistantModels'
+import { Assistant, DEFAULT_ASSISTANT_ID, KIDS_BUILT_IN_ASSISTANT_IDS, getBuiltInAssistantSpec } from '../models/AssistantModels'
 import { ChatViewModel } from '../viewmodels/ChatViewModel'
 import { SettingsChangeCallback } from '../viewmodels/SettingsManager'
 import { ThemeMode, AppLanguage, PreferenceKeys } from '../services/PreferencesService'
@@ -2965,7 +2965,7 @@ struct Index {
     this.editingAssistantId = assistant.id
     this.editingAssistantCreatedAt = assistant.createdAt
     this.editingAssistantSortOrder = assistant.sortOrder
-    this.editingAssistantIsDefault = assistant.id === DEFAULT_ASSISTANT_ID || assistant.isDefault
+    this.editingAssistantIsDefault = KIDS_BUILT_IN_ASSISTANT_IDS.includes(assistant.id) || assistant.isDefault
     this.assistantFormName = assistant.name
     this.assistantFormAvatarSymbol = this.normalizeAssistantAvatarSymbol(assistant.avatarSymbol)
     this.assistantFormColor = assistant.color !== '' ? assistant.color : DEFAULT_PRIMARY_COLOR
@@ -3084,15 +3084,16 @@ struct Index {
     assistant.frequencyPenalty = this.assistantFormFrequencyPenalty
     assistant.contextMessageCount = this.assistantFormContextMessageCount
     assistant.maxOutputTokens = this.assistantFormMaxOutputTokens
-    // 工具白名单:默认助手会被 normalizeAssistant 强制覆盖为锁定列表,这里写值无副作用;
+    // 工具白名单:5 个内置助手会被 normalizeAssistant 强制覆盖为各自锁定列表,这里写值无副作用;
     // 用户自建助手走 form 字段的真实值。
-    assistant.enabledToolIds = this.editingAssistantIsDefault
-      ? [...DEFAULT_ASSISTANT_LOCKED_TOOL_IDS]
+    const builtInSpec = getBuiltInAssistantSpec(assistant.id)
+    assistant.enabledToolIds = builtInSpec !== null
+      ? [...builtInSpec.lockedToolIds]
       : [...this.assistantFormEnabledToolIds]
     assistant.reasoningLevel = this.assistantFormReasoningLevel
     assistant.createdAt = this.editingAssistantCreatedAt
     assistant.sortOrder = this.editingAssistantSortOrder
-    assistant.isDefault = this.editingAssistantIsDefault
+    assistant.isDefault = assistant.id === DEFAULT_ASSISTANT_ID
 
     if (assistant.id === '') {
       await this.assistantService.createAssistant(assistant)
@@ -3114,7 +3115,7 @@ struct Index {
   }
 
   private async deleteAssistantFromTab(assistant: Assistant): Promise<void> {
-    if (assistant.id === DEFAULT_ASSISTANT_ID || assistant.isDefault || assistant.isPreset) {
+    if (KIDS_BUILT_IN_ASSISTANT_IDS.includes(assistant.id) || assistant.isDefault || assistant.isPreset) {
       return
     }
     if (this.getAssistantSessionCount(assistant.id) <= 0) {
@@ -3328,7 +3329,7 @@ struct Index {
 
   @Builder
   private AssistantEndSwipePanel(assistant: Assistant) {
-    if (assistant.id !== DEFAULT_ASSISTANT_ID && !assistant.isDefault && !assistant.isPreset) {
+    if (!KIDS_BUILT_IN_ASSISTANT_IDS.includes(assistant.id) && !assistant.isDefault && !assistant.isPreset) {
       Row() {
         this.AssistantSwipeButton($r('sys.symbol.trash'), $r('app.string.delete'), $r('app.color.status_error'),
           72, (): void => {
@@ -3680,7 +3681,7 @@ struct Index {
           this.openAssistantEditor(assistant)
         })
 
-      if (assistant.id !== DEFAULT_ASSISTANT_ID && !assistant.isDefault && !assistant.isPreset) {
+      if (!KIDS_BUILT_IN_ASSISTANT_IDS.includes(assistant.id) && !assistant.isDefault && !assistant.isPreset) {
         MenuItem({
           startIcon: $r('sys.symbol.trash'),
           content: $r('app.string.delete')

@@ -10,7 +10,7 @@ import {
   SearchReference,
   ReasoningLevel
 } from '../models/ChatModels'
-import { Assistant, DEFAULT_ASSISTANT_ID, createDefaultAssistant, DEFAULT_ASSISTANT_SYSTEM_PROMPT, DEFAULT_ASSISTANT_LOCKED_TOOL_IDS } from '../models/AssistantModels'
+import { Assistant, DEFAULT_ASSISTANT_ID, createDefaultAssistant, createKidsSubjectAssistants, DEFAULT_ASSISTANT_SYSTEM_PROMPT, DEFAULT_ASSISTANT_LOCKED_TOOL_IDS } from '../models/AssistantModels'
 import { GeneratedMedia } from '../models/ImageGenerationModels'
 import { StarEventInsert, StarEventRow } from '../models/StarEventModels'
 import { DailyLessonPlanRow, PreparedMediaRow, PlannerStats } from '../models/LessonPlanModels'
@@ -649,6 +649,7 @@ export class DatabaseService {
 	      // 迁移现有供应商数据
 	      await this.migrateExistingProviders()
 	      await this.ensureDefaultAssistant()
+	      await this.ensureKidsSubjectAssistants()
       // 迁移历史消息: 为 parts_json 为空的助手消息填充 parts
       await this.migrateMessagePartsIfNeeded()
     } catch (error) {
@@ -1282,6 +1283,30 @@ export class DatabaseService {
 	      await this.rdbStore.insert(TableNames.ASSISTANTS, this.assistantToValueBucket(createDefaultAssistant()))
 	    } catch (error) {
 	      console.error('DatabaseService', `Failed to create default assistant: ${JSON.stringify(error)}`)
+	    }
+	  }
+
+	  /**
+	   * 确保 4 个儿童学科助手存在（spec 2026-09-15 §3.3）。
+	   * 幂等：老用户升级后启动自动补建；已存在则跳过。
+	   */
+	  private async ensureKidsSubjectAssistants(): Promise<void> {
+	    if (this.rdbStore === null) {
+	      return
+	    }
+	    const subjectAssistants: Assistant[] = createKidsSubjectAssistants()
+	    for (let i = 0; i < subjectAssistants.length; i++) {
+	      const assistant: Assistant = subjectAssistants[i]
+	      const existing = await this.queryAssistantByIdNoWait(assistant.id)
+	      if (existing !== null) {
+	        continue
+	      }
+	      try {
+	        await this.rdbStore.insert(TableNames.ASSISTANTS, this.assistantToValueBucket(assistant))
+	      } catch (error) {
+	        console.error('DatabaseService',
+	          `Failed to create kids subject assistant ${assistant.id}: ${JSON.stringify(error)}`)
+	      }
 	    }
 	  }
 
