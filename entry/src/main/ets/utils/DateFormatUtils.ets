@@ -121,3 +121,14 @@ export function getStartOfWeekMs(timestamp: number): number {
   d.setDate(d.getDate() - getIsoWeekday(timestamp))
   return d.getTime()
 }
+
+/**
+ * 返回 timestamp 所在本地自然日的 00:00:00.000 时间戳。
+ * 供儿童主屏「今日会话判定 / 今日星星 / 按天分组」使用
+ * （与 StarRewardService 内部私有的 getStartOfTodayMs 同口径）。
+ */
+export function getStartOfDayMs(timestamp: number): number {
+  const date = new Date(timestamp)
+  date.setHours(0, 0, 0, 0)
+  return date.getTime()
+}

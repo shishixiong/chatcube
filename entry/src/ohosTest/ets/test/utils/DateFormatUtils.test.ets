@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@ohos/hypium'
-import { getStartOfWeekMs } from '../../../../main/ets/utils/DateFormatUtils'
+import { getStartOfWeekMs, getStartOfDayMs } from '../../../../main/ets/utils/DateFormatUtils'
 
 /**
  * getStartOfWeekMs 单元测试
@@ -58,6 +58,31 @@ export default function dateFormatUtilsTest() {
       expect(result.getMinutes()).assertEqual(0)
       expect(result.getSeconds()).assertEqual(0)
       expect(result.getMilliseconds()).assertEqual(0)
+    })
+  })
+
+  describe('getStartOfDayMs', () => {
+    it('midday rolls back to same day 00:00', 0, () => {
+      const noon = new Date(2026, 8, 15, 14, 30, 15, 500).getTime()
+      const expected = new Date(2026, 8, 15, 0, 0, 0, 0).getTime()
+      expect(getStartOfDayMs(noon)).assertEqual(expected)
+    })
+
+    it('00:00:00.000 returns itself', 0, () => {
+      const midnight = new Date(2026, 8, 15, 0, 0, 0, 0).getTime()
+      expect(getStartOfDayMs(midnight)).assertEqual(midnight)
+    })
+
+    it('23:59:59.999 stays on same day', 0, () => {
+      const late = new Date(2026, 8, 15, 23, 59, 59, 999).getTime()
+      const expected = new Date(2026, 8, 15, 0, 0, 0, 0).getTime()
+      expect(getStartOfDayMs(late)).assertEqual(expected)
+    })
+
+    it('00:01 next day belongs to next day (cross-boundary)', 0, () => {
+      const early = new Date(2026, 8, 16, 0, 1, 0, 0).getTime()
+      const expected = new Date(2026, 8, 16, 0, 0, 0, 0).getTime()
+      expect(getStartOfDayMs(early)).assertEqual(expected)
     })
   })
 }
