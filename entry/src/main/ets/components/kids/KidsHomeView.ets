@@ -1,47 +1,43 @@
 import { ChatSession } from '../../models/ChatModels'
-import { DEFAULT_ASSISTANT_ID } from '../../models/AssistantModels'
+import { DEFAULT_ASSISTANT_ID, KIDS_BUILT_IN_ASSISTANT_IDS } from '../../models/AssistantModels'
+import { StarEventRow, TodayStarSummary } from '../../models/StarEventModels'
 import { getStarRewardService } from '../../services/StarRewardService'
 import { getDatabaseService } from '../../services/DatabaseService'
 import { getChildProfileService, ChildKnowledgeProfile } from '../../services/ChildProfileService'
-import { formatRelativeTime } from '../../utils/TimeFormatUtils'
 import { getDayPartGreeting } from '../../utils/GreetingUtils'
-import { getStartOfWeekMs } from '../../utils/DateFormatUtils'
+import { getStartOfDayMs } from '../../utils/DateFormatUtils'
 import { withColorAlpha } from '../../utils/ColorAlphaUtils'
-import { ParentalGateSheet } from './ParentalGateSheet'
-import { KidsSessionCard } from './KidsSessionCard'
-import { KIDS_ACTIVITIES, KidsActivityItem } from './KidsActivityCatalog'
 import {
-  KIDS_BG,
-  KIDS_SURFACE,
-  KIDS_FG,
-  KIDS_MUTED,
-  KIDS_SUBTLE,
-  KIDS_BORDER,
-  KIDS_ACCENT,
-  KIDS_ACCENT_2,
-  KIDS_ON_HERO,
-  KIDS_ON_HERO_2,
-  KIDS_AVATAR_INK,
-  KIDS_AVATAR_1,
-  KIDS_AVATAR_2,
-  KIDS_GLASS,
-  KIDS_INK_SOFT
+  countTodayBySubject,
+  findTodaySession,
+  formatDateLabel,
+  formatWeekday,
+  groupSessionsByDay,
+  KidsDayGroup
+} from '../../utils/KidsSubjectUtils'
+import { KIDS_SUBJECTS, KidsSubjectItem } from './KidsSubjectCatalog'
+import { ParentalGateSheet } from './ParentalGateSheet'
+import { KidsDayGroupCard } from './KidsDayGroupCard'
+import { KidsStarDetailSheet } from './KidsStarDetailSheet'
+import {
+  KIDS_BG, KIDS_SURFACE, KIDS_FG, KIDS_MUTED, KIDS_SUBTLE, KIDS_BORDER,
+  KIDS_ACCENT, KIDS_ACCENT_2, KIDS_ON_HERO, KIDS_ON_HERO_2,
+  KIDS_AVATAR_INK, KIDS_AVATAR_1, KIDS_AVATAR_2, KIDS_GLASS
 } from './KidsBrandTokens'
 
-/** 活动宫格单块高度（12 上衬 + 42 图标 + 7 间距 + ~14 标签 + 10 下衬） */
-const ACTIVITY_TILE_HEIGHT: number = 85
-/** 会话卡高度（与 KidsSessionCard 固定高度一致） */
-const SESSION_CARD_HEIGHT: number = 118
-/** 「我的学习乐园」最多保留的会话记录数（最近的 N 条，防网格无限增长） */
-const KIDS_SESSION_DISPLAY_LIMIT: number = 20
+/** 学习乐园最多显示的「有记录的天」数 */
+const KIDS_GARDEN_DAY_LIMIT: number = 7
 
 /**
- * 儿童主屏（对照 docs/kids-home-prototype.html 五区块布局）:
- * 问候行（昵称头像 + 时段问候 + 星星药丸）→ 小星老师主卡（吉祥物 + CTA + 本周徽章）
- * → 活动八宫格「今天想玩什么」→ 2 列会话网格「我的学习乐园」→ 居中家长入口。
+ * 儿童主屏 v2（spec 2026-09-15 三段式布局）:
+ * 问候行（昵称头像 + 时段问候 + 星星药丸）-> hero 一天一会话主卡（今日日期眉标 +
+ * 静态星星图标 + 两态副文案 + 主 CTA + 今日星星徽章 + 看明细）-> 2×2 学科卡
+ * 「今天玩什么」-> 学习乐园按天分组（KidsDayGroupCard，7 天上限，同日 >3 折叠）
+ * -> 居中家长入口。
  *
- * 列表只读（无长按/删除/多选）; 只显示 assistantId === 'default' 的会话。
- * 恒定暖色绘本令牌（KidsBrandTokens），不随深色模式切换。
+ * hero 一天一会话: 今日的小星老师会话存在 -> onOpenSession 续接，否则
+ * onNewChat('', DEFAULT) 开新会话。学科卡无此限制——每次点击都开新会话。
+ * 恒定暖色绘本令牌（KidsBrandTokens），不随深色模式切换；图标一律 SVG，无 emoji。
  * 星星数据自加载, starRefreshTick 由宿主在导航栈 didShow(navBar) 时递增触发刷新。
  */
 @ComponentV2
@@ -50,38 +46,49 @@ export struct KidsHomeView {
   @Param starRefreshTick: number = 0
   @Param topInsetVp: number = 0
   @Event onOpenSession: (sessionId: string) => void = () => {}
-  /** 新建会话; initialPrompt 非空时进入会话后自动发送（活动宫格引导语）; assistantId 为目标助手（临时桥接: 旧视图恒传小星老师, Task 9 重写后由学科卡传学科助手） */
+  /** 新建会话：hero 传 ('', DEFAULT)；学科卡传 (startPrompt, 学科 assistantId) */
   @Event onNewChat: (initialPrompt: string, assistantId: string) => void = () => {}
   @Event onGatePassed: () => void = () => {}
   @Local totalStars: number = 0
-  @Local weekStars: number = 0
+  @Local todayStars: number = 0
+  @Local todayEvents: StarEventRow[] = []
   @Local childName: string = ''
   @Local starBySession: Map<string, number> = new Map()
+  @Local starByDay: Map<string, number> = new Map()
   @Local showGateSheet: boolean = false
-  @Local mascotFloatY: number = 0
+  @Local showStarDetailSheet: boolean = false
 
   @Monitor('starRefreshTick')
   onStarRefreshTickChanged(): void {
-    this.loadStars()
-    this.loadChildName()
+    this.loadAll()
+  }
+
+  @Monitor('sessions')
+  onSessionsChanged(): void {
+    // 回到主屏时会话 updatedAt 已刷新 -> 重算今日会话与分组（build 内派生计算自动生效）
   }
 
   aboutToAppear(): void {
-    this.loadStars()
-    this.loadChildName()
+    this.loadAll()
   }
 
-  private loadStars(): void {
+  private loadAll(): void {
     getStarRewardService().getAllTimeStarTotal().then((total: number): void => {
       this.totalStars = total
     }).catch((error: Object): void => {
       console.error('KidsHomeView', `Failed to load total stars: ${JSON.stringify(error)}`)
     })
-    getStarRewardService().getStarsSinceMs(getStartOfWeekMs(Date.now())).then((total: number): void => {
-      this.weekStars = total
+    getStarRewardService().getTodaySummary().then((summary: TodayStarSummary): void => {
+      this.todayStars = summary.total
     }).catch((error: Object): void => {
-      console.error('KidsHomeView', `Failed to load week stars: ${JSON.stringify(error)}`)
-      this.weekStars = 0
+      console.error('KidsHomeView', `Failed to load today summary: ${JSON.stringify(error)}`)
+      this.todayStars = 0
+    })
+    getStarRewardService().getTodayEvents().then((events: StarEventRow[]): void => {
+      this.todayEvents = events
+    }).catch((error: Object): void => {
+      console.error('KidsHomeView', `Failed to load today events: ${JSON.stringify(error)}`)
+      this.todayEvents = []
     })
     getDatabaseService().getStarTotalsBySession().then((totals: Map<string, number>): void => {
       this.starBySession = totals
@@ -89,6 +96,8 @@ export struct KidsHomeView {
       console.error('KidsHomeView', `Failed to load session star totals: ${JSON.stringify(error)}`)
       this.starBySession = new Map()
     })
+    this.loadChildName()
+    this.loadStarByDay()
   }
 
   private loadChildName(): void {
@@ -100,18 +109,48 @@ export struct KidsHomeView {
     })
   }
 
+  /** sinceMs = 最早显示天的 0 点（先分组拿最早 session，再查按天汇总） */
+  private loadStarByDay(): void {
+    const groups: KidsDayGroup[] = this.dayGroups()
+    if (groups.length === 0) {
+      this.starByDay = new Map()
+      return
+    }
+    const lastGroup: KidsDayGroup = groups[groups.length - 1]
+    const oldest: ChatSession = lastGroup.sessions[lastGroup.sessions.length - 1]
+    const sinceMs: number = getStartOfDayMs(oldest.updatedAt)
+    getDatabaseService().getStarTotalsByDay(sinceMs).then((totals: Map<string, number>): void => {
+      this.starByDay = totals
+    }).catch((error: Object): void => {
+      console.error('KidsHomeView', `Failed to load day star totals: ${JSON.stringify(error)}`)
+      this.starByDay = new Map()
+    })
+  }
+
+  /** 5 个内置助手的会话（'' 遗留会话不可见），updatedAt 降序 */
   private kidsSessions(): ChatSession[] {
-    // 严格只放行 assistantId === 'default': '' 是遗留成人时代会话, 不对儿童可见（spec §2）
-    return this.sessions.filter((session: ChatSession): boolean =>
+    const filtered: ChatSession[] = this.sessions.filter((session: ChatSession): boolean =>
+      KIDS_BUILT_IN_ASSISTANT_IDS.includes(session.assistantId))
+    filtered.sort((a: ChatSession, b: ChatSession): number => b.updatedAt - a.updatedAt)
+    return filtered
+  }
+
+  private todayDefaultSessions(): ChatSession[] {
+    return this.kidsSessions().filter((session: ChatSession): boolean =>
       session.assistantId === DEFAULT_ASSISTANT_ID)
   }
 
-  private displayedKidsSessions(): ChatSession[] {
-    return this.kidsSessions().slice(0, KIDS_SESSION_DISPLAY_LIMIT)
+  /** hero 一天一会话：今日的小星老师会话（无则 null） */
+  private todaySession(): ChatSession | null {
+    return findTodaySession(this.todayDefaultSessions(), getStartOfDayMs(Date.now()))
   }
 
-  private starCountFor(sessionId: string): number {
-    return this.starBySession.get(sessionId) ?? 0
+  private dayGroups(): KidsDayGroup[] {
+    return groupSessionsByDay(this.kidsSessions(), Date.now(), KIDS_GARDEN_DAY_LIMIT)
+  }
+
+  private todayCountFor(subject: KidsSubjectItem): number {
+    return countTodayBySubject(this.todayEvents, subject.activityTypes)
   }
 
   private displayName(): string {
@@ -119,46 +158,51 @@ export struct KidsHomeView {
   }
 
   private avatarChar(): string {
-    return this.childName.length > 0 ? this.childName.substring(0, 1) : '⭐'
+    return this.childName.length > 0 ? this.childName.substring(0, 1) : ''
   }
 
   private greetingText(): string {
     return `${getDayPartGreeting(new Date().getHours())}，${this.displayName()}`
   }
 
-  private lastLessonLabel(): string {
-    const kids: ChatSession[] = this.kidsSessions()
-    if (kids.length > 0) {
-      const title: string = kids[0].title.trim()
-      return title.length > 0 ? `上次学到「${title}」` : '继续和小星老师的学习'
-    }
-    return '今天开启新的学习冒险'
+  private heroDateLabel(): string {
+    const now: number = Date.now()
+    return `今日学习 · ${formatDateLabel(now)} ${formatWeekday(now)}`
   }
 
-  private activityGridHeight(): number {
-    const rows: number = Math.ceil(KIDS_ACTIVITIES.length / 4)
-    return rows * ACTIVITY_TILE_HEIGHT + (rows - 1) * 10
-  }
-
-  private sessionsGridHeight(): number {
-    const rows: number = Math.ceil(this.displayedKidsSessions().length / 2)
-    return rows * SESSION_CARD_HEIGHT + Math.max(0, rows - 1) * 12
+  private heroSubtitle(): string {
+    return this.todaySession() !== null ?
+      '小星老师 · 已进入今天的会话' :
+      '小星老师 · 今天第一次学习，将开启新会话'
   }
 
   build() {
     Column() {
-      // ── 问候行: 昵称头像 + 时段问候 + 星星药丸 ──
+      // ── 问候行: 昵称头像 + 时段问候 + 星星药丸（固定不滚动） ──
       Row({ space: 12 }) {
-        Text(this.avatarChar())
-          .fontSize(22)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(KIDS_AVATAR_INK)
+        if (this.avatarChar().length > 0) {
+          Text(this.avatarChar())
+            .fontSize(22)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(KIDS_AVATAR_INK)
+            .width(46)
+            .height(46)
+            .textAlign(TextAlign.Center)
+            .borderRadius(16)
+            .linearGradient({ angle: 150, colors: [[KIDS_AVATAR_1, 0], [KIDS_AVATAR_2, 1]] })
+            .shadow({ radius: 10, color: '#59FF9F43', offsetY: 4 })
+        } else {
+          // 无昵称 fallback: star.svg（去 emoji，spec §4.2）
+          Column() {
+            Image($rawfile('kids/star.svg')).width(24).height(24)
+          }
           .width(46)
           .height(46)
-          .textAlign(TextAlign.Center)
           .borderRadius(16)
+          .justifyContent(FlexAlign.Center)
           .linearGradient({ angle: 150, colors: [[KIDS_AVATAR_1, 0], [KIDS_AVATAR_2, 1]] })
           .shadow({ radius: 10, color: '#59FF9F43', offsetY: 4 })
+        }
 
         Column({ space: 2 }) {
           Text(this.greetingText())
@@ -168,15 +212,14 @@ export struct KidsHomeView {
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
           Text('今天想和小星老师玩点什么？')
-            .fontSize(12.5)
+            .fontSize(12)
             .fontColor(KIDS_MUTED)
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
 
         Row({ space: 6 }) {
-          Text('⭐')
-            .fontSize(14)
+          Image($rawfile('kids/star.svg')).width(14).height(14)
           Text(`${this.totalStars}`)
             .fontSize(17)
             .fontWeight(FontWeight.Bold)
@@ -190,232 +233,20 @@ export struct KidsHomeView {
         .backgroundColor(KIDS_SURFACE)
         .border({ width: 1, color: KIDS_BORDER })
         .shadow({ radius: 6, color: '#1A24211C', offsetY: 2 })
+        .accessibilityText(`累计获得 ${this.totalStars} 颗星`)
       }
       .width('100%')
-      .padding({
-        left: 20,
-        right: 20,
-        top: this.topInsetVp + 12,
-        bottom: 8
-      })
+      .padding({ left: 20, right: 20, top: this.topInsetVp + 12, bottom: 8 })
       .alignItems(VerticalAlign.Center)
 
       Scroll() {
         Column({ space: 16 }) {
-          // ── 小星老师主卡 ──
-          Stack({ alignContent: Alignment.TopEnd }) {
-            // 右上玻璃圆装饰
-            Column()
-              .width(130)
-              .height(130)
-              .borderRadius(65)
-              .backgroundColor(KIDS_GLASS)
-              .margin({ top: -34, right: -34 })
-
-            Column({ space: 16 }) {
-              Row({ space: 14 }) {
-                // 吉祥物: 白底圆角容器 + ⭐, 上下浮动
-                Column() {
-                  Text('⭐')
-                    .fontSize(42)
-                }
-                .width(76)
-                .height(76)
-                .borderRadius(24)
-                .justifyContent(FlexAlign.Center)
-                .backgroundColor('#EBFFFDF8')
-                .shadow({ radius: 14, color: '#333A2506', offsetY: 6 })
-                .translate({ y: this.mascotFloatY })
-                .onAppear((): void => {
-                  this.getUIContext().animateTo({
-                    duration: 2200,
-                    curve: Curve.EaseInOut,
-                    iterations: -1,
-                    playMode: PlayMode.Alternate
-                  }, (): void => {
-                    this.mascotFloatY = -5
-                  })
-                })
-
-                Column({ space: 3 }) {
-                  Text('小星老师')
-                    .fontSize(10.5)
-                    .fontWeight(FontWeight.Medium)
-                    .fontColor(KIDS_ON_HERO_2)
-                    .letterSpacing(1)
-                  Text('找小星老师玩！')
-                    .fontSize(23)
-                    .fontWeight(FontWeight.Bold)
-                    .fontColor(KIDS_ON_HERO)
-                  Text(this.lastLessonLabel())
-                    .fontSize(12.5)
-                    .fontColor(KIDS_ON_HERO_2)
-                    .maxLines(1)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-                }
-                .alignItems(HorizontalAlign.Start)
-                .layoutWeight(1)
-              }
-              .alignItems(VerticalAlign.Center)
-              .width('100%')
-
-              Row({ space: 10 }) {
-                // 白色 CTA 胶囊（点击落在主卡 onClick 上, 无需独立手势）
-                Row({ space: 8 }) {
-                  Text(this.kidsSessions().length > 0 ? '继续学习' : '开始学习')
-                    .fontSize(15)
-                    .fontWeight(FontWeight.Bold)
-                    .fontColor(KIDS_FG)
-                  Text('→')
-                    .fontSize(14)
-                    .fontWeight(FontWeight.Bold)
-                    .fontColor(KIDS_FG)
-                }
-                .padding({ left: 20, right: 20, top: 12, bottom: 12 })
-                .borderRadius(999)
-                .backgroundColor(KIDS_SURFACE)
-                .shadow({ radius: 14, color: '#403A2506', offsetY: 6 })
-
-                if (this.weekStars > 0) {
-                  Row({ space: 5 }) {
-                    Text('⭐')
-                      .fontSize(11)
-                    Text(`本周 +${this.weekStars}`)
-                      .fontSize(12.5)
-                      .fontWeight(FontWeight.Medium)
-                      .fontColor(KIDS_ON_HERO)
-                  }
-                  .padding({ left: 13, right: 13, top: 9, bottom: 9 })
-                  .borderRadius(999)
-                  .backgroundColor('#243A2506')
-                }
-              }
-              .width('100%')
-              .alignItems(VerticalAlign.Center)
-            }
-            .padding(20)
-            .width('100%')
-          }
-          .width('100%')
-          .borderRadius(24)
-          .clip(true)
-          .linearGradient({ angle: 135, colors: [[KIDS_ACCENT, 0], [KIDS_ACCENT_2, 1]] })
-          .shadow({ radius: 28, color: '#66FF9F43', offsetY: 10 })
-          .onClick((): void => {
-            // 主卡/CTA 一律开启新的空会话（不复用最近会话）
-            this.onNewChat('', DEFAULT_ASSISTANT_ID)
-          })
-
-          // ── 活动八宫格: 今天想玩什么 ──
-          Column({ space: 12 }) {
-            Row() {
-              Text('今天想玩什么')
-                .fontSize(17)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(KIDS_FG)
-              Blank()
-              Text('点一下，马上开始')
-                .fontSize(11.5)
-                .fontColor(KIDS_SUBTLE)
-            }
-            .width('100%')
-            .alignItems(VerticalAlign.Bottom)
-
-            Grid() {
-              ForEach(KIDS_ACTIVITIES, (item: KidsActivityItem): void => {
-                GridItem() {
-                  Column({ space: 7 }) {
-                    Text(item.emoji)
-                      .fontSize(21)
-                      .width(42)
-                      .height(42)
-                      .textAlign(TextAlign.Center)
-                      .borderRadius(14)
-                      .backgroundColor(withColorAlpha(item.color, '29'))
-                    Text(item.label)
-                      .fontSize(11)
-                      .fontWeight(FontWeight.Medium)
-                      .fontColor(KIDS_INK_SOFT)
-                      .maxLines(1)
-                      .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  }
-                  .width('100%')
-                  .padding({ top: 12, bottom: 10, left: 4, right: 4 })
-                  .borderRadius(18)
-                  .backgroundColor(KIDS_SURFACE)
-                  .border({ width: 1, color: KIDS_BORDER })
-                  .accessibilityText(`打开${item.label}`)
-                  .onClick((): void => {
-                    this.onNewChat(item.startPrompt, DEFAULT_ASSISTANT_ID)
-                  })
-                }
-              }, (item: KidsActivityItem): string => item.id)
-            }
-            .columnsTemplate('1fr 1fr 1fr 1fr')
-            .columnsGap(10)
-            .rowsGap(10)
-            .width('100%')
-            .height(this.activityGridHeight())
-            .scrollBar(BarState.Off)
-          }
-          .width('100%')
-
-          // ── 我的学习乐园: 2 列会话网格 ──
+          this.HeroCard()
+          this.SubjectSection()
           if (this.kidsSessions().length > 0) {
-            Column({ space: 12 }) {
-              Row() {
-                Text('我的学习乐园')
-                  .fontSize(17)
-                  .fontWeight(FontWeight.Bold)
-                  .fontColor(KIDS_FG)
-                Blank()
-                Text(`共 ${this.displayedKidsSessions().length} 次学习`)
-                  .fontSize(11.5)
-                  .fontColor(KIDS_SUBTLE)
-              }
-              .width('100%')
-              .alignItems(VerticalAlign.Bottom)
-
-              Grid() {
-                ForEach(this.displayedKidsSessions(), (session: ChatSession): void => {
-                  GridItem() {
-                    KidsSessionCard({
-                      sessionTitle: session.title,
-                      starCount: this.starCountFor(session.id),
-                      timeLabel: formatRelativeTime(session.updatedAt),
-                      themeColor: KIDS_ACCENT,
-                      onTap: (): void => {
-                        this.onOpenSession(session.id)
-                      }
-                    })
-                  }
-                }, (session: ChatSession): string => session.id)
-              }
-              .columnsTemplate('1fr 1fr')
-              .columnsGap(12)
-              .rowsGap(12)
-              .width('100%')
-              .height(this.sessionsGridHeight())
-              .scrollBar(BarState.Off)
-            }
-            .width('100%')
+            this.GardenSection()
           }
-
-          // ── 家长入口: 底部居中小灰字, 不吸引孩子 ──
-          Row({ space: 6 }) {
-            Text('🔒')
-              .fontSize(11)
-            Text('家长入口')
-              .fontSize(12)
-              .fontColor(KIDS_SUBTLE)
-          }
-          .width('100%')
-          .height(46)
-          .borderRadius(12)
-          .justifyContent(FlexAlign.Center)
-          .onClick((): void => {
-            this.showGateSheet = true
-          })
+          this.ParentEntry()
         }
         .width('100%')
         .padding({ left: 20, right: 20, top: 10, bottom: 24 })
@@ -436,6 +267,270 @@ export struct KidsHomeView {
         this.showGateSheet = false
       }
     })
+    .bindSheet($$this.showStarDetailSheet, this.StarDetailSheetBuilder(), {
+      height: SheetSize.LARGE,
+      dragBar: true,
+      showClose: false,
+      preferType: SheetType.BOTTOM,
+      onDisappear: (): void => {
+        this.showStarDetailSheet = false
+      }
+    })
+  }
+
+  @Builder
+  HeroCard() {
+    Stack({ alignContent: Alignment.TopEnd }) {
+      // 右上玻璃圆装饰（静态，无动画）
+      Column()
+        .width(130)
+        .height(130)
+        .borderRadius(65)
+        .backgroundColor(KIDS_GLASS)
+        .margin({ top: -34, right: -34 })
+
+      Column({ space: 14 }) {
+        // 眉标: mono 10.5vp
+        Text(this.heroDateLabel())
+          .fontSize(10.5)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(KIDS_ON_HERO_2)
+          .letterSpacing(1)
+
+        Row({ space: 14 }) {
+          // 静态星星图标块（替代 v1 吉祥物循环浮动，spec §8）
+          Column() {
+            Image($rawfile('kids/star.svg')).width(40).height(40)
+          }
+          .width(76)
+          .height(76)
+          .borderRadius(24)
+          .justifyContent(FlexAlign.Center)
+          .backgroundColor('#EBFFFDF8')
+          .shadow({ radius: 14, color: '#333A2506', offsetY: 6 })
+
+          Column({ space: 3 }) {
+            Text('继续学习')
+              .fontSize(23)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(KIDS_ON_HERO)
+            // 副文案允许换行不 ellipsis（v2.2 修正 6）
+            Text(this.heroSubtitle())
+              .fontSize(12.5)
+              .fontColor(KIDS_ON_HERO_2)
+              .lineHeight(19)
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+        }
+        .alignItems(VerticalAlign.Center)
+        .width('100%')
+
+        Row({ space: 10 }) {
+          // 主 CTA 白底胶囊 ≥44vp
+          Row({ space: 8 }) {
+            Text('开始今天的学习')
+              .fontSize(15)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(KIDS_FG)
+            Image($rawfile('kids/chevron.svg')).width(14).height(14)
+          }
+          .padding({ left: 20, right: 20 })
+          .height(46)
+          .borderRadius(999)
+          .backgroundColor(KIDS_SURFACE)
+          .shadow({ radius: 14, color: '#403A2506', offsetY: 6 })
+
+          Blank()
+
+          // 今日星星徽章（N=0 也显示——「今天还没来」动机）
+          Row({ space: 5 }) {
+            Image($rawfile('kids/star.svg')).width(12).height(12)
+            Text(`今日 +${this.todayStars}`)
+              .fontSize(12.5)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(KIDS_ON_HERO)
+          }
+          .padding({ left: 13, right: 13, top: 9, bottom: 9 })
+          .borderRadius(999)
+          .backgroundColor('#243A2506')
+          .accessibilityText(`今日获得 ${this.todayStars} 颗星`)
+
+          // 看明细（44vp 触控高、描边胶囊）
+          Text('看明细')
+            .fontSize(12.5)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(KIDS_ON_HERO)
+            .padding({ left: 14, right: 14 })
+            .height(44)
+            .borderRadius(999)
+            .border({ width: 1.5, color: '#333A2506' })
+            .textAlign(TextAlign.Center)
+            .onClick((): void => {
+              this.showStarDetailSheet = true
+            })
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+      }
+      .padding(20)
+      .width('100%')
+    }
+    .width('100%')
+    .borderRadius(24)
+    .clip(true)
+    .linearGradient({ angle: 135, colors: [[KIDS_ACCENT, 0], [KIDS_ACCENT_2, 1]] })
+    .shadow({ radius: 28, color: '#66FF9F43', offsetY: 10 })
+    .onClick((): void => {
+      // 一天一会话: 已有今日会话 -> 续接; 否则开新会话
+      const today: ChatSession | null = this.todaySession()
+      if (today !== null) {
+        this.onOpenSession(today.id)
+      } else {
+        this.onNewChat('', DEFAULT_ASSISTANT_ID)
+      }
+    })
+  }
+
+  @Builder
+  SubjectSection() {
+    Column({ space: 12 }) {
+      Row() {
+        Text('今天玩什么')
+          .fontSize(17.5)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(KIDS_FG)
+        Blank()
+        Text('选一个，马上开始')
+          .fontSize(11.5)
+          .fontColor(KIDS_SUBTLE)
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Bottom)
+
+      Row({ space: 12 }) {
+        this.SubjectCard(KIDS_SUBJECTS[0])
+        this.SubjectCard(KIDS_SUBJECTS[1])
+      }
+      .width('100%')
+
+      Row({ space: 12 }) {
+        this.SubjectCard(KIDS_SUBJECTS[2])
+        this.SubjectCard(KIDS_SUBJECTS[3])
+      }
+      .width('100%')
+    }
+    .width('100%')
+  }
+
+  @Builder
+  SubjectCard(item: KidsSubjectItem) {
+    Column() {
+      Row({ space: 10 }) {
+        // 图标块 44vp / 圆角 14 / 学科色 15% 淡底
+        Column() {
+          Image($rawfile(item.iconPath)).width(24).height(24)
+        }
+        .width(44)
+        .height(44)
+        .borderRadius(14)
+        .justifyContent(FlexAlign.Center)
+        .backgroundColor(withColorAlpha(item.color, '26'))
+
+        Column({ space: 2 }) {
+          Text(item.label)
+            .fontSize(17)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(KIDS_FG)
+          // 副标题固定 2 行高，保证卡片等高
+          Text(item.subtitle)
+            .fontSize(11.5)
+            .fontColor(KIDS_MUTED)
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .height(30)
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      // 底部状态行: 1px 虚线上边框 + 今日计数 + 开始 ›
+      Row() {
+        Text(this.todayCountFor(item) > 0 ?
+          `今日 ${this.todayCountFor(item)} ${item.countUnit}` :
+          (item.id === 'games' ? '今天还没玩' : '今天还没练'))
+          .fontSize(10.5)
+          .fontColor(KIDS_SUBTLE)
+        Blank()
+        Text('开始 ›')
+          .fontSize(11.5)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(item.ink)
+      }
+      .width('100%')
+      .height(30)
+      .alignItems(VerticalAlign.Center)
+      .border({ width: { top: 1 }, color: KIDS_BORDER, style: { top: BorderStyle.Dashed } })
+    }
+    .layoutWeight(1)
+    .padding({ left: 14, right: 14, top: 14, bottom: 6 })
+    .borderRadius(19)
+    .backgroundColor(KIDS_SURFACE)
+    .border({ width: 1, color: KIDS_BORDER })
+    .shadow({ radius: 8, color: '#1424211C', offsetY: 3 })
+    .accessibilityText(`打开${item.label}`)
+    .onClick((): void => {
+      this.onNewChat(item.startPrompt, item.assistantId)
+    })
+  }
+
+  @Builder
+  GardenSection() {
+    Column({ space: 12 }) {
+      Row() {
+        Text('我的学习乐园')
+          .fontSize(17.5)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(KIDS_FG)
+        Blank()
+        Text(`共 ${this.kidsSessions().length} 次学习`)
+          .fontSize(11.5)
+          .fontColor(KIDS_SUBTLE)
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Bottom)
+
+      ForEach(this.dayGroups(), (group: KidsDayGroup): void => {
+        KidsDayGroupCard({
+          group: group,
+          dayStars: this.starByDay.get(group.dayKey) ?? 0,
+          starBySession: this.starBySession,
+          onOpenSession: (sessionId: string): void => {
+            this.onOpenSession(sessionId)
+          }
+        })
+      }, (group: KidsDayGroup): string => group.dayKey)
+    }
+    .width('100%')
+  }
+
+  @Builder
+  ParentEntry() {
+    Row({ space: 6 }) {
+      Image($rawfile('kids/lock.svg')).width(13).height(13)
+      Text('家长入口')
+        .fontSize(12)
+        .fontColor(KIDS_SUBTLE)
+    }
+    .width('100%')
+    .height(46)
+    .borderRadius(12)
+    .justifyContent(FlexAlign.Center)
+    .onClick((): void => {
+      this.showGateSheet = true
+    })
   }
 
   @Builder
@@ -447,6 +542,15 @@ export struct KidsHomeView {
       },
       onCancelled: (): void => {
         this.showGateSheet = false
+      }
+    })
+  }
+
+  @Builder
+  StarDetailSheetBuilder() {
+    KidsStarDetailSheet({
+      onClose: (): void => {
+        this.showStarDetailSheet = false
       }
     })
   }
