@@ -18,6 +18,7 @@ import { TeachingStyleAdjustmentRow, WeeklyTrendRow } from '../models/TeachingRe
 import { ImageIndexRow } from '../models/ImageIndexModels'
 import { deserializeMessageParts, serializeMessageParts } from '../models/MessageParts'
 import { ensureMessageParts, buildMessagePartsFromLegacy } from '../utils/ChatMessagePartsHelper'
+import { formatYMD } from '../utils/DateFormatUtils'
 import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
 import { generateDefaultTextIcon } from '../utils/IconGeneratorUtils'
 import { isPresetProvider, getPresetProviderById } from '../config/PresetProviders'
@@ -3249,6 +3250,23 @@ export class DatabaseService {
       }
       const previous: number = totals.get(sessionId) ?? 0
       totals.set(sessionId, previous + events[i].stars)
+    }
+    return totals
+  }
+
+  /**
+   * 按本地自然日聚合星星总数（儿童主屏学习乐园天卡头部「⭐ +N」用）。
+   * - 按事件 createdAt 归日（非会话时间），与 hero「今日 +N」同源同口径
+   * - client-side 聚合（对齐 getStarTotalsBySession 的 MVP 策略），走
+   *   getStarEventsSince(sinceMs) 的 createdAt 索引，sinceMs = 最早显示天的 0 点
+   * - 查询失败时 getStarEventsSince 内部已吞错返回 []，本方法随之返回空 Map
+   */
+  async getStarTotalsByDay(sinceMs: number): Promise<Map<string, number>> {
+    const totals: Map<string, number> = new Map()
+    const events: StarEventRow[] = await this.getStarEventsSince(sinceMs)
+    for (let i = 0; i < events.length; i++) {
+      const dayKey: string = formatYMD(events[i].createdAt)
+      totals.set(dayKey, (totals.get(dayKey) ?? 0) + events[i].stars)
     }
     return totals
   }
