@@ -798,8 +798,8 @@ struct Index {
 
   onOpenNewChat(): void {
     if (this.openNewChatTimestamp > 0) {
-      // 儿童模式深链守卫: 当前助手非小星老师时不推成人 ChatPage 到儿童导航栈
-      if (this.isKidsUiActive() && this.currentAssistantId !== DEFAULT_ASSISTANT_ID) {
+      // 儿童模式深链守卫: 当前助手非内置儿童助手时不推成人 ChatPage 到儿童导航栈
+      if (this.isKidsUiActive() && !KIDS_BUILT_IN_ASSISTANT_IDS.includes(this.currentAssistantId)) {
         return
       }
       this.openChatRoute({} as ChatPageRouteParams)
@@ -812,7 +812,7 @@ struct Index {
       return
     }
     // 儿童模式深链守卫: 同上
-    if (this.isKidsUiActive() && this.currentAssistantId !== DEFAULT_ASSISTANT_ID) {
+    if (this.isKidsUiActive() && !KIDS_BUILT_IN_ASSISTANT_IDS.includes(this.currentAssistantId)) {
       return
     }
     this.openChatRoute({ initialDraft: payload.text } as ChatPageRouteParams)
@@ -1312,7 +1312,7 @@ struct Index {
   }
 
   /**
-   * 儿童模式深链守卫: 仅放行小星老师（assistantId === DEFAULT_ASSISTANT_ID）名下的会话。
+   * 儿童模式深链守卫: 放行 5 个内置助手（小星老师 + 4 学科老师）名下的会话。
    * 会话尚未加载（冷启动竞态）或属于成人助手时返回 false → 调用方跳过导航（不清 payload,
    * 待 sessions 加载或家长过门后的下一次触发再处理）。'' 视为遗留成人会话, 不放行（与
    * KidsHomeView.kidsSessions 过滤口径一致）。
@@ -1323,7 +1323,7 @@ struct Index {
     }
     for (let i = 0; i < this.sessions.length; i++) {
       if (this.sessions[i].id === sessionId) {
-        return this.sessions[i].assistantId === DEFAULT_ASSISTANT_ID
+        return KIDS_BUILT_IN_ASSISTANT_IDS.includes(this.sessions[i].assistantId)
       }
     }
     return false
@@ -1357,20 +1357,22 @@ struct Index {
   }
 
   /**
-   * 儿童模式新建小星老师会话。
-   * initialPrompt 非空时（活动八宫格点击）随路由参数带入 ChatPage,
-   * 由现有 autoSendInitialPrompt 链路自动发送引导语。
+   * 儿童模式新建会话（spec 2026-09-15 §5）。
+   * - hero 传 DEFAULT_ASSISTANT_ID + 空 prompt（一天一会话由 KidsHomeView 判定，
+   *   已有今日会话时走 onOpenSession，不进这里）
+   * - 学科卡传学科 assistantId + startPrompt：先 switchAssistant 再推 ChatPage，
+   *   autoSendInitialPrompt 链路自动发引导语。学科会话不做一天一会话限制。
    */
-  private handleKidsNewChat(initialPrompt: string = ''): void {
+  private handleKidsNewChat(initialPrompt: string = '', assistantId: string = DEFAULT_ASSISTANT_ID): void {
     const params: ChatPageRouteParams = initialPrompt.trim().length > 0 ?
     { initialPrompt: initialPrompt.trim() } as ChatPageRouteParams :
     {} as ChatPageRouteParams
-    // 儿童模式新建会话必须落在小星老师上——家长可能把"当前助手"切成了自定义助手
-    if (this.currentAssistantId !== DEFAULT_ASSISTANT_ID) {
-      this.switchAssistant(DEFAULT_ASSISTANT_ID).then((): void => {
+    // 儿童模式会话必须落在内置助手上——家长可能把「当前助手」切成了自定义助手
+    if (this.currentAssistantId !== assistantId) {
+      this.switchAssistant(assistantId).then((): void => {
         this.openChatRoute(params)
       }).catch((error: Object): void => {
-        console.error('Index', `Failed to switch to default assistant for kids chat: ${JSON.stringify(error)}`)
+        console.error('Index', `Failed to switch assistant for kids chat: ${JSON.stringify(error)}`)
         this.openChatRoute(params)
       })
       return
@@ -2696,7 +2698,8 @@ struct Index {
         starRefreshTick: this.kidsStarRefreshTick,
         topInsetVp: this.px2vp(this.topAvoidHeight),
         onOpenSession: (sessionId: string): void => this.handleKidsOpenSession(sessionId),
-        onNewChat: (initialPrompt: string): void => this.handleKidsNewChat(initialPrompt),
+        onNewChat: (initialPrompt: string, assistantId: string): void =>
+          this.handleKidsNewChat(initialPrompt, assistantId),
         onGatePassed: (): void => this.handleKidsGatePassed()
       })
     }

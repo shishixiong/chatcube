@@ -50,8 +50,8 @@ export struct KidsHomeView {
   @Param starRefreshTick: number = 0
   @Param topInsetVp: number = 0
   @Event onOpenSession: (sessionId: string) => void = () => {}
-  /** 新建小星老师会话; initialPrompt 非空时进入会话后自动发送（活动八宫格引导语） */
-  @Event onNewChat: (initialPrompt: string) => void = () => {}
+  /** 新建会话; initialPrompt 非空时进入会话后自动发送（活动宫格引导语）; assistantId 为目标助手（临时桥接: 旧视图恒传小星老师, Task 9 重写后由学科卡传学科助手） */
+  @Event onNewChat: (initialPrompt: string, assistantId: string) => void = () => {}
   @Event onGatePassed: () => void = () => {}
   @Local totalStars: number = 0
   @Local weekStars: number = 0
@@ -303,7 +303,7 @@ export struct KidsHomeView {
           .shadow({ radius: 28, color: '#66FF9F43', offsetY: 10 })
           .onClick((): void => {
             // 主卡/CTA 一律开启新的空会话（不复用最近会话）
-            this.onNewChat('')
+            this.onNewChat('', DEFAULT_ASSISTANT_ID)
           })
 
           // ── 活动八宫格: 今天想玩什么 ──
@@ -346,7 +346,7 @@ export struct KidsHomeView {
                   .border({ width: 1, color: KIDS_BORDER })
                   .accessibilityText(`打开${item.label}`)
                   .onClick((): void => {
-                    this.onNewChat(item.startPrompt)
+                    this.onNewChat(item.startPrompt, DEFAULT_ASSISTANT_ID)
                   })
                 }
               }, (item: KidsActivityItem): string => item.id)
