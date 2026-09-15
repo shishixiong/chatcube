@@ -14,8 +14,8 @@ export const KIDS_SURFACE: string = '#FFFDF8'
 export const KIDS_FG: string = '#24211C'
 /** 次级文字 */
 export const KIDS_MUTED: string = '#6F6A60'
-/** 三级文字（小字对比度加深版） */
-export const KIDS_SUBTLE: string = '#7A7268'
+/** 三级文字（v2.2 修正 4：bg 4.76 / surface 4.97 对比度） */
+export const KIDS_SUBTLE: string = '#746E64'
 /** 分隔线/描边 */
 export const KIDS_BORDER: string = '#DED8CC'
 /** 儿童主题色 · 小星老师暖橙 */
@@ -42,3 +42,20 @@ export const KIDS_AVATAR_2: string = '#FFB45E'
 export const KIDS_GLASS: string = '#38FFFFFF'
 /** 正文深灰（活动标签） */
 export const KIDS_INK_SOFT: string = '#4A423A'
+
+/** 学科色 · 学数学（仅 15% 淡底用；文字/图标用 KIDS_MATH_INK） */
+export const KIDS_MATH: string = '#4E8FE0'
+/** 学数学墨色（文字/图标专用，surface 对比 5.71） */
+export const KIDS_MATH_INK: string = '#1D64BE'
+/** 学科色 · 学英语 */
+export const KIDS_ENGLISH: string = '#35A98A'
+/** 学英语墨色（5.62） */
+export const KIDS_ENGLISH_INK: string = '#22735D'
+/** 学科色 · 学语文 */
+export const KIDS_CHINESE: string = '#E2603C'
+/** 学语文墨色（5.80；家长门答错也借用此色，§6 状态语义） */
+export const KIDS_CHINESE_INK: string = '#B53917'
+/** 学科色 · 小游戏 */
+export const KIDS_GAMES: string = '#8B72E0'
+/** 小游戏墨色（5.76） */
+export const KIDS_GAMES_INK: string = '#6A49DB'
