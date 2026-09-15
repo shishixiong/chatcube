@@ -1,3 +1,4 @@
+import { BusinessError } from '@kit.BasicServicesKit'
 import { StarEventRow, TodayStarSummary } from '../../models/StarEventModels'
 import { getStarRewardService } from '../../services/StarRewardService'
 import {
@@ -41,7 +42,7 @@ export struct KidsStarDetailSheet {
     getStarRewardService().getTodaySummary().then((summary: TodayStarSummary): void => {
       this.todayStars = summary.total
     }).catch((error: Object): void => {
-      console.error('KidsStarDetailSheet', `Failed to load today summary: ${JSON.stringify(error)}`)
+      console.error('KidsStarDetailSheet', `Failed to load today summary: ${(error as BusinessError).message ?? String(error)}`)
       this.todayStars = 0
     })
     getStarRewardService().getTodayEvents().then((events: StarEventRow[]): void => {
@@ -49,7 +50,7 @@ export struct KidsStarDetailSheet {
       this.eventRows = buildTodayEventRows(events)
       this.loaded = true
     }).catch((error: Object): void => {
-      console.error('KidsStarDetailSheet', `Failed to load today events: ${JSON.stringify(error)}`)
+      console.error('KidsStarDetailSheet', `Failed to load today events: ${(error as BusinessError).message ?? String(error)}`)
       this.categoryRows = []
       this.eventRows = []
       this.loaded = true

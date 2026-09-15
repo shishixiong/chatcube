@@ -1,3 +1,4 @@
+import { BusinessError } from '@kit.BasicServicesKit'
 import { ChatSession } from '../../models/ChatModels'
 import { DEFAULT_ASSISTANT_ID, KIDS_BUILT_IN_ASSISTANT_IDS } from '../../models/AssistantModels'
 import { StarEventRow, TodayStarSummary } from '../../models/StarEventModels'
@@ -80,24 +81,24 @@ export struct KidsHomeView {
     getStarRewardService().getAllTimeStarTotal().then((total: number): void => {
       this.totalStars = total
     }).catch((error: Object): void => {
-      console.error('KidsHomeView', `Failed to load total stars: ${JSON.stringify(error)}`)
+      console.error('KidsHomeView', `Failed to load total stars: ${(error as BusinessError).message ?? String(error)}`)
     })
     getStarRewardService().getTodaySummary().then((summary: TodayStarSummary): void => {
       this.todayStars = summary.total
     }).catch((error: Object): void => {
-      console.error('KidsHomeView', `Failed to load today summary: ${JSON.stringify(error)}`)
+      console.error('KidsHomeView', `Failed to load today summary: ${(error as BusinessError).message ?? String(error)}`)
       this.todayStars = 0
     })
     getStarRewardService().getTodayEvents().then((events: StarEventRow[]): void => {
       this.todayEvents = events
     }).catch((error: Object): void => {
-      console.error('KidsHomeView', `Failed to load today events: ${JSON.stringify(error)}`)
+      console.error('KidsHomeView', `Failed to load today events: ${(error as BusinessError).message ?? String(error)}`)
       this.todayEvents = []
     })
     getDatabaseService().getStarTotalsBySession().then((totals: Map<string, number>): void => {
       this.starBySession = totals
     }).catch((error: Object): void => {
-      console.error('KidsHomeView', `Failed to load session star totals: ${JSON.stringify(error)}`)
+      console.error('KidsHomeView', `Failed to load session star totals: ${(error as BusinessError).message ?? String(error)}`)
       this.starBySession = new Map()
     })
     this.loadChildName()
@@ -108,7 +109,7 @@ export struct KidsHomeView {
     getChildProfileService().getProfile().then((profile: ChildKnowledgeProfile): void => {
       this.childName = profile.childName.trim()
     }).catch((error: Object): void => {
-      console.error('KidsHomeView', `Failed to load child profile: ${JSON.stringify(error)}`)
+      console.error('KidsHomeView', `Failed to load child profile: ${(error as BusinessError).message ?? String(error)}`)
       this.childName = ''
     })
   }
@@ -126,7 +127,7 @@ export struct KidsHomeView {
     getDatabaseService().getStarTotalsByDay(sinceMs).then((totals: Map<string, number>): void => {
       this.starByDay = totals
     }).catch((error: Object): void => {
-      console.error('KidsHomeView', `Failed to load day star totals: ${JSON.stringify(error)}`)
+      console.error('KidsHomeView', `Failed to load day star totals: ${(error as BusinessError).message ?? String(error)}`)
       this.starByDay = new Map()
     })
   }

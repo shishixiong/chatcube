@@ -1,3 +1,4 @@
+import { BusinessError } from '@kit.BasicServicesKit'
 import { GateQuestion, generateGateQuestion, checkGateAnswer } from '../../utils/ParentalGateMath'
 import {
   KIDS_BG,
@@ -117,7 +118,7 @@ export struct ParentalGateSheet {
     getStarRewardService().getTodaySummary().then((summary: TodayStarSummary): void => {
       this.summaryStars = summary.total
     }).catch((error: Object): void => {
-      console.error('ParentalGateSheet', `Failed to load summary: ${JSON.stringify(error)}`)
+      console.error('ParentalGateSheet', `Failed to load summary: ${(error as BusinessError).message ?? String(error)}`)
       this.summaryStars = 0
     })
     getStarRewardService().getTodayEvents().then((events: StarEventRow[]): void => {
@@ -125,7 +126,7 @@ export struct ParentalGateSheet {
       this.summaryEventRows = buildTodayEventRows(events)
       this.summaryLoaded = true
     }).catch((error: Object): void => {
-      console.error('ParentalGateSheet', `Failed to load summary events: ${JSON.stringify(error)}`)
+      console.error('ParentalGateSheet', `Failed to load summary events: ${(error as BusinessError).message ?? String(error)}`)
       this.summaryCategoryRows = []
       this.summaryEventRows = []
       this.summaryLoaded = true  // 失败也降级显示 star-hero + 按钮，不阻塞进入家长设置
@@ -133,7 +134,7 @@ export struct ParentalGateSheet {
     getChildProfileService().getProfile().then((profile: ChildKnowledgeProfile): void => {
       this.summaryChildName = profile.childName.trim()
     }).catch((error: Object): void => {
-      console.error('ParentalGateSheet', `Failed to load child name: ${JSON.stringify(error)}`)
+      console.error('ParentalGateSheet', `Failed to load child name: ${(error as BusinessError).message ?? String(error)}`)
       this.summaryChildName = ''
     })
   }
