@@ -10,14 +10,14 @@
  *
  * 校验原则 (避免过度拒绝): 只拒绝「答案可证明错误」或「卡片不可玩」的题,
  * 纯外观问题 (question 文案缺失 / difficulty 怪异) 不在校验范围。
- *  1. arithmetic: correct_answer 是数字且在数字 options 里; expression 可计算时两者一致
+ *  1. arithmetic: expression 可计算时权威复算答案 (math_verify 同款引擎, 复算值与
+ *     correct_answer 不一致即拒绝); 期望答案必须在数字 options 里
  *  2. shape: correct_answer / options 都是白名单形状名, 正确答案在选项里
  *  3. comparison: left/right_value 是数字; correct_answer 是数学真值运算符 (方向校验)
  *  4. time: correct_answer 的 H:MM 与 clock_hour/clock_minute 一致
  *  5. elapsed_time: correct_answer 的时长与 start/end 四字段计算结果一致
  */
 
-import { evaluateMathExpression } from './MathExpressionParser'
 import {
   normalizeQuizType,
   normalizeShapeName,
@@ -28,7 +28,8 @@ import {
   computeElapsedDuration,
   formatDuration,
   normalizeTimeString,
-  normalizeDurationString
+  normalizeDurationString,
+  tryEvaluateExpression
 } from './MathQuizGame'
 
 export interface MathQuizValidationResult {
@@ -99,36 +100,31 @@ function containsString(values: string[], target: string): boolean {
   return false
 }
 
-// 尝试计算表达式; 无法计算返回 null (不抛异常)
-function tryEvaluate(expression: string): number | null {
-  try {
-    return evaluateMathExpression(expression)
-  } catch (_e) {
-    return null
-  }
-}
-
 function validateArithmetic(parsed: Record<string, Object>): MathQuizValidationResult {
   const rawCorrect = parsed['correct_answer']
   const expression = ((parsed['expression'] as string) ?? '').trim()
 
-  // 期望答案: 优先 correct_answer; 缺失时回退用 expression 计算 (parseMathQuiz 同款兜底)
-  let expected: number | null = null
+  // LLM 声称的答案: 数字或字符串型数字都接受 (与 parseMathQuiz 同口径)
+  let declared: number | null = null
   if (typeof rawCorrect === 'number') {
-    expected = rawCorrect as number
-  } else if (expression !== '') {
-    expected = tryEvaluate(expression)
+    declared = rawCorrect as number
+  } else if (typeof rawCorrect === 'string') {
+    const text: string = (rawCorrect as string).trim()
+    const n: number = Number(text)
+    if (text !== '' && Number.isFinite(n)) {
+      declared = n
+    }
   }
+
+  // 权威复算: expression (sanitize 后) 可计算时以计算值为准 (math_verify 同款引擎)
+  const computed = tryEvaluateExpression(expression)
+  const expected: number | null = computed !== null ? computed : declared
   if (expected === null) {
     return fail('arithmetic 题缺少正确答案: correct_answer 必须是数字 (或提供可计算的 expression), 请修正后重新出题')
   }
-
-  // expression 与 correct_answer 交叉验证 (两者都在且可计算时)
-  if (expression !== '' && typeof rawCorrect === 'number') {
-    const computed = tryEvaluate(expression)
-    if (computed !== null && Math.abs(computed - (rawCorrect as number)) > 0.001) {
-      return fail(`arithmetic 题答案不一致: expression「${expression}」计算结果是 ${computed}, 但 correct_answer 是 ${rawCorrect}, 请修正后重新出题`)
-    }
+  // 声称值与复算值同时存在且不一致 → 可证明答案错误, 拒绝并让 AI 自我修正
+  if (computed !== null && declared !== null && Math.abs(computed - declared) > 0.001) {
+    return fail(`arithmetic 题答案不一致: expression「${expression}」计算结果是 ${computed}, 但 correct_answer 是 ${declared}, 请修正后重新出题`)
   }
 
   const options = collectNumberOptions(parsed)

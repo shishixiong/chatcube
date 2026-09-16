@@ -234,7 +234,9 @@ export struct CardShell {
   // ================ feedback: 对/错统一横幅 ========================
   @Builder
   FeedbackRegion() {
-    if (this.state.submitted || this.isAnswered) {
+    // feedbackSuppressed: 卡片无法判定对错时(如历史 payload 丢失)整块不渲染,
+    // 避免默认 isCorrect=false 落成假「再试一次」
+    if ((this.state.submitted || this.isAnswered) && !this.state.feedbackSuppressed) {
       Column({ space: 8 }) {
         if (this.state.isCorrect) {
           Column({ space: 6 }) {

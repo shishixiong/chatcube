@@ -62,6 +62,51 @@ export interface ExpressionToken {
 const MATH_OP_CHARS: string = '+-*/()×÷'
 
 /**
+ * 把表达式里的 '=' / '?' / 中文等杂质剥离, 返回可交给 evaluateMathExpression
+ * 计算的纯算式串。首个 '=' 或 '?' 之后的内容全部截断; 无有效字符时返回 ''。
+ * 例: '49 ÷ 7 = ?' → '49 ÷ 7 '。
+ */
+export function sanitizeExpression(expr: string): string {
+  let s: string = expr
+  const eqIdx: number = s.indexOf('=')
+  if (eqIdx >= 0) {
+    s = s.substring(0, eqIdx)
+  }
+  const qIdx: number = s.indexOf('?')
+  if (qIdx >= 0) {
+    s = s.substring(0, qIdx)
+  }
+  // 正则字符类必须与 MATH_OP_CHARS + 数字/小数点保持同步
+  const matches = s.match(/[\d.+\-*/()×÷]/g)
+  if (matches === null || matches.length === 0) {
+    return ''
+  }
+  return matches.join('')
+}
+
+/**
+ * 计算 (sanitize 后的) 表达式; 无法计算返回 null, 不抛异常。
+ * 与 math_verify 工具同一引擎 (evaluateMathExpression) —— 这是算术题
+ * 判分的权威口径: 能算出来就以计算值为准, 不信任 LLM 传的 correct_answer。
+ * 结果四舍五入到 3 位小数, 消除浮点噪声 (与 isCorrectAnswer 的 === 比较口径一致)。
+ */
+export function tryEvaluateExpression(expr: string): number | null {
+  const sanitized = sanitizeExpression(expr)
+  if (sanitized === '') {
+    return null
+  }
+  try {
+    const computed: number = evaluateMathExpression(sanitized)
+    if (!Number.isFinite(computed)) {
+      return null
+    }
+    return Math.round(computed * 1000) / 1000
+  } catch (_e) {
+    return null
+  }
+}
+
+/**
  * 解析 AI 传入的 toolCall.arguments JSON 字符串为题目数据。
  * 解析失败时返回空对象, 不抛异常, 由上层决定如何降级渲染。
  */
@@ -91,10 +136,21 @@ export function parseMathQuiz(argsJson: string): MathQuizQuestion {
     result.skillKey = (parsed['skill_key'] as string) ?? ''
 
     if (result.type === 'arithmetic') {
-      // 算术题型: 维持原行为
+      // 算术题型: 正确答案以表达式权威复核 (math_verify 同款引擎), 不再无条件
+      // 信任 LLM 传的 correct_answer —— 传错答案/字符串答案都会导致误判分。
       result.expression = (parsed['expression'] as string) ?? ''
       const rawCorrect = parsed['correct_answer']
-      result.correctAnswer = typeof rawCorrect === 'number' ? (rawCorrect as number) : 0
+      let llmAnswer: number = 0
+      if (typeof rawCorrect === 'number') {
+        llmAnswer = rawCorrect as number
+      } else if (typeof rawCorrect === 'string') {
+        // 字符串型数字 (如 "7") 也接受; 旧行为强归 0 会丢正确答案
+        const text: string = (rawCorrect as string).trim()
+        const n: number = Number(text)
+        llmAnswer = (text !== '' && Number.isFinite(n)) ? n : 0
+      }
+      const computed = tryEvaluateExpression(result.expression)
+      result.correctAnswer = computed !== null ? computed : llmAnswer
       // 应用题旗标: AI 显式传 word_problem=true 时启用 (只渲染 question, 隐藏算式)
       const wp = parsed['word_problem']
       result.wordProblem = (wp === true || wp === 'true')
@@ -106,13 +162,6 @@ export function parseMathQuiz(argsJson: string): MathQuizQuestion {
           if (typeof val === 'number') {
             result.options.push(val as number)
           }
-        }
-      }
-      if (result.correctAnswer === 0 && result.expression !== '') {
-        try {
-          result.correctAnswer = evaluateMathExpression(result.expression)
-        } catch (_e) {
-          // 无法计算, 保持 0
         }
       }
     } else if (result.type === 'shape') {

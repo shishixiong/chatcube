@@ -55,7 +55,7 @@ export const KIDS_SUBJECTS: KidsSubjectItem[] = [
     ink: KIDS_MATH_INK,
     countUnit: '题',
     dailyLimit: 10,
-    startPrompt: '我想练数学题，请给我出题吧',
+    startPrompt: '我想玩数学游戏：口算、比大小、认图形、看时钟、应用题都可以，请换着花样给我出题吧',
     activityTypes: ['math_quiz']
   },
   {
@@ -69,7 +69,7 @@ export const KIDS_SUBJECTS: KidsSubjectItem[] = [
     ink: KIDS_ENGLISH_INK,
     countUnit: '题',
     dailyLimit: 10,
-    startPrompt: '我想练英语，请给我出题吧',
+    startPrompt: '我想学英语：听音选词、看图识词、认字母、学单词都可以，请换着花样给我出题吧',
     activityTypes: ['english_quiz', 'picture_vocab', 'listening_quiz']
   },
   {
@@ -83,7 +83,7 @@ export const KIDS_SUBJECTS: KidsSubjectItem[] = [
     ink: KIDS_CHINESE_INK,
     countUnit: '题',
     dailyLimit: 10,
-    startPrompt: '我想学语文，请带我练拼音和写字吧',
+    startPrompt: '我想学语文：拼音认读和学写字换着练，请给我安排吧',
     activityTypes: ['pinyin_quiz', 'handwriting_practice']
   },
   {
@@ -97,7 +97,7 @@ export const KIDS_SUBJECTS: KidsSubjectItem[] = [
     ink: KIDS_GAMES_INK,
     countUnit: '局',
     dailyLimit: 20,
-    startPrompt: '我想玩益智小游戏，请开始一局吧',
+    startPrompt: '我想玩益智游戏：华容道、走迷宫、数独、连一连、分类都可以，请换着花样开始一局吧',
     activityTypes: ['number_puzzle', 'maze', 'sudoku', 'matching_pairs', 'categorization']
   }
 ]

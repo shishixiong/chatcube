@@ -30,4 +30,7 @@ export class CardShellState {
   @Trace feedbackBadge: string = ''
   /** 整局结束(胜或弃), 驱动放弃动作隐藏; 与 submitted 分离——放弃时不显示横幅 */
   @Trace isFinished: boolean = false
+  /** 抑制对/错反馈横幅: 历史恢复时 payload 丢失、无法判定对错时使用,
+   *  避免默认 isCorrect=false 被误渲染成「再试一次」假答错。默认 false 不影响现有卡片 */
+  @Trace feedbackSuppressed: boolean = false
 }

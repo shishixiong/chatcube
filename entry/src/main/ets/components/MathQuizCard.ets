@@ -125,6 +125,11 @@ export struct MathQuizCard {
         this.showResult = true
         this.isCorrect = prev.correct
         this.correctAnswerValue = prev.correct_answer
+      } else {
+        // payload 缺失/不可解析(如旧会话数据断链): 无法判定当时对错,
+        // 抑制反馈横幅——否则默认 isCorrect=false 会把实际答对的题
+        // 渲染成假「再试一次」(绿色揭示正确答案 + 红色横幅的矛盾组合)
+        this.shellState.feedbackSuppressed = true
       }
     }
     // 异步加载连胜 (fire-and-forget, 由 streakLoaded 守卫竞态)
