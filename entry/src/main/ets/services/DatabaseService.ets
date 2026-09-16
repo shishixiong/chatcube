@@ -1,5 +1,6 @@
 import { relationalStore } from '@kit.ArkData'
 import { Context } from '@kit.AbilityKit'
+import { BusinessError } from '@kit.BasicServicesKit'
 import {
   ChatMessage,
   ChatSession,
@@ -10,7 +11,7 @@ import {
   SearchReference,
   ReasoningLevel
 } from '../models/ChatModels'
-import { Assistant, DEFAULT_ASSISTANT_ID, createDefaultAssistant, createKidsSubjectAssistants, DEFAULT_ASSISTANT_SYSTEM_PROMPT, DEFAULT_ASSISTANT_LOCKED_TOOL_IDS } from '../models/AssistantModels'
+import { Assistant, DEFAULT_ASSISTANT_ID, createDefaultAssistant, createKidsSubjectAssistants, getBuiltInAssistantSpec, KidsSubjectAssistantSpec, DEFAULT_ASSISTANT_SYSTEM_PROMPT, DEFAULT_ASSISTANT_LOCKED_TOOL_IDS } from '../models/AssistantModels'
 import { GeneratedMedia } from '../models/ImageGenerationModels'
 import { StarEventInsert, StarEventRow } from '../models/StarEventModels'
 import { DailyLessonPlanRow, PreparedMediaRow, PlannerStats } from '../models/LessonPlanModels'
@@ -1289,7 +1290,10 @@ export class DatabaseService {
 
 	  /**
 	   * 确保 4 个儿童学科助手存在（spec 2026-09-15 §3.3）。
-	   * 幂等：老用户升级后启动自动补建；已存在则跳过。
+	   * 幂等：老用户升级后启动自动补建；已存在则与内置规范对账——
+	   * normalizeAssistant 只覆盖写路径（create/save），加载路径不规范化，
+	   * 因此版本升级修订 systemPrompt/锁定工具/元数据后，DB 旧值靠这里对齐。
+	   * 全部字段一致时跳过写入（每次启动都跑，必须便宜且幂等）。
 	   */
 	  private async ensureKidsSubjectAssistants(): Promise<void> {
 	    if (this.rdbStore === null) {
@@ -1300,6 +1304,7 @@ export class DatabaseService {
 	      const assistant: Assistant = subjectAssistants[i]
 	      const existing = await this.queryAssistantByIdNoWait(assistant.id)
 	      if (existing !== null) {
+	        await this.reconcileKidsSubjectAssistant(existing)
 	        continue
 	      }
 	      try {
@@ -1308,6 +1313,44 @@ export class DatabaseService {
 	        console.error('DatabaseService',
 	          `Failed to create kids subject assistant ${assistant.id}: ${JSON.stringify(error)}`)
 	      }
+	    }
+	  }
+
+	  /**
+	   * 已存在的学科助手与 getBuiltInAssistantSpec 对账：name/avatarSymbol/color/
+	   * systemPrompt/sortOrder/enabledToolIds（排序 join 比较，ArkTS 无数组深比较）
+	   * 任一不同则以规范值更新（保留 id/createdAt，updatedAt = now）；一致则不写。
+	   */
+	  private async reconcileKidsSubjectAssistant(existing: Assistant): Promise<void> {
+	    const spec: KidsSubjectAssistantSpec | null = getBuiltInAssistantSpec(existing.id)
+	    if (spec === null) {
+	      return
+	    }
+	    const existingToolIdsKey: string = [...existing.enabledToolIds].sort().join(',')
+	    const specToolIdsKey: string = [...spec.lockedToolIds].sort().join(',')
+	    const needUpdate: boolean = existing.name !== spec.name ||
+	      existing.avatarSymbol !== spec.avatarSymbol ||
+	      existing.color !== spec.color ||
+	      existing.systemPrompt !== spec.systemPrompt ||
+	      existing.sortOrder !== spec.sortOrder ||
+	      existingToolIdsKey !== specToolIdsKey
+	    if (!needUpdate || this.rdbStore === null) {
+	      return
+	    }
+	    existing.name = spec.name
+	    existing.avatarSymbol = spec.avatarSymbol
+	    existing.color = spec.color
+	    existing.systemPrompt = spec.systemPrompt
+	    existing.sortOrder = spec.sortOrder
+	    existing.enabledToolIds = [...spec.lockedToolIds]
+	    existing.updatedAt = Date.now()
+	    const predicates = new relationalStore.RdbPredicates(TableNames.ASSISTANTS)
+	    predicates.equalTo('id', existing.id)
+	    try {
+	      await this.rdbStore.update(this.assistantToValueBucket(existing, false), predicates)
+	    } catch (error) {
+	      console.error('DatabaseService',
+	        `Failed to reconcile kids subject assistant ${existing.id}: ${(error as BusinessError).message ?? String(error)}`)
 	    }
 	  }
 
