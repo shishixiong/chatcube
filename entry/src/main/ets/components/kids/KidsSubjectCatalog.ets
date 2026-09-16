@@ -11,7 +11,7 @@ import {
 
 /**
  * 儿童主屏「今天玩什么」2×2 学科目录（纯数据，无 ArkUI 依赖）。
- * 取代 v1 的 KidsActivityCatalog（12 emoji 宫格，已删）。
+ * 取代 v1 的 12 emoji 宫格活动目录组件（已删除）。
  *
  * 每学科绑定一个专用内置助手（spec §3）；activityTypes 决定「今日 N 题」
  * 的星星事件归属（按 activityType 而非会话助手，chat_correct 不计入任何学科）。
