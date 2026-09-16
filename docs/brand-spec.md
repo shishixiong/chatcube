@@ -168,3 +168,7 @@
 **触控目标**：全部可点元素 ≥44px（`.qopt` 46、`.pm-done` 48、`.back/.sheet-close/.send` 44、`.play` 56、`.hero-more` 44、`.parent` 46）。
 **未达项**：`.avatar` 的 `--on-gold` 在 `--avatar-1` 上 4.36:1——头像为 19px 粗体（≥14pt bold，属大字号，阈值 3:1）且 `aria-hidden`，故通过；如未来把头像可见文字化，需改深色字。
 
+## 14. 落地状态（2026-09-15）
+
+本规范 v2 已在 ArkTS 端落地：儿童主屏三段式（`components/kids/KidsHomeView.ets`）、2×2 学科卡（`KidsSubjectCatalog.ets` + 4 学科内置助手）、按天分组学习乐园（`KidsDayGroupCard.ets`）、今日星星明细（`KidsStarDetailSheet.ets`）、家长门两阶段（`ParentalGateSheet.ets`）。8 个 monoline SVG 图标位于 `resources/rawfile/kids/`（star/math/english/chinese/games/lock/chevron/close，颜色 baked-in）。令牌实现在 `components/kids/KidsBrandTokens.ets`（`KIDS_SUBTLE` 已按 §13.4 修正为 `#746E64`；8 个学科色令牌 `KIDS_MATH`/`KIDS_MATH_INK` 等与本文一致）。设计 spec：`docs/superpowers/specs/2026-09-15-kids-home-v2-redesign-design.md`。
+
