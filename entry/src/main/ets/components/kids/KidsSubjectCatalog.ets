@@ -10,7 +10,7 @@ import {
 } from './KidsBrandTokens'
 
 /**
- * 儿童主屏「今天玩什么」2×2 学科目录（纯数据，无 ArkUI 依赖）。
+ * 儿童主屏「来获取星星」2×2 学科目录（纯数据，无 ArkUI 依赖）。
  * 取代 v1 的 12 emoji 宫格活动目录组件（已删除）。
  *
  * 每学科绑定一个专用内置助手（spec §3）；activityTypes 决定「今日 N 题」
@@ -35,6 +35,8 @@ export interface KidsSubjectItem {
   ink: string
   /** 今日计数量词：题 / 局 */
   countUnit: string
+  /** 每日练习上限（按「今日 N 题/局」口径计数，达到后当日不再开新会话） */
+  dailyLimit: number
   /** 点击卡片后自动发送的引导语 */
   startPrompt: string
   /** 「今日 N 题」计数归属的 StarActivityType 集合 */
@@ -52,6 +54,7 @@ export const KIDS_SUBJECTS: KidsSubjectItem[] = [
     color: KIDS_MATH,
     ink: KIDS_MATH_INK,
     countUnit: '题',
+    dailyLimit: 10,
     startPrompt: '我想练数学题，请给我出题吧',
     activityTypes: ['math_quiz']
   },
@@ -65,6 +68,7 @@ export const KIDS_SUBJECTS: KidsSubjectItem[] = [
     color: KIDS_ENGLISH,
     ink: KIDS_ENGLISH_INK,
     countUnit: '题',
+    dailyLimit: 10,
     startPrompt: '我想练英语，请给我出题吧',
     activityTypes: ['english_quiz', 'picture_vocab', 'listening_quiz']
   },
@@ -78,6 +82,7 @@ export const KIDS_SUBJECTS: KidsSubjectItem[] = [
     color: KIDS_CHINESE,
     ink: KIDS_CHINESE_INK,
     countUnit: '题',
+    dailyLimit: 10,
     startPrompt: '我想学语文，请带我练拼音和写字吧',
     activityTypes: ['pinyin_quiz', 'handwriting_practice']
   },
@@ -91,6 +96,7 @@ export const KIDS_SUBJECTS: KidsSubjectItem[] = [
     color: KIDS_GAMES,
     ink: KIDS_GAMES_INK,
     countUnit: '局',
+    dailyLimit: 20,
     startPrompt: '我想玩益智小游戏，请开始一局吧',
     activityTypes: ['number_puzzle', 'maze', 'sudoku', 'matching_pairs', 'categorization']
   }

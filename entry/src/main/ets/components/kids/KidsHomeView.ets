@@ -33,11 +33,13 @@ const KIDS_GARDEN_DAY_LIMIT: number = 7
  * 儿童主屏 v2（spec 2026-09-15 三段式布局）:
  * 问候行（昵称头像 + 时段问候 + 星星药丸）-> hero 一天一会话主卡（今日日期眉标 +
  * 静态星星图标 + 两态副文案 + 主 CTA + 今日星星徽章 + 看明细）-> 2×2 学科卡
- * 「今天玩什么」-> 学习乐园按天分组（KidsDayGroupCard，7 天上限，同日 >3 折叠）
+ * 「来获取星星」-> 学习乐园按天分组（KidsDayGroupCard，7 天上限，同日 >3 折叠）
  * -> 居中家长入口。
  *
  * hero 一天一会话: 今日的小星老师会话存在 -> onOpenSession 续接，否则
- * onNewChat('', DEFAULT) 开新会话。学科卡无此限制——每次点击都开新会话。
+ * onNewChat('', DEFAULT) 开新会话。学科卡每次点击都开新会话，但受 dailyLimit
+ * 每日上限约束（学数学/英语/语文各 10、小游戏 20，按「今日 N 题/局」口径计数）——
+ * 达上限后卡片降透明度置灰、点击无响应，次日自动恢复。
  * 恒定暖色绘本令牌（KidsBrandTokens），不随深色模式切换；图标一律 SVG，无 emoji。
  * 星星数据自加载, starRefreshTick 由宿主在导航栈 didShow(navBar) 时递增触发刷新。
  */
@@ -168,6 +170,11 @@ export struct KidsHomeView {
 
   private todayCountFor(subject: KidsSubjectItem): number {
     return countTodayBySubject(this.todayEvents, subject.activityTypes)
+  }
+
+  /** 是否达到每日上限（今日 N 题/局口径，达上限当日不再开新会话） */
+  private isCapped(subject: KidsSubjectItem): boolean {
+    return this.todayCountFor(subject) >= subject.dailyLimit
   }
 
   private displayName(): string {
@@ -343,8 +350,8 @@ export struct KidsHomeView {
         .alignItems(VerticalAlign.Center)
         .width('100%')
 
-        Row({ space: 10 }) {
-          // 主 CTA 白底胶囊 ≥44vp
+        Column({ space: 10 }) {
+          // 主 CTA 白底胶囊 ≥44vp，独占一行（窄屏单行三件套会裁掉看明细）
           Row({ space: 8 }) {
             Text('开始今天的学习')
               .fontSize(15)
@@ -352,43 +359,47 @@ export struct KidsHomeView {
               .fontColor(KIDS_FG)
             Image($rawfile('kids/chevron.svg')).width(14).height(14)
           }
-          .padding({ left: 20, right: 20 })
+          .width('100%')
           .height(46)
+          .justifyContent(FlexAlign.Center)
           .borderRadius(999)
           .backgroundColor(KIDS_SURFACE)
           .shadow({ radius: 14, color: '#403A2506', offsetY: 6 })
 
-          Blank()
+          Row() {
+            // 今日星星徽章（N=0 也显示——「今天还没来」动机）
+            Row({ space: 5 }) {
+              Image($rawfile('kids/star.svg')).width(12).height(12)
+              Text(`今日 +${this.todayStars}`)
+                .fontSize(12.5)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(KIDS_ON_HERO)
+            }
+            .padding({ left: 13, right: 13, top: 9, bottom: 9 })
+            .borderRadius(999)
+            .backgroundColor('#243A2506')
+            .accessibilityText(`今日获得 ${this.todayStars} 颗星`)
 
-          // 今日星星徽章（N=0 也显示——「今天还没来」动机）
-          Row({ space: 5 }) {
-            Image($rawfile('kids/star.svg')).width(12).height(12)
-            Text(`今日 +${this.todayStars}`)
+            Blank()
+
+            // 看明细（44vp 触控高、描边胶囊）
+            Text('看明细')
               .fontSize(12.5)
               .fontWeight(FontWeight.Medium)
               .fontColor(KIDS_ON_HERO)
+              .padding({ left: 14, right: 14 })
+              .height(44)
+              .borderRadius(999)
+              .border({ width: 1.5, color: '#333A2506' })
+              .textAlign(TextAlign.Center)
+              .onClick((): void => {
+                this.showStarDetailSheet = true
+              })
           }
-          .padding({ left: 13, right: 13, top: 9, bottom: 9 })
-          .borderRadius(999)
-          .backgroundColor('#243A2506')
-          .accessibilityText(`今日获得 ${this.todayStars} 颗星`)
-
-          // 看明细（44vp 触控高、描边胶囊）
-          Text('看明细')
-            .fontSize(12.5)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(KIDS_ON_HERO)
-            .padding({ left: 14, right: 14 })
-            .height(44)
-            .borderRadius(999)
-            .border({ width: 1.5, color: '#333A2506' })
-            .textAlign(TextAlign.Center)
-            .onClick((): void => {
-              this.showStarDetailSheet = true
-            })
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
         }
         .width('100%')
-        .alignItems(VerticalAlign.Center)
       }
       .padding(20)
       .width('100%')
@@ -422,7 +433,7 @@ export struct KidsHomeView {
   SubjectSection() {
     Column({ space: 12 }) {
       Row() {
-        Text('今天玩什么')
+        Text('来获取星星')
           .fontSize(17.5)
           .fontWeight(FontWeight.Bold)
           .fontColor(KIDS_FG)
@@ -482,18 +493,20 @@ export struct KidsHomeView {
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
-      // 底部状态行: 1px 虚线上边框 + 今日计数 + 开始 ›
+      // 底部状态行: 1px 虚线上边框 + 今日计数（达上限换文案） + 开始 ›/明天见
       Row() {
-        Text(this.todayCountFor(item) > 0 ?
-          `今日 ${this.todayCountFor(item)} ${item.countUnit}` :
-          (item.id === 'games' ? '今天还没玩' : '今天还没练'))
+        Text(this.isCapped(item) ?
+          '今天练够啦，明天再来' :
+          (this.todayCountFor(item) > 0 ?
+            `今日 ${this.todayCountFor(item)} ${item.countUnit}` :
+            (item.id === 'games' ? '今天还没玩' : '今天还没练')))
           .fontSize(10.5)
           .fontColor(KIDS_SUBTLE)
         Blank()
-        Text('开始 ›')
+        Text(this.isCapped(item) ? '明天见' : '开始 ›')
           .fontSize(11.5)
           .fontWeight(FontWeight.Bold)
-          .fontColor(item.ink)
+          .fontColor(this.isCapped(item) ? KIDS_SUBTLE : item.ink)
       }
       .width('100%')
       .height(30)
@@ -506,10 +519,14 @@ export struct KidsHomeView {
     .backgroundColor(KIDS_SURFACE)
     .border({ width: 1, color: KIDS_BORDER })
     .shadow({ radius: 8, color: '#1424211C', offsetY: 3 })
-    .accessibilityText(`打开${item.label}`)
+    .opacity(this.isCapped(item) ? 0.55 : 1)
+    .accessibilityText(this.isCapped(item) ? `${item.label}今天练够啦` : `打开${item.label}`)
     .scale(this.pressedSubjectId === item.id ? { x: 0.98, y: 0.98 } : { x: 1, y: 1 })
     .animation({ duration: 70, curve: Curve.EaseOut })
     .onTouch((e: TouchEvent): void => {
+      if (this.isCapped(item)) {
+        return
+      }
       if (e.type === TouchType.Down) {
         this.pressedSubjectId = item.id
       } else if (e.type === TouchType.Up || e.type === TouchType.Cancel) {
@@ -517,6 +534,10 @@ export struct KidsHomeView {
       }
     })
     .onClick((): void => {
+      // 每日上限: 达到后当日不再开新会话
+      if (this.isCapped(item)) {
+        return
+      }
       this.onNewChat(item.startPrompt, item.assistantId)
     })
   }
