@@ -56,6 +56,13 @@ export struct KidsHomeView {
   @Local childName: string = ''
   @Local starBySession: Map<string, number> = new Map()
   @Local starByDay: Map<string, number> = new Map()
+  /**
+   * 星星 Map 异步加载完成计数（单调递增）。starByDay/starBySession 均为 DB 异步加载，
+   * 解析后 @Local Map 引用变化不足以驱动 GardenSection 的 ForEach 重建子组件（key 未变时
+   * ArkUI 复用旧 KidsDayGroupCard，@Param 不刷新）。把它折进 ForEach key，保证任一 Map
+   * 落地后 key 变化 -> 子组件按新数据重挂。
+   */
+  @Local starLoadTick: number = 0
   @Local showGateSheet: boolean = false
   @Local showStarDetailSheet: boolean = false
   /** 按压反馈（spec §7: scale 0.98 + 60-80ms）: hero 卡 */
@@ -70,7 +77,10 @@ export struct KidsHomeView {
 
   @Monitor('sessions')
   onSessionsChanged(): void {
-    // 回到主屏时会话 updatedAt 已刷新 -> 重算今日会话与分组（build 内派生计算自动生效）
+    // 分组/今日会话是 build 内派生计算，sessions 变化自动生效；但 starByDay 是按最早
+    // 显示天算 sinceMs 的异步 DB 加载——冷启动时 sessions 可能尚未就绪（分组为空 ->
+    // starByDay 空 Map 且不再重试）。sessions 到达后必须重新触发 loadStarByDay。
+    this.loadStarByDay()
   }
 
   aboutToAppear(): void {
@@ -97,6 +107,7 @@ export struct KidsHomeView {
     })
     getDatabaseService().getStarTotalsBySession().then((totals: Map<string, number>): void => {
       this.starBySession = totals
+      this.starLoadTick++
     }).catch((error: Object): void => {
       console.error('KidsHomeView', `Failed to load session star totals: ${(error as BusinessError).message ?? String(error)}`)
       this.starBySession = new Map()
@@ -126,6 +137,7 @@ export struct KidsHomeView {
     const sinceMs: number = getStartOfDayMs(oldest.updatedAt)
     getDatabaseService().getStarTotalsByDay(sinceMs).then((totals: Map<string, number>): void => {
       this.starByDay = totals
+      this.starLoadTick++
     }).catch((error: Object): void => {
       console.error('KidsHomeView', `Failed to load day star totals: ${(error as BusinessError).message ?? String(error)}`)
       this.starByDay = new Map()
@@ -534,7 +546,8 @@ export struct KidsHomeView {
             this.onOpenSession(sessionId)
           }
         })
-      }, (group: KidsDayGroup): string => group.dayKey)
+      }, (group: KidsDayGroup): string =>
+        `${group.dayKey}_${group.sessions.length}_${this.starByDay.get(group.dayKey) ?? 0}_${this.starRefreshTick}_${this.starLoadTick}`)
     }
     .width('100%')
   }
