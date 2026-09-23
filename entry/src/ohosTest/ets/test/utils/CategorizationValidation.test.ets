@@ -398,4 +398,75 @@ export default function categorizationValidationTest() {
       expect(r.error.includes('不在标准范围')).assertTrue()
     })
   })
+
+  describe('validateAndNormalizeCategorization - why 讲解字段', () => {
+    // 构造最小合法题面
+    function buildMinimalArgs(extra: Record<string, Object>): string {
+      const base: Record<string, Object> = {
+        theme: '水果',
+        bins: [
+          { name: '水果', emoji: '' },
+          { name: '蔬菜', emoji: '' }
+        ],
+        items: [
+          { name: '苹果', emoji: '', bin_index: 0 },
+          { name: '香蕉', emoji: '', bin_index: 0 },
+          { name: '白菜', emoji: '', bin_index: 1 },
+          { name: '萝卜', emoji: '', bin_index: 1 }
+        ]
+      }
+      // ArkTS 不支持展开运算符合并对象, 逐 key 写入
+      const keys = Object.keys(extra)
+      for (let i = 0; i < keys.length; i++) {
+        base[keys[i]] = extra[keys[i]]
+      }
+      return JSON.stringify(base)
+    }
+
+    it('why 存在: 原样透传', 0, () => {
+      const r = validateAndNormalizeCategorization(buildMinimalArgs({
+        why: '苹果和香蕉是水果，白菜和萝卜是蔬菜。'
+      }))
+      expect(r.ok).assertTrue()
+      expect(r.why).assertEqual('苹果和香蕉是水果，白菜和萝卜是蔬菜。')
+    })
+
+    it('why 缺失: 返回空串 (可选字段)', 0, () => {
+      const r = validateAndNormalizeCategorization(buildMinimalArgs({}))
+      expect(r.ok).assertTrue()
+      expect(r.why).assertEqual('')
+    })
+
+    it('why 纯空白: 视同缺失, 返回空串', 0, () => {
+      const r = validateAndNormalizeCategorization(buildMinimalArgs({ why: '   ' }))
+      expect(r.ok).assertTrue()
+      expect(r.why).assertEqual('')
+    })
+
+    it('why 首尾空白: trim 后透传', 0, () => {
+      const r = validateAndNormalizeCategorization(buildMinimalArgs({ why: '  苹果是水果。  ' }))
+      expect(r.ok).assertTrue()
+      expect(r.why).assertEqual('苹果是水果。')
+    })
+
+    it('why 超长 (>120 字): 截断到 120 字', 0, () => {
+      let longWhy = ''
+      for (let i = 0; i < 40; i++) {
+        longWhy = longWhy + '讲解'
+      }
+      const r = validateAndNormalizeCategorization(buildMinimalArgs({ why: longWhy }))
+      expect(r.ok).assertTrue()
+      expect(r.why.length).assertEqual(120)
+    })
+
+    it('why 非字符串类型 (number): 视同缺失, 返回空串', 0, () => {
+      // 直接拼原始 JSON: JSON.stringify 会把 number why 序列化为 "why":42
+      const rawJson = '{"theme":"水果","bins":[{"name":"水果"},{"name":"蔬菜"}],' +
+        '"items":[{"name":"苹果","bin_index":0},{"name":"香蕉","bin_index":0},' +
+        '{"name":"白菜","bin_index":1},{"name":"萝卜","bin_index":1}],"why":42}'
+      const r = validateAndNormalizeCategorization(rawJson)
+      expect(r.ok).assertTrue()
+      expect(r.why).assertEqual('')
+    })
+  })
 }

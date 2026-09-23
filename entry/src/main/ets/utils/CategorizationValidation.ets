@@ -14,6 +14,7 @@
  *   - 每个桶至少 2 件物品
  *   - theme 非空
  *   - difficulty 缺失 / 非法时, 由 items.length 自动推断 (4→1 / 6→2 / 9→3)
+ *   - why 讲解可选: 仅接受字符串 (非字符串视同缺失), trim 后 ≤120 字截断
  */
 
 import { CategorizationBin, CategorizationItem } from '../components/CategorizationCard'
@@ -27,7 +28,11 @@ export interface NormalizedCategorizationData {
   difficulty: number
   theme: string
   instruction: string
+  why: string
 }
+
+// why 讲解的字数上限 (完成后横幅展示一句话, 过长截断)
+const WHY_MAX_LENGTH: number = 120
 
 // 构造失败结果 (ok=false)。抽成模块级顶层函数, 避免组件内闭包。
 function fail(msg: string): NormalizedCategorizationData {
@@ -38,7 +43,8 @@ function fail(msg: string): NormalizedCategorizationData {
     items: [],
     difficulty: 1,
     theme: '',
-    instruction: ''
+    instruction: '',
+    why: ''
   }
 }
 
@@ -61,6 +67,16 @@ export function validateAndNormalizeCategorization(args: string): NormalizedCate
     return fail('主题为空，请提示小星老师再出一题吧')
   }
   const instruction = ((parsed['instruction'] as string) ?? '').trim()
+
+  // why 讲解: 可选, 仅接受字符串 (LLM 偶发发数字/对象时视同缺失), trim + 截断
+  let why = ''
+  const whyRaw = parsed['why']
+  if (typeof whyRaw === 'string') {
+    why = (whyRaw as string).trim()
+    if (why.length > WHY_MAX_LENGTH) {
+      why = why.substring(0, WHY_MAX_LENGTH)
+    }
+  }
 
   const binsRaw = parsed['bins'] as Array<Record<string, Object>> | undefined
   if (!binsRaw || binsRaw.length < 2 || binsRaw.length > 3) {
@@ -126,6 +142,7 @@ export function validateAndNormalizeCategorization(args: string): NormalizedCate
     items,
     difficulty,
     theme,
-    instruction
+    instruction,
+    why
   }
 }

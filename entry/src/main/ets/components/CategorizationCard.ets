@@ -1,11 +1,13 @@
 /**
  * CategorizationCard - 分类小管家互动卡片
  *
- * 设计语言对齐 NumberPuzzleCard / MathQuizCard 卡片族:
+ * 设计语言对齐 NumberPuzzleCard / MathQuizCard 卡片族 + docs/categorization-game.html 原型:
  * - CardShell 统一外壳 (head/stem/feedback), direct 模式 (usesConfirm: false)
- * - 物品圆球 + 桶虚线轮廓, 拖拽或"先点物品再点桶"两种交互
+ * - 物品白底卡 + 桶虚线轮廓 (绘本感), 拖拽或"先点物品再点桶"两种交互
+ * - 物品/桶图标: CategorizationIconBank 解析 rawfile SVG (kids/icons/),
+ *   未命中退化 emoji → 文字 (题库外自由题仍可玩)
  * - 双卡片统计 (时间 / 进度)
- * - 完成反馈横幅 (绿色) / 放弃药丸 (橙色) 由 shellState 驱动
+ * - 完成反馈横幅含「为什么这样分」讲解 (why); 答错轻摇 + 轻提示文字, 不扣分
  * - 严格的输入校验: 桶数 2-3、物品数 4/6/9、bin_index 合法、每桶 ≥2 物品
  *
  * 公共 API: toolCall / isAnswered / answeredPayload / largeSize / onAnswer
@@ -17,6 +19,7 @@ import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { getPreferencesService, PreferenceKeys } from '../services/PreferencesService'
 import { validateAndNormalizeCategorization, NormalizedCategorizationData } from '../utils/CategorizationValidation'
+import { resolveItemIconPath, resolveBinGlyphPath } from '../utils/CategorizationIconBank'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { curves } from '@kit.ArkUI'
 import { CardShell } from './cardshell/CardShell'
@@ -40,7 +43,7 @@ const BIN_COLOR_HONEY: string = '#FBBF24'  // 蜂蜜黄
 const BIN_COLOR_MINT: string = '#34D399'   // 薄荷绿 (冷色平衡)
 
 // ================ 物品呼吸 / 引导动画参数 ================
-// 这些之前散落在 ItemCircle / startItemAnim / shakeItem 里, 抽出来便于调参。
+// 这些之前散落在 ItemCard / startItemAnim / shakeItem 里, 抽出来便于调参。
 const ITEM_ANIM_INTERVAL_MS: number = 50         // 呼吸 setInterval 频率
 const ITEM_ANIM_PHASE_STEP: number = 6            // 每 tick 推进的相位 (度), 6° / 50ms = 120°/s
 const ITEM_BREATHING_AMPLITUDE: number = 0.03      // 未选中物品 ±3% scale (sin 驱动)
@@ -61,6 +64,12 @@ interface BinRect {
   w: number
   h: number
 }
+
+// ================ 绘本感视觉 (docs/categorization-game.html 原型) ================
+const ITEM_SURFACE: string = '#FFFDF8'   // 物品卡固定浅色面 (贴纸感, 双模式一致, 保证暖色图标对比度)
+const BIN_LETTER_BG: string = '#8B72E0'  // 字母桶色块 (m/p/b/A/B/C 拼音英文主题无类别字形的兜底)
+const BIN_LETTER_INK: string = '#6A49DB'
+const WRONG_HINT_MS: number = 2000       // 答错轻提示显示时长 (与 shake 同源触发)
 
 // ================ 公共接口 ================
 export interface CategorizationResult {
@@ -87,9 +96,7 @@ export interface CategorizationItem {
 // 校验 / 解析逻辑已抽到 utils/CategorizationValidation.ets, 此处仅复用其类型
 
 // ================ 组件 ================
-// TODO (v1.1): 当前仅实现点击交互 (点击物品选中 → 点击桶归位)。
-// 拖拽交互 (PanGesture + 命中检测) 计划在 v1.1 增量添加，
-// 参见 spec §7.1 和 docs/superpowers/plans/2026-06-06-categorization-helper.md。
+// 拖拽 + 点选双交互均已实现 (spec §7.1)。
 
 @ComponentV2
 export struct CategorizationCard {
@@ -106,6 +113,13 @@ export struct CategorizationCard {
   @Local items: CategorizationItem[] = []
   @Local difficulty: number = 1
   @Local validationError: string = ''
+  // 「为什么这样分」讲解 (AI 可选字段, 完成横幅展示)
+  @Local why: string = ''
+  // 图标路径 (与 bins/items 下标对齐): kids/icons/*.svg, 未命中为 ''
+  @Local binGlyphPaths: string[] = []
+  @Local itemIconPaths: string[] = []
+  // 答错轻提示 (WRONG_HINT_MS 后自动消失; 不用全局 toast —— 卡片在聊天气泡内)
+  @Local wrongHint: string = ''
 
   // 游戏态
   @Local placedItems: number[] = []
@@ -153,6 +167,7 @@ export struct CategorizationCard {
   // 非响应式
   private timerId: number = -1
   private shakeTimerId: number = -1
+  private wrongHintTimerId: number = -1
   private itemAnimTimerId: number = -1
   private startTime: number = 0
 
@@ -186,6 +201,7 @@ export struct CategorizationCard {
     this.bins = v.bins
     this.items = v.items
     this.difficulty = v.difficulty
+    this.why = v.why
     this.placedItems = this.createPlacedArray(this.items.length)
     // 最佳成绩两个分支都需要: 未回答时给新纪录检测用; 已回答时在线视图由
     // loadBestScores 完成后重建反馈区, 在 feedbackDetail 末尾展示「最佳 X:Y · 0 错」
@@ -204,6 +220,9 @@ export struct CategorizationCard {
       this.startItemAnim()
       this.loadTutorialState()
     }
+    // 图标路径解析 (与 bins/items 下标对齐; shuffleItems 只重排 items, 元素值不变)
+    this.binGlyphPaths = this.resolveBinGlyphPaths()
+    this.itemIconPaths = this.resolveItemIconPaths()
     // 校验通过后重建 shell 配置 (subtitle/stem 依赖已解析的题面数据)
     this.shellConfig = {
       title: '分类小管家',
@@ -223,6 +242,10 @@ export struct CategorizationCard {
     if (this.shakeTimerId >= 0) {
       clearTimeout(this.shakeTimerId)
       this.shakeTimerId = -1
+    }
+    if (this.wrongHintTimerId >= 0) {
+      clearTimeout(this.wrongHintTimerId)
+      this.wrongHintTimerId = -1
     }
   }
 
@@ -346,6 +369,23 @@ export struct CategorizationCard {
     return arr
   }
 
+  // 题库图标解析: 桶名/物品名 → rawfile SVG 路径; 未命中 '' (渲染层退化 emoji → 文字)
+  private resolveBinGlyphPaths(): string[] {
+    const paths: string[] = []
+    for (let i = 0; i < this.bins.length; i++) {
+      paths.push(resolveBinGlyphPath(this.bins[i].name))
+    }
+    return paths
+  }
+
+  private resolveItemIconPaths(): string[] {
+    const paths: string[] = []
+    for (let i = 0; i < this.items.length; i++) {
+      paths.push(resolveItemIconPath(this.items[i].name))
+    }
+    return paths
+  }
+
   // ================ 校验 / 解析 ================
   // 校验逻辑已抽到 utils/CategorizationValidation.ets (纯函数, 可单测)。
   // 此处仅做参数转发, 保留组件内访问入口。
@@ -457,6 +497,7 @@ export struct CategorizationCard {
     } else {
       this.wrongAttempts = this.wrongAttempts + 1
       this.shakeItem(itemIndex)
+      this.showWrongHint(item.name)
       hilog.info(DOMAIN, TAG, `wrong drop: item=${itemIndex} expected=${item.bin_index} got=${binIndex}`)
     }
   }
@@ -472,6 +513,19 @@ export struct CategorizationCard {
     }, WRONG_DROP_SHAKE_MS)
   }
 
+  // 答错轻提示: 与 shake 同源触发, WRONG_HINT_MS 后自动消失
+  // (原型 toast 的气泡内等价物, 只提示不扣分, 不打断孩子)
+  private showWrongHint(itemName: string): void {
+    this.wrongHint = `再想想～「${itemName}」不是放这里哦`
+    if (this.wrongHintTimerId >= 0) {
+      clearTimeout(this.wrongHintTimerId)
+    }
+    this.wrongHintTimerId = setTimeout(() => {
+      this.wrongHint = ''
+      this.wrongHintTimerId = -1
+    }, WRONG_HINT_MS)
+  }
+
   // ================ shell 状态同步 ================
   // 判胜同步: 反馈横幅 + 头部药丸。注意调用时 isNewBest 通常还是 false
   // (saveBestScoresIfImproved 异步写回后才置 true, 届时单独升级为 '新纪录')。
@@ -484,6 +538,10 @@ export struct CategorizationCard {
     // 原 WinBanner 的最佳成绩行(全对王): 仅在已加载到有效最佳 (>= 0) 时追加, 与迁移前条件渲染一致
     if (this.bestPerfectSeconds >= 0) {
       this.shellState.feedbackDetail += `\n最佳 ${this.formatBestTime(this.bestPerfectSeconds)} · 0 错`
+    }
+    // 「为什么这样分」教学讲解 (AI 可选字段 why, 校验层已 trim + 截断)
+    if (this.why !== '') {
+      this.shellState.feedbackDetail += `\n${this.why}`
     }
     this.shellState.headPill = this.isNewBest ? '新纪录' : '已完成'
     this.shellState.headPillColor = '#4CAF50'
@@ -754,81 +812,98 @@ export struct CategorizationCard {
     .width('100%')
   }
 
+  // ================ 槽位数据 (绘本感桶: 固定 quota 格, 已归位/虚线空槽) ================
+  // 每桶槽位数 = 物品数 / 桶数 (校验器保证 2/2、2/2/2、3/3/3 分布)
+  private getBinSlotQuota(): number {
+    if (this.bins.length === 0) {
+      return 0
+    }
+    return Math.floor(this.items.length / this.bins.length)
+  }
+
+  private buildSlotIndices(): number[] {
+    const indices: number[] = []
+    const quota = this.getBinSlotQuota()
+    for (let p = 0; p < quota; p++) {
+      indices.push(p)
+    }
+    return indices
+  }
+
+  private getSlotItemIndex(binIndex: number, slotIdx: number): number {
+    const inBin = this.getItemsInBin(binIndex)
+    if (slotIdx < 0 || slotIdx >= inBin.length) {
+      return -1
+    }
+    return inBin[slotIdx]
+  }
+
+  private getSlotIconPath(binIndex: number, slotIdx: number): string {
+    const itemIdx = this.getSlotItemIndex(binIndex, slotIdx)
+    if (itemIdx >= 0 && itemIdx < this.itemIconPaths.length) {
+      return this.itemIconPaths[itemIdx]
+    }
+    return ''
+  }
+
+  private getSlotEmoji(binIndex: number, slotIdx: number): string {
+    const itemIdx = this.getSlotItemIndex(binIndex, slotIdx)
+    if (itemIdx >= 0 && itemIdx < this.items.length) {
+      return this.items[itemIdx].emoji
+    }
+    return ''
+  }
+
+  private getSlotName(binIndex: number, slotIdx: number): string {
+    const itemIdx = this.getSlotItemIndex(binIndex, slotIdx)
+    if (itemIdx >= 0 && itemIdx < this.items.length) {
+      return this.items[itemIdx].name
+    }
+    return ''
+  }
+
+  private isSingleLetterName(name: string): boolean {
+    if (name.length !== 1) {
+      return false
+    }
+    const c = name.charAt(0)
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+  }
+
   @Builder
   BinCell(bin: CategorizationBin, index: number) {
     Column() {
-      // 桶口高光带 (暗示容器开口)
-      Row()
-        .width('100%')
-        .height(this.largeSize ? 10 : 8)
-        .linearGradient({
-          angle: 90,
-          colors: [
-            [Color.Transparent, 0.0],
-            [withColorAlpha(this.getBinAccentColor(index), '55'), 0.5],
-            [Color.Transparent, 1.0]
-          ]
-        })
-
-      // 内容
-      Column({ space: this.largeSize ? 4 : 3 }) {
-        if (bin.emoji !== '') {
-          Text(bin.emoji)
-            .fontSize(this.largeSize ? 32 : 28)
-        }
+      // 桶头: 类别字形 (或 emoji / 字母色块兜底) + 桶名 + 归位计数
+      Column({ space: this.largeSize ? 3 : 2 }) {
+        this.BinHeadArt(bin, index)
         Text(bin.name)
           .fontSize(this.largeSize ? 13 : 12)
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.text_primary'))
-        Text(`${this.countPlacedInBin(index)} 件`)
+          .maxLines(1)
+        Text(`${this.countPlacedInBin(index)} 件已归位`)
           .fontSize(this.largeSize ? 11 : 10)
           .fontColor($r('app.color.text_tertiary'))
-
-        // 已落入物品堆: 按归位顺序横排显示 emoji, 点击 = 撤回
-        this.BinItemsRow(index)
       }
       .layoutWeight(1)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
 
-      // 桶底暗影 (暗示容器底部)
-      Row()
-        .width('100%')
-        .height(this.largeSize ? 6 : 5)
-        .linearGradient({
-          angle: 90,
-          colors: [
-            [Color.Transparent, 0.0],
-            [withColorAlpha(this.getBinAccentColor(index), '32'), 0.5],
-            [Color.Transparent, 1.0]
-          ]
-        })
+      // 归位槽位行: 已归位显示 mini 图标 (点击撤回), 空槽虚线占位
+      this.BinSlotsRow(index)
     }
     .layoutWeight(1)
-    .height(this.largeSize ? 140 : 116)
-    .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-    .borderRadius(this.largeSize ? 16 : 14)
-    .linearGradient(this.hoveredBinIndex === index
-      ? {
-        angle: 180,
-        colors: [
-          [withColorAlpha(this.themePrimary, '32'), 0.0],
-          [withColorAlpha(this.themePrimary, '18'), 1.0]
-        ]
-      }
-      : {
-        angle: 180,
-        colors: [
-          [withColorAlpha(this.getBinAccentColor(index), '22'), 0.0],
-          [withColorAlpha(this.getBinAccentColor(index), '10'), 1.0]
-        ]
-      })
+    .height(this.largeSize ? 150 : 128)
+    .padding({ left: 6, right: 6, top: this.largeSize ? 10 : 8, bottom: this.largeSize ? 10 : 8 })
+    .borderRadius(this.largeSize ? 18 : 16)
+    // 选中物品后 (armed) 桶切换实线加强边框, 提示"点这里放进去"
+    .backgroundColor(withColorAlpha(this.getBinAccentColor(index), this.selectedItemIndex >= 0 ? '16' : '0C'))
     .border({
-      width: 0.5,
-      style: BorderStyle.Solid,
-      color: this.hoveredBinIndex === index
+      width: 1.5,
+      style: this.selectedItemIndex >= 0 ? BorderStyle.Solid : BorderStyle.Dashed,
+      color: this.hoveredBinIndex === index || this.selectedItemIndex >= 0
         ? this.themePrimary
-        : withColorAlpha(this.getBinAccentColor(index), '38')
+        : withColorAlpha(this.getBinAccentColor(index), '45')
     })
     .scale(this.hoveredBinIndex === index || this.selectedItemIndex >= 0
       ? { x: HOVERED_BIN_SCALE, y: HOVERED_BIN_SCALE }
@@ -841,59 +916,101 @@ export struct CategorizationCard {
     })
   }
 
-  // 桶内已归位物品的横排堆栈。空桶时 ForEach 输出空数组, Flex 自然不渲染子项。
-  // 每个 emoji 点击 = 撤回该物品 (从桶取出回到 ItemsLayer)。
+  // 桶头字形: 类别字形 (水里/天上 等分类概念) → emoji → 字母色块 (m/p/b/A/B/C 拼音英文主题)
   @Builder
-  BinItemsRow(binIndex: number) {
-    Flex({ wrap: FlexWrap.NoWrap, justifyContent: FlexAlign.Center, alignItems: ItemAlign.Center }) {
-      ForEach(this.getItemsInBin(binIndex), (itemIdx: number) => {
-        this.BinPlacedItem(itemIdx)
-      }, (itemIdx: number) => `binitem_${binIndex}_${itemIdx}`)
+  BinHeadArt(bin: CategorizationBin, index: number) {
+    if (index < this.binGlyphPaths.length && this.binGlyphPaths[index] !== '') {
+      Image($rawfile(this.binGlyphPaths[index]))
+        .width(this.largeSize ? 40 : 34)
+        .height(this.largeSize ? 40 : 34)
+    } else if (bin.emoji !== '') {
+      Text(bin.emoji)
+        .fontSize(this.largeSize ? 32 : 28)
+    } else if (this.isSingleLetterName(bin.name)) {
+      Text(bin.name)
+        .fontSize(this.largeSize ? 20 : 17)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(BIN_LETTER_INK)
+        .width(this.largeSize ? 40 : 34)
+        .height(this.largeSize ? 40 : 34)
+        .textAlign(TextAlign.Center)
+        .backgroundColor(withColorAlpha(BIN_LETTER_BG, '26'))
+        .borderRadius(this.largeSize ? 12 : 10)
     }
+  }
+
+  // 槽位行: 固定 quota 个格子 (与校验分布一致), 空槽即"还差几件"的可视进度
+  @Builder
+  BinSlotsRow(binIndex: number) {
+    Row({ space: this.largeSize ? 5 : 4 }) {
+      ForEach(this.buildSlotIndices(), (slotIdx: number) => {
+        this.BinSlot(binIndex, slotIdx)
+      }, (slotIdx: number) => `slot_${binIndex}_${slotIdx}`)
+    }
+    .justifyContent(FlexAlign.Center)
     .width('100%')
-    .margin({ top: 4 })
   }
 
   @Builder
-  BinPlacedItem(itemIdx: number) {
-    Column() {
-      if (this.items[itemIdx].emoji !== '') {
-        Text(this.items[itemIdx].emoji)
-          .fontSize(this.largeSize ? 18 : 16)
-      } else {
-        Text(this.items[itemIdx].name)
-          .fontSize(10)
-          .fontColor($r('app.color.text_primary'))
-          .maxLines(1)
+  BinSlot(binIndex: number, slotIdx: number) {
+    if (slotIdx < this.getItemsInBin(binIndex).length) {
+      // 已归位槽: 白底 mini 贴纸, 点击撤回
+      Column() {
+        if (this.getSlotIconPath(binIndex, slotIdx) !== '') {
+          Image($rawfile(this.getSlotIconPath(binIndex, slotIdx)))
+            .width(this.largeSize ? 20 : 18)
+            .height(this.largeSize ? 20 : 18)
+        } else if (this.getSlotEmoji(binIndex, slotIdx) !== '') {
+          Text(this.getSlotEmoji(binIndex, slotIdx))
+            .fontSize(this.largeSize ? 13 : 12)
+        } else {
+          Text(this.getSlotName(binIndex, slotIdx))
+            .fontSize(9)
+            .fontColor($r('app.color.text_primary'))
+            .maxLines(1)
+        }
       }
+      .width(this.largeSize ? 30 : 26)
+      .height(this.largeSize ? 30 : 26)
+      .borderRadius(this.largeSize ? 10 : 9)
+      .backgroundColor(ITEM_SURFACE)
+      .border({
+        width: 1,
+        color: withColorAlpha(this.getBinAccentColor(binIndex), '55'),
+        style: BorderStyle.Solid
+      })
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .scale(this.itemPressedIndex === this.getSlotItemIndex(binIndex, slotIdx)
+        ? { x: 0.9, y: 0.9 } : { x: 1, y: 1 })
+      .animation(SPRING_QUICK)
+      .onTouch((e: TouchEvent) => {
+        const itemIdx = this.getSlotItemIndex(binIndex, slotIdx)
+        if (e.type === TouchType.Down) {
+          this.itemPressedIndex = itemIdx
+        } else if (e.type === TouchType.Up || e.type === TouchType.Cancel) {
+          this.itemPressedIndex = -1
+        }
+      })
+      // 只在未完成 + 非 isAnswered 时允许撤回
+      .onClick(() => {
+        if (!this.isCompleted && !this.isAnswered) {
+          this.handleUnplace(this.getSlotItemIndex(binIndex, slotIdx))
+        }
+      })
+    } else {
+      // 空槽: 虚线占位 (等待落子)
+      Column()
+        .width(this.largeSize ? 30 : 26)
+        .height(this.largeSize ? 30 : 26)
+        .borderRadius(this.largeSize ? 10 : 9)
+        .backgroundColor(withColorAlpha(this.getBinAccentColor(binIndex), '10'))
+        .border({
+          width: 1,
+          color: withColorAlpha(this.getBinAccentColor(binIndex), '30'),
+          style: BorderStyle.Dashed
+        })
     }
-    .width(this.largeSize ? 30 : 26)
-    .height(this.largeSize ? 30 : 26)
-    .borderRadius(this.largeSize ? 15 : 13)
-    .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '18' : '12'))
-    .border({
-      width: 1,
-      color: withColorAlpha(this.themePrimary, '40'),
-      style: BorderStyle.Solid
-    })
-    .margin(2)
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
-    .scale(this.itemPressedIndex === itemIdx ? { x: 0.9, y: 0.9 } : { x: 1, y: 1 })
-    .animation(SPRING_QUICK)
-    .onTouch((e: TouchEvent) => {
-      if (e.type === TouchType.Down) {
-        this.itemPressedIndex = itemIdx
-      } else if (e.type === TouchType.Up || e.type === TouchType.Cancel) {
-        this.itemPressedIndex = -1
-      }
-    })
-    // 只在未完成 + 非 isAnswered 时允许撤回
-    .onClick(() => {
-      if (!this.isCompleted && !this.isAnswered) {
-        this.handleUnplace(itemIdx)
-      }
-    })
   }
 
   @Builder
@@ -901,7 +1018,7 @@ export struct CategorizationCard {
     Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Center, alignItems: ItemAlign.Center }) {
       ForEach(this.items, (item: CategorizationItem, index: number) => {
         if (this.placedItems[index] < 0) {
-          this.ItemCircle(item, index)
+          this.ItemCard(item, index)
         }
       }, (item: CategorizationItem, index: number) => `item_${index}_${item.name}`)
     }
@@ -911,45 +1028,49 @@ export struct CategorizationCard {
     .borderRadius(12)
   }
 
+  // 物品卡: 白底圆角贴纸 (固定浅色面, 双模式一致保证暖色图标对比度) + 图标/emoji + 名称
+  // 降级链: 题库 SVG → emoji → 名称文字 (题库外自由题仍可玩)
   @Builder
-  ItemCircle(item: CategorizationItem, index: number) {
-    Column() {
-      if (item.emoji !== '') {
-        Text(item.emoji)
-          .fontSize(this.largeSize ? 30 : 24)
-      } else {
+  ItemCard(item: CategorizationItem, index: number) {
+    Column({ space: this.largeSize ? 5 : 4 }) {
+      if (index < this.itemIconPaths.length && this.itemIconPaths[index] !== '') {
+        Image($rawfile(this.itemIconPaths[index]))
+          .width(this.largeSize ? 52 : 44)
+          .height(this.largeSize ? 52 : 44)
         Text(item.name)
-          .fontSize(this.largeSize ? 13 : 11)
+          .fontSize(this.largeSize ? 12 : 11)
+          .fontColor($r('app.color.text_secondary'))
+          .textAlign(TextAlign.Center)
+          .maxLines(1)
+      } else if (item.emoji !== '') {
+        Text(item.emoji)
+          .fontSize(this.largeSize ? 30 : 26)
+        Text(item.name)
+          .fontSize(this.largeSize ? 12 : 11)
+          .fontColor($r('app.color.text_secondary'))
+          .textAlign(TextAlign.Center)
+          .maxLines(1)
+      } else {
+        // 图标/emoji 双缺失: 名称文字即主体
+        Text(item.name)
+          .fontSize(this.largeSize ? 15 : 13)
+          .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.text_primary'))
           .textAlign(TextAlign.Center)
           .maxLines(2)
       }
     }
-    .width(this.largeSize ? 80 : 68)
-    .height(this.largeSize ? 80 : 68)
-    .borderRadius(this.largeSize ? 40 : 34)
-    .linearGradient(this.selectedItemIndex === index || this.draggingItemIndex === index
-      ? {
-        angle: 180,
-        colors: [
-          [withColorAlpha(this.themePrimary, '32'), 0.0],
-          [withColorAlpha(this.themePrimary, '18'), 1.0]
-        ]
-      }
-      : {
-        angle: 180,
-        colors: [
-          [withColorAlpha(this.themePrimary, '14'), 0.0],
-          [withColorAlpha(this.themePrimary, '04'), 1.0]
-        ]
-      })
+    .width(this.largeSize ? 84 : 74)
+    .height(this.largeSize ? 92 : 82)
+    .borderRadius(this.largeSize ? 18 : 16)
+    .backgroundColor(ITEM_SURFACE)
     .borderWidth(this.selectedItemIndex === index || this.shakingItemIndex === index
-      || this.draggingItemIndex === index ? 3 : 1)
+      || this.draggingItemIndex === index ? 2.5 : 1)
     .borderColor(this.shakingItemIndex === index
       ? ERROR_RED
       : (this.selectedItemIndex === index || this.draggingItemIndex === index
         ? this.themePrimary
-        : withColorAlpha(this.themePrimary, '30')))
+        : withColorAlpha(this.themePrimary, '22')))
     .scale(this.draggingItemIndex === index
       ? { x: DRAGGING_ITEM_SCALE, y: DRAGGING_ITEM_SCALE }
       : (this.selectedItemIndex === index
@@ -1070,7 +1191,15 @@ export struct CategorizationCard {
   @Builder
   ActionRow() {
     Row() {
-      if (this.isFirstPlay && this.selectedItemIndex < 0 && this.hasUnplacedItem()) {
+      if (this.wrongHint !== '') {
+        // 答错轻提示: 优先于引导/操作提示 (与 shake 同源触发, WRONG_HINT_MS 后自动消失)
+        Text(this.wrongHint)
+          .fontSize(11)
+          .fontColor(ERROR_RED)
+          .layoutWeight(1)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      } else if (this.isFirstPlay && this.selectedItemIndex < 0 && this.hasUnplacedItem()) {
         this.TutorialBubble()
       } else if (this.selectedItemIndex >= 0) {
         Text('选好一个物品 → 点击对应分类桶')
