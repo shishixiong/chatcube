@@ -170,6 +170,7 @@ const themesStart = html.indexOf('var THEMES=[')
 const themesEnd = html.indexOf('];', themesStart)
 if (themesStart < 0 || themesEnd < 0) throw new Error('cannot find THEMES section')
 const themes = html.slice(themesStart, themesEnd)
+const themeCount = (themes.match(/\{id:'/g) || []).length
 
 const itemPairs = [] // [label, iconId]
 const seenItem = new Set()
@@ -201,7 +202,7 @@ const bankData = `/**
  * CategorizationIconBankData - 分类小管家图标库数据 (AUTO-GENERATED)
  *
  * 由 scripts/export-categorization-icons.mjs 从 docs/categorization-game.html 生成，
- * 数据源是原型里的 23 主题题库。每行一条「名称|图标 id」，
+ * 数据源是原型里的 ${themeCount} 主题题库。每行一条「名称|图标 id」，
  * 图标 id 对应 rawfile/kids/icons/<id>.svg。
  * 不要手改此文件——改原型 HTML 后在仓库根目录重跑导出脚本。
  */

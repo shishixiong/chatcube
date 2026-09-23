@@ -25,6 +25,18 @@ export default function categorizationIconBankTest() {
       expect(resolveItemIconPath(' 大象 ')).assertEqual('kids/icons/elephant.svg')
     })
 
+    it('扩库物品直查: 奶牛 → cow.svg', 0, () => {
+      expect(resolveItemIconPath('奶牛')).assertEqual('kids/icons/cow.svg')
+    })
+
+    it('扩库物品直查: 泰迪熊 → teddy.svg', 0, () => {
+      expect(resolveItemIconPath('泰迪熊')).assertEqual('kids/icons/teddy.svg')
+    })
+
+    it('扩库尾缀字母 token: 「大象 d」命中 elephant', 0, () => {
+      expect(resolveItemIconPath('大象 d')).assertEqual('kids/icons/elephant.svg')
+    })
+
     it('全角空格归一: 「帽子　m」命中 hat', 0, () => {
       expect(resolveItemIconPath('帽子　m')).assertEqual('kids/icons/hat.svg')
     })
@@ -83,6 +95,14 @@ export default function categorizationIconBankTest() {
       expect(resolveBinGlyphPath('p')).assertEqual('')
       expect(resolveBinGlyphPath('b')).assertEqual('')
       expect(resolveBinGlyphPath('A')).assertEqual('')
+    })
+
+    it('扩库桶直查: 快 → fast.svg', 0, () => {
+      expect(resolveBinGlyphPath('快')).assertEqual('kids/icons/fast.svg')
+    })
+
+    it('扩库桶直查: 家具 → cat-furniture.svg', 0, () => {
+      expect(resolveBinGlyphPath('家具')).assertEqual('kids/icons/cat-furniture.svg')
     })
 
     it('题库外桶名: 返回空串 (组件层退化 emoji→字母块)', 0, () => {
