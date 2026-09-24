@@ -47,7 +47,7 @@ export struct ChoiceModeBody {
   private imageLoadTimer: number = -1
   private shellConfig: CardShellConfig = {
     title: '听音选词', subtitle: '', icon: $r('sys.symbol.speaker_wave_2_fill'),
-    stem: '', hasAudio: false, usesConfirm: true,
+    stem: '', hasAudio: false, usesConfirm: false,
     feedbackTitleCorrect: '答对啦！真棒！', correctAnswerLabel: '正确答案'
   }
   private shellState: CardShellState = new CardShellState()
@@ -69,7 +69,7 @@ export struct ChoiceModeBody {
     this.shellConfig = {
       title: modeDisplayName(args.mode), subtitle: args.theme !== '' ? `主题 · ${args.theme}` : '',
       icon: this.showImage ? $r('sys.symbol.picture') : $r('sys.symbol.speaker_wave_2_fill'),
-      stem: '', hasAudio: false, usesConfirm: true,
+      stem: '', hasAudio: false, usesConfirm: false,
       feedbackTitleCorrect: '答对啦！真棒！', correctAnswerLabel: '正确答案'
     }
     if (this.isAnswered) {
