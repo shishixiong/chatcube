@@ -1,0 +1,810 @@
+/**
+ * LegacyBody - english_quiz legacy 交互体 (历史会话零风险搬运)
+ *
+ * 原 components/EnglishQuizCard.ets 的交互逻辑整体搬家 (free-input + phonics_choice),
+ * 除以下 3 处机械调整外与原实现逐字一致:
+ * 1. EnglishQuizAnswerPayload 改从 ../ModeTypes 导入 (删除文件内重复定义)
+ * 2. struct 更名 LegacyBody; shellConfig.title 逻辑不变 (phonics_choice ? '自然拼读' : '英语小游戏')
+ * 3. resolveImage 的 Tier1/2/3 链路替换为 ../QuizImageResolver 调用 (120s 超时兜底保留)
+ *
+ * 由 english_quiz v2 路由器消费 (四个 body 统一签名); 本文件不做任何行为演进。
+ */
+
+import { ToolCall } from '../../models/ChatModels'
+import { getAppUiState } from '../../state/AppUiState'
+import { withColorAlpha } from '../../utils/ColorAlphaUtils'
+import { CardShell } from '../../cardshell/CardShell'
+import { CardShellConfig, CardShellCopy } from '../../cardshell/CardShellTypes'
+import { CardShellState } from '../../cardshell/CardShellState'
+import { SpeechRecognitionCallback } from '../../services/SpeechRecognitionService'
+import { ServiceRegistry } from '../../services/ServiceRegistry'
+import { EnglishQuizAnswerPayload } from '../ModeTypes'
+import { resolveQuizImagePath } from '../QuizImageResolver'
+import { common } from '@kit.AbilityKit'
+
+interface EnglishQuizQuestion {
+  word: string
+  sentence: string
+  imagePath: string
+  imagePrompt: string
+  correctAnswer: string
+  questionType: string
+  difficulty: number
+  skillKey: string
+  letterOptions: string[]    // phonics_choice 用: 3-4 个字母选项
+  soundText: string           // phonics_choice 用: TTS 要朗读的字母音
+}
+
+@ComponentV2
+export struct LegacyBody {
+  @Param toolCall: ToolCall = new ToolCall()
+  @Param isAnswered: boolean = false
+  @Param answeredPayload: string = ''
+  @Param largeSize: boolean = false
+  @Event onAnswer: (toolCallId: string, answerJson: string) => void = () => {}
+
+  @Local inputText: string = ''
+  @Local showResult: boolean = false
+  @Local isCorrect: boolean = false
+  @Local correctAnswerText: string = ''
+  @Local isRecording: boolean = false
+  @Local recognitionPreview: string = ''
+  // 麦克风权限被拒后, 隐藏语音按钮并展示键盘输入提示, 避免孩子反复点不出声音卡住
+  @Local voicePermissionDenied: boolean = false
+  // 标记本次语音会话已被 cancel / retry 重置, onComplete 收到时直接吞掉, 防止覆盖 retry 清空的状态
+  @Local wasCancelled: boolean = false
+  // 组件内部异步解析的图片路径, 不再依赖 handleEnglishQuiz 注入 image_path
+  @Local resolvedImagePath: string = ''
+  // 供 @Builder 直接读取的展示路径, 避免方法调用导致 V2 响应式追踪失效
+  @Local displayImagePath: string = ''
+  @Local isImageLoading: boolean = false
+  @Local imageLoadFailed: boolean = false
+  // ===== phonics_choice 题型专用状态 =====
+  @Local letterOptions: string[] = []
+  @Local soundText: string = ''
+  @Local selectedLetter: string = ''         // 用户点击的字母, 用于反馈展示
+  @Local isPlayingSound: boolean = false    // TTS 播放中
+  private imageLoadTimer: number = -1
+
+  @Local shellConfig: CardShellConfig = {
+    title: '英语小游戏',
+    subtitle: '',
+    icon: $r('sys.symbol.square_and_pencil'),
+    stem: '',
+    hasAudio: false,
+    usesConfirm: true,
+    feedbackTitleCorrect: '答对啦！真棒！',
+    correctAnswerLabel: '正确答案'
+  }
+  private shellState: CardShellState = new CardShellState()
+
+  private get themePrimary(): string {
+    return getAppUiState().themePrimary
+  }
+
+  private get isDarkMode(): boolean {
+    return getAppUiState().isDarkMode
+  }
+
+  aboutToAppear(): void {
+    // 如果是已回答状态, 从 answeredPayload 中恢复结果
+    if (this.isAnswered) {
+      const prev = this.parsePreviousAnswer()
+      if (prev !== null) {
+        this.inputText = prev.child_answer
+        this.showResult = true
+        this.isCorrect = prev.correct
+        this.correctAnswerText = prev.correct_answer
+        // phonics_choice: 恢复孩子选的字母
+        if (prev.question_type === 'phonics_choice') {
+          this.selectedLetter = prev.child_answer
+        }
+        this.shellState.submitted = true
+        this.shellState.isCorrect = prev.correct
+      }
+      this.shellState.headPill = '已回答'
+      this.shellState.headPillColor = '#4CAF50'
+    }
+
+    // 读取 phonics_choice 题型字段 (letter_options / sound_text)
+    const quiz = this.parseQuiz()
+
+    // 重建外壳配置 (题面在 slot 内, stem 保持 ''; 标题按题型区分)
+    this.shellConfig = {
+      title: quiz.questionType === 'phonics_choice' ? '自然拼读' : '英语小游戏',
+      subtitle: '',
+      icon: $r('sys.symbol.square_and_pencil'),
+      stem: '',
+      hasAudio: false,
+      usesConfirm: true,
+      feedbackTitleCorrect: '答对啦！真棒！',
+      correctAnswerLabel: '正确答案'
+    }
+
+    if (quiz.questionType === 'phonics_choice') {
+      this.letterOptions = quiz.letterOptions
+      this.soundText = quiz.soundText
+      // phonics_choice 不需要图片, 直接跳过整个 image 解析管线
+      return
+    }
+
+    // 异步解析图片: 优先从 arguments 中已有的 image_path 读取,
+    // 没有则通过 EnglishQuizImageIndex 查缓存/生成
+    this.resolveImage()
+  }
+
+  // handleEnglishQuiz 在后台异步解析图片后注入 image_path 到 arguments,
+  // 此时 ForEach 可能跳过 dirty mark 导致卡片不重渲染, 需要主动检测。
+  // 注意: 不能简单用 resolvedImagePath !== '' 做 guard,
+  // 因为 resolveImage 可能拿到的是过期的缓存路径 (文件已被系统清理),
+  // 此时 handleEnglishQuiz 重新生成的新 image_path 会被错误跳过。
+  @Monitor('toolCall.arguments')
+  onArgumentsChanged(): void {
+    if (this.isAnswered) {
+      return
+    }
+    try {
+      const parsed = JSON.parse(this.toolCall.arguments) as Record<string, Object>
+      const imagePath = (parsed['image_path'] as string) ?? ''
+      if (imagePath !== '' && imagePath !== this.displayImagePath) {
+        this.resolvedImagePath = imagePath
+        this.displayImagePath = imagePath
+        this.isImageLoading = false
+      }
+    } catch (_e) {}
+  }
+
+  aboutToDisappear(): void {
+    if (this.imageLoadTimer >= 0) {
+      clearTimeout(this.imageLoadTimer)
+      this.imageLoadTimer = -1
+    }
+    // 停止 TTS 朗读, 避免离开卡片后还在播
+    if (this.isPlayingSound) {
+      try {
+        ServiceRegistry.tts().stop()
+      } catch (_e) {}
+      this.isPlayingSound = false
+    }
+  }
+
+  /**
+   * 将沙箱绝对路径转为 file:// URL, 供 Image 组件加载本地文件
+   */
+  private toFileUrl(path: string): string {
+    if (path === '') {
+      return ''
+    }
+    if (path.startsWith('file://') || path.startsWith('data:') ||
+        path.startsWith('http://') || path.startsWith('https://')) {
+      return path
+    }
+    return 'file://' + path
+  }
+
+  private resolveImage(): void {
+    const quiz = this.parseQuiz()
+
+    // 已有 image_path (由 handleEnglishQuiz 注入)
+    if (quiz.imagePath !== '') {
+      this.resolvedImagePath = quiz.imagePath
+      this.displayImagePath = quiz.imagePath
+      return
+    }
+    if (quiz.word === '' && quiz.sentence === '' && quiz.imagePrompt === '') {
+      return
+    }
+
+    this.isImageLoading = true
+    const word = quiz.word
+    const sentence = quiz.sentence
+    const imagePrompt = quiz.imagePrompt
+
+    // 120s 超时兜底 (防御性保留; 正常路径 handler 已同步注入)
+    this.imageLoadTimer = setTimeout(() => {
+      if (this.isImageLoading && this.resolvedImagePath === '') {
+        this.isImageLoading = false
+        this.imageLoadFailed = true
+      }
+    }, 120000)
+
+    resolveQuizImagePath(word, sentence, imagePrompt).then((filePath: string) => {
+      if (filePath !== '') {
+        this.resolvedImagePath = filePath
+        this.displayImagePath = filePath
+      } else {
+        this.imageLoadFailed = true
+      }
+      this.isImageLoading = false
+      if (this.imageLoadTimer >= 0) {
+        clearTimeout(this.imageLoadTimer)
+        this.imageLoadTimer = -1
+      }
+    })
+  }
+
+  private parseQuiz(): EnglishQuizQuestion {
+    const result: EnglishQuizQuestion = {
+      word: '',
+      sentence: '',
+      imagePath: '',
+      imagePrompt: '',
+      correctAnswer: '',
+      questionType: 'word',
+      difficulty: 1,
+      skillKey: 'english_vocab',
+      letterOptions: [],
+      soundText: ''
+    }
+    try {
+      const parsed = JSON.parse(this.toolCall.arguments) as Record<string, Object>
+      const questionType = (parsed['question_type'] as string) ?? 'word'
+      const answer = (parsed['correct_answer'] as string) ?? ''
+      if (answer !== '') {
+        if (questionType === 'sentence') {
+          result.sentence = answer
+        } else if (questionType === 'phonics_choice') {
+          // phonics_choice: correct_answer 是单个字母
+          result.word = answer
+        } else {
+          result.word = answer
+        }
+      } else {
+        // 兼容旧格式: correct_answer 为空时回退读 word/sentence
+        result.word = (parsed['word'] as string) ?? ''
+        result.sentence = (parsed['sentence'] as string) ?? ''
+      }
+      result.imagePath = (parsed['image_path'] as string) ?? ''
+      result.imagePrompt = (parsed['image_prompt'] as string) ?? ''
+      result.correctAnswer = (parsed['correct_answer'] as string) ?? ''
+      result.questionType = (parsed['question_type'] as string) ?? 'word'
+      result.difficulty = (parsed['difficulty'] as number) ?? 1
+      result.skillKey = (parsed['skill_key'] as string) ?? 'english_vocab'
+      result.letterOptions = (parsed['letter_options'] as string[]) ?? []
+      result.soundText = (parsed['sound_text'] as string) ?? ''
+    } catch (_e) {}
+    return result
+  }
+
+  private parsePreviousAnswer(): EnglishQuizAnswerPayload | null {
+    if (this.answeredPayload === '') {
+      return null
+    }
+    try {
+      return JSON.parse(this.answeredPayload) as EnglishQuizAnswerPayload
+    } catch (_e) {
+      return null
+    }
+  }
+
+  /**
+   * 判断答案是否正确
+   * - 单词模式：忽略大小写和前后空格；允许编辑距离 ≤ 1 的拼写错误（aple→apple）
+   * - 句子模式：忽略大小写 + 多余空格，每个词允许编辑距离 ≤ 1，匹配度 ≥ 50% 即正确
+   *
+   * 放宽理由：6-7 岁孩子拼写不稳定、容易漏掉虚词（a/an/the），80% 阈值过严。
+   */
+  private checkAnswer(childAnswer: string, correctAnswer: string, questionType: string): boolean {
+    const child = childAnswer.trim().toLowerCase()
+    const correct = correctAnswer.trim().toLowerCase()
+
+    if (child === '' || correct === '') {
+      return false
+    }
+
+    if (questionType === 'phonics_choice') {
+      // 单字母点选: 忽略大小写完全匹配即可, 无需编辑距离
+      return child === correct
+    }
+
+    if (questionType === 'word') {
+      if (child === correct) {
+        return true
+      }
+      // 单字符拼写错误宽容
+      return this.levenshteinDistance(child, correct) <= 1
+    }
+
+    // 句子模式：分词后逐词匹配（允许编辑距离 ≤ 1）
+    const childWords = child.split(/\s+/).filter((w: string): boolean => w.length > 0)
+    const correctWords = correct.split(/\s+/).filter((w: string): boolean => w.length > 0)
+
+    if (correctWords.length === 0) {
+      return false
+    }
+
+    let matchCount = 0
+    const usedIndices: Set<number> = new Set()
+    for (let i = 0; i < childWords.length; i++) {
+      for (let j = 0; j < correctWords.length; j++) {
+        if (!usedIndices.has(j) && this.softWordEqual(childWords[i], correctWords[j])) {
+          matchCount++
+          usedIndices.add(j)
+          break
+        }
+      }
+    }
+
+    const accuracy = matchCount / correctWords.length
+    return accuracy >= 0.5
+  }
+
+  /**
+   * 单词软匹配：完全相等 或 编辑距离 ≤ 1
+   * - 长度差 > 1 时不可能 ≤ 1 编辑距离，直接 false
+   */
+  private softWordEqual(a: string, b: string): boolean {
+    if (a === b) {
+      return true
+    }
+    return this.levenshteinDistance(a, b) <= 1
+  }
+
+  /**
+   * 编辑距离（Levenshtein）。长度差 > 1 时直接返回较大长度（剪枝）。
+   * 仅用于 6-12 字符以内的英文单词匹配，2 行 DP 足够。
+   */
+  private levenshteinDistance(a: string, b: string): number {
+    if (a === b) {
+      return 0
+    }
+    const la = a.length
+    const lb = b.length
+    if (la === 0) {
+      return lb
+    }
+    if (lb === 0) {
+      return la
+    }
+    if (Math.abs(la - lb) > 1) {
+      return Math.max(la, lb)
+    }
+    let prev: number[] = new Array(lb + 1)
+    let curr: number[] = new Array(lb + 1)
+    for (let j = 0; j <= lb; j++) {
+      prev[j] = j
+    }
+    for (let i = 1; i <= la; i++) {
+      curr[0] = i
+      for (let j = 1; j <= lb; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1
+        const del = prev[j] + 1
+        const ins = curr[j - 1] + 1
+        const sub = prev[j - 1] + cost
+        let min = del
+        if (ins < min) {
+          min = ins
+        }
+        if (sub < min) {
+          min = sub
+        }
+        curr[j] = min
+      }
+      const tmp = prev
+      prev = curr
+      curr = tmp
+    }
+    return prev[lb]
+  }
+
+  private handleSubmit(): void {
+    if (this.inputText.trim() === '' || this.isAnswered) {
+      return
+    }
+
+    const quiz = this.parseQuiz()
+    const correct = this.checkAnswer(this.inputText, quiz.correctAnswer, quiz.questionType)
+
+    // 先显示即时反馈
+    this.showResult = true
+    this.isCorrect = correct
+    this.correctAnswerText = quiz.correctAnswer
+    this.shellState.submitted = true
+    this.shellState.isCorrect = correct
+
+    // 构建 payload 回传
+    const payload: EnglishQuizAnswerPayload = {
+      answered: true,
+      child_answer: this.inputText.trim(),
+      correct: correct,
+      correct_answer: quiz.correctAnswer,
+      word: quiz.word,
+      sentence: quiz.sentence,
+      question_type: quiz.questionType,
+      skill_key: quiz.skillKey
+    }
+
+    this.onAnswer(this.toolCall.id, JSON.stringify(payload))
+  }
+
+  private handleRetry(): void {
+    // retry 是纯本地重置: AI 已收到第一次 onAnswer, 不再调 onAnswer, 避免重复计分。
+    if (!this.showResult || this.isCorrect || this.isAnswered) {
+      return
+    }
+    if (this.isRecording) {
+      this.handleVoiceRecordCancel()
+    }
+    this.showResult = false
+    this.isCorrect = false
+    this.inputText = ''
+    this.recognitionPreview = ''
+    this.selectedLetter = ''
+    this.shellState.hasSelection = false
+    this.shellState.submitted = false
+    this.shellState.isCorrect = false
+  }
+
+  /**
+   * phonics_choice: 用户点击字母按钮
+   */
+  private handleLetterSelect(letter: string): void {
+    if (this.isAnswered || this.showResult) {
+      return
+    }
+    const quiz = this.parseQuiz()
+    if (quiz.questionType !== 'phonics_choice') {
+      return
+    }
+
+    const correct = this.checkAnswer(letter, quiz.correctAnswer, quiz.questionType)
+
+    this.selectedLetter = letter
+    this.showResult = true
+    this.isCorrect = correct
+    this.correctAnswerText = quiz.correctAnswer
+    // 字母点选是直提路径(同语音直提): 同步外壳状态, 立即出反馈且不渲染确认按钮
+    this.shellState.hasSelection = true
+    this.shellState.submitted = true
+    this.shellState.isCorrect = correct
+
+    const payload: EnglishQuizAnswerPayload = {
+      answered: true,
+      child_answer: letter.trim(),
+      correct: correct,
+      correct_answer: quiz.correctAnswer,
+      word: '',
+      sentence: '',
+      question_type: quiz.questionType,
+      skill_key: quiz.skillKey,
+      letter_options: this.letterOptions,
+      sound_text: this.soundText
+    }
+
+    this.onAnswer(this.toolCall.id, JSON.stringify(payload))
+  }
+
+  /**
+   * phonics_choice: 播放字母音
+   */
+  private handlePlaySound(): void {
+    if (this.soundText === '' || this.isPlayingSound) {
+      return
+    }
+    this.isPlayingSound = true
+    ServiceRegistry.tts().speak(this.soundText, {
+      onStart: () => {},
+      onComplete: () => {
+        this.isPlayingSound = false
+      },
+      onError: (error: string) => {
+        this.isPlayingSound = false
+        console.error('EnglishQuizCard', `TTS error: ${error}`)
+      }
+    }).catch((e: Error) => {
+      this.isPlayingSound = false
+      console.error('EnglishQuizCard', `TTS speak failed: ${e.message}`)
+    })
+  }
+
+  private handleVoiceRecordStart(): void {
+    if (this.isRecording || this.isAnswered || this.showResult || this.voicePermissionDenied) {
+      return
+    }
+
+    const speechService = ServiceRegistry.speechRecognition()
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+
+    speechService.checkPermission(context).then((granted: boolean) => {
+      if (!granted) {
+        // 权限被拒: 标记为降级, InputArea 会隐藏语音按钮并提示改用键盘, 不再静默 return
+        this.voicePermissionDenied = true
+        return
+      }
+      speechService.init().then(() => {
+        this.isRecording = true
+        this.recognitionPreview = ''
+        const callback: SpeechRecognitionCallback = {
+          onStart: () => {
+            console.info('EnglishQuizCard', 'Voice recording started')
+          },
+          onResult: (text: string, isFinal: boolean) => {
+            if (isFinal) {
+              this.recognitionPreview = text
+            }
+          },
+          onComplete: (finalText: string) => {
+            this.isRecording = false
+            // 防御 cancel 后引擎仍可能触发的延迟 onComplete, 避免覆盖 retry 重置的 inputText / 重复 submit
+            if (this.wasCancelled) {
+              this.wasCancelled = false
+              return
+            }
+            if (finalText.trim() !== '') {
+              this.inputText = finalText.trim()
+              // 语音识别完成后直接提交答案
+              this.handleSubmit()
+            }
+          },
+          onCancel: () => {
+            this.isRecording = false
+          },
+          onError: (code: number, message: string) => {
+            this.isRecording = false
+            console.error('EnglishQuizCard', `Voice recognition error: ${code} ${message}`)
+          }
+        }
+        speechService.startListening(callback)
+      }).catch((err: Error) => {
+        console.error('EnglishQuizCard', `Failed to init speech: ${err.message}`)
+      })
+    })
+  }
+
+  private handleVoiceRecordFinish(): void {
+    ServiceRegistry.speechRecognition().finishListening()
+  }
+
+  private handleVoiceRecordCancel(): void {
+    ServiceRegistry.speechRecognition().cancelListening()
+    this.isRecording = false
+    // 引擎 cancel 后仍可能触发延迟 onComplete, 标记一下让 onComplete 吞掉, 防止 inputText 被覆盖
+    this.wasCancelled = true
+  }
+
+  private getCardBackgroundColor(): string {
+    return this.isDarkMode ? withColorAlpha(this.themePrimary, '18') : withColorAlpha(this.themePrimary, '12')
+  }
+
+  build() {
+    CardShell({
+      config: this.shellConfig,
+      state: this.shellState,
+      isAnswered: this.isAnswered,
+      correctAnswerText: this.correctAnswerText,
+      onConfirm: (): void => { this.handleSubmit() },
+      onRetry: (): void => { this.handleRetry() }
+    }) {
+      if (this.parseQuiz().questionType === 'phonics_choice') {
+        this.PhonicsContent()
+        if (!this.isAnswered && !this.showResult) {
+          this.LetterOptionsGrid()
+        }
+      } else {
+        this.QuizContent()
+        if (!this.isAnswered && !this.showResult) {
+          this.InputArea()
+        }
+      }
+    }
+  }
+
+  @Builder
+  QuizContent() {
+    Column({ space: 10 }) {
+      // 图片区域: 直接读取 @Local displayImagePath, 确保 V2 响应式追踪生效
+      if (this.displayImagePath !== '') {
+        Image(this.toFileUrl(this.displayImagePath))
+          .width('100%')
+          .height(180)
+          .objectFit(ImageFit.Contain)
+          .borderRadius(10)
+          .backgroundColor($r('app.color.surface'))
+      } else if (this.isImageLoading) {
+        // 正在异步加载图片中
+        Column() {
+          SymbolGlyph($r('sys.symbol.doc_plaintext'))
+            .fontSize(32)
+            .fontColor([$r('app.color.text_tertiary')])
+          Text('图片加载中...')
+            .fontSize(12)
+            .fontColor($r('app.color.text_tertiary'))
+            .margin({ top: 4 })
+        }
+        .width('100%')
+        .height(120)
+        .justifyContent(FlexAlign.Center)
+        .backgroundColor($r('app.color.surface'))
+        .borderRadius(10)
+      } else if (this.imageLoadFailed) {
+        // 图片生成失败
+        Column() {
+          SymbolGlyph($r('sys.symbol.doc_plaintext'))
+            .fontSize(32)
+            .fontColor([$r('app.color.text_tertiary')])
+          Text('图片加载失败')
+            .fontSize(12)
+            .fontColor($r('app.color.text_tertiary'))
+            .margin({ top: 4 })
+        }
+        .width('100%')
+        .height(120)
+        .justifyContent(FlexAlign.Center)
+        .backgroundColor($r('app.color.surface'))
+        .borderRadius(10)
+      } else {
+        // 初始状态: 尚未开始加载
+        Column() {
+          SymbolGlyph($r('sys.symbol.doc_plaintext'))
+            .fontSize(32)
+            .fontColor([$r('app.color.text_tertiary')])
+          Text('准备中...')
+            .fontSize(12)
+            .fontColor($r('app.color.text_tertiary'))
+            .margin({ top: 4 })
+        }
+        .width('100%')
+        .height(120)
+        .justifyContent(FlexAlign.Center)
+        .backgroundColor($r('app.color.surface'))
+        .borderRadius(10)
+      }
+
+      // 提示文字
+      Text(this.parseQuiz().questionType === 'sentence' ? '看图说出英语句子' : '看图说出英语单词')
+        .fontSize(14)
+        .fontColor($r('app.color.text_secondary'))
+        .width('100%')
+        .textAlign(TextAlign.Center)
+    }
+    .width('100%')
+    .padding(12)
+    .backgroundColor(this.getCardBackgroundColor())
+    .borderRadius(10)
+  }
+
+  @Builder
+  InputArea() {
+    Column({ space: 8 }) {
+      if (!this.voicePermissionDenied) {
+        Row() {
+          Button() {
+            Row({ space: 6 }) {
+              SymbolGlyph($r('sys.symbol.mic'))
+                .fontSize(16)
+                .fontColor([Color.White])
+              Text(this.isRecording ? '松开结束' : '按住说话')
+                .fontSize(14)
+                .fontColor(Color.White)
+            }
+          }
+          .type(ButtonType.Normal)
+          .height(40)
+          .layoutWeight(1)
+          .backgroundColor(this.isRecording ? '#FF6B6B' : this.themePrimary)
+          .borderRadius(20)
+          .onTouch((event: TouchEvent) => {
+            if (this.isAnswered || this.showResult) {
+              return
+            }
+            if (event.type === TouchType.Down) {
+              this.handleVoiceRecordStart()
+            } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+              if (this.isRecording) {
+                if (event.type === TouchType.Cancel) {
+                  this.handleVoiceRecordCancel()
+                } else {
+                  this.handleVoiceRecordFinish()
+                }
+              }
+            }
+          })
+        }
+        .width('100%')
+      } else {
+        // 权限被拒降级提示: 显式告诉孩子「麦克风没开, 改用键盘也行」, 避免无声卡住
+        Row({ space: 6 }) {
+          SymbolGlyph($r('sys.symbol.mic'))
+            .fontSize(14)
+            .fontColor([$r('app.color.text_tertiary')])
+          Text('麦克风不可用 · 用键盘输入也可以 ✏️')
+            .fontSize(13)
+            .fontColor($r('app.color.text_tertiary'))
+        }
+        .width('100%')
+        .height(40)
+        .justifyContent(FlexAlign.Center)
+        .enabled(false)
+      }
+
+      // 语音识别预览
+      if (this.isRecording && this.recognitionPreview !== '') {
+        Text(`识别中: ${this.recognitionPreview}`)
+          .fontSize(12)
+          .fontColor($r('app.color.text_tertiary'))
+          .width('100%')
+      }
+
+      // 文字输入框 (提交入口统一为外壳确认按钮, 键盘 onSubmit 保留为快捷路径)
+      Row({ space: 8 }) {
+        TextInput({ text: this.inputText, placeholder: '输入英语答案...' })
+          .layoutWeight(1)
+          .height(40)
+          .fontSize(15)
+          .backgroundColor($r('app.color.surface'))
+          .borderRadius(10)
+          .onChange((value: string) => {
+            this.inputText = value
+            this.shellState.hasSelection = value.trim() !== ''
+          })
+          .onSubmit(() => {
+            this.handleSubmit()
+          })
+      }
+      .width('100%')
+    }
+    .width('100%')
+  }
+
+  @Builder
+  PhonicsContent() {
+    Column({ space: 10 }) {
+      // 🔊 大听音按钮: 孩子点一下就读字母音
+      Button() {
+        Row({ space: 8 }) {
+          SymbolGlyph($r('sys.symbol.speaker_wave_2_fill'))
+            .fontSize(20)
+            .fontColor([Color.White])
+          Text(this.isPlayingSound ? CardShellCopy.PLAYING : CardShellCopy.REPLAY)
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(Color.White)
+        }
+      }
+      .type(ButtonType.Normal)
+      .width('100%')
+      .height(56)
+      .backgroundColor(this.isPlayingSound ? '#FF9F43' : this.themePrimary)
+      .borderRadius(28)
+      .enabled(!this.isPlayingSound)
+      .onClick(() => {
+        this.handlePlaySound()
+      })
+
+      Text('听一听, 选出正确的字母')
+        .fontSize(13)
+        .fontColor($r('app.color.text_secondary'))
+        .width('100%')
+        .textAlign(TextAlign.Center)
+    }
+    .width('100%')
+    .padding(12)
+    .backgroundColor(this.getCardBackgroundColor())
+    .borderRadius(10)
+  }
+
+  @Builder
+  LetterOptionsGrid() {
+    Grid() {
+      ForEach(this.letterOptions, (letter: string, idx: number) => {
+        GridItem() {
+          Button(letter.toUpperCase())
+            .fontSize(28)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+            .width('100%')
+            .height(64)
+            .backgroundColor(this.themePrimary)
+            .borderRadius(12)
+            .onClick(() => {
+              this.handleLetterSelect(letter)
+            })
+        }
+      }, (letter: string, idx: number) => `letter_${idx}_${letter}`)
+    }
+    .columnsTemplate('1fr 1fr')
+    .columnsGap(10)
+    .rowsGap(10)
+    .width('100%')
+  }
+}
