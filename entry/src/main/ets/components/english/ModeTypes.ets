@@ -99,6 +99,11 @@ export function parseEnglishQuizModeArgs(argsJson: string): EnglishQuizModeArgs 
     return empty
   }
   const resolved = resolveQuizMode(parsed)
+  if (resolved.mode === '') {
+    // mode 与 question_type 都缺: resolveQuizMode 返回 mode='', 不属于任何合法 mode,
+    // 回落 legacy 兜底 (与 JSON 解析失败同款), 兑现函数 doc 的承诺
+    return empty
+  }
   const result: EnglishQuizModeArgs = {
     mode: 'legacy',
     question: ((parsed['question'] as string) ?? '').trim(),
