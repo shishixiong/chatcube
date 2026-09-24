@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@ohos/hypium'
-import { validateEnglishQuizArgs } from '../../../../main/ets/utils/EnglishQuizValidation'
+import { validateEnglishQuizArgs, resolveQuizMode } from '../../../../main/ets/utils/EnglishQuizValidation'
 
 /**
  * EnglishQuizValidation 单元测试
@@ -120,6 +120,44 @@ export default function englishQuizValidationTest() {
       const r = validateEnglishQuizArgs('{bad')
       expect(r.ok).assertFalse()
       expect(r.error.includes('JSON')).assertTrue()
+    })
+  })
+
+  describe('resolveQuizMode', () => {
+    it('mode 合法 → 新路径', 0, () => {
+      const r = resolveQuizMode(JSON.parse('{"mode":"read_aloud"}') as Record<string, Object>)
+      expect(r.mode).assertEqual('read_aloud')
+      expect(r.isLegacy).assertFalse()
+    })
+    it('mode 缺失 + question_type 合法 → legacy', 0, () => {
+      const r = resolveQuizMode(JSON.parse('{"question_type":"phonics_choice"}') as Record<string, Object>)
+      expect(r.mode).assertEqual('phonics_choice')
+      expect(r.isLegacy).assertTrue()
+    })
+    it('mode 非法 + question_type 缺失 → 容错按 word (parseQuiz 同款)', 0, () => {
+      const r = resolveQuizMode(JSON.parse('{"mode":"bogus"}') as Record<string, Object>)
+      expect(r.mode).assertEqual('word')
+      expect(r.isLegacy).assertTrue()
+    })
+    it('mode 与 question_type 都空 → mode 为空串 (校验层 fail)', 0, () => {
+      const r = resolveQuizMode(JSON.parse('{}') as Record<string, Object>)
+      expect(r.mode).assertEqual('')
+    })
+  })
+  describe('validateEnglishQuizArgs - 结果携带 mode/isLegacy', () => {
+    it('legacy word 题回填 question_type + isLegacy=true', 0, () => {
+      const r = validateEnglishQuizArgs(buildArgs({
+        question: '苹果', image_prompt: 'an apple',
+        correct_answer: 'apple', question_type: 'word'
+      }))
+      expect(r.ok).assertTrue()
+      expect(r.mode).assertEqual('word')
+      expect(r.isLegacy).assertTrue()
+    })
+    it('mode 与 question_type 都空 → 拒绝且提示 mode', 0, () => {
+      const r = validateEnglishQuizArgs(buildArgs({ question: 'q', correct_answer: 'apple' }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('mode')).assertTrue()
     })
   })
 }
