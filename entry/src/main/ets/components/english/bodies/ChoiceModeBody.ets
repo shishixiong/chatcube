@@ -83,6 +83,11 @@ export struct ChoiceModeBody {
         this.shellState.isCorrect = prev.correct
         this.shellState.headPill = '已回答'
         this.shellState.headPillColor = '#4CAF50'
+      } else {
+        // payload 缺失/不可解析: 无法判定当时对错, 抑制反馈横幅 (MathQuizCard 同款守卫)
+        this.shellState.feedbackSuppressed = true
+        this.shellState.headPill = '已回答'
+        this.shellState.headPillColor = '#4CAF50'
       }
     } else if (this.showImage) {
       this.resolveImage()

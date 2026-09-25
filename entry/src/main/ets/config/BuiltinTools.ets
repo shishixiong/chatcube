@@ -1577,12 +1577,15 @@ function createMathQuizToolConfig(): ToolConfig {
 }
 
 // ===== english_quiz 工具 =====
-// 英语看图说话工具：让 AI 出示图片，小朋友通过语音或文字说出对应的英语单词/句子。
-// 图片优先从本地缓存加载（ImageIndexService 统一数据访问层：ENGLISH_QUIZ + LESSON_PLAN 双源），
-// 缓存未命中时调用图片生成 API。交互由前端 EnglishQuizCard 组件处理，与 math_quiz 模式类似。
+// 英语趣味题工具（v2）：mode 六选一（listen_choice / picture_word / phonics_blend /
+// sentence_fill / read_aloud / letter_trace），同时兼容历史 question_type 三题型（word /
+// sentence / phonics_choice）。图片优先从本地缓存加载（ImageIndexService 统一数据访问层：
+// ENGLISH_QUIZ + LESSON_PLAN 双源），缓存未命中时调用图片生成 API。
+// 交互由前端 components/english/EnglishQuizCard 组件处理（按 mode 路由到各 body），与 math_quiz 模式类似。
 
 interface EnglishQuizArgs {
   question: string
+  mode?: string               // v2 六 mode; 缺省时走 legacy question_type 兼容路径
   image_prompt: string
   correct_answer: string
   question_type: string
@@ -1633,7 +1636,7 @@ function createEnglishQuizToolDefinition(): ToolDefinition {
       "mode": {
         "type": "string",
         "enum": ["listen_choice", "picture_word", "phonics_blend", "sentence_fill", "read_aloud", "letter_trace"],
-        "description": "Quiz mode, exactly one of six. listen_choice: child hears a word via TTS and picks it from 4 options (tts_text REQUIRED). picture_word: child sees an image and picks the matching word (image_prompt REQUIRED). phonics_blend: pick the word matching phonics_rule from 4 same-rule options (phonics_rule REQUIRED). sentence_fill: fill the one blank in pattern by picking from 4 options (pattern REQUIRED). read_aloud: child reads target_text aloud, card auto-scores via speech recognition (target_text REQUIRED). letter_trace: trace a single letter (letter and case REQUIRED)."
+        "description": "Quiz mode, exactly one of six. listen_choice: child hears a word via TTS and picks it from 4 options (tts_text REQUIRED). picture_word: child sees an image and picks the matching word (image_prompt REQUIRED). phonics_blend: pick the word matching phonics_rule from 4 same-rule options (phonics_rule REQUIRED). sentence_fill: fill the one blank in pattern by picking from 4 options (pattern REQUIRED). read_aloud: child reads target_text aloud, card auto-scores via speech recognition (target_text REQUIRED). letter_trace: trace a single letter (letter and case REQUIRED). phonics_blend 的 4 个选项都符合 phonics_rule, 孩子只能靠听音作答——question 要写成「听一听, 选出你听到的词」这类听音指令."
       },
       "question": {
         "type": "string",

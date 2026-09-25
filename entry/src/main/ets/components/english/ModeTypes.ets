@@ -119,7 +119,7 @@ export function parseEnglishQuizModeArgs(argsJson: string): EnglishQuizModeArgs 
     letter: ((parsed['letter'] as string) ?? '').trim(),
     letterCase: ((parsed['case'] as string) ?? '').trim(),
     skillKey: ((parsed['skill_key'] as string) ?? '').trim(),
-    difficulty: (parsed['difficulty'] as number) ?? 1,
+    difficulty: typeof parsed['difficulty'] === 'number' ? (parsed['difficulty'] as number) : 1,
     stage: ((parsed['stage'] as string) ?? '').trim(),
     theme: ((parsed['theme'] as string) ?? '').trim(),
     legacyQuestionType: resolved.isLegacy ? resolved.mode : '',

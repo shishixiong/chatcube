@@ -111,8 +111,11 @@ export function validateEnglishQuizArgs(args: string): EnglishQuizValidationResu
 
 function validateLegacyArgs(parsed: Record<string, Object>, mode: string): EnglishQuizValidationResult {
   // ===== 原 validateEnglishQuizArgs 的 question_type 分支逻辑逐字搬入, 行为不变 =====
-  const questionType = ((parsed['question_type'] as string) ?? 'word').trim()
-  const correct = ((parsed['correct_answer'] as string) ?? '').trim()
+  // typeof 守卫: 值字段为非字符串 (如数字) 时按缺省值处理, 走既有校验失败路径而非 .trim() 崩溃
+  const questionTypeRaw = parsed['question_type']
+  const questionType = (typeof questionTypeRaw === 'string' ? (questionTypeRaw as string) : 'word').trim()
+  const correctRaw = parsed['correct_answer']
+  const correct = (typeof correctRaw === 'string' ? (correctRaw as string) : '').trim()
 
   if (questionType === 'phonics_choice') {
     if (correct === '') {
@@ -121,7 +124,8 @@ function validateLegacyArgs(parsed: Record<string, Object>, mode: string): Engli
     if (correct.length !== 1) {
       return fail(`phonics_choice 题的 correct_answer「${correct}」必须是单个字母`, mode, true)
     }
-    const sound = ((parsed['sound_text'] as string) ?? '').trim()
+    const soundRaw = parsed['sound_text']
+    const sound = (typeof soundRaw === 'string' ? (soundRaw as string) : '').trim()
     if (sound === '') {
       return fail('phonics_choice 题缺少 sound_text (TTS 要朗读的字母音), 没有它小朋友听不到题目, 请补上后重新出题', mode, true)
     }
@@ -160,11 +164,13 @@ function validateLegacyArgs(parsed: Record<string, Object>, mode: string): Engli
   if (correct === '') {
     return fail(`${questionType} 题缺少 correct_answer (正确的英文单词/句子)`, mode, true)
   }
-  const question = ((parsed['question'] as string) ?? '').trim()
+  const questionRaw = parsed['question']
+  const question = (typeof questionRaw === 'string' ? (questionRaw as string) : '').trim()
   if (question === '') {
     return fail(`${questionType} 题缺少 question (给小朋友看的中文提示语)`, mode, true)
   }
-  const imagePrompt = ((parsed['image_prompt'] as string) ?? '').trim()
+  const imagePromptRaw = parsed['image_prompt']
+  const imagePrompt = (typeof imagePromptRaw === 'string' ? (imagePromptRaw as string) : '').trim()
   if (imagePrompt === '') {
     return fail(`${questionType} 题缺少 image_prompt — 没有图片描述, 卡片会一直停在加载占位上无法作答, 请补上后重新出题`, mode, true)
   }
@@ -174,7 +180,10 @@ function validateLegacyArgs(parsed: Record<string, Object>, mode: string): Engli
 const VOWELS: string[] = ['a', 'e', 'i', 'o', 'u']
 
 function readString(parsed: Record<string, Object>, key: string): string {
-  return ((parsed[key] as string) ?? '').trim()
+  // typeof 守卫: 非字符串值 (如数字 correct_answer / question) 按空串处理,
+  // 流入既有「缺少字段」校验失败路径 (should_retry) 而非 .trim() 运行时崩溃
+  const raw = parsed[key]
+  return (typeof raw === 'string' ? (raw as string) : '').trim()
 }
 
 /**
@@ -303,6 +312,10 @@ function validateSentenceFill(parsed: Record<string, Object>, mode: string): Eng
     return fail(optionsErr, mode, false)
   }
   const pattern = readString(parsed, 'pattern')
+  // 4 个及以上连续下划线会被 split('___') 误计成 1 个空, 渲染出残留的「_」——直接拒绝让 LLM 修正
+  if (pattern.indexOf('____') >= 0) {
+    return fail('sentence_fill 题的 pattern 含 4 个及以上连续下划线 (____), 空位必须恰好是 3 个下划线 ___; 请修正后重新出题', mode, false)
+  }
   const blanks = pattern === '' ? 0 : pattern.split('___').length - 1
   if (pattern === '' || blanks !== 1) {
     return fail(`sentence_fill 题的 pattern 必须恰好含一个 ___ 空格 (当前 ${blanks} 个), 如「I like ___.」; 严禁 0 个或多个空, 请修正后重新出题`, mode, false)

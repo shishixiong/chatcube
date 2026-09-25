@@ -73,6 +73,11 @@ export struct ReadAloudBody {
         this.shellState.isCorrect = prev.correct
         this.shellState.headPill = '已回答'
         this.shellState.headPillColor = '#4CAF50'
+      } else {
+        // payload 缺失/不可解析: 无法判定当时对错, 抑制反馈横幅 (MathQuizCard 同款守卫)
+        this.shellState.feedbackSuppressed = true
+        this.shellState.headPill = '已回答'
+        this.shellState.headPillColor = '#4CAF50'
       }
     }
   }
@@ -207,8 +212,13 @@ export struct ReadAloudBody {
       correctAnswerText: this.targetText,
       onConfirm: (): void => { this.handleTypedSubmit() },
       onRetry: (): void => {
-        // 外壳「再试一次」仅键盘路径使用: 清输入, 不重复计分
+        // 外壳「再试一次」: 清输入 + 复位提交/失败态, 让 InputArea 重新出现。
+        // 放弃提交后 showResult=true 会永久隐藏输入区, 只复位 shellState 不复位
+        // showResult/attemptFailed 时重试按钮点了没反应 (fix-wave #2)。
+        // 注意: 放弃后 AI 已收到第一次 onAnswer, 此处再录再交只走本地反馈, 不重复计分。
         this.inputText = ''
+        this.showResult = false
+        this.attemptFailed = false
         this.shellState.hasSelection = false
         this.shellState.submitted = false
         this.shellState.isCorrect = false

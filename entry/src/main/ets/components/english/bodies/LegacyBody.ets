@@ -101,6 +101,11 @@ export struct LegacyBody {
         }
         this.shellState.submitted = true
         this.shellState.isCorrect = prev.correct
+      } else {
+        // payload 缺失/不可解析(如旧会话数据断链): 无法判定当时对错,
+        // 抑制反馈横幅——否则默认 isCorrect=false 会把实际答对的题
+        // 渲染成假「再试一次」(MathQuizCard 同款守卫)
+        this.shellState.feedbackSuppressed = true
       }
       this.shellState.headPill = '已回答'
       this.shellState.headPillColor = '#4CAF50'

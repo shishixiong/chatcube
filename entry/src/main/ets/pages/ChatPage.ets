@@ -4840,18 +4840,50 @@ export struct ChatPage {
           quizText += ' ' + expression + ' 等于几？'
         }
       } else if (interaction.toolId === ENGLISH_QUIZ_TOOL_ID) {
-        const questionType = (parsed['question_type'] as string) ?? 'word'
-        let question = (parsed['question'] as string) ?? ''
-        if (question === '') {
-          // 兼容旧格式
-          if (questionType === 'sentence') {
-            question = (parsed['sentence'] as string) ?? ''
-          } else {
-            question = (parsed['word'] as string) ?? ''
+        // v2 六 mode 各朗读对应字段 (listen_choice 读 tts_text / read_aloud 读 target_text /
+        // letter_trace 读字母 / 三个选择题读 question); 无 mode 的历史调用保持 legacy 行为逐字不变
+        const mode = (parsed['mode'] as string) ?? ''
+        if (mode === 'listen_choice') {
+          let spoken = (parsed['tts_text'] as string) ?? ''
+          if (spoken === '') {
+            spoken = (parsed['question'] as string) ?? ''
           }
-        }
-        if (question !== '') {
-          quizText = questionType === 'sentence' ? ('请说出英语句子: ' + question) : ('请说出英语单词: ' + question)
+          if (spoken !== '') {
+            quizText = '请听单词: ' + spoken
+          }
+        } else if (mode === 'read_aloud') {
+          let spoken = (parsed['target_text'] as string) ?? ''
+          if (spoken === '') {
+            spoken = (parsed['question'] as string) ?? ''
+          }
+          if (spoken !== '') {
+            quizText = '请跟读: ' + spoken
+          }
+        } else if (mode === 'letter_trace') {
+          const letter = (parsed['letter'] as string) ?? ''
+          if (letter !== '') {
+            quizText = '我们来描写字母: ' + letter
+          }
+        } else if (mode === 'picture_word' || mode === 'phonics_blend' || mode === 'sentence_fill') {
+          const question = (parsed['question'] as string) ?? ''
+          if (question !== '') {
+            quizText = '请看题: ' + question
+          }
+        } else {
+          // legacy (无 mode): 历史行为逐字保留
+          const questionType = (parsed['question_type'] as string) ?? 'word'
+          let question = (parsed['question'] as string) ?? ''
+          if (question === '') {
+            // 兼容旧格式
+            if (questionType === 'sentence') {
+              question = (parsed['sentence'] as string) ?? ''
+            } else {
+              question = (parsed['word'] as string) ?? ''
+            }
+          }
+          if (question !== '') {
+            quizText = questionType === 'sentence' ? ('请说出英语句子: ' + question) : ('请说出英语单词: ' + question)
+          }
         }
       } else if (interaction.toolId === NUMBER_PUZZLE_TOOL_ID) {
         // 数字华容道：按 difficulty 映射到 2-5 阶 gridSize，与 NumberPuzzleCard.ets:113-121 保持一致

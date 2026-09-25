@@ -26,7 +26,7 @@ import { SHARED_IDENTITY, buildBasePrompt } from '../utils/SharedPromptFragments
 export const DEFAULT_ASSISTANT_ID: string = 'default'
 
 // 默认助手（小星老师）的固定系统提示词，锁定不可编辑
-// 结构：身份 + 行为规则 + 教学策略 + 6 大领域（各 1 行） + 工具调用规则 + 元指令优先级
+// 结构：身份 + 行为规则 + 教学策略 + 6 大领域（各领域 1 行起，英语段为五步课多行块） + 工具调用规则 + 元指令优先级
 // 总行数 ~70（-60% 相比原 172 行版本），token 节省 ~49%/次请求
 // 共享片段来自 utils/SharedPromptFragments.ets，4 处复用，改文案请同步检查
 export const DEFAULT_ASSISTANT_SYSTEM_PROMPT: string = [

@@ -1895,7 +1895,7 @@ export class ToolExecutionService {
     }
 
     // === english_quiz 特殊路径 ===
-    // 英语看图说话互动工具, 由 EnglishQuizCard 收集小朋友的答案。
+    // 英语趣味题互动工具（mode 六选一 + legacy question_type 兼容）, 由 components/english/EnglishQuizCard 收集小朋友的答案。
     if (isEnglishQuizFunctionName(normalizedFunctionName)) {
       return await this.handleEnglishQuiz(toolCall, context)
     }

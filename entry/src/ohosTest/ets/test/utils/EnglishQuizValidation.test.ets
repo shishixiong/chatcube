@@ -333,4 +333,41 @@ export default function englishQuizValidationTest() {
       expect(r.error.includes('case')).assertTrue()
     })
   })
+  describe('validateEnglishQuizArgs - 非字符串值/异常 pattern 守卫', () => {
+    it('picture_word: correct_answer 为数字 → 校验失败而非抛异常', 0, () => {
+      const r = validateEnglishQuizArgs(buildArgs({
+        mode: 'picture_word', question: '看图选词', correct_answer: 123,
+        options: ['apple', 'banana', 'orange', 'pear'],
+        image_prompt: 'A bright red apple, children illustration style'
+      }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('correct_answer')).assertTrue()
+    })
+
+    it('legacy: question_type 为数字 (mode bogus) → 容错按 word 不抛异常', 0, () => {
+      // 齐全 payload: 数字 question_type 容错按 word, 正常通过 (与 bogus 字符串 mode 同款容错)
+      const okR = validateEnglishQuizArgs(buildArgs({
+        mode: 'bogus', question: '苹果', question_type: 123,
+        image_prompt: 'an apple', correct_answer: 'apple'
+      }))
+      expect(okR.ok).assertTrue()
+      expect(okR.mode).assertEqual('word')
+      expect(okR.isLegacy).assertTrue()
+      // 补上 correct_answer 后缺 image_prompt: 数字 question_type 不崩溃, 流入既有校验失败路径 (should_retry)
+      const failR = validateEnglishQuizArgs(buildArgs({
+        mode: 'bogus', question: 'q', question_type: 123, correct_answer: 'apple'
+      }))
+      expect(failR.ok).assertFalse()
+      expect(failR.error.includes('image_prompt')).assertTrue()
+    })
+
+    it('sentence_fill: pattern 含 ____ (4 连下划线), 拒绝', 0, () => {
+      const r = validateEnglishQuizArgs(buildArgs({
+        mode: 'sentence_fill', question: 'q', correct_answer: 'apples',
+        options: ['apples', 'banana', 'milk', 'eggs'], pattern: 'I like ____.'
+      }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('下划线')).assertTrue()
+    })
+  })
 }

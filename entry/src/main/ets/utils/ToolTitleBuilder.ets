@@ -26,6 +26,7 @@ interface ToolArgumentDict {
   character?: string
   theme?: string
   question_type?: string
+  mode?: string
   difficulty?: number
 }
 
@@ -206,16 +207,19 @@ export function buildToolTitle(toolCall: ToolCall): string {
     const question = coerceString(args.question)
     const word = coerceString(args.word)
     const sentence = coerceString(args.sentence)
+    // v2 六 mode 调用一律带 mode, 前缀用中性「英语题」; 无 mode 的历史 legacy 调用保留「英语看图」
+    const mode = coerceString(args.mode)
+    const prefix = mode !== '' ? '英语题: ' : '英语看图: '
     if (question !== '') {
-      return `英语看图: ${truncate(question)}`
+      return `${prefix}${truncate(question)}`
     }
     if (word !== '') {
-      return `英语看图: ${truncate(word)}`
+      return `${prefix}${truncate(word)}`
     }
     if (sentence !== '') {
-      return `英语看图: ${truncate(sentence)}`
+      return `${prefix}${truncate(sentence)}`
     }
-    return '英语看图说话'
+    return '英语趣味题'
   }
   if (fn === 'pinyin_quiz') {
     const character = coerceString(args.character)
