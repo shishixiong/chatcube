@@ -46,6 +46,7 @@ const SKILL_DEFINITIONS: [string, string][] = [
   ['english_vocab', '英语词汇'],
   ['english_sentence', '英语句子'],
   ['english_phonics', '自然拼读'],
+  ['english_reading', '英语跟读'],
   ['general_nature', '自然常识'],
   ['general_social', '社交礼仪'],
   ['general_life', '生活常识'],

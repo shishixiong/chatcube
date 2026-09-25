@@ -54,6 +54,7 @@ const SKILL_GROUPS: LearningSkillGroup[] = [
       'english_vocab',
       'english_sentence',
       'english_phonics',
+      'english_reading',
       'english_writing'
     ]
   },
