@@ -53,6 +53,46 @@ const LETTERS = {
   'Z': [[0.2,0.1,0.8,0.1,'—'],[0.8,0.1,0.2,0.9,'/'],[0.2,0.9,0.8,0.9,'—']],
 }
 
+// Lowercase letter stroke data (0-1 grid, Y-down) — x-height top=0.35, baseline=0.9,
+// ascender top=0.1, descender bottom=0.95-0.98. Same thick-rectangle rendering as A-Z.
+// Label '·' marks a dot stroke (i/j) rendered as a small filled square (see dotPath).
+const LOWERCASE_LETTERS = {
+  'a': [[0.5,0.35,0.3,0.35,'⌒'],[0.3,0.35,0.3,0.9,'|'],[0.3,0.9,0.5,0.9,'⌒'],[0.5,0.35,0.5,0.9,'|']],
+  'b': [[0.25,0.1,0.25,0.9,'|'],[0.25,0.35,0.45,0.35,'—'],[0.45,0.35,0.45,0.9,'|'],[0.45,0.9,0.25,0.9,'—']],
+  'c': [[0.45,0.35,0.25,0.35,'⌒'],[0.25,0.35,0.25,0.9,'|'],[0.25,0.9,0.45,0.9,'⌒']],
+  'd': [[0.25,0.35,0.45,0.35,'⌒'],[0.25,0.35,0.25,0.9,'|'],[0.25,0.9,0.45,0.9,'⌒'],[0.45,0.1,0.45,0.9,'|']],
+  'e': [[0.25,0.55,0.5,0.55,'—'],[0.25,0.35,0.5,0.35,'⌒'],[0.5,0.35,0.5,0.55,'|'],[0.25,0.35,0.25,0.9,'|'],[0.25,0.9,0.5,0.9,'⌒']],
+  'f': [[0.45,0.1,0.3,0.1,'⌒'],[0.3,0.1,0.3,0.9,'|'],[0.2,0.55,0.45,0.55,'—']],
+  'g': [[0.25,0.35,0.45,0.35,'⌒'],[0.25,0.35,0.25,0.9,'|'],[0.25,0.9,0.45,0.9,'⌒'],[0.45,0.35,0.45,0.95,'|'],[0.45,0.95,0.3,0.96,'⌒']],
+  'h': [[0.25,0.1,0.25,0.9,'|'],[0.25,0.55,0.45,0.55,'—'],[0.45,0.35,0.45,0.9,'|']],
+  'i': [[0.35,0.35,0.35,0.9,'|'],[0.35,0.2,0.35,0.2,'·']],
+  'j': [[0.35,0.35,0.35,0.95,'|'],[0.35,0.95,0.22,0.9,'⌒'],[0.35,0.2,0.35,0.2,'·']],
+  'k': [[0.25,0.1,0.25,0.9,'|'],[0.25,0.6,0.45,0.35,'/'],[0.28,0.6,0.5,0.9,'\\']],
+  'l': [[0.35,0.1,0.35,0.9,'|']],
+  'm': [[0.25,0.35,0.25,0.9,'|'],[0.25,0.55,0.4,0.55,'—'],[0.4,0.35,0.4,0.9,'|'],[0.4,0.55,0.55,0.55,'—'],[0.55,0.35,0.55,0.9,'|']],
+  'n': [[0.25,0.35,0.25,0.9,'|'],[0.25,0.55,0.45,0.55,'—'],[0.45,0.35,0.45,0.9,'|']],
+  'o': [[0.5,0.35,0.25,0.35,'⌒'],[0.25,0.35,0.25,0.9,'|'],[0.25,0.9,0.5,0.9,'⌒'],[0.5,0.9,0.5,0.35,'|']],
+  'p': [[0.25,0.35,0.25,0.95,'|'],[0.25,0.35,0.45,0.35,'—'],[0.45,0.35,0.45,0.9,'|'],[0.45,0.9,0.25,0.9,'—']],
+  'q': [[0.25,0.35,0.45,0.35,'⌒'],[0.25,0.35,0.25,0.9,'|'],[0.25,0.9,0.45,0.9,'⌒'],[0.45,0.35,0.45,0.95,'|']],
+  'r': [[0.3,0.35,0.3,0.9,'|'],[0.3,0.5,0.45,0.35,'/']],
+  's': [[0.45,0.35,0.25,0.35,'—'],[0.25,0.35,0.25,0.62,'|'],[0.25,0.62,0.5,0.62,'—'],[0.5,0.62,0.5,0.9,'|'],[0.5,0.9,0.25,0.9,'—']],
+  't': [[0.35,0.2,0.35,0.9,'|'],[0.2,0.45,0.5,0.45,'—']],
+  'u': [[0.25,0.35,0.25,0.8,'|'],[0.25,0.8,0.5,0.8,'⌒'],[0.5,0.8,0.5,0.35,'|']],
+  'v': [[0.25,0.35,0.38,0.9,'\\'],[0.38,0.9,0.5,0.35,'/']],
+  'w': [[0.15,0.35,0.25,0.9,'\\'],[0.25,0.9,0.325,0.62,'/'],[0.325,0.62,0.4,0.9,'\\'],[0.4,0.9,0.5,0.35,'/']],
+  'x': [[0.25,0.35,0.5,0.9,'\\'],[0.5,0.35,0.25,0.9,'/']],
+  'y': [[0.25,0.35,0.38,0.7,'\\'],[0.5,0.35,0.25,0.95,'/'],[0.25,0.95,0.15,0.88,'⌒']],
+  'z': [[0.25,0.35,0.5,0.35,'—'],[0.5,0.35,0.25,0.9,'/'],[0.25,0.9,0.5,0.9,'—']],
+}
+
+// Dot stroke (label '·'): small filled square, pure M/L/Z — HandwritingCard.drawSvgPath
+// does NOT support the A (arc) command, so zero-length dots must not emit arcs.
+function dotPath(x, y) {
+  const cx = x * 1024, cy = (1 - y) * 1024
+  const r = 28
+  return `M ${(cx-r).toFixed(0)} ${(cy-r).toFixed(0)} L ${(cx+r).toFixed(0)} ${(cy-r).toFixed(0)} L ${(cx+r).toFixed(0)} ${(cy+r).toFixed(0)} L ${(cx-r).toFixed(0)} ${(cy+r).toFixed(0)} Z`
+}
+
 // Convert letter line segment to thick filled rectangle SVG path (Y-flipped to Y-up)
 function strokeToPath(x1, y1, x2, y2, thickness = 70) {
   const sx1 = x1 * 1024, sy1 = (1 - y1) * 1024
@@ -60,7 +100,9 @@ function strokeToPath(x1, y1, x2, y2, thickness = 70) {
   const dx = sx2 - sx1, dy = sy2 - sy1
   const len = Math.sqrt(dx * dx + dy * dy)
   if (len < 1) {
-    return `M ${sx1+25} ${sy1} A 25 25 0 1 0 ${sx1-25} ${sy1} A 25 25 0 1 0 ${sx1+25} ${sy1} Z`
+    // Degenerate segment → small square (NOT an arc: renderer has no A command)
+    const r = 28
+    return `M ${(sx1-r).toFixed(0)} ${(sy1-r).toFixed(0)} L ${(sx1+r).toFixed(0)} ${(sy1-r).toFixed(0)} L ${(sx1+r).toFixed(0)} ${(sy1+r).toFixed(0)} L ${(sx1-r).toFixed(0)} ${(sy1+r).toFixed(0)} Z`
   }
   const nx = -dy / len, ny = dx / len
   const ox = nx * thickness / 2, oy = ny * thickness / 2
@@ -122,10 +164,10 @@ async function fetchChineseChar(char) {
 }
 
 function generateLetter(char) {
-  const letterData = LETTERS[char]
+  const letterData = LETTERS[char] || LOWERCASE_LETTERS[char]
   if (!letterData) return null
   return letterData.map(([x1, y1, x2, y2, label]) => ({
-    path: strokeToPath(x1, y1, x2, y2),
+    path: label === '·' ? dotPath(x1, y1) : strokeToPath(x1, y1, x2, y2),
     label: label,
   }))
 }
@@ -134,7 +176,7 @@ async function main() {
   const lines = []
   for (const char of CHARS) {
     let strokes = null
-    if (/[A-Z]/.test(char)) {
+    if (/[A-Za-z]/.test(char)) {
       strokes = generateLetter(char)
       if (!strokes) {
         console.error(`ERROR: ${char} - no letter data`)
