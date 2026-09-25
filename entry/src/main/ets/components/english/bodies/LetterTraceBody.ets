@@ -45,11 +45,12 @@ export struct LetterTraceBody {
       ? ((parsed['skill_key'] as string) ?? '').trim() : 'english_writing'
     this.stage = ((parsed['stage'] as string) ?? '').trim()
     // letter_trace → handwriting_practice 契约映射: character 传原样大小写字母
-    const mappedArgs = JSON.stringify({
-      type: 'letter',
-      character: this.letter,
-      difficulty: (parsed['difficulty'] as number) ?? 1
-    } as Record<string, Object>)
+    const mappedArgsObj: Record<string, Object> = {
+      'type': 'letter',
+      'character': this.letter,
+      'difficulty': (parsed['difficulty'] as number) ?? 1
+    }
+    const mappedArgs = JSON.stringify(mappedArgsObj)
     this.innerToolCall = new ToolCall(
       this.toolCall.id, 'handwriting_practice', mappedArgs,
       'handwriting_practice', '字母描红'

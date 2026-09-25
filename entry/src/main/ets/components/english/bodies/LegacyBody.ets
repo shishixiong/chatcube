@@ -10,14 +10,14 @@
  * 由 english_quiz v2 路由器消费 (四个 body 统一签名); 本文件不做任何行为演进。
  */
 
-import { ToolCall } from '../../models/ChatModels'
-import { getAppUiState } from '../../state/AppUiState'
-import { withColorAlpha } from '../../utils/ColorAlphaUtils'
+import { ToolCall } from '../../../models/ChatModels'
+import { getAppUiState } from '../../../state/AppUiState'
+import { withColorAlpha } from '../../../utils/ColorAlphaUtils'
 import { CardShell } from '../../cardshell/CardShell'
 import { CardShellConfig, CardShellCopy } from '../../cardshell/CardShellTypes'
 import { CardShellState } from '../../cardshell/CardShellState'
-import { SpeechRecognitionCallback } from '../../services/SpeechRecognitionService'
-import { ServiceRegistry } from '../../services/ServiceRegistry'
+import { SpeechRecognitionCallback } from '../../../services/SpeechRecognitionService'
+import { ServiceRegistry } from '../../../services/ServiceRegistry'
 import { EnglishQuizAnswerPayload } from '../ModeTypes'
 import { resolveQuizImagePath } from '../QuizImageResolver'
 import { common } from '@kit.AbilityKit'
