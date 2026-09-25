@@ -1630,42 +1630,90 @@ function createEnglishQuizToolDefinition(): ToolDefinition {
   const rawSchemaJson: string = `{
     "type": "object",
     "properties": {
+      "mode": {
+        "type": "string",
+        "enum": ["listen_choice", "picture_word", "phonics_blend", "sentence_fill", "read_aloud", "letter_trace"],
+        "description": "Quiz mode, exactly one of six. listen_choice: child hears a word via TTS and picks it from 4 options (tts_text REQUIRED). picture_word: child sees an image and picks the matching word (image_prompt REQUIRED). phonics_blend: pick the word matching phonics_rule from 4 same-rule options (phonics_rule REQUIRED). sentence_fill: fill the one blank in pattern by picking from 4 options (pattern REQUIRED). read_aloud: child reads target_text aloud, card auto-scores via speech recognition (target_text REQUIRED). letter_trace: trace a single letter (letter and case REQUIRED)."
+      },
       "question": {
         "type": "string",
-        "description": "The Chinese word or sentence the child needs to say in English. For word quizzes: the Chinese word (e.g. '苹果', '小狗'). For sentence quizzes: the Chinese sentence (e.g. '我喜欢吃苹果')."
-      },
-      "image_prompt": {
-        "type": "string",
-        "description": "Detailed English prompt for generating the image. Should be child-friendly, colorful, and clearly depict the word/concept. e.g. 'A bright red apple on a wooden table, children illustration style, colorful, simple background'"
+        "description": "Chinese instruction shown to the child, e.g. 「听一听, 选出你听到的单词」 / 「看图选出对应的英文」 / 「跟我读下面这句话」."
       },
       "correct_answer": {
         "type": "string",
-        "description": "The correct English answer. For word quiz: the English word. For sentence quiz: the English sentence. e.g. 'apple' or 'I like apples'"
+        "description": "The correct English answer for this mode: the heard word (listen_choice), the pictured word (picture_word), the rule-matching word (phonics_blend), the blank word (sentence_fill), or the target sentence itself (read_aloud), or the letter (letter_trace)."
+      },
+      "difficulty": {
+        "type": "number",
+        "description": "Difficulty level 1-5 based on the child's english_* profile levels."
+      },
+      "skill_key": {
+        "type": "string",
+        "description": "Child profile skill dimension this quiz targets: english_alphabet / english_vocab / english_phonics / english_sentence / english_reading / english_writing. Optional — a sensible default is applied per mode if omitted."
+      },
+      "stage": {
+        "type": "string",
+        "enum": ["warm_up", "presentation", "practice", "production", "review"],
+        "description": "Optional lesson stage tag for the five-step English lesson. Informational only."
+      },
+      "theme": {
+        "type": "string",
+        "description": "Optional theme of this quiz: 颜色/动物/食物/家庭/数字/身体/学校/天气. All 4 options must belong to the same theme."
+      },
+      "options": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "REQUIRED for listen_choice / picture_word / phonics_blend / sentence_fill: EXACTLY 4 distinct English words including correct_answer. 严禁跨主题混词 (apple/bus/red 是坏题); 严禁重复项; 严禁 3 个或 5 个选项."
+      },
+      "image_prompt": {
+        "type": "string",
+        "description": "REQUIRED only for picture_word. English image-generation prompt with a single clearly recognizable subject, child illustration style. Other modes must omit it."
+      },
+      "phonics_rule": {
+        "type": "string",
+        "description": "REQUIRED only for phonics_blend, e.g. 「short a」. All 4 options must fully satisfy the rule (short a → cat/ham/map/bat). 严禁混入违反规则的词 (r-controlled 的 car, 长元音的 cake)."
+      },
+      "pattern": {
+        "type": "string",
+        "description": "REQUIRED only for sentence_fill, e.g. 「I like ___.」. Must contain EXACTLY ONE ___ blank. 严禁 0 个或 2 个以上空格."
+      },
+      "tts_text": {
+        "type": "string",
+        "description": "REQUIRED only for listen_choice: the English word TTS will read aloud. Must be plain TTS-readable English (not IPA, not letter names)."
+      },
+      "target_text": {
+        "type": "string",
+        "description": "REQUIRED only for read_aloud: the sentence the child reads aloud. Max 8 words; level 0-1 → max 3 words, 2-3 → max 5, 4-5 → max 8. Use english_sentence level from child_profile."
+      },
+      "phonetic_hint": {
+        "type": "string",
+        "description": "Optional for read_aloud: tricky-sound hint, e.g. 「th → this」."
+      },
+      "letter": {
+        "type": "string",
+        "description": "REQUIRED only for letter_trace: a single English letter (a-z or A-Z)."
+      },
+      "case": {
+        "type": "string",
+        "enum": ["upper", "lower"],
+        "description": "REQUIRED only for letter_trace: letter case to practice."
       },
       "question_type": {
         "type": "string",
         "enum": ["word", "sentence", "phonics_choice"],
-        "description": "Type of quiz: 'word' for single word, 'sentence' for full sentence, 'phonics_choice' for letter sound recognition (TTS plays sound_text, child taps correct letter)."
-      },
-      "difficulty": {
-        "type": "number",
-        "description": "Difficulty level 1-5. 1=very easy (common objects), 5=harder (abstract concepts). Base on child profile."
-      },
-      "skill_key": {
-        "type": "string",
-        "description": "The child profile skill dimension this quiz targets: 'english_vocab' for words, 'english_sentence' for sentences, 'english_phonics' for phonics-related."
+        "description": "DEPRECATED legacy field for historical sessions only. New calls must use mode instead; sending question_type alone renders the legacy free-input card."
       },
       "letter_options": {
         "type": "array",
         "items": { "type": "string", "minLength": 1, "maxLength": 3 },
-        "description": "仅 phonics_choice 必填: 3-4 个字母选项 (字符串数组), 必须包含 correct_answer。例如 ['k', 'c', 's', 'p']。distractor 选取同类或相近音的字母 (k/c/g, b/d/p/q, m/n)。"
+        "description": "仅 legacy phonics_choice 用: 3-4 个字母选项 (含 correct_answer), distractor 选同类或相近音字母 (k/c/g, b/d/p/q, m/n)。新调用不要发此字段."
       },
       "sound_text": {
         "type": "string",
-        "description": "仅 phonics_choice 必填: TTS 可读的自然拼读音拼写 (不是 IPA 也不是字母名)。例如 /k/ 写作「kuh」、/ae/ 写作「aah」、/t/ 写作「tuh」。长度不超过 10 个字符, 单个短音节或单词。"
+        "description": "仅 legacy phonics_choice 用: TTS 可读的字母音拼写 (如 /k/ 写作「kuh」)。新调用不要发此字段."
       }
     },
-    "required": ["correct_answer", "question_type", "image_prompt", "question"]
+    "required": ["question", "mode", "correct_answer"]
   }`
 
   const parameters = new ToolParameters()
@@ -1673,7 +1721,7 @@ function createEnglishQuizToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     ENGLISH_QUIZ_TOOL_ID,
-    'Present an English vocabulary quiz to the child with an image. The child sees a picture and speaks or types the English word/sentence. Use this INSTEAD of writing English questions in plain text — plain text questions cannot grade the child\'s answer or record stars/skill progress, only this tool can. Provide a child-friendly image_prompt that clearly depicts the concept. Set difficulty based on the child\'s english_vocab/english_sentence level from child_profile. Alternate between word and sentence types.',
+    'Present an English quiz to the child as an interactive card. Six modes cover the five-step English lesson: listen_choice (hear and pick), picture_word (see image and pick), phonics_blend (same-rule word pick), sentence_fill (fill one blank), read_aloud (read aloud, auto-scored), letter_trace (trace a letter). Choice modes need options: EXACTLY 4 distinct words including correct_answer, all from the SAME theme. Use this INSTEAD of writing English questions in plain text — only this tool can grade answers and record stars. Pick mode and difficulty from the child_profile english_* levels. 严禁在文字里直接出英语题, 严禁跨主题混选项, 严禁 phonics_blend 里混入违反 phonics_rule 的词.',
     parameters
   )
 
@@ -1683,8 +1731,8 @@ function createEnglishQuizToolDefinition(): ToolDefinition {
 function createEnglishQuizToolConfig(): ToolConfig {
   return new ToolConfig(
     ENGLISH_QUIZ_TOOL_ID,
-    '英语看图说话',
-    '出示图片让小朋友说出对应的英语单词或句子, 通过语音或文字作答。',
+    '英语趣味题',
+    '英语听说读写互动题: 听音选词/看图选词/自然拼读/句型填空/跟读/字母描红, 答对自动记星。',
     null,
     true,
     false,
