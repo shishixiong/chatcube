@@ -663,7 +663,7 @@ export class ToolExecutionService {
   private async handleEnglishQuiz(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
     toolCall.toolId = ENGLISH_QUIZ_TOOL_ID
     if (toolCall.displayName.trim() === '') {
-      toolCall.displayName = '英语看图说话'
+      toolCall.displayName = '英语趣味题'
     }
     toolCall.sourceType = ToolSourceType.BUILTIN
     if (toolCall.sourceLabel.trim() === '') {
@@ -695,28 +695,30 @@ export class ToolExecutionService {
     toolCall.approvalState = 'pending'
 
     // 2. 后台解析图片: 缓存查询 + API 生成, 完成后注入 image_path
-    //    phonics_choice 题型不需要图片 (字母音 + 字母选项即可), 跳过整个管线
+    //    仅 picture_word / legacy word/sentence 需要图片, 其余 mode 跳过整条管线
     try {
       const parsed = JSON.parse(toolCall.arguments) as Record<string, Object>
-      const questionType = (parsed['question_type'] as string) ?? 'word'
+      const resolvedMode = englishValidation.mode
+      const needsImage = resolvedMode === 'picture_word' || resolvedMode === 'word' || resolvedMode === 'sentence'
 
-      if (questionType === 'phonics_choice') {
+      if (!needsImage) {
         console.info('ToolExecutionService',
-          `english_quiz phonics_choice: skip image pipeline, letter_options=${JSON.stringify(parsed['letter_options'] ?? [])}, sound_text="${(parsed['sound_text'] as string) ?? ''}"`)
+          `english_quiz mode=${resolvedMode}: skip image pipeline`)
       } else {
         const question = (parsed['question'] as string) ?? ''
         const answer = (parsed['correct_answer'] as string) ?? ''
         let word = ''
         let sentence = ''
-        if (questionType === 'sentence') {
+        if (resolvedMode === 'sentence') {
           sentence = answer
         } else {
+          // picture_word 与 legacy word 都是单词图
           word = answer
         }
         const imagePrompt = (parsed['image_prompt'] as string) ?? ''
 
         console.info('ToolExecutionService',
-          `english_quiz image resolution start: question="${question}", questionType="${questionType}", answer="${answer}", imagePrompt="${imagePrompt.substring(0, 80)}..."`)
+          `english_quiz image resolution start: question="${question}", mode="${resolvedMode}", answer="${answer}", imagePrompt="${imagePrompt.substring(0, 80)}..."`)
 
         // 三层查找：英语题本地缓存 → 备课预生成图 → 现生图
         const imageIndex = getImageIndexService()
@@ -729,7 +731,7 @@ export class ToolExecutionService {
           imagePath = quizHit.filePath
           console.info('ToolExecutionService',
             `english_quiz tier1 quizCache HIT: key="${quizKey}"`)
-        } else if (questionType !== 'sentence' && word !== '' && imagePrompt !== '') {
+        } else if (resolvedMode !== 'sentence' && word !== '' && imagePrompt !== '') {
           // Tier 2: 备课预生成图（仅单词题有干净映射；句子题走 Tier 3 兜底）
           const topicKey = `vocab.${word.toLowerCase().trim()}`
           console.info('ToolExecutionService',
