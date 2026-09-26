@@ -36,13 +36,15 @@ const SKILL_GROUPS: LearningSkillGroup[] = [
     sectionIcon: $r('sys.symbol.plus'),
     keys: [
       'math_counting',
+      'math_number_sense',
       'math_addition',
       'math_subtraction',
       'math_multiply',
       'math_divide',
       'math_shapes',
       'math_comparison',
-      'math_time'
+      'math_time',
+      'math_word_problem'
     ]
   },
   {
@@ -198,6 +200,22 @@ struct LearningProfilePage {
       return 0
     }
     return skill.level
+  }
+
+  private strategyOf(key: string): string {
+    const dim = this.findSkillByKey(key)
+    if (dim === null) {
+      return ''
+    }
+    return dim.strategy
+  }
+
+  private misconceptionsOf(key: string): string {
+    const dim = this.findSkillByKey(key)
+    if (dim === null) {
+      return ''
+    }
+    return dim.misconceptions
   }
 
   private getLastAssessedLabel(key: string): string {
@@ -409,28 +427,54 @@ struct LearningProfilePage {
 
   @Builder
   private SkillRow(key: string) {
-    Row() {
-      Text(this.getSkillLabel(key, key))
-        .fontSize(14)
-        .fontColor($r('app.color.text_primary'))
-        .layoutWeight(1)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    Column() {
+      Row() {
+        Text(this.getSkillLabel(key, key))
+          .fontSize(14)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-      SkillLevelDots({ level: this.getSkillLevel(key) })
+        SkillLevelDots({ level: this.getSkillLevel(key) })
 
-      Text(this.getLastAssessedLabel(key))
-        .fontSize(11)
-        .fontColor($r('app.color.text_tertiary'))
-        .margin({ left: 8 })
-        .width(64)
-        .maxLines(1)
-        .textAlign(TextAlign.End)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.getLastAssessedLabel(key))
+          .fontSize(11)
+          .fontColor($r('app.color.text_tertiary'))
+          .margin({ left: 8 })
+          .width(64)
+          .maxLines(1)
+          .textAlign(TextAlign.End)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .width('100%')
+      .padding({ top: 10, bottom: 10, left: 14, right: 14 })
+      .alignItems(VerticalAlign.Center)
+
+      if (this.strategyOf(key) !== '') {
+        Text('方法：' + this.strategyOf(key))
+          .fontSize(11)
+          .fontColor($r('app.color.text_secondary'))
+          .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+          .borderRadius(6)
+          .backgroundColor($r('app.color.background'))
+          .margin({ left: 14, right: 14, bottom: 8 })
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      if (this.misconceptionsOf(key) !== '') {
+        Text('易错：' + this.misconceptionsOf(key))
+          .fontSize(11)
+          .fontColor($r('app.color.status_error'))
+          .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+          .borderRadius(6)
+          .backgroundColor($r('app.color.background'))
+          .margin({ left: 14, right: 14, bottom: 8 })
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
     }
     .width('100%')
-    .padding({ top: 10, bottom: 10, left: 14, right: 14 })
-    .alignItems(VerticalAlign.Center)
   }
 
   @Builder

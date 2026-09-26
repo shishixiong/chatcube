@@ -9,10 +9,18 @@ export class SkillDimension {
   level: number = 0       // 0=未评估, 1=入门, 2=初步, 3=中等, 4=良好, 5=精通
   lastAssessed: number = 0
   notes: string = ''
+  strategy: string = ''          // 孩子解题用的方法（凑十/数数/掰手指）
+  misconceptions: string = ''    // 常错点（忘记进位/方向反/数位没对齐）
 
-  constructor(key: string = '', label: string = '') {
+  constructor(key: string = '', label: string = '', level: number = 0, lastAssessed: number = 0,
+              notes: string = '', strategy: string = '', misconceptions: string = '') {
     this.key = key
     this.label = label
+    this.level = level
+    this.lastAssessed = lastAssessed
+    this.notes = notes
+    this.strategy = strategy
+    this.misconceptions = misconceptions
   }
 }
 
@@ -35,6 +43,7 @@ export class ChildKnowledgeProfile {
  */
 const SKILL_DEFINITIONS: [string, string][] = [
   ['math_counting', '数数'],
+  ['math_number_sense', '数感与数的组成'],
   ['math_addition', '加法'],
   ['math_subtraction', '减法'],
   ['math_multiply', '乘法'],
@@ -42,6 +51,7 @@ const SKILL_DEFINITIONS: [string, string][] = [
   ['math_shapes', '图形认知'],
   ['math_comparison', '比较排序'],
   ['math_time', '时间认知'],
+  ['math_word_problem', '解决问题'],
   ['english_alphabet', '英语字母'],
   ['english_vocab', '英语词汇'],
   ['english_sentence', '英语句子'],
@@ -94,8 +104,7 @@ export class ChildProfileService {
     const json = await this.preferences.getString(PreferenceKeys.CHILD_PROFILE_JSON, '')
     if (json !== '') {
       try {
-        const parsed = JSON.parse(json) as Object
-        this.cachedProfile = this.parseProfile(parsed)
+        this.cachedProfile = parseProfileJson(json)
         return this.cachedProfile
       } catch (error) {
         console.error('ChildProfileService', `Failed to parse profile JSON: ${JSON.stringify(error)}`)
@@ -139,58 +148,65 @@ export class ChildProfileService {
     }
     return result
   }
+}
 
-  private parseProfile(obj: Object): ChildKnowledgeProfile {
-    const record = obj as Record<string, Object>
-    const profile = new ChildKnowledgeProfile()
-    profile.childName = (record['childName'] as string) ?? ''
-    profile.ageYears = (record['ageYears'] as number) ?? 0
-    profile.overallNote = (record['overallNote'] as string) ?? ''
-    profile.sessionCount = (record['sessionCount'] as number) ?? 0
-    profile.lastInteraction = (record['lastInteraction'] as number) ?? 0
+/**
+ * 解析画像 JSON 字符串为 ChildKnowledgeProfile（模块级纯函数, 便于单测覆盖兼容性）。
+ * 旧版本 JSON 缺少 strategy / misconceptions 字段或新增技能维度时, 补默认值（26 维齐全）。
+ */
+export function parseProfileJson(json: string): ChildKnowledgeProfile {
+  const parsed = JSON.parse(json) as Object
+  const record = parsed as Record<string, Object>
+  const profile = new ChildKnowledgeProfile()
+  profile.childName = (record['childName'] as string) ?? ''
+  profile.ageYears = (record['ageYears'] as number) ?? 0
+  profile.overallNote = (record['overallNote'] as string) ?? ''
+  profile.sessionCount = (record['sessionCount'] as number) ?? 0
+  profile.lastInteraction = (record['lastInteraction'] as number) ?? 0
 
-    // 初始化所有维度
-    profile.skills = {}
-    for (let i = 0; i < SKILL_DEFINITIONS.length; i++) {
-      const def = SKILL_DEFINITIONS[i]
-      profile.skills[def[0]] = new SkillDimension(def[0], def[1])
-    }
-
-    // 解析已有技能数据
-    if (record['skills'] !== undefined && record['skills'] !== null) {
-      const skillsRecord = record['skills'] as Record<string, Object>
-      const keys = Object.keys(skillsRecord)
-      for (let i = 0; i < keys.length; i++) {
-        const key = keys[i]
-        if (profile.skills[key] === undefined) {
-          continue
-        }
-        const skillObj = skillsRecord[key] as Record<string, Object>
-        profile.skills[key].level = (skillObj['level'] as number) ?? 0
-        profile.skills[key].lastAssessed = (skillObj['lastAssessed'] as number) ?? 0
-        profile.skills[key].notes = (skillObj['notes'] as string) ?? ''
-      }
-    }
-
-    profile.strengths = this.parseStringArray(record['strengths'])
-    profile.weakAreas = this.parseStringArray(record['weakAreas'])
-
-    return profile
+  // 初始化所有维度
+  profile.skills = {}
+  for (let i = 0; i < SKILL_DEFINITIONS.length; i++) {
+    const def = SKILL_DEFINITIONS[i]
+    profile.skills[def[0]] = new SkillDimension(def[0], def[1])
   }
 
-  private parseStringArray(value: Object | undefined): string[] {
-    if (value === undefined || value === null || !Array.isArray(value)) {
-      return []
-    }
-    const result: string[] = []
-    const arr = value as Object[]
-    for (let i = 0; i < arr.length; i++) {
-      if (typeof arr[i] === 'string') {
-        result.push(arr[i] as string)
+  // 解析已有技能数据
+  if (record['skills'] !== undefined && record['skills'] !== null) {
+    const skillsRecord = record['skills'] as Record<string, Object>
+    const keys = Object.keys(skillsRecord)
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i]
+      if (profile.skills[key] === undefined) {
+        continue
       }
+      const skillObj = skillsRecord[key] as Record<string, Object>
+      profile.skills[key].level = (skillObj['level'] as number) ?? 0
+      profile.skills[key].lastAssessed = (skillObj['lastAssessed'] as number) ?? 0
+      profile.skills[key].notes = (skillObj['notes'] as string) ?? ''
+      profile.skills[key].strategy = typeof skillObj['strategy'] === 'string' ? skillObj['strategy'] as string : ''
+      profile.skills[key].misconceptions = typeof skillObj['misconceptions'] === 'string' ? skillObj['misconceptions'] as string : ''
     }
-    return result
   }
+
+  profile.strengths = parseStringArray(record['strengths'])
+  profile.weakAreas = parseStringArray(record['weakAreas'])
+
+  return profile
+}
+
+function parseStringArray(value: Object | undefined): string[] {
+  if (value === undefined || value === null || !Array.isArray(value)) {
+    return []
+  }
+  const result: string[] = []
+  const arr = value as Object[]
+  for (let i = 0; i < arr.length; i++) {
+    if (typeof arr[i] === 'string') {
+      result.push(arr[i] as string)
+    }
+  }
+  return result
 }
 
 export function getChildProfileService(): ChildProfileService {

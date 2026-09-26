@@ -31,16 +31,18 @@ export const MIN_PLANNER_COUNTS: MinPlannerCounts = {
   general: 2
 }
 
-/** math 项 dimension 白名单（8 个, 必须与 ChildProfileService.SKILL_DEFINITIONS 一致） */
+/** math 项 dimension 白名单（10 个, 必须与 ChildProfileService.SKILL_DEFINITIONS 一致） */
 export const VALID_MATH_DIMENSIONS: ReadonlyArray<string> = [
   'math_counting',
+  'math_number_sense',
   'math_addition',
   'math_subtraction',
   'math_multiply',
   'math_divide',
   'math_shapes',
   'math_comparison',
-  'math_time'
+  'math_time',
+  'math_word_problem'
 ]
 
 export interface PlannerValidationResult {
