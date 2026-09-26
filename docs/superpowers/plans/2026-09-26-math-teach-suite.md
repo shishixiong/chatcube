@@ -2475,7 +2475,7 @@ Expected: BUILD SUCCESSFUL（若遇 SignHap "Invalid CEN header" 报错是 hvigo
 
 在 DevEco Studio 中逐个右键 Run（CLI hvigorw test 不可用）：
 1. `entry/src/ohosTest/ets/test/utils/MathTeachBoards.test.ets` —— 10 用例全绿
-2. `entry/src/ohosTest/ets/test/utils/MathTeachValidation.test.ets` —— 14 用例全绿
+2. `entry/src/ohosTest/ets/test/utils/MathTeachValidation.test.ets` —— 13 用例全绿
 3. `entry/src/ohosTest/ets/test/utils/ChildProfileParse.test.ets`（若 Task 3 Step 5 创建）—— 2 用例全绿
 
 - [ ] **Step 5: 真机验证清单（人工执行，来自 spec §8）**
