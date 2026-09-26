@@ -318,6 +318,10 @@ export class ChatViewModel {
 	    const withExtra = this.assistantService.combineSystemPrompts(basePrompt, extraPrompt)
 	    // 动态教学计划注入：仅当助手是小星老师时生效（其他助手保持原 prompt 纯净）
 	    if (assistantConfig.assistantId !== DEFAULT_ASSISTANT_ID) {
+	      // 非小星老师助手不注入教学段, 但保留主动招呼元指令（学科老师开场, 2026-09-25）
+	      if (greetingHint.trim() !== '') {
+	        return this.assistantService.combineSystemPrompts(withExtra, greetingHint)
+	      }
 	      return withExtra
 	    }
 	    return await this.injectTeachingSections(withExtra, greetingHint)

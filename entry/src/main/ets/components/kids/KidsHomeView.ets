@@ -37,9 +37,11 @@ const KIDS_GARDEN_DAY_LIMIT: number = 7
  * -> 居中家长入口。
  *
  * hero 一天一会话: 今日的小星老师会话存在 -> onOpenSession 续接，否则
- * onNewChat('', DEFAULT) 开新会话。学科卡每次点击都开新会话，但受 dailyLimit
- * 每日上限约束（学数学/英语/语文各 10、小游戏 20，按「今日 N 题/局」口径计数）——
- * 达上限后卡片降透明度置灰、点击无响应，次日自动恢复。
+ * onNewChat('', DEFAULT) 开新会话。学科卡同为一天一会话（按学科 assistantId
+ * 判定今日会话，有则 onOpenSession 续接），startPrompt 仅在新会话时传入、
+ * 由 ChatPage 转成学科老师开场元指令（老师先开口，不再作为孩子消息发出）。
+ * 学科卡仍受 dailyLimit 每日上限约束（学数学/英语/语文各 10、小游戏 20，
+ * 按「今日 N 题/局」口径计数）——达上限后卡片降透明度置灰、点击无响应，次日自动恢复。
  * 恒定暖色绘本令牌（KidsBrandTokens），不随深色模式切换；图标一律 SVG，无 emoji。
  * 星星数据自加载, starRefreshTick 由宿主在导航栈 didShow(navBar) 时递增触发刷新。
  */
@@ -49,7 +51,7 @@ export struct KidsHomeView {
   @Param starRefreshTick: number = 0
   @Param topInsetVp: number = 0
   @Event onOpenSession: (sessionId: string) => void = () => {}
-  /** 新建会话：hero 传 ('', DEFAULT)；学科卡传 (startPrompt, 学科 assistantId) */
+  /** 新建会话：hero 传 ('', DEFAULT)；学科卡传 (startPrompt, 学科 assistantId)——startPrompt 现为老师开场上下文 */
   @Event onNewChat: (initialPrompt: string, assistantId: string) => void = () => {}
   @Event onGatePassed: () => void = () => {}
   @Local totalStars: number = 0
@@ -162,6 +164,13 @@ export struct KidsHomeView {
   /** hero 一天一会话：今日的小星老师会话（无则 null） */
   private todaySession(): ChatSession | null {
     return findTodaySession(this.todayDefaultSessions(), getStartOfDayMs(Date.now()))
+  }
+
+  /** 学科一天一会话：今日该学科助手的会话（无则 null） */
+  private todaySessionFor(assistantId: string): ChatSession | null {
+    const subjectSessions: ChatSession[] = this.kidsSessions().filter((session: ChatSession): boolean =>
+      session.assistantId === assistantId)
+    return findTodaySession(subjectSessions, getStartOfDayMs(Date.now()))
   }
 
   private dayGroups(): KidsDayGroup[] {
@@ -493,7 +502,7 @@ export struct KidsHomeView {
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
-      // 底部状态行: 1px 虚线上边框 + 今日计数（达上限换文案） + 开始 ›/明天见
+      // 底部状态行: 1px 虚线上边框 + 今日计数（达上限换文案） + 开始 ›/继续 ›/明天见
       Row() {
         Text(this.isCapped(item) ?
           '今天练够啦，明天再来' :
@@ -503,7 +512,9 @@ export struct KidsHomeView {
           .fontSize(10.5)
           .fontColor(KIDS_SUBTLE)
         Blank()
-        Text(this.isCapped(item) ? '明天见' : '开始 ›')
+        Text(this.isCapped(item) ?
+          '明天见' :
+          (this.todaySessionFor(item.assistantId) !== null ? '继续 ›' : '开始 ›'))
           .fontSize(11.5)
           .fontWeight(FontWeight.Bold)
           .fontColor(this.isCapped(item) ? KIDS_SUBTLE : item.ink)
@@ -534,11 +545,17 @@ export struct KidsHomeView {
       }
     })
     .onClick((): void => {
-      // 每日上限: 达到后当日不再开新会话
+      // 每日上限: 达到后当日整卡禁用（含进入会话）
       if (this.isCapped(item)) {
         return
       }
-      this.onNewChat(item.startPrompt, item.assistantId)
+      // 学科一天一会话: 已有今日会话 -> 续接; 否则开新会话（老师先开口）
+      const today: ChatSession | null = this.todaySessionFor(item.assistantId)
+      if (today !== null) {
+        this.onOpenSession(today.id)
+      } else {
+        this.onNewChat(item.startPrompt, item.assistantId)
+      }
     })
   }
 

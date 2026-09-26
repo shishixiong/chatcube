@@ -1,6 +1,8 @@
 import { describe, it, expect } from '@ohos/hypium'
 import {
   shouldAutoGreetToday,
+  shouldAutoGreetSubject,
+  buildSubjectGreetingHint,
   getDayPartGreeting,
   GREETING_SYSTEM_HINT
 } from '../../../../main/ets/utils/GreetingUtils'
@@ -9,6 +11,8 @@ import {
  * GreetingUtils 单元测试
  *
  * 覆盖 shouldAutoGreetToday 的 5 个短路条件 + 边界场景,
+ * shouldAutoGreetSubject 的 4 个短路条件 (学科老师开场, 无 per-day 日期守卫),
+ * buildSubjectGreetingHint 的文案契约 (嵌入 startPrompt / 禁出题 / 无 emoji),
  * 以及 GREETING_SYSTEM_HINT 元指令的基本健全性 (无 emoji / 含招呼意图)。
  *
  * 运行: DevEco Studio → 右键该文件 → Run 'hypium test'
@@ -24,6 +28,14 @@ export default function greetingUtilsTest() {
     inputText: '',
     lastGreetDate: '',
     todayYmd: '2026-06-17'
+  }
+
+  // 学科开场基础参数: 全部满足时 shouldAutoGreetSubject === true
+  const baseSubjectArgs = {
+    isNewChatTransition: true,
+    isSubjectAssistant: true,
+    messagesLength: 0,
+    inputText: ''
   }
 
   describe('shouldAutoGreetToday', () => {
@@ -72,6 +84,68 @@ export default function greetingUtilsTest() {
         lastGreetDate: '2026-06-17',
         todayYmd: '2026-06-17'
       })).assertFalse()
+    })
+  })
+
+  describe('shouldAutoGreetSubject', () => {
+    it('returns true on fresh new-chat with subject assistant and empty input', 0, () => {
+      expect(shouldAutoGreetSubject(baseSubjectArgs)).assertTrue()
+    })
+
+    it('returns false when not a new chat transition (existing session reopened)', 0, () => {
+      expect(shouldAutoGreetSubject({ ...baseSubjectArgs, isNewChatTransition: false })).assertFalse()
+    })
+
+    it('returns false when assistant is not a subject assistant (default hero)', 0, () => {
+      expect(shouldAutoGreetSubject({ ...baseSubjectArgs, isSubjectAssistant: false })).assertFalse()
+    })
+
+    it('returns false when messages already exist in session', 0, () => {
+      expect(shouldAutoGreetSubject({ ...baseSubjectArgs, messagesLength: 2 })).assertFalse()
+    })
+
+    it('returns false when input has real text (child already typing)', 0, () => {
+      expect(shouldAutoGreetSubject({ ...baseSubjectArgs, inputText: '老师好' })).assertFalse()
+    })
+
+    it('returns false when input has whitespace only', 0, () => {
+      expect(shouldAutoGreetSubject({ ...baseSubjectArgs, inputText: '  ' })).assertFalse()
+    })
+
+    it('compound failure: old session + non-subject + messages', 0, () => {
+      expect(shouldAutoGreetSubject({
+        isNewChatTransition: false,
+        isSubjectAssistant: false,
+        messagesLength: 5,
+        inputText: 'x'
+      })).assertFalse()
+    })
+  })
+
+  describe('buildSubjectGreetingHint', () => {
+    it('embeds the startPrompt as child intent context', 0, () => {
+      const hint: string = buildSubjectGreetingHint('我想玩数学游戏：口算、比大小')
+      expect(hint.includes('我想玩数学游戏')).assertTrue()
+    })
+
+    it('contains greeting intent 打招呼', 0, () => {
+      expect(buildSubjectGreetingHint('x').includes('打招呼')).assertTrue()
+    })
+
+    it('forbids quizzing in the greet turn (等孩子回复 / 不要出题)', 0, () => {
+      const hint: string = buildSubjectGreetingHint('x')
+      expect(hint.includes('等孩子回复')).assertTrue()
+      expect(hint.includes('不要出题')).assertTrue()
+    })
+
+    it('degrades gracefully on empty startPrompt', 0, () => {
+      const hint: string = buildSubjectGreetingHint('   ')
+      expect(hint.includes('打招呼')).assertTrue()
+      expect(hint.includes('「')).assertFalse()
+    })
+
+    it('does not contain forbidden user-facing emoji (range U+1F300-U+1FAFF)', 0, () => {
+      expect(/[\u{1F300}-\u{1FAFF}]/u.test(buildSubjectGreetingHint('我想学英语'))).assertFalse()
     })
   })
 

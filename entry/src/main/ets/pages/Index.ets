@@ -1357,11 +1357,13 @@ struct Index {
   }
 
   /**
-   * 儿童模式新建会话（spec 2026-09-15 §5）。
+   * 儿童模式新建会话（spec 2026-09-15 §5; 2026-09-25 学科一天一会话调整）。
    * - hero 传 DEFAULT_ASSISTANT_ID + 空 prompt（一天一会话由 KidsHomeView 判定，
    *   已有今日会话时走 onOpenSession，不进这里）
-   * - 学科卡传学科 assistantId + startPrompt：先 switchAssistant 再推 ChatPage，
-   *   autoSendInitialPrompt 链路自动发引导语。学科会话不做一天一会话限制。
+   * - 学科卡传学科 assistantId + startPrompt：先 switchAssistant 再推 ChatPage。
+   *   学科会话同为一天一会话（KidsHomeView 按 assistantId 判定，已有今日会话走
+   *   onOpenSession，不进这里）；新会话的 startPrompt 不再作为孩子消息发送，
+   *   而是由 ChatPage.autoGreetSubjectAssistant 转成开场元指令，学科老师先开口。
    */
   private handleKidsNewChat(initialPrompt: string = '', assistantId: string = DEFAULT_ASSISTANT_ID): void {
     const params: ChatPageRouteParams = initialPrompt.trim().length > 0 ?

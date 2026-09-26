@@ -142,7 +142,8 @@ import {
 import { DocumentParsePolicy, DocumentParseResult, WebDocumentParserService } from '../services/DocumentParseService'
 import { shouldUseLeftHandAdaptiveLayout } from '../utils/HandAdaptiveUtils'
 import { formatYMD } from '../utils/DateFormatUtils'
-import { shouldAutoGreetToday, GREETING_SYSTEM_HINT } from '../utils/GreetingUtils'
+import { shouldAutoGreetToday, shouldAutoGreetSubject, buildSubjectGreetingHint, GREETING_SYSTEM_HINT } from '../utils/GreetingUtils'
+import { subjectForAssistantId } from '../components/kids/KidsSubjectCatalog'
 
 const DOMAIN = 0x0003
 const TAG = 'ChatPage'
@@ -429,6 +430,9 @@ export struct ChatPage {
   // 单次主动招呼的派发守卫: 防止 triggerPostLoadActions 在同一页面实例内被多次回调时重复招呼
   // 跨日/跨页面进入的重复守卫依赖 AppUiState.lastGreetDate (per-day 粒度)
   private autoGreetDispatched: boolean = false
+  // 学科老师开场的页面内重入守卫 (与 hero 的 autoGreetDispatched 平行; 跨日粒度由
+  // 「学科会话一天一会话」保证, 不读写 LAST_GREET_DATE)
+  private subjectGreetDispatched: boolean = false
   private currentTaskId: string = ''
   private isSendDispatching: boolean = false
   private lastHandledAlertTimestamp: number = 0
@@ -791,9 +795,14 @@ export struct ChatPage {
     }
 
     if (this.isNewChatTransition && this.pendingInitialPrompt !== '' && !this.initialPromptAutoSent) {
-      setTimeout(() => {
-        this.autoSendInitialPrompt()
-      }, 120)
+      if (subjectForAssistantId(this.currentAssistantId) !== null) {
+        // 学科助手: startPrompt 不再作为孩子消息发出, 改由学科老师先开口（400ms, 同 hero 节奏）
+        setTimeout((): void => { this.autoGreetSubjectAssistant() }, 400)
+      } else {
+        setTimeout(() => {
+          this.autoSendInitialPrompt()
+        }, 120)
+      }
     }
 
     // 主动招呼: 仅在「全新小星老师对话 + 今日首次」触发, 晚于 autoSendInitialPrompt
@@ -2012,6 +2021,48 @@ export struct ChatPage {
     setAppUiStateValue(AppStorageKeys.LAST_GREET_DATE, todayYmd)
 
     await this.sendAutoGreet(GREETING_SYSTEM_HINT)
+  }
+
+  // 学科老师每日首次开场 (hero autoGreetAssistant 的平行路径, 2026-09-25)。
+  //
+  // 触发条件 (shouldAutoGreetSubject 已封装):
+  //   1. 新会话过渡 (isNewChatTransition)
+  //   2. 当前助手为学科助手 (kids_math/kids_english/kids_chinese/kids_games)
+  //   3. 当前 session 消息数 = 0
+  //   4. 输入框为空 (小朋友未开始打字)
+  //
+  // per-day 粒度: KidsHomeView 保证学科会话一天一会话, 空新会话即当日首次;
+  // 不读写 LAST_GREET_DATE, 与 hero 招呼互不干扰。
+  // 取消策略与 hero 一致: 派发失败当日不补发 (会话已建, 重进走 onOpenSession)。
+  // startPrompt (pendingInitialPrompt) 只作为开场元指令上下文, 不产生孩子气泡。
+  private async autoGreetSubjectAssistant(): Promise<void> {
+    if (this.subjectGreetDispatched) {
+      return
+    }
+    if (this.isSending || this.isSendDispatching) {
+      // 已被其它路径 (用户主动发送) 占用, 让路静默退出
+      return
+    }
+    if (!shouldAutoGreetSubject({
+      isNewChatTransition: this.isNewChatTransition,
+      isSubjectAssistant: subjectForAssistantId(this.currentAssistantId) !== null,
+      messagesLength: this.messages.length,
+      inputText: this.inputText
+    })) {
+      return
+    }
+    // 二次校验: 400ms 内用户可能已键入内容
+    if (this.inputText.trim() !== '') {
+      return
+    }
+
+    const startPrompt: string = this.pendingInitialPrompt
+    this.subjectGreetDispatched = true
+    this.initialPromptAutoSent = true
+    this.pendingInitialPrompt = ''
+    this.pendingInitialToolIds = []
+
+    await this.sendAutoGreet(buildSubjectGreetingHint(startPrompt))
   }
 
   private findProviderModelSelection(

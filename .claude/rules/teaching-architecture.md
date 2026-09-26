@@ -57,7 +57,8 @@
 ### 2.2 儿童主屏触点（kids home v2）
 
 - `components/kids/KidsHomeView.ets`：三段式（问候行 → 「继续学习」hero → 2×2 学科卡 → 按天分组学习乐园）。hero 一天一会话：`utils/KidsSubjectUtils.findTodaySession` 命中今日会话则显示"继续"，否则开新会话。
-- 学科卡数据源：`components/kids/KidsSubjectCatalog.ets`（4 科目录，含 startPrompt / assistantId / 图标路径 / 色令牌）。点击 → `Index.handleKidsNewChat(item.startPrompt, item.assistantId)` 开新会话并自动发引导语。
+- `components/kids/KidsHomeView.ets`：三段式（问候行 → 「继续学习」hero → 2×2 学科卡 → 按天分组学习乐园）。hero 一天一会话：`utils/KidsSubjectUtils.findTodaySession` 命中今日会话则显示"继续"，否则开新会话。
+- 学科卡数据源：`components/kids/KidsSubjectCatalog.ets`（4 科目录，含 startPrompt / assistantId / 图标路径 / 色令牌）。**学科会话同为一天一会话**（2026-09-25 起，按学科 assistantId 过滤后复用 `findTodaySession`，`KidsHomeView.todaySessionFor`）：命中今日会话 → `onOpenSession` 续接（CTA 显示「继续 ›」），否则 `Index.handleKidsNewChat(item.startPrompt, item.assistantId)` 开新会话。`startPrompt` **不再作为孩子消息自动发送**——新会话时由 `ChatPage.autoGreetSubjectAssistant` 经 `GreetingUtils.buildSubjectGreetingHint` 转成开场元指令走 `sendAutoGreet` 通道（无孩子气泡），**学科老师先开口打招呼**；per-day 粒度由一天一会话保证，不读写 `LAST_GREET_DATE`（与 hero 招呼互不干扰）。达 `dailyLimit` 上限仍整卡禁用（含进入会话）。前提：`ChatViewModel.buildRequestSystemPrompt` 对非 default 助手也拼 `greetingHint`（仅招呼元指令，不注入教学段）。
 - 学科卡「今日 N 题」计数按 `star_events.activityType` 映射到学科（`utils/KidsSubjectUtils.countTodayBySubject`），**不按会话 assistantId**——`chat_correct` 不计入任何学科。
 - 学习乐园：`KidsDayGroupCard.ets` 按天分组（`groupSessionsByDay`，同日超 3 条折叠），每日星数来自 `DatabaseService.getStarTotalsByDay(sinceMs)`；今日星星明细 → `KidsStarDetailSheet.ets`（`buildTodayCategoryRows` / `buildTodayEventRows`）。
 - 家长门：`ParentalGateSheet.ets` 两阶段——算术验证门（`phase='gate'`）答对进今日概览（`phase='summary'`，可进家长设置或返回主屏）；关闭重开需重新验证。

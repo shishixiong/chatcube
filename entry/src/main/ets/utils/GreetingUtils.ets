@@ -1,5 +1,12 @@
 /**
- * 小星老师「每日首次进入 chat 主动招呼」工具函数
+ * 「每日首次进入 chat 主动招呼」工具函数
+ *
+ * 两套平行机制:
+ *  - 小星老师 (hero「开始今天的学习」): shouldAutoGreetToday + GREETING_SYSTEM_HINT,
+ *    per-day 守卫走 AppUiState.lastGreetDate
+ *  - 学科老师 (kids_math/kids_english/kids_chinese/kids_games 开新会话):
+ *    shouldAutoGreetSubject + buildSubjectGreetingHint, per-day 粒度由
+ *    「学科会话一天一会话」保证,不读写 lastGreetDate
  *
  * 纯函数集合,无 ArkUI 依赖,可直接被 hypium 单元测试覆盖。
  * 唯一的"日期/状态"输入由调用方注入 (lastGreetDate + todayYmd),
@@ -21,6 +28,18 @@ export interface AutoGreetPredicateArgs {
   lastGreetDate: string
   /** 今日 'YYYY-MM-DD' (调用方实时计算,避免函数内部依赖系统时钟) */
   todayYmd: string
+}
+
+/** 学科老师开场判定的入参 (与 AutoGreetPredicateArgs 平行,但无 per-day 日期守卫) */
+export interface AutoGreetSubjectPredicateArgs {
+  /** 是否新会话过渡 */
+  isNewChatTransition: boolean
+  /** 当前助手是否学科助手 (kids_math/kids_english/kids_chinese/kids_games), 由调用方判定 */
+  isSubjectAssistant: boolean
+  /** 当前 session 消息数, 必须为 0 才触发 */
+  messagesLength: number
+  /** 输入框当前文本, 非空表示小朋友已开始输入 → 取消 */
+  inputText: string
 }
 
 /**
@@ -67,6 +86,54 @@ export function shouldAutoGreetToday(args: AutoGreetPredicateArgs): boolean {
 export const GREETING_SYSTEM_HINT: string =
   '这是今日与孩子的第一次对话,请先用 1 句温暖的话主动打招呼,' +
   '可结合「今日教学目标」或孩子的「强项」自然切入,然后等孩子回复。'
+
+/**
+ * 判断是否应在「当前 chat 页面打开」时触发学科老师开场。
+ *
+ * 4 个短路条件 (任一不满足即返回 false):
+ *   1. 必须处于新会话过渡 (避免对老会话骚扰)
+ *   2. 必须是学科助手 (kids_math/kids_english/kids_chinese/kids_games)
+ *   3. 必须没有历史消息 (空 session)
+ *   4. 输入框必须为空 (小朋友没在打字)
+ *
+ * 与 shouldAutoGreetToday 不同: 无 lastGreetDate per-day 守卫——学科会话
+ * 一天一会话 (KidsHomeView 按 assistantId 判定) 本身保证了 per-day 粒度,
+ * 且不读写 LAST_GREET_DATE,与 hero 招呼互不干扰。
+ */
+export function shouldAutoGreetSubject(args: AutoGreetSubjectPredicateArgs): boolean {
+  if (!args.isNewChatTransition) {
+    return false
+  }
+  if (!args.isSubjectAssistant) {
+    return false
+  }
+  if (args.messagesLength !== 0) {
+    return false
+  }
+  if (args.inputText.trim() !== '') {
+    return false
+  }
+  return true
+}
+
+/**
+ * 学科老师开场注入到 system prompt 末尾的元指令 (LLM 可见,小朋友不可见)。
+ *
+ * 把孩子口吻的 startPrompt (如「我想玩数学游戏:口算、比大小…」) 转成老师视角的
+ * 开场上下文——只打招呼不出题,等孩子回应 (2026-09-25 需求决策)。
+ * startPrompt 为空时退化为通用开场指令 (防御性,当前 KIDS_SUBJECTS 均非空)。
+ */
+export function buildSubjectGreetingHint(startPrompt: string): string {
+  const trimmed: string = startPrompt.trim()
+  let hint: string =
+    '这是今日与孩子在这门学科的第一次对话,请老师主动开场:' +
+    '先用 1-2 句温暖的话打招呼,自然介绍今天要练什么,'
+  if (trimmed !== '') {
+    hint += `孩子今天想练的内容可参考:「${trimmed}」,`
+  }
+  hint += '然后等孩子回复;这一轮不要出题或调用互动工具,等孩子回应后再开始。'
+  return hint
+}
 
 /**
  * 按小时返回时段问候语 (儿童主屏问候行用)。
