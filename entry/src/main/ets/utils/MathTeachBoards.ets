@@ -37,7 +37,10 @@ export function barPercents(a: number, b: number): BarPercents {
     const zero: BarPercents = { aPct: 0, bPct: 0 }
     return zero
   }
-  const p: BarPercents = { aPct: Math.round(a / total * 100), bPct: Math.round(b / total * 100) }
+  // bPct 取补数（100 - aPct），保证两侧百分比恒和为 100——
+  // 独立四舍五入在 x.5 边界会出 38+63=101，下游 100% 宽容器会裁切。
+  const aPct: number = Math.round(a / total * 100)
+  const p: BarPercents = { aPct: aPct, bPct: 100 - aPct }
   return p
 }
 

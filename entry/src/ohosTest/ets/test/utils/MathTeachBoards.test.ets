@@ -39,6 +39,11 @@ export default function mathTeachBoardsTest() {
       const p: BarPercents = barPercents(0, 0)
       expect(p.aPct === 0 && p.bPct === 0).assertTrue()
     })
+    it('barPercents_互补和恒为100', 0, () => {
+      const p: BarPercents = barPercents(3, 5)
+      expect(p.aPct === 38 && p.bPct === 62).assertTrue()
+      expect(p.aPct + p.bPct === 100).assertTrue()
+    })
     it('numberLineHops_9加5先跳1再跳4', 0, () => {
       const h: NumberLineHops = numberLineHops(9, 5)
       expect(h.firstHop === 1 && h.secondHop === 4 && h.sum === 14).assertTrue()
