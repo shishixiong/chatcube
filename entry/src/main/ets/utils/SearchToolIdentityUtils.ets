@@ -8,6 +8,7 @@ export const MUSIC_GENERATION_TOOL_ID: string = 'music_generation'
 export const CHILD_PROFILE_TOOL_ID: string = 'child_profile'
 export const MATH_VERIFY_TOOL_ID: string = 'math_verify'
 export const MATH_QUIZ_TOOL_ID: string = 'math_quiz'
+export const MATH_TEACH_TOOL_ID: string = 'math_teach'
 export const ENGLISH_QUIZ_TOOL_ID: string = 'english_quiz'
 // 旧版数字华容道工具名。已规范化为 NUMBER_PUZZLE_TOOL_ID, 但历史会话消息里
 // 持久化的 functionName 永远是 huarongdao, 渲染/分发守卫必须保留此 legacy 常量。
@@ -91,6 +92,10 @@ export function isMathVerifyFunctionName(functionName: string): boolean {
 
 export function isMathQuizFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === MATH_QUIZ_TOOL_ID
+}
+
+export function isMathTeachFunctionName(functionName: string): boolean {
+  return normalizeToolFunctionName(functionName) === MATH_TEACH_TOOL_ID
 }
 
 export function isEnglishQuizFunctionName(functionName: string): boolean {
