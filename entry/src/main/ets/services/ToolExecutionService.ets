@@ -26,8 +26,10 @@ import {
   LISTENING_QUIZ_TOOL_ID,
   PINYIN_QUIZ_TOOL_ID,
   MATCHING_PAIRS_TOOL_ID,
+  MATH_TEACH_TOOL_ID,
   isAskUserFunctionName,
   isMathQuizFunctionName,
+  isMathTeachFunctionName,
   isEnglishQuizFunctionName,
   isHuarongdaoFunctionName,
   isNumberPuzzleFunctionName,
@@ -52,6 +54,7 @@ import { generateMaze } from '../utils/MazeGame'
 import { generateSudoku, getDifficultyConfig } from '../utils/SudokuGenerator'
 import { validateAndNormalizeCategorization } from '../utils/CategorizationValidation'
 import { validateMathQuizArgs } from '../utils/MathQuizValidation'
+import { validateMathTeachArgs, MathTeachValidationResult } from '../utils/MathTeachValidation'
 import { validateEnglishQuizArgs } from '../utils/EnglishQuizValidation'
 import { validatePictureVocabArgs } from '../utils/PictureVocabValidation'
 import { validateListeningQuizArgs } from '../utils/ListeningQuizValidation'
@@ -63,6 +66,7 @@ import { RequestMessage, AIApiConfig } from './AIApiService'
 import { getProviderViewModel } from '../viewmodels/ProviderViewModel'
 import { getEffectiveApiKey } from '../config/PresetProviders'
 import { getStarRewardService } from './StarRewardService'
+import { getChildProfileService } from './ChildProfileService'
 import { StarActivityType } from '../models/StarEventModels'
 
 
@@ -648,6 +652,120 @@ export class ToolExecutionService {
     toolCall.approvalReason = answerJson
     console.info('ToolExecutionService', `math_quiz answered: ${toolCall.id}`)
     this.recordStarEvent('math_quiz', toolCall, context, answerJson)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
+  // math_teach 特殊路径: 与 math_quiz 同款 pending 挂起, 等待 MathTeachCard 完成。
+  // 讲解不授星（spec §0 决策）——本函数严禁调用 recordStarEvent。
+  private async handleMathTeach(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = MATH_TEACH_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '数学讲解板'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 读画像各维 level 注入难度校验（规则 4）；读取失败降级 null 跳过，不阻塞讲解
+    let profileLevels: Record<string, number> | null = null
+    try {
+      const profile = await getChildProfileService().getProfile()
+      const levels: Record<string, number> = {}
+      const keys: string[] = Object.keys(profile.skills)
+      for (let i = 0; i < keys.length; i++) {
+        levels[keys[i]] = profile.skills[keys[i]].level
+      }
+      profileLevels = levels
+    } catch (_e) {
+      profileLevels = null
+    }
+
+    // validateMathTeachArgs 在 JSON.parse 相邻边界会 throw（如 rawArgs='null' 抛 TypeError，
+    // 属纯函数设计行为）；Task 2 裁定：try/catch 包裹，throw 与 !ok 同走 denied 形状。
+    let teachValidationOk: boolean = false
+    let teachValidationError: string = ''
+    try {
+      const teachValidation: MathTeachValidationResult =
+        validateMathTeachArgs(toolCall.arguments, profileLevels)
+      teachValidationOk = teachValidation.ok
+      teachValidationError = teachValidation.error
+    } catch (_e) {
+      teachValidationOk = false
+      teachValidationError = 'math_teach 参数解析异常，请修正后重试'
+    }
+    if (!teachValidationOk) {
+      console.warn('ToolExecutionService', `math_teach validation failed: ${teachValidationError}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: 'validation_failed',
+          message: teachValidationError,
+          should_retry: true
+        }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'pending'
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = MATH_TEACH_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `math_teach answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `math_teach 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'math_teach cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未完成本次讲解' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `math_teach answered: ${toolCall.id}`)
+    // 注意：与 handleMathQuiz 不同，这里不调 recordStarEvent（讲解不授星）
     return new ToolResult(
       toolCall.id,
       answerJson,
@@ -1892,6 +2010,12 @@ export class ToolExecutionService {
     // 数学游戏互动工具, 由 MathQuizCard 收集小朋友的答案。
     if (isMathQuizFunctionName(normalizedFunctionName)) {
       return await this.handleMathQuiz(toolCall, context)
+    }
+
+    // === math_teach 特殊路径 ===
+    // 数学讲解板互动工具, 由 MathTeachCard 收集小朋友的讲解完成回执。
+    if (isMathTeachFunctionName(normalizedFunctionName)) {
+      return await this.handleMathTeach(toolCall, context)
     }
 
     // === english_quiz 特殊路径 ===
