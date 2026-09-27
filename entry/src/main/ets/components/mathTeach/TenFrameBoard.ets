@@ -34,10 +34,12 @@ export struct TenFrameBoard {
     return `${this.a} + ${10 - this.a} = 10，10 + ${this.outside} = ${10 + this.outside}`
   }
 
+  // 响应式关键：occupied 状态在 Builder 体内直接读 this.frameDots 计算（idx 是常量下标），
+  // 不能在调用点传 `i < this.frameDots` 布尔快照——快照传参会断响应式，borrow() 后框不填充。
   @Builder
-  Cell(occupied: boolean) {
+  Cell(idx: number) {
     Stack() {
-      if (occupied) {
+      if (idx < this.frameDots) {
         Circle().width(26).height(26).fill(KIDS_MATH_INK)
           .transition(TransitionEffect.OPACITY
             .combine(TransitionEffect.scale({ x: 0.2, y: 0.2 }))
@@ -52,14 +54,18 @@ export struct TenFrameBoard {
     Column({ space: 12 }) {
       Column({ space: 6 }) {
         Row({ space: 6 }) {
-          ForEach(this.seq(5), (i: number) => {
-            this.Cell(i < this.frameDots)
-          }, (i: number) => 'c1_' + i.toString())
+          this.Cell(0)
+          this.Cell(1)
+          this.Cell(2)
+          this.Cell(3)
+          this.Cell(4)
         }
         Row({ space: 6 }) {
-          ForEach(this.seq(5), (i: number) => {
-            this.Cell(i + 5 < this.frameDots)
-          }, (i: number) => 'c2_' + i.toString())
+          this.Cell(5)
+          this.Cell(6)
+          this.Cell(7)
+          this.Cell(8)
+          this.Cell(9)
         }
       }
 

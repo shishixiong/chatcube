@@ -23,6 +23,7 @@ export struct TeachStepper {
         .width(44).height(44)
         .type(ButtonType.Capsule)
         .backgroundColor(withColorAlpha(KIDS_MATH, '26')).fontColor(KIDS_MATH_INK).fontSize(20)
+        .accessibilityText('减少一个')
         .onClick(() => { this.tap(-1) })
       Text(this.value.toString())
         .fontSize(18).fontWeight(FontWeight.Bold).fontColor(KIDS_MATH_INK)
@@ -31,6 +32,7 @@ export struct TeachStepper {
         .width(44).height(44)
         .type(ButtonType.Capsule)
         .backgroundColor(withColorAlpha(KIDS_MATH, '26')).fontColor(KIDS_MATH_INK).fontSize(20)
+        .accessibilityText('增加一个')
         .onClick(() => { this.tap(1) })
     }
     .padding(4)
