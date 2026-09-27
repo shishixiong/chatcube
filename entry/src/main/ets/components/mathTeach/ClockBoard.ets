@@ -88,19 +88,19 @@ export struct ClockBoard {
 
       if (!this.readonly) {
         Row({ space: 10 }) {
-          Button('时 −').width(60).height(40)
+          Button('时 −').width(60).height(44)
             .backgroundColor(withColorAlpha(KIDS_MATH, '26')).fontColor(KIDS_MATH_INK)
             .accessibilityText('减少一小时')
             .onClick(() => { this.stepHour(-1) })
-          Button('时 +').width(60).height(40)
+          Button('时 +').width(60).height(44)
             .backgroundColor(withColorAlpha(KIDS_MATH, '26')).fontColor(KIDS_MATH_INK)
             .accessibilityText('增加一小时')
             .onClick(() => { this.stepHour(1) })
-          Button('整点').width(64).height(40)
+          Button('整点').width(64).height(44)
             .backgroundColor(withColorAlpha(KIDS_MATH, '26')).fontColor(KIDS_MATH_INK)
             .accessibilityText('设置为整点')
             .onClick(() => { this.setHalf(false) })
-          Button('半点').width(64).height(40)
+          Button('半点').width(64).height(44)
             .backgroundColor(withColorAlpha(KIDS_MATH, '26')).fontColor(KIDS_MATH_INK)
             .accessibilityText('设置为半点')
             .onClick(() => { this.setHalf(true) })
