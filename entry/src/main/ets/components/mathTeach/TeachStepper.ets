@@ -27,7 +27,7 @@ export struct TeachStepper {
         .onClick(() => { this.tap(-1) })
       Text(this.value.toString())
         .fontSize(18).fontWeight(FontWeight.Bold).fontColor(KIDS_MATH_INK)
-        .minWidth(28).textAlign(TextAlign.Center)
+        .constraintSize({ minWidth: 28 }).textAlign(TextAlign.Center)
       Button('+')
         .width(44).height(44)
         .type(ButtonType.Capsule)
