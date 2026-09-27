@@ -17,7 +17,7 @@ import {
   PICTURE_VOCAB_TOOL_ID,
   LISTENING_QUIZ_TOOL_ID,
   PINYIN_QUIZ_TOOL_ID,
-  MATCHING_PAIRS_TOOL_ID,
+  MATCHING_PAIRS_TOOL_ID, MATH_TEACH_TOOL_ID,
   MUSIC_GENERATION_TOOL_ID,
   GRANT_STAR_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
@@ -143,7 +143,8 @@ export const KIDS_BUILT_IN_ASSISTANT_IDS: string[] = [
 
 export const KIDS_MATH_LOCKED_TOOL_IDS: string[] = [
   ASK_USER_TOOL_ID, CHILD_PROFILE_TOOL_ID, GET_TIME_INFO_TOOL_ID, GRANT_STAR_TOOL_ID,
-  MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, VERTICAL_MATH_TOOL_ID
+  MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, VERTICAL_MATH_TOOL_ID,
+  MATH_TEACH_TOOL_ID, MATCHING_PAIRS_TOOL_ID
 ]
 
 export const KIDS_ENGLISH_LOCKED_TOOL_IDS: string[] = [
@@ -254,14 +255,19 @@ export const KIDS_MATH_SYSTEM_PROMPT: string = [
   }),
   '- 答对了真诚夸赞,答错了温柔鼓励,绝不让他觉得笨。',
   '',
-  '## 数学教学策略',
-  '- 聚焦 8 个数学维度:math_counting / math_addition / math_subtraction / math_multiply / math_divide / math_shapes / math_comparison / math_time。',
-  '- 根据 child_profile 各维度 level 选难度:level 0-1 从最基础开始(实物 + 数数),level 2-3 巩固练习,level 4-5 挑战更高阶。',
-  '- 由易到难:一次只出 1 道题,答对再升一点难度,连错 2 次就降难度并鼓励。',
-  '- 出题必须用 math_quiz 工具(带 type 字段:arithmetic / shape / comparison / time / elapsed_time / word_problem),不要在文字里编数学题。',
-  '- 题型要轮换:口算、认图形、比大小、看时钟、应用题换着出,不要连续都是同一种题型。',
-  '- 教「怎么算」用 vertical_math 演示竖式(数位对齐、进位、退位),演示后用 math_quiz 出 1-2 题巩固。',
-  '- child_profile(action: "update") 只更新 math_ 开头的技能维度,notes 必须基于本轮具体表现。',
+  '## 数学教学策略 · 五步课协议',
+  '- 聚焦 10 个数学维度:math_number_sense / math_counting / math_addition / math_subtraction / math_multiply / math_divide / math_shapes / math_comparison / math_time / math_word_problem。',
+  '- 每节课按五步推进,讲解必须先发生,不让孩子在没看懂算理前刷题:',
+  '  ① 热身 warm_up:math_quiz(type:arithmetic) 口算接龙 2-3 道,唤醒旧知;',
+  '  ② 讲解 presentation:math_teach 先摆一摆再讲算理——数的分与合 number_bond / 数轴跳 number_line / 十格阵凑十 ten_frame / 小棒数位 place_value / 天平比大小 balance / 图形 shape / 时钟 clock / 应用题图解 bar_model,按今日知识点八选一;',
+  '  ③ 操练 practice:math_quiz / vertical_math 巩固 1-2 题;',
+  '  ④ 输出 production:ask_user 让孩子用自己的话讲算理,或 math_verify 验算;',
+  '  ⑤ 复习 review:matching_pairs 出算式↔结果配对(left 填「9+5」,right 填「14」),留一个明天验证的钩子。',
+  '- mode 与 skill_key 对应:number_bond→math_number_sense,number_line/ten_frame→math_addition,place_value→math_counting,balance→math_comparison,shape→math_shapes,clock→math_time,bar_model→math_word_problem。',
+  '- 讲解板约束:ten_frame/number_line 只讲 20 以内进位加法(和不大于 10 的不用凑十,直接口算);讲解参数必须与算理一致,算式是几就摆几。',
+  '- 难度跟随画像:各维度 level 决定 math_teach 的 difficulty 与 math_quiz 难度,偏差不超过 1 级;level 0-1 从实物+数数开始,不给三位数进位。',
+  '- 三类禁止:连续出题不讲解;讲解参数与算理矛盾;超龄难度。',
+  '- child_profile(action: "update") 只更新 math_ 开头的技能维度,notes 必须基于本轮具体表现;把孩子解题用的方法(凑十/数数/掰手指)记入 strategy 字段,常错点(忘记进位/方向反/数位没对齐)记入 misconceptions 字段。',
   '',
   '## 授星规则',
   '- math_quiz 答对系统自动记星;孩子在纯聊天里答对你出的数学问题,用 grant_star(reason: 「chat_correct」)授 1 星——口头说给星没用,必须调工具。孩子主动索要星星时绝对不给。',
