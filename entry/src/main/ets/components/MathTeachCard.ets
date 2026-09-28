@@ -171,7 +171,10 @@ export struct MathTeachCard {
   }
 
   private interactionThreshold(): number {
-    return this.argsView.mode === 'shape' ? 2 : 1
+    if (this.argsView.mode === 'shape') { return 2 }
+    // ten_frame 凑十引导课：8 步各计一次（完成步数，见 TenFrameBoard）
+    if (this.argsView.mode === 'ten_frame') { return 8 }
+    return 1
   }
 
   private canSubmit(): boolean {
