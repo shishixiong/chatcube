@@ -121,6 +121,7 @@ import {
   getSearchToolIds,
   isSearchToolId,
   MATH_QUIZ_TOOL_ID,
+  MATH_TEACH_TOOL_ID,
   ENGLISH_QUIZ_TOOL_ID,
   NUMBER_PUZZLE_TOOL_ID,
   HANDWRITING_PRACTICE_TOOL_ID,
@@ -4809,12 +4810,13 @@ export struct ChatPage {
     this.applyPendingToolExecutionApproval(interaction)
   }
 
-  // 语音模式：互动工具（math_quiz / english_quiz / number_puzzle / handwriting_practice / categorization / vertical_math / maze / sudoku / picture_vocab / pinyin_quiz / matching_pairs）出现 pending 交互时自动朗读题目
+  // 语音模式：互动工具（math_quiz / math_teach / english_quiz / number_puzzle / handwriting_practice / categorization / vertical_math / maze / sudoku / picture_vocab / pinyin_quiz / matching_pairs）出现 pending 交互时自动朗读题目
   private tryAutoTtsForQuizInteraction(interaction: PendingToolInteractionSnapshot): void {
     if (!this.isVoiceMode || this.isRecording) {
       return
     }
     const isAutoTtsTool = interaction.toolId === MATH_QUIZ_TOOL_ID ||
+      interaction.toolId === MATH_TEACH_TOOL_ID ||
       interaction.toolId === ENGLISH_QUIZ_TOOL_ID ||
       interaction.toolId === NUMBER_PUZZLE_TOOL_ID ||
       interaction.toolId === HANDWRITING_PRACTICE_TOOL_ID ||
@@ -4861,14 +4863,19 @@ export struct ChatPage {
     let aiText = ''
     const lastMsg = this.findLastAssistantMessage()
     if (lastMsg !== null) {
-      // 该消息已经做过 quiz TTS(可能是一轮多次调用 quiz 工具的上一道题,或
-      // onSendingCompleted 已经把整段 AI 文本读过了),AI 正文已读,跳过避免重复朗读。
-      // 新增的正文若超出 lastAutoTtsQuizMessageContentLength,会由
-      // 下一次 onSendingCompleted 单独朗读,不会丢失。
-      const alreadyReadForThisMessage =
+      // 该消息已经做过 quiz/teach TTS(上一道题或讲解板,或 onSendingCompleted 已读过一段),
+      // 只朗读 lastAutoTtsQuizMessageContentLength 之后的新增正文——例如讲解板确认后、
+      // 下一道题之前的衔接语。已读部分跳过避免重复朗读;本次没读到的尾部若后续仍在增长,
+      // 由下一次 onSendingCompleted 单独朗读,不会丢失。
+      const alreadyStartedReading =
         this.lastAutoTtsQuizMessageContentLength > 0 &&
         this.lastAutoTtsQuizMessageId === lastMsg.id
-      if (!alreadyReadForThisMessage) {
+      if (alreadyStartedReading) {
+        const start = this.lastAutoTtsQuizMessageContentLength
+        if (start < lastMsg.content.length) {
+          aiText = lastMsg.content.substring(start).trim()
+        }
+      } else {
         for (let i = 0; i < lastMsg.parts.length; i++) {
           const part = lastMsg.parts[i]
           if (part.kind === MessagePartKind.TEXT && part.text.trim() !== '') {
@@ -4890,6 +4897,11 @@ export struct ChatPage {
         if (expression !== '') {
           quizText += ' ' + expression + ' 等于几？'
         }
+      } else if (interaction.toolId === MATH_TEACH_TOOL_ID) {
+        // 讲解板：只读 concept(一句话知识点标题;bar_model 模式下兼作应用题题干)。
+        // 不读 mode 专属参数——具体数字由孩子在板上动手摆,板出现即承接,
+        // 前面的 AI 正文已作为 aiText 在本次朗读。
+        quizText = ((parsed['concept'] as string) ?? '').trim()
       } else if (interaction.toolId === ENGLISH_QUIZ_TOOL_ID) {
         // v2 六 mode 各朗读对应字段 (listen_choice 读 tts_text / read_aloud 读 target_text /
         // letter_trace 读字母 / 三个选择题读 question); 无 mode 的历史调用保持 legacy 行为逐字不变
