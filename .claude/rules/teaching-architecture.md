@@ -11,7 +11,7 @@
 
 ## 1. 总览
 
-教学体系分三层：**教学策略**（AI 助手 + 系统提示词；v2 起为 1 个全科小星老师 + 4 个学科专用助手）→ **教学工具**（AI 调用的 19 个锁定工具 + 13 张互动卡片，学科助手各锁子集）→ **教学数据**（孩子画像 26 维技能 + 每日备课 + 星星奖励）。这三层通过 `ChatViewModel` 串成闭环：会话开始时注入今日教学目标（仅小星老师），AI 据孩子表现出题并更新画像，小星老师会话结束后 5 分钟防抖触发"备课老师"自动生成次日计划。
+教学体系分三层：**教学策略**（AI 助手 + 系统提示词；v2 起为 1 个全科小星老师 + 4 个学科专用助手）→ **教学工具**（AI 调用的 20 个锁定工具 + 14 张互动卡片；小星老师锁 19，`math_teach` 为 kids_math 专属）→ **教学数据**（孩子画像 26 维技能 + 每日备课 + 星星奖励）。这三层通过 `ChatViewModel` 串成闭环：会话开始时注入今日教学目标（仅小星老师），AI 据孩子表现出题并更新画像，小星老师会话结束后 5 分钟防抖触发"备课老师"自动生成次日计划。
 
 ---
 
@@ -106,7 +106,7 @@
 
 ## 4. 教学工具生态
 
-小星老师 **锁定 19 个工具**（§2 `DEFAULT_ASSISTANT_LOCKED_TOOL_IDS`），其中 13 个有 UI 互动卡片（含 `ask_user`，已并入锁定白名单），3 个纯后端（`child_profile`、`math_verify`、`grant_star`），2 个非互动生成类（`image_generation`、`music_generation`），外加 `get_time_info`。4 个学科助手各锁定其中一个子集（见 §2.1，均不含 image_generation / music_generation）。
+小星老师 **锁定 19 个工具**（§2 `DEFAULT_ASSISTANT_LOCKED_TOOL_IDS`），其中 13 个有 UI 互动卡片（含 `ask_user`，已并入锁定白名单），3 个纯后端（`child_profile`、`math_verify`、`grant_star`），2 个非互动生成类（`image_generation`、`music_generation`），外加 `get_time_info`。4 个学科助手各锁定其中一个子集（见 §2.1，均不含 image_generation / music_generation）；唯一例外是 kids_math 额外锁定小星老师集合之外的 `math_teach`（2026-09-27 起，见下表）。
 
 | 工具 ID | UI 卡片 | 是否锁定 | 备注 |
 |---------|---------|----------|------|
@@ -119,7 +119,7 @@
 | `math_quiz` | `MathQuizCard.ets` | ✓ | 预校验 + should_retry |
 | `english_quiz` | `EnglishQuizCard.ets` | ✓ | 六 mode（v2） |
 | `vertical_math` | `VerticalMathCard.ets` | ✓ | 竖式演示 |
-| `math_teach` | `MathTeachCard.ets` | ✓ | kids_math 专用五步课讲解板，预校验 + should_retry；8 mode |
+| `math_teach` | `MathTeachCard.ets` | kids_math | kids_math 专用五步课讲解板（不在小星老师锁定集内），预校验 + should_retry；8 mode |
 | `number_puzzle` | `NumberPuzzleCard.ets` | ✓ | 2026-09 由 `huarongdao` 规范化而来；历史会话旧名仍可渲染 |
 | `handwriting_practice` | `HandwritingCard.ets` | ✓ | 学写字 |
 | `categorization` | `CategorizationCard.ets` | ✓ | 分类小管家 |
