@@ -157,7 +157,7 @@ export struct MathTeachCard {
   @Event onAnswer: (toolCallId: string, answerJson: string) => void = (_id: string, _a: string) => {}
 
   @Local interactions: number = 0
-  @Local submitted: boolean = false
+  private submitted: boolean = false
   private shellState: CardShellState = new CardShellState()
   private argsView: MathTeachArgsView = createDefaultArgsView()
 

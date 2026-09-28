@@ -11,7 +11,7 @@
 
 ## 1. 总览
 
-教学体系分三层：**教学策略**（AI 助手 + 系统提示词；v2 起为 1 个全科小星老师 + 4 个学科专用助手）→ **教学工具**（AI 调用的 19 个锁定工具 + 13 张互动卡片，学科助手各锁子集）→ **教学数据**（孩子画像 24 维技能 + 每日备课 + 星星奖励）。这三层通过 `ChatViewModel` 串成闭环：会话开始时注入今日教学目标（仅小星老师），AI 据孩子表现出题并更新画像，小星老师会话结束后 5 分钟防抖触发"备课老师"自动生成次日计划。
+教学体系分三层：**教学策略**（AI 助手 + 系统提示词；v2 起为 1 个全科小星老师 + 4 个学科专用助手）→ **教学工具**（AI 调用的 19 个锁定工具 + 13 张互动卡片，学科助手各锁子集）→ **教学数据**（孩子画像 26 维技能 + 每日备课 + 星星奖励）。这三层通过 `ChatViewModel` 串成闭环：会话开始时注入今日教学目标（仅小星老师），AI 据孩子表现出题并更新画像，小星老师会话结束后 5 分钟防抖触发"备课老师"自动生成次日计划。
 
 ---
 
@@ -41,7 +41,7 @@
 
 | ID | 名称 | avatarSymbol | color | 锁定工具子集 | sortOrder |
 |----|------|--------------|-------|--------------|-----------|
-| `kids_math` | 小星数学老师 | 数 | #4E8FE0 | ask_user, child_profile, get_time_info, grant_star, math_verify, math_quiz, vertical_math | 1 |
+| `kids_math` | 小星数学老师 | 数 | #4E8FE0 | ask_user, child_profile, get_time_info, grant_star, math_verify, math_quiz, vertical_math, math_teach, matching_pairs | 1 |
 | `kids_english` | 小星英语老师 | 英 | #35A98A | ask_user, child_profile, get_time_info, grant_star, english_quiz, picture_vocab, listening_quiz | 2 |
 | `kids_chinese` | 小星语文老师 | 语 | #E2603C | ask_user, child_profile, get_time_info, grant_star, pinyin_quiz, handwriting_practice | 3 |
 | `kids_games` | 小星游戏老师 | 玩 | #8B72E0 | ask_user, child_profile, get_time_info, grant_star, number_puzzle, maze, sudoku, matching_pairs, categorization | 4 |
@@ -69,7 +69,7 @@
 
 1. **说话方式**：1-3 句、≤50 字、禁 emoji、禁 markdown（`SharedPromptFragments.buildBasePrompt`）
 2. **教学策略**：每轮开始调 `child_profile(action:"read")`；有真凭实据才 `update`
-3. **数学**：8 维目标（`math_addition/subtraction/multiply/divide/shapes/comparison/time/counting`）
+3. **数学**：10 维目标（`math_counting/number_sense/addition/subtraction/multiply/divide/shapes/comparison/time/word_problem`）
 4. **英语**：4 维目标（`alphabet/vocab/sentence/phonics`）
 5. **常识**：3 维目标（`general_nature/social/life`）
 6. **益智**：3 维目标（`logic_thinking/observation/spatial_reasoning`）
@@ -119,6 +119,7 @@
 | `math_quiz` | `MathQuizCard.ets` | ✓ | 预校验 + should_retry |
 | `english_quiz` | `EnglishQuizCard.ets` | ✓ | 六 mode（v2） |
 | `vertical_math` | `VerticalMathCard.ets` | ✓ | 竖式演示 |
+| `math_teach` | `MathTeachCard.ets` | ✓ | kids_math 专用五步课讲解板，预校验 + should_retry；8 mode |
 | `number_puzzle` | `NumberPuzzleCard.ets` | ✓ | 2026-09 由 `huarongdao` 规范化而来；历史会话旧名仍可渲染 |
 | `handwriting_practice` | `HandwritingCard.ets` | ✓ | 学写字 |
 | `categorization` | `CategorizationCard.ets` | ✓ | 分类小管家 |
@@ -146,12 +147,13 @@
 | 字段 | 存储 | 备注 |
 |------|------|------|
 | 整条画像 | Preferences `child_profile_json` 单条 JSON | **非 SQLite** |
+| SkillDimension 扩展字段 | 每维 `strategy` / `misconceptions` | 2026-09-27 新增，child_profile update 透传 |
 | 缓存 | `ChildProfileService.cachedProfile` 字段 | 启动加载一次 |
 | 更新入口 | `child_profile(action:"update")` 工具 | AI 调用 → `ChildProfileExecutor.handleUpdate` (BuiltinTools.ets:817-870) |
 
-**24 维技能**（`ChildProfileService.ets` 的 `SKILL_DEFINITIONS`）：
+**26 维技能**（`ChildProfileService.ets` 的 `SKILL_DEFINITIONS`）：
 
-- **数学 8**：`math_counting` / `math_addition` / `math_subtraction` / `math_multiply` / `math_divide` / `math_shapes` / `math_comparison` / `math_time`
+- **数学 10**：`math_counting` / `math_number_sense` / `math_addition` / `math_subtraction` / `math_multiply` / `math_divide` / `math_shapes` / `math_comparison` / `math_time` / `math_word_problem`
 - **英语 5**：`english_alphabet` / `english_vocab` / `english_sentence` / `english_phonics` / `english_reading`
 - **常识 3**：`general_nature` / `general_social` / `general_life`
 - **认知 3**：`logic_thinking` / `observation` / `spatial_reasoning`
@@ -275,7 +277,7 @@ ChatViewModel（会话结束路径）调 getLessonPlanningService().notifySessio
 - 模型：默认对话模型（`ModelRole.CHAT`）
 - 参数：`temperature=0.4`，`maxTokens=4096`，**关 reasoning**（避免 `<think>` 污染 JSON）
 - 提示词：`utils/LessonPlanPromptUtils.ets:27-93` 的 `PLANNER_SYSTEM_PROMPT`，以"经验丰富的 6-7 岁教学专家"人设
-- 输入 JSON：今日小星老师会话总结 + 24 维孩子画像弱项 + 昨日计划 + `planDate`（明天）
+- 输入 JSON：今日小星老师会话总结 + 26 维孩子画像弱项 + 昨日计划 + `planDate`（明天）
 - 输出清洗：`cleanPlannerJsonOutput()`（行 279-299）剥 `<think>` / 围栏 / 提取 `{...}` → `JSON.parse` → `parseLessonPlan` 带 fallback 水合
 
 ### 7.4 图片预生成（prefetchImages，行 955-1116）
@@ -305,7 +307,7 @@ ChatViewModel（会话结束路径）调 getLessonPlanningService().notifySessio
 | `daily_lesson_plans` | 每日教学计划 | `plan_date, plan_json, status, planner_provider_id/model_id, session_ids_json` |
 | `image_index` | 统一图片索引（替代原 prepared_media 表 + EnglishQuizImageIndex Preferences） | `source, key, file_path, expires_at, consumed_count, status` + 索引 `(source,key)` |
 | `prepared_media` | **已废弃**——保留表结构仅给 `getPlannerStats` 兜底读取历史统计 | `topic_key, file_path, consumed_count, expires_at, plan_id` (FK CASCADE) |
-| (Preferences) `child_profile_json` | 孩子画像 | 单条 JSON，24 维技能 + 强项/弱项标签 |
+| (Preferences) `child_profile_json` | 孩子画像 | 单条 JSON，26 维技能 + 强项/弱项标签 |
 
 ### 8.1 统一图片索引管线（`image_index` 单表 + `ImageSource` 枚举）
 
@@ -401,7 +403,7 @@ ChatViewModel（会话结束路径）调 getLessonPlanningService().notifySessio
 
 4. **4 模块非空校验**是抵御 LLM 自由发挥的关键防线——若不校验，模型倾向把内容堆到 `themeDescription`/`teacherNotes` 而 4 个模块全空，导致小星老师拿着空计划上课。
 
-5. **24 维技能 = 24 个枚举值**散落在多份 schema 定义中（`ChildProfileService.SKILL_DEFINITIONS`、`BuiltinTools.ets` 的 child_profile schema、`AssistantModels.ets` 的 5 份系统提示词——default + 4 学科各自引用维度子集）。**修改维度时必须多处同步**——不像 10 处漂移点有专门技能提醒，这个目前是 naked 风险（v2 起提示词从 1 份变 5 份，漂移面扩大）。
+5. **26 维技能 = 26 个枚举值**散落在多份 schema 定义中（`ChildProfileService.SKILL_DEFINITIONS`、`BuiltinTools.ets` 的 child_profile schema、`AssistantModels.ets` 的 5 份系统提示词——default + 4 学科各自引用维度子集）。**修改维度时必须多处同步**——不像 10 处漂移点有专门技能提醒，这个目前是 naked 风险（v2 起提示词从 1 份变 5 份，漂移面扩大）。
 
 6. **锁定工具 + 锁定系统提示词**是产品级硬约束：5 个内置助手（小星老师 + 4 学科老师）永远是它们自己，用户无法在前端"改个名字"破坏体验。这对面向低龄儿童的产品是正确取舍（避免家长/孩子误操作导致人格漂移），但也意味着任何"让内置助手更灵活"的尝试必须改注册表实现（`getBuiltInAssistantSpec` / `KIDS_SUBJECT_SPECS`）而非放开权限。
 
@@ -419,7 +421,7 @@ ChatViewModel（会话结束路径）调 getLessonPlanningService().notifySessio
 | `viewmodels/ChatViewModel.ets:311-383, 2743` | 提示词注入（`injectTeachingSections`）+ 会话结束通知 |
 | `services/LessonPlanningService.ets` | 备课老师完整管线 |
 | `utils/LessonPlanPromptUtils.ets` | 备课系统提示词 + 渲染 |
-| `services/ChildProfileService.ets` | 24 维技能定义 |
+| `services/ChildProfileService.ets` | 26 维技能定义 |
 | `services/StarRewardService.ets` | 星星计算 + 副作用 |
 | `models/StarEventModels.ets` | 10 处联合漂移点 |
 | `services/ToolExecutionService.ets` | 工具分发 + 星星事件 + 互动工具特殊处理器 |

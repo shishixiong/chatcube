@@ -116,6 +116,7 @@ export struct NumberLineBoard {
         Button('凑十跳')
           .width(140).height(44)
           .backgroundColor(KIDS_MATH_INK).fontSize(15)
+          .accessibilityText('凑十跳：从起点沿数轴跳到十再跳余数')
           .onClick(() => { this.startHop() })
       }
     }

@@ -24,7 +24,7 @@ export default function childProfileParseTest() {
       skills['math_addition'] = dim
       old['skills'] = skills
       old['strengths'] = emptyArr
-      old['weaknesses'] = emptyArr
+      old['weakAreas'] = emptyArr
       const p = parseProfileJson(JSON.stringify(old))
       expect(p.skills['math_number_sense'] !== undefined).assertTrue()
       expect(p.skills['math_word_problem'] !== undefined).assertTrue()
@@ -46,7 +46,7 @@ export default function childProfileParseTest() {
       skills['math_addition'] = dim
       raw['skills'] = skills
       raw['strengths'] = emptyArr
-      raw['weaknesses'] = emptyArr
+      raw['weakAreas'] = emptyArr
       const p = parseProfileJson(JSON.stringify(raw))
       expect(p.skills['math_addition'].strategy === '凑十').assertTrue()
       expect(p.skills['math_addition'].misconceptions === '忘记进位').assertTrue()

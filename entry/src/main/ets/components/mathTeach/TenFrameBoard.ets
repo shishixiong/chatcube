@@ -85,6 +85,7 @@ export struct TenFrameBoard {
         Button('借一个进框')
           .width(140).height(44)
           .backgroundColor(KIDS_MATH_INK).fontSize(15)
+          .accessibilityText('借一个进框：把框外的一个点移进十格框')
           .onClick(() => { this.borrow() })
       }
     }
