@@ -10,9 +10,7 @@ export interface MathTeachValidationResult {
   error: string
 }
 
-const TEACH_MODES: string[] = ['number_bond', 'number_line', 'ten_frame', 'place_value',
-  'balance', 'shape', 'clock', 'bar_model']
-const SHAPE_FOCUS: string[] = ['circle', 'square', 'triangle', 'rectangle']
+const TEACH_MODES: string[] = ['number_bond', 'ten_frame', 'balance', 'clock']
 const SKILL_KEYS: string[] = ['math_number_sense', 'math_counting', 'math_addition',
   'math_subtraction', 'math_multiply', 'math_divide', 'math_shapes', 'math_comparison',
   'math_time', 'math_word_problem']
@@ -98,17 +96,6 @@ function validateModeArgs(mode: string, args: Record<string, Object>): MathTeach
   if (mode === 'number_bond') {
     const total: number = getNumber(args, 'total')
     if (!inRange(total, 2, 20)) { return fail('number_bond 的 total 必须是 2-20 的整数') }
-  } else if (mode === 'number_line') {
-    const start: number = getNumber(args, 'start')
-    const step: number = getNumber(args, 'step')
-    if (!inRange(start, 6, 9)) { return fail('number_line 的 start 必须是 6-9（保证能先跳到 10）') }
-    if (!inRange(step, 1, 10)) { return fail('number_line 的 step 必须是 1-10 的整数') }
-    const sum: number = start + step
-    if (sum > 20) { return fail('number_line 的 start+step 不能超过 20') }
-    if (sum <= 10) {
-      return fail('number_line 只讲 20 以内进位加法：start+step 必须大于 10' +
-        '（不进位的加法不需要凑十，用 math_quiz 或 vertical_math）')
-    }
   } else if (mode === 'ten_frame') {
     const a: number = getNumber(args, 'a')
     const b: number = getNumber(args, 'b')
@@ -120,22 +107,11 @@ function validateModeArgs(mode: string, args: Record<string, Object>): MathTeach
       return fail('ten_frame 只讲 20 以内进位加法：a+b 必须大于 10' +
         '（⚠️ 严禁 a+b 不超过 10 时使用 ten_frame，那样的题不需要凑十）')
     }
-  } else if (mode === 'place_value') {
-    const tens: number = getNumber(args, 'tens')
-    const ones: number = getNumber(args, 'ones')
-    if (!inRange(tens, 0, 8)) { return fail('place_value 的 tens 必须是 0-8 的整数') }
-    if (!inRange(ones, 0, 9)) { return fail('place_value 的 ones 必须是 0-9 的整数') }
-    if (tens === 0 && ones === 0) { return fail('place_value 的 tens 和 ones 不能同时为 0') }
   } else if (mode === 'balance') {
     const left: number = getNumber(args, 'left')
     const right: number = getNumber(args, 'right')
     if (!inRange(left, 1, 20)) { return fail('balance 的 left 必须是 1-20 的整数') }
     if (!inRange(right, 1, 20)) { return fail('balance 的 right 必须是 1-20 的整数') }
-  } else if (mode === 'shape') {
-    const focus: string = getString(args, 'focus')
-    if (SHAPE_FOCUS.indexOf(focus) < 0) {
-      return fail('shape 的 focus 必须是 circle/square/triangle/rectangle 之一')
-    }
   } else if (mode === 'clock') {
     const hour: number = getNumber(args, 'hour')
     const minute: number = getNumber(args, 'minute')
@@ -143,11 +119,6 @@ function validateModeArgs(mode: string, args: Record<string, Object>): MathTeach
     if (minute !== 0 && minute !== 30) {
       return fail('clock 的 minute 只能是 0（整点）或 30（半点）')
     }
-  } else if (mode === 'bar_model') {
-    const pa: number = getNumber(args, 'part_a')
-    const pb: number = getNumber(args, 'part_b')
-    if (!inRange(pa, 1, 9)) { return fail('bar_model 的 part_a 必须是 1-9 的整数') }
-    if (!inRange(pb, 1, 9)) { return fail('bar_model 的 part_b 必须是 1-9 的整数') }
   }
   return pass()
 }

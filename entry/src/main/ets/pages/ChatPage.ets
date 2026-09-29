@@ -4898,7 +4898,7 @@ export struct ChatPage {
           quizText += ' ' + expression + ' 等于几？'
         }
       } else if (interaction.toolId === MATH_TEACH_TOOL_ID) {
-        // 讲解板：只读 concept(一句话知识点标题;bar_model 模式下兼作应用题题干)。
+        // 讲解板：只读 concept(一句话知识点标题)。
         // 不读 mode 专属参数——具体数字由孩子在板上动手摆,板出现即承接,
         // 前面的 AI 正文已作为 aiText 在本次朗读。
         quizText = ((parsed['concept'] as string) ?? '').trim()

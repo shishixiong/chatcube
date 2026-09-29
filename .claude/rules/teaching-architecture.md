@@ -119,7 +119,7 @@
 | `math_quiz` | `MathQuizCard.ets` | ✓ | 预校验 + should_retry |
 | `english_quiz` | `EnglishQuizCard.ets` | ✓ | 六 mode（v2） |
 | `vertical_math` | `VerticalMathCard.ets` | ✓ | 竖式演示 |
-| `math_teach` | `MathTeachCard.ets` | kids_math | kids_math 专用五步课讲解板（不在小星老师锁定集内），预校验 + should_retry；8 mode |
+| `math_teach` | `MathTeachCard.ets` | kids_math | kids_math 专用五步课讲解板（不在小星老师锁定集内），预校验 + should_retry；4 mode（number_bond/ten_frame/balance/clock；2026-09-29 下线 number_line/place_value/shape/bar_model） |
 | `number_puzzle` | `NumberPuzzleCard.ets` | ✓ | 2026-09 由 `huarongdao` 规范化而来；历史会话旧名仍可渲染 |
 | `handwriting_practice` | `HandwritingCard.ets` | ✓ | 学写字 |
 | `categorization` | `CategorizationCard.ets` | ✓ | 分类小管家 |

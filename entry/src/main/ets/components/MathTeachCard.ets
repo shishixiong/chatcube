@@ -1,7 +1,7 @@
 /**
  * MathTeachCard - 数学讲解板互动卡片（math_teach 工具）
  *
- * 解析 toolCall.arguments 中的讲解参数（8 种 mode），分发到对应讲解板组件；
+ * 解析 toolCall.arguments 中的讲解参数（4 种 mode），分发到对应讲解板组件；
  * 孩子在板内动手操作（onInteract 计数），达到门槛后可点「我学会了 · 继续」
  * 提交 MathTeachResult。无对错判定，完成即成功。
  *
@@ -16,13 +16,9 @@ import { ToolCall } from '../models/ChatModels'
 import { KIDS_MATH_INK, KIDS_MUTED } from './kids/KidsBrandTokens'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { NumberBondBoard } from './mathTeach/NumberBondBoard'
-import { NumberLineBoard } from './mathTeach/NumberLineBoard'
 import { TenFrameBoard } from './mathTeach/TenFrameBoard'
-import { PlaceValueBoard } from './mathTeach/PlaceValueBoard'
 import { BalanceBoard } from './mathTeach/BalanceBoard'
-import { ShapeBoard } from './mathTeach/ShapeBoard'
 import { ClockBoard } from './mathTeach/ClockBoard'
-import { BarModelBoard } from './mathTeach/BarModelBoard'
 
 export interface MathTeachResult {
   mode: string
@@ -40,30 +36,19 @@ interface MathTeachArgsView {
   concept: string
   skill_key: string
   total: number
-  start: number
-  step: number
   a: number
   b: number
-  tens: number
-  ones: number
   left: number
   right: number
-  focus: string
   hour: number
   minute: number
-  part_a: number
-  part_b: number
 }
 
 const TEACH_MODES_ZH: Record<string, string> = {
   'number_bond': '数的分与合',
-  'number_line': '数轴凑十跳',
   'ten_frame': '十格阵凑十',
-  'place_value': '小棒与数位',
   'balance': '天平比大小',
-  'shape': '图形数一数',
-  'clock': '时钟拨一拨',
-  'bar_model': '应用题图解'
+  'clock': '时钟拨一拨'
 }
 
 const STAGE_ZH: Record<string, string> = {
@@ -92,8 +77,7 @@ function getStr(obj: Record<string, Object>, key: string, dflt: string): string 
 function createDefaultArgsView(): MathTeachArgsView {
   const view: MathTeachArgsView = {
     valid: false, mode: '', stage: 'presentation', difficulty: 1, concept: '', skill_key: '',
-    total: 9, start: 9, step: 5, a: 9, b: 5, tens: 1, ones: 5, left: 9, right: 5,
-    focus: 'circle', hour: 9, minute: 0, part_a: 5, part_b: 5
+    total: 9, a: 9, b: 5, left: 9, right: 5, hour: 9, minute: 0
   }
   return view
 }
@@ -118,19 +102,12 @@ export function parseMathTeachArgs(raw: string): MathTeachArgsView {
     view.concept = getStr(obj, 'concept', '')
     view.skill_key = getStr(obj, 'skill_key', '')
     view.total = getNum(obj, 'total', 9)
-    view.start = getNum(obj, 'start', 9)
-    view.step = getNum(obj, 'step', 5)
     view.a = getNum(obj, 'a', 9)
     view.b = getNum(obj, 'b', 5)
-    view.tens = getNum(obj, 'tens', 1)
-    view.ones = getNum(obj, 'ones', 5)
     view.left = getNum(obj, 'left', 9)
     view.right = getNum(obj, 'right', 5)
-    view.focus = getStr(obj, 'focus', 'circle')
     view.hour = getNum(obj, 'hour', 9)
     view.minute = getNum(obj, 'minute', 0)
-    view.part_a = getNum(obj, 'part_a', 5)
-    view.part_b = getNum(obj, 'part_b', 5)
   } catch (_e) {
     return view
   }
@@ -171,7 +148,6 @@ export struct MathTeachCard {
   }
 
   private interactionThreshold(): number {
-    if (this.argsView.mode === 'shape') { return 2 }
     // ten_frame 凑十引导课：8 步各计一次（完成步数，见 TenFrameBoard）
     if (this.argsView.mode === 'ten_frame') { return 8 }
     return 1
@@ -232,20 +208,12 @@ export struct MathTeachCard {
         .padding({ top: 8, bottom: 8 })
     } else if (this.argsView.mode === 'number_bond') {
       NumberBondBoard({ total: this.argsView.total, readonly: this.isAnswered, onInteract: () => { this.countInteract() } })
-    } else if (this.argsView.mode === 'number_line') {
-      NumberLineBoard({ start: this.argsView.start, step: this.argsView.step, readonly: this.isAnswered, onInteract: () => { this.countInteract() } })
     } else if (this.argsView.mode === 'ten_frame') {
       TenFrameBoard({ a: this.argsView.a, b: this.argsView.b, readonly: this.isAnswered, onInteract: () => { this.countInteract() } })
-    } else if (this.argsView.mode === 'place_value') {
-      PlaceValueBoard({ tens: this.argsView.tens, ones: this.argsView.ones, readonly: this.isAnswered, onInteract: () => { this.countInteract() } })
     } else if (this.argsView.mode === 'balance') {
       BalanceBoard({ left: this.argsView.left, right: this.argsView.right, readonly: this.isAnswered, onInteract: () => { this.countInteract() } })
-    } else if (this.argsView.mode === 'shape') {
-      ShapeBoard({ focus: this.argsView.focus, readonly: this.isAnswered, onInteract: () => { this.countInteract() } })
     } else if (this.argsView.mode === 'clock') {
       ClockBoard({ hour: this.argsView.hour, minute: this.argsView.minute, readonly: this.isAnswered, onInteract: () => { this.countInteract() } })
-    } else if (this.argsView.mode === 'bar_model') {
-      BarModelBoard({ partA: this.argsView.part_a, partB: this.argsView.part_b, readonly: this.isAnswered, onInteract: () => { this.countInteract() } })
     }
   }
 

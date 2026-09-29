@@ -16,23 +16,21 @@ function asJson(a: Record<string, Object>): string {
 
 export default function mathTeachValidationTest() {
   describe('mathTeachValidation', () => {
-    it('八个mode合法参数通过', 0, () => {
+    it('四个mode合法参数通过', 0, () => {
       const c1: Record<string, Object> = baseArgs('number_bond'); c1['total'] = 9
-      const c2: Record<string, Object> = baseArgs('number_line'); c2['start'] = 9; c2['step'] = 5
-      const c3: Record<string, Object> = baseArgs('ten_frame'); c3['a'] = 9; c3['b'] = 5
-      const c4: Record<string, Object> = baseArgs('place_value'); c4['tens'] = 1; c4['ones'] = 7
-      const c5: Record<string, Object> = baseArgs('balance'); c5['left'] = 9; c5['right'] = 5
-      const c6: Record<string, Object> = baseArgs('shape'); c6['focus'] = 'circle'
-      const c7: Record<string, Object> = baseArgs('clock'); c7['hour'] = 9; c7['minute'] = 30
-      const c8: Record<string, Object> = baseArgs('bar_model'); c8['part_a'] = 3; c8['part_b'] = 4
+      const c2: Record<string, Object> = baseArgs('ten_frame'); c2['a'] = 9; c2['b'] = 5
+      const c3: Record<string, Object> = baseArgs('balance'); c3['left'] = 9; c3['right'] = 5
+      const c4: Record<string, Object> = baseArgs('clock'); c4['hour'] = 9; c4['minute'] = 30
       expect(validateMathTeachArgs(asJson(c1), null).ok).assertTrue()
       expect(validateMathTeachArgs(asJson(c2), null).ok).assertTrue()
       expect(validateMathTeachArgs(asJson(c3), null).ok).assertTrue()
       expect(validateMathTeachArgs(asJson(c4), null).ok).assertTrue()
-      expect(validateMathTeachArgs(asJson(c5), null).ok).assertTrue()
-      expect(validateMathTeachArgs(asJson(c6), null).ok).assertTrue()
-      expect(validateMathTeachArgs(asJson(c7), null).ok).assertTrue()
-      expect(validateMathTeachArgs(asJson(c8), null).ok).assertTrue()
+    })
+    it('已下线mode拒绝', 0, () => {
+      expect(validateMathTeachArgs(asJson(baseArgs('number_line')), null).ok).assertFalse()
+      expect(validateMathTeachArgs(asJson(baseArgs('place_value')), null).ok).assertFalse()
+      expect(validateMathTeachArgs(asJson(baseArgs('shape')), null).ok).assertFalse()
+      expect(validateMathTeachArgs(asJson(baseArgs('bar_model')), null).ok).assertFalse()
     })
     it('mode越界或缺失拒绝', 0, () => {
       expect(validateMathTeachArgs(asJson(baseArgs('huarongdao')), null).ok).assertFalse()
@@ -41,14 +39,6 @@ export default function mathTeachValidationTest() {
     it('坏JSON拒绝', 0, () => {
       expect(validateMathTeachArgs('not-json', null).ok).assertFalse()
     })
-    it('凑十边界_number_line_sum10拒_11收_19收', 0, () => {
-      const r1: Record<string, Object> = baseArgs('number_line'); r1['start'] = 9; r1['step'] = 1
-      expect(validateMathTeachArgs(asJson(r1), null).ok).assertFalse()
-      const r2: Record<string, Object> = baseArgs('number_line'); r2['start'] = 6; r2['step'] = 5
-      expect(validateMathTeachArgs(asJson(r2), null).ok).assertTrue()
-      const r3: Record<string, Object> = baseArgs('number_line'); r3['start'] = 9; r3['step'] = 10
-      expect(validateMathTeachArgs(asJson(r3), null).ok).assertTrue()
-    })
     it('凑十边界_ten_frame_sum10拒_11收_19收', 0, () => {
       const t1: Record<string, Object> = baseArgs('ten_frame'); t1['a'] = 5; t1['b'] = 5
       expect(validateMathTeachArgs(asJson(t1), null).ok).assertFalse()
@@ -56,10 +46,6 @@ export default function mathTeachValidationTest() {
       expect(validateMathTeachArgs(asJson(t2), null).ok).assertTrue()
       const t3: Record<string, Object> = baseArgs('ten_frame'); t3['a'] = 9; t3['b'] = 10
       expect(validateMathTeachArgs(asJson(t3), null).ok).assertTrue()
-    })
-    it('number_line_start越界拒绝', 0, () => {
-      const r: Record<string, Object> = baseArgs('number_line'); r['start'] = 5; r['step'] = 7
-      expect(validateMathTeachArgs(asJson(r), null).ok).assertFalse()
     })
     it('难度偏差±1收_2拒', 0, () => {
       const lv: Record<string, number> = {}
@@ -94,14 +80,6 @@ export default function mathTeachValidationTest() {
       expect(validateMathTeachArgs(asJson(c1), null).ok).assertFalse()
       const c2: Record<string, Object> = baseArgs('clock'); c2['hour'] = 9; c2['minute'] = 0
       expect(validateMathTeachArgs(asJson(c2), null).ok).assertTrue()
-    })
-    it('shape_focus白名单', 0, () => {
-      const s: Record<string, Object> = baseArgs('shape'); s['focus'] = 'hexagon'
-      expect(validateMathTeachArgs(asJson(s), null).ok).assertFalse()
-    })
-    it('place_value双零拒绝', 0, () => {
-      const p: Record<string, Object> = baseArgs('place_value'); p['tens'] = 0; p['ones'] = 0
-      expect(validateMathTeachArgs(asJson(p), null).ok).assertFalse()
     })
   })
 }

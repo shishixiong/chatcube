@@ -1594,7 +1594,7 @@ function createMathQuizToolConfig(): ToolConfig {
 }
 
 // ===== math_teach 工具 =====
-// 数学讲解板：先摆一摆再讲算理的交互教具, 八种 mode 八选一。
+// 数学讲解板：先摆一摆再讲算理的交互教具, 四种 mode 四选一。
 // 真实交互在 ToolExecutionService.handleMathTeach 特殊路径, 由前端讲解板卡片处理。
 
 class MathTeachExecutor implements ToolExecutor {
@@ -1609,25 +1609,18 @@ function createMathTeachToolDefinition(): ToolDefinition {
   const rawSchemaJson: string = `{
     "type": "object",
     "properties": {
-      "mode": {"type": "string", "enum": ["number_bond","number_line","ten_frame","place_value","balance","shape","clock","bar_model"], "description": "讲解板类型八选一。number_bond 数的分与合（skill_key 配 math_number_sense）/ number_line 数轴凑十跳（math_addition）/ ten_frame 十格阵凑十（math_addition）/ place_value 小棒数位捆十（math_counting）/ balance 天平比大小（math_comparison）/ shape 图形数边角（math_shapes）/ clock 时钟整点半点（math_time）/ bar_model 应用题图解（math_word_problem）"},
+      "mode": {"type": "string", "enum": ["number_bond","ten_frame","balance","clock"], "description": "讲解板类型四选一。number_bond 数的分与合（skill_key 配 math_number_sense）/ ten_frame 十格阵凑十（math_addition）/ balance 天平比大小（math_comparison）/ clock 时钟整点半点（math_time）"},
       "stage": {"type": "string", "enum": ["warm_up","presentation","practice","production","review"], "description": "五步课当前环节标签，缺省 presentation。只影响卡片头部显示，不影响玩法"},
       "difficulty": {"type": "number", "description": "难度 1-5 整数，须与画像等级偏差不超过 1；画像该维度 level 为 0（未评估）时可自选"},
-      "concept": {"type": "string", "description": "给孩子看的一句话知识点标题，如「凑十法：先凑成 10 再加」。bar_model 模式下此参数兼作应用题题干，如「小明有 9 个苹果，妈妈又给了 5 个，一共几个？」"},
+      "concept": {"type": "string", "description": "给孩子看的一句话知识点标题，如「凑十法：先凑成 10 再加」"},
       "skill_key": {"type": "string", "description": "对应画像维度，与 mode 的映射见 mode 描述。用于难度校验与画像更新提示"},
       "total": {"type": "number", "description": "number_bond 专用：分成两部分的合数，2-20 整数"},
-      "start": {"type": "number", "description": "number_line 专用：数轴起点，6-9 整数（保证能先跳到 10）"},
-      "step": {"type": "number", "description": "number_line 专用：从 start 跳的总步数，1-10 整数。start+step 必须大于 10（凑十只讲进位加法）且不超过 20"},
       "a": {"type": "number", "description": "ten_frame 专用：十格阵里已有的个数，5-9 整数"},
       "b": {"type": "number", "description": "ten_frame 专用：框外散点个数，1-10 整数。a+b 必须大于 10 且不超过 20（⚠️ 严禁 a+b 不超过 10 时使用 ten_frame）"},
-      "tens": {"type": "number", "description": "place_value 专用：十位捆数，0-8 整数"},
-      "ones": {"type": "number", "description": "place_value 专用：个位散棒数，0-9 整数，板内可调到 10 触发捆扎；tens 与 ones 不同时为 0"},
       "left": {"type": "number", "description": "balance 专用：天平左盘数，1-20 整数"},
       "right": {"type": "number", "description": "balance 专用：天平右盘数，1-20 整数"},
-      "focus": {"type": "string", "enum": ["circle","square","triangle","rectangle"], "description": "shape 专用：重点认识的图形"},
       "hour": {"type": "number", "description": "clock 专用：时针位置，1-12 整数"},
-      "minute": {"type": "number", "description": "clock 专用：分针位置，只能 0（整点）或 30（半点）"},
-      "part_a": {"type": "number", "description": "bar_model 专用：应用题第一部分数量，1-9 整数"},
-      "part_b": {"type": "number", "description": "bar_model 专用：应用题第二部分数量，1-9 整数"}
+      "minute": {"type": "number", "description": "clock 专用：分针位置，只能 0（整点）或 30（半点）"}
     },
     "required": ["mode", "difficulty", "concept", "skill_key"]
   }`
@@ -1637,7 +1630,7 @@ function createMathTeachToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     MATH_TEACH_TOOL_ID,
-    '数学讲解板：先摆一摆再讲算理的交互教具。孩子先在讲解板上动手操作看懂算理，之后你再出操练题。八种 mode 八选一，每种 mode 有专属参数。调用前必须先 child_profile(action:read) 读画像，difficulty 与对应 skill_key 的画像等级偏差不超过 1 级。讲解完成后孩子会按「我学会了」回传 {mode, skill_key, stage, completed, interactions}，收到回执后按五步课协议继续出操练题（math_quiz）。⚠️ 严禁连续出题不讲解；⚠️ 严禁讲解参数与算理矛盾（声明凑十却出不用凑十的题）；⚠️ 严禁在 ten_frame/number_line 里讲不进位加法（和必须大于 10 才用这两块板）。',
+    '数学讲解板：先摆一摆再讲算理的交互教具。孩子先在讲解板上动手操作看懂算理，之后你再出操练题。四种 mode 四选一，每种 mode 有专属参数。调用前必须先 child_profile(action:read) 读画像，difficulty 与对应 skill_key 的画像等级偏差不超过 1 级。讲解完成后孩子会按「我学会了」回传 {mode, skill_key, stage, completed, interactions}，收到回执后按五步课协议继续出操练题（math_quiz）。⚠️ 严禁连续出题不讲解；⚠️ 严禁讲解参数与算理矛盾（声明凑十却出不用凑十的题）；⚠️ 严禁在 ten_frame 里讲不进位加法（和必须大于 10 才用这块板）。',
     parameters
   )
 
