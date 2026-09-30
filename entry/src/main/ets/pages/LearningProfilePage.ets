@@ -16,6 +16,8 @@ import {
 } from '../services/ChildProfileService'
 import { SkillLevelDots } from '../components/SkillLevelDots'
 import { formatRelativeTime } from '../utils/TimeFormatUtils'
+import { getLearningLedgerService } from '../services/LearningLedgerService'
+import { RepeatStat, TOP_REPEATED_WINDOW_MS } from '../models/LearningLedgerModels'
 
 const TAG = 'LearningProfilePage'
 const TOTAL_LEVELS: number = 5
@@ -134,6 +136,8 @@ struct LearningProfilePage {
   @Local profile: ChildKnowledgeProfile = new ChildKnowledgeProfile()
   @Local skillDefinitions: SkillDimension[] = []
   @Local isLoading: boolean = true
+  @Local ledgerMasteredCount: number = 0
+  @Local ledgerTopRepeated: string[] = []
 
   private compactScroller: Scroller = new Scroller()
   private loadToken: number = 0
@@ -144,6 +148,7 @@ struct LearningProfilePage {
 
   aboutToAppear(): void {
     this.loadProfile()
+    this.loadLedgerStats()
   }
 
   private async loadProfile(): Promise<void> {
@@ -163,6 +168,27 @@ struct LearningProfilePage {
       if (token === this.loadToken) {
         this.isLoading = false
       }
+    }
+  }
+
+  private async loadLedgerStats(): Promise<void> {
+    try {
+      const ledger = getLearningLedgerService()
+      const since = Date.now() - TOP_REPEATED_WINDOW_MS
+      const enTop = await ledger.getTopRepeated('en', since, 8)
+      const zhTop = await ledger.getTopRepeated('zh', since, 8)
+      const merged: RepeatStat[] = enTop.concat(zhTop)
+      merged.sort((a: RepeatStat, b: RepeatStat) => b.count - a.count)
+      const displays: string[] = []
+      for (let i = 0; i < Math.min(8, merged.length); i++) {
+        displays.push(`${merged[i].display} ×${merged[i].count}`)
+      }
+      this.ledgerTopRepeated = displays
+      const enCount = await ledger.getMasteredCount('en')
+      const zhCount = await ledger.getMasteredCount('zh')
+      this.ledgerMasteredCount = enCount + zhCount
+    } catch (error) {
+      console.warn(TAG, `loadLedgerStats failed (ignored): ${String(error)}`)
     }
   }
 
@@ -528,6 +554,46 @@ struct LearningProfilePage {
   }
 
   @Builder
+  private VocabLedgerCard() {
+    Column({ space: 8 }) {
+      Text('词汇台账')
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_secondary'))
+
+      Text(`已掌握词数: ${this.ledgerMasteredCount}`)
+        .fontSize(13)
+        .fontColor($r('app.color.text_primary'))
+        .width('100%')
+
+      Text('近 7 天高频词:')
+        .fontSize(13)
+        .fontColor($r('app.color.text_primary'))
+        .width('100%')
+
+      if (this.ledgerTopRepeated.length === 0) {
+        Text('暂无数据')
+          .fontSize(13)
+          .fontColor($r('app.color.text_tertiary'))
+      } else {
+        ForEach(this.ledgerTopRepeated, (item: string, index: number) => {
+          Text(item)
+            .fontSize(13)
+            .fontColor($r('app.color.text_primary'))
+            .width('100%')
+        }, (item: string, index: number) => `${index}_${item}`)
+      }
+    }
+    .width('100%')
+    .padding(14)
+    .backgroundColor(this.themeSurface)
+    .borderRadius(16)
+    .border({ width: 1, color: $r('app.color.divider') })
+    .visualEffect(buildPointLightBorderEffect())
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
   private EmptyState() {
     Column({ space: 8 }) {
       SymbolGlyph($r('sys.symbol.person'))
@@ -588,6 +654,13 @@ struct LearningProfilePage {
             .margin({ top: 18 })
             .alignItems(HorizontalAlign.Start)
           }
+
+          Column() {
+            this.VocabLedgerCard()
+          }
+          .width('100%')
+          .margin({ top: 14 })
+          .alignItems(HorizontalAlign.Start)
 
           Blank().width('100%').height(28)
         }
