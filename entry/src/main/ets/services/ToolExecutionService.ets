@@ -80,6 +80,9 @@ import { getEffectiveApiKey } from '../config/PresetProviders'
 import { getStarRewardService } from './StarRewardService'
 import { getChildProfileService } from './ChildProfileService'
 import { StarActivityType } from '../models/StarEventModels'
+import { getLearningLedgerService } from './LearningLedgerService'
+import { extractLedgerItemsFromTool, extractLedgerAnswerItems, normalizeItemKey } from '../utils/LedgerExtractUtils'
+import { LedgerRecord } from '../models/LearningLedgerModels'
 
 
 // 取消检查回调类型
@@ -450,6 +453,52 @@ export class ToolExecutionService {
       payloadJson: answerJson,
       toolCallId: toolCall.id,
       sessionId: context.sessionId
+    })
+    // 词级台账作答回写 (fire-and-forget): 非台账工具 extract 返回空, 天然 no-op
+    this.recordLedgerAnswered(activityType, toolCall, context, answerJson)
+  }
+
+  /**
+   * 出题曝光登记 (fire-and-forget, spec §6.2): 在 handler 进入 pending 态后调用。
+   * 静默失败——台账任何异常不影响出题。
+   */
+  private recordLedgerServed(toolId: string, toolCall: ToolCall, context: ToolExecutionContext): void {
+    const items = extractLedgerItemsFromTool(toolId, toolCall.arguments)
+    if (items.length === 0) {
+      return
+    }
+    const now = Date.now()
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
+      const record: LedgerRecord = {
+        itemKey: normalizeItemKey(item.subject, item.itemType, item.display),
+        subject: item.subject,
+        itemType: item.itemType,
+        display: item.display,
+        skillKey: item.skillKey,
+        mode: item.mode,
+        toolId: toolId,
+        sessionId: context.sessionId,
+        now: now
+      }
+      getLearningLedgerService().recordServed(record).catch((_e: Object) => {
+        // 静默: 台账失败不阻断出题
+      })
+    }
+  }
+
+  /**
+   * 作答对账 (fire-and-forget): 仅由 recordStarEvent 调用——该方法只在拿到 answerJson 的
+   * 路径被触达 (取消/关闭卡片的 null 路径在此之前已 early-return), 因此取消不写掌握度。
+   */
+  private recordLedgerAnswered(toolId: string, toolCall: ToolCall, context: ToolExecutionContext,
+    answerJson: string): void {
+    const answers = extractLedgerAnswerItems(toolId, toolCall.arguments, answerJson)
+    if (answers.length === 0) {
+      return
+    }
+    getLearningLedgerService().recordAnswer(answers, Date.now()).catch((_e: Object) => {
+      // 静默: 台账失败不阻断授星与对话
     })
   }
 
@@ -823,6 +872,7 @@ export class ToolExecutionService {
 
     // 1. 立即设置 pending 状态, 让卡片立即出现
     toolCall.approvalState = 'pending'
+    this.recordLedgerServed('english_quiz', toolCall, context)
 
     // 2. 后台解析图片: 缓存查询 + API 生成, 完成后注入 image_path
     //    仅 picture_word / legacy word/sentence 需要图片, 其余 mode 跳过整条管线
@@ -1007,6 +1057,7 @@ export class ToolExecutionService {
 
     // 1. 立即设置 pending 状态, 让卡片立即出现
     toolCall.approvalState = 'pending'
+    this.recordLedgerServed('picture_vocab', toolCall, context)
 
     // 2. 后台解析图片: 优先用 AI 传入的 image, 未传时用 image_prompt 兜底生成
     try {
@@ -1129,6 +1180,7 @@ export class ToolExecutionService {
 
     // 1. 立即设置 pending 状态, 让卡片立即出现
     toolCall.approvalState = 'pending'
+    this.recordLedgerServed('listening_quiz', toolCall, context)
 
     let answerJson: string | null = null
     try {
@@ -1220,6 +1272,7 @@ export class ToolExecutionService {
 
     // 1. 立即设置 pending 状态, 让卡片立即出现
     toolCall.approvalState = 'pending'
+    this.recordLedgerServed('pinyin_quiz', toolCall, context)
 
     let answerJson: string | null = null
     try {
@@ -1310,6 +1363,7 @@ export class ToolExecutionService {
 
     // 1. 立即设置 pending 状态, 让卡片立即出现
     toolCall.approvalState = 'pending'
+    this.recordLedgerServed('hanzi_card', toolCall, context)
 
     let answerJson: string | null = null
     try {
@@ -1400,6 +1454,7 @@ export class ToolExecutionService {
 
     // 1. 立即设置 pending 状态, 让卡片立即出现
     toolCall.approvalState = 'pending'
+    this.recordLedgerServed('pinyin_card', toolCall, context)
 
     let answerJson: string | null = null
     try {
@@ -1490,6 +1545,7 @@ export class ToolExecutionService {
 
     // 1. 立即设置 pending 状态, 让卡片立即出现
     toolCall.approvalState = 'pending'
+    this.recordLedgerServed('picture_talk', toolCall, context)
 
     // 2. 后台解析图片: 按 image_prompt 字面键走 ImageIndexService 缓存 (永不过期)
     try {
@@ -1609,6 +1665,7 @@ export class ToolExecutionService {
 
     // 1. 立即设置 pending 状态, 让卡片立即出现
     toolCall.approvalState = 'pending'
+    this.recordLedgerServed('chinese_quiz', toolCall, context)
 
     let answerJson: string | null = null
     try {
@@ -2065,6 +2122,7 @@ export class ToolExecutionService {
     }
 
     toolCall.approvalState = 'pending'
+    this.recordLedgerServed('matching_pairs', toolCall, context)
 
     let answerJson: string | null = null
     try {
@@ -2136,6 +2194,7 @@ export class ToolExecutionService {
     toolCall.permissionLevel = ToolPermissionLevel.READ
 
     toolCall.approvalState = 'pending'
+    this.recordLedgerServed('handwriting_practice', toolCall, context)
 
     let answerJson: string | null = null
     try {
