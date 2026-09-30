@@ -27,6 +27,10 @@ import {
   PINYIN_QUIZ_TOOL_ID,
   MATCHING_PAIRS_TOOL_ID,
   MATH_TEACH_TOOL_ID,
+  HANZI_CARD_TOOL_ID,
+  PINYIN_CARD_TOOL_ID,
+  PICTURE_TALK_TOOL_ID,
+  CHINESE_QUIZ_TOOL_ID,
   isAskUserFunctionName,
   isMathQuizFunctionName,
   isMathTeachFunctionName,
@@ -42,6 +46,10 @@ import {
   isListeningQuizFunctionName,
   isPinyinQuizFunctionName,
   isMatchingPairsFunctionName,
+  isHanziCardFunctionName,
+  isPinyinCardFunctionName,
+  isPictureTalkFunctionName,
+  isChineseQuizFunctionName,
   isScrapeWebFunctionName,
   isSearchWebFunctionName,
   isGrantStarFunctionName
@@ -59,6 +67,10 @@ import { validateEnglishQuizArgs } from '../utils/EnglishQuizValidation'
 import { validatePictureVocabArgs } from '../utils/PictureVocabValidation'
 import { validateListeningQuizArgs } from '../utils/ListeningQuizValidation'
 import { validatePinyinQuizArgs } from '../utils/PinyinQuizValidation'
+import { validateHanziCardArgs } from '../utils/HanziCardValidation'
+import { validatePinyinCardArgs } from '../utils/PinyinCardValidation'
+import { validatePictureTalkArgs } from '../utils/PictureTalkValidation'
+import { validateChineseQuizArgs } from '../utils/ChineseQuizValidation'
 import { validateAndNormalizeMatchingPairs } from '../utils/MatchingPairsGame'
 import { ServiceRegistry } from './ServiceRegistry'
 import { modelSupportsVision } from './registry/ModelAbilityRegistry'
@@ -1265,6 +1277,395 @@ export class ToolExecutionService {
     )
   }
 
+  // hanzi_card 特殊路径: 汉字小课堂讲解卡, 由 HanziCard 收集「我学会了」完成回执。
+  // 讲解型工具: 完成即授星, 无对错判定。
+  private async handleHanziCard(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = HANZI_CARD_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '汉字小课堂'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 0. 预校验: 字外字符 / 拼音与字典不符 / stroke_count 与笔顺数据不符等
+    const hzValidation = validateHanziCardArgs(toolCall.arguments)
+    if (!hzValidation.ok) {
+      console.warn('ToolExecutionService', `hanzi_card validation failed: ${hzValidation.error}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: 'validation_failed',
+          message: hzValidation.error,
+          should_retry: true
+        }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    // 1. 立即设置 pending 状态, 让卡片立即出现
+    toolCall.approvalState = 'pending'
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = HANZI_CARD_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `hanzi_card answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `hanzi_card 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'hanzi_card cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未完成本课学习' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `hanzi_card answered: ${toolCall.id}`)
+    this.recordStarEvent('hanzi_card', toolCall, context, answerJson)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
+  // pinyin_card 特殊路径: 拼音小课堂讲解卡, 由 PinyinCard 收集「我学会了」完成回执。
+  // 讲解型工具: 完成即授星, 无对错判定。
+  private async handlePinyinCard(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = PINYIN_CARD_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '拼音小课堂'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 0. 预校验: syllable 拼合不符 / 示范条数不足等
+    const pyValidation = validatePinyinCardArgs(toolCall.arguments)
+    if (!pyValidation.ok) {
+      console.warn('ToolExecutionService', `pinyin_card validation failed: ${pyValidation.error}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: 'validation_failed',
+          message: pyValidation.error,
+          should_retry: true
+        }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    // 1. 立即设置 pending 状态, 让卡片立即出现
+    toolCall.approvalState = 'pending'
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = PINYIN_CARD_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `pinyin_card answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `pinyin_card 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'pinyin_card cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未完成本课学习' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `pinyin_card answered: ${toolCall.id}`)
+    this.recordStarEvent('pinyin_card', toolCall, context, answerJson)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
+  // picture_talk 特殊路径: 看图说话卡, 由 PictureTalkCard 收集孩子的口语表达结果。
+  // 生图在进入 pending 后后台完成 (picture_vocab 同款): 命中 image_index 缓存则秒回, 未命中生成并入库。
+  private async handlePictureTalk(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = PICTURE_TALK_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '看图说话'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 0. 预校验: questions / words / sample 完整性
+    const ptValidation = validatePictureTalkArgs(toolCall.arguments)
+    if (!ptValidation.ok) {
+      console.warn('ToolExecutionService', `picture_talk validation failed: ${ptValidation.error}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: 'validation_failed',
+          message: ptValidation.error,
+          should_retry: true
+        }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    // 1. 立即设置 pending 状态, 让卡片立即出现
+    toolCall.approvalState = 'pending'
+
+    // 2. 后台解析图片: 按 image_prompt 字面键走 ImageIndexService 缓存 (永不过期)
+    try {
+      const parsed = JSON.parse(toolCall.arguments) as Record<string, Object>
+      const imageField = (parsed['image'] as string) ?? ''
+      const imagePrompt = (parsed['image_prompt'] as string) ?? ''
+
+      if (imageField !== '') {
+        parsed['image_path'] = imageField as Object
+        toolCall.arguments = JSON.stringify(parsed)
+        console.info('ToolExecutionService', 'picture_talk: using AI-provided image')
+      } else if (imagePrompt !== '') {
+        const imageIndex = getImageIndexService()
+        const ptKey = `pt:${imagePrompt.trim().toLowerCase()}`
+        console.info('ToolExecutionService', `picture_talk: resolving image for key="${ptKey.substring(0, 80)}..."`)
+        const generated = await imageIndex.generateAndStore(ImageSource.PICTURE_TALK, ptKey, imagePrompt)
+        if (generated !== null && generated.filePath !== '') {
+          parsed['image_path'] = generated.filePath as Object
+          toolCall.arguments = JSON.stringify(parsed)
+          console.info('ToolExecutionService', `picture_talk: image resolution SUCCESS: path="${generated.filePath}"`)
+        } else {
+          console.error('ToolExecutionService', 'picture_talk: image generation FAILED, card will show placeholder')
+        }
+      } else {
+        console.warn('ToolExecutionService', 'picture_talk: no image and no image_prompt, card will show placeholder')
+      }
+    } catch (error) {
+      console.error('ToolExecutionService', `picture_talk image resolution exception: ${JSON.stringify(error)}`)
+    }
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = PICTURE_TALK_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `picture_talk answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `picture_talk 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'picture_talk cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未完成看图说话' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `picture_talk answered: ${toolCall.id}`)
+    this.recordStarEvent('picture_talk', toolCall, context, answerJson)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
+  // chinese_quiz 特殊路径: 语文小练习 (四 mode 路由), 由 ChineseQuizCard 收集小朋友的选项 / 排序。
+  private async handleChineseQuiz(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = CHINESE_QUIZ_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '语文小练习'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 0. 预校验: mode 合法性 / options 数量与去重 / answer 在 options 内 /
+    //    sentence_order 的 answer 能由 words 还原等
+    const cqValidation = validateChineseQuizArgs(toolCall.arguments)
+    if (!cqValidation.ok) {
+      console.warn('ToolExecutionService', `chinese_quiz validation failed: ${cqValidation.error}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: 'validation_failed',
+          message: cqValidation.error,
+          should_retry: true
+        }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    // 1. 立即设置 pending 状态, 让卡片立即出现
+    toolCall.approvalState = 'pending'
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = CHINESE_QUIZ_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `chinese_quiz answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `chinese_quiz 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'chinese_quiz cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未回答该题目' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `chinese_quiz answered: ${toolCall.id}`)
+    this.recordStarEvent('chinese_quiz', toolCall, context, answerJson)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
   // number_puzzle 特殊路径: 与 math_quiz/english_quiz 类似, 挂起等待 NumberPuzzleCard 回答。
   // 卡片在 aboutToAppear 按 difficulty 自行洗牌, 这里不注入棋盘。
   // 历史会话的 legacy 工具名 huarongdao 由分发层兼容路由到这里。
@@ -2084,6 +2485,30 @@ export class ToolExecutionService {
     // 连一连配对互动工具, 由 MatchingPairsCard 收集小朋友的配对结果。
     if (isMatchingPairsFunctionName(normalizedFunctionName)) {
       return await this.handleMatchingPairs(toolCall, context)
+    }
+
+    // === hanzi_card 特殊路径 ===
+    // 汉字小课堂讲解卡, 由 HanziCard 收集「我学会了」完成回执。
+    if (isHanziCardFunctionName(normalizedFunctionName)) {
+      return await this.handleHanziCard(toolCall, context)
+    }
+
+    // === pinyin_card 特殊路径 ===
+    // 拼音小课堂讲解卡, 由 PinyinCard 收集「我学会了」完成回执。
+    if (isPinyinCardFunctionName(normalizedFunctionName)) {
+      return await this.handlePinyinCard(toolCall, context)
+    }
+
+    // === picture_talk 特殊路径 ===
+    // 看图说话卡, 由 PictureTalkCard 收集孩子的口语表达结果。
+    if (isPictureTalkFunctionName(normalizedFunctionName)) {
+      return await this.handlePictureTalk(toolCall, context)
+    }
+
+    // === chinese_quiz 特殊路径 ===
+    // 语文小练习 (四 mode 路由), 由 ChineseQuizCard 收集小朋友的选项 / 排序。
+    if (isChineseQuizFunctionName(normalizedFunctionName)) {
+      return await this.handleChineseQuiz(toolCall, context)
     }
 
     // 通过函数名获取工具 ID

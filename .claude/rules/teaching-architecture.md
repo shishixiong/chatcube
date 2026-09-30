@@ -11,7 +11,9 @@
 
 ## 1. 总览
 
-教学体系分三层：**教学策略**（AI 助手 + 系统提示词；v2 起为 1 个全科小星老师 + 4 个学科专用助手）→ **教学工具**（AI 调用的 20 个锁定工具 + 14 张互动卡片；小星老师锁 19，`math_teach` 为 kids_math 专属）→ **教学数据**（孩子画像 26 维技能 + 每日备课 + 星星奖励）。这三层通过 `ChatViewModel` 串成闭环：会话开始时注入今日教学目标（仅小星老师），AI 据孩子表现出题并更新画像，小星老师会话结束后 5 分钟防抖触发"备课老师"自动生成次日计划。
+教学体系分三层：**教学策略**（AI 助手 + 系统提示词；v2 起为 1 个全科小星老师 + 4 个学科专用助手）→ **教学工具**（AI 调用的 24 个锁定工具 + 18 张互动卡片；小星老师锁 23，`math_teach` 为 kids_math 专属）→ **教学数据**（孩子画像 28 维技能 + 每日备课 + 星星奖励）。这三层通过 `ChatViewModel` 串成闭环：会话开始时注入今日教学目标（仅小星老师），AI 据孩子表现出题并更新画像，小星老师会话结束后 5 分钟防抖触发"备课老师"自动生成次日计划。
+
+> **2026-09-30 语文套件 v2**：新增 hanzi_card / pinyin_card / picture_talk / chinese_quiz 四工具（讲解/练习二分）+ chinese_vocab / chinese_reading 两画像维度。实施记录见 `docs/superpowers/specs/2026-09-30-chinese-teaching-tools-implementation.md`。
 
 ---
 
@@ -28,7 +30,7 @@
 | `isDefault` | `true` | `Assistant` 构造函数按 id 判定 |
 | `sortOrder` | `0` | `createDefaultAssistant()` |
 | 系统提示词 | `DEFAULT_ASSISTANT_SYSTEM_PROMPT`（经 `utils/SharedPromptFragments.ets` 共享片段拼装，~60 行） | `models/AssistantModels.ets:32-95` |
-| 锁定工具 | 19 个（见 §4） | `DEFAULT_ASSISTANT_LOCKED_TOOL_IDS` |
+| 锁定工具 | 23 个（见 §4） | `DEFAULT_ASSISTANT_LOCKED_TOOL_IDS` |
 
 **锁定语义（v2 · 注册表驱动）**：`services/AssistantService.ets` 的 `normalizeAssistant()` 对**全部 5 个内置助手**（default + 4 学科）经 `getBuiltInAssistantSpec(id)`（`models/AssistantModels.ets:418`）查注册表，命中即强制覆盖 `name` / `systemPrompt` / `enabledToolIds`（取 `lockedToolIds` 副本）——用户在前端编辑时无法修改内置助手的名称、提示词与工具白名单。非内置 id 返回 `null`，仅做 trim/兜底规整。
 
@@ -43,7 +45,7 @@
 |----|------|--------------|-------|--------------|-----------|
 | `kids_math` | 小星数学老师 | 数 | #4E8FE0 | ask_user, child_profile, get_time_info, grant_star, math_verify, math_quiz, vertical_math, math_teach, matching_pairs | 1 |
 | `kids_english` | 小星英语老师 | 英 | #35A98A | ask_user, child_profile, get_time_info, grant_star, english_quiz, picture_vocab, listening_quiz | 2 |
-| `kids_chinese` | 小星语文老师 | 语 | #E2603C | ask_user, child_profile, get_time_info, grant_star, pinyin_quiz, handwriting_practice | 3 |
+| `kids_chinese` | 小星语文老师 | 语 | #E2603C | ask_user, child_profile, get_time_info, grant_star, pinyin_quiz, handwriting_practice, hanzi_card, pinyin_card, picture_talk, chinese_quiz | 3 |
 | `kids_games` | 小星游戏老师 | 玩 | #8B72E0 | ask_user, child_profile, get_time_info, grant_star, number_puzzle, maze, sudoku, matching_pairs, categorization | 4 |
 
 - 定义：`models/AssistantModels.ets` 的 `KIDS_SUBJECT_SPECS`（行 374-411）+ `createKidsSubjectAssistants()`（行 439）。系统提示词与小星老师同源（共用 `SharedPromptFragments.buildBasePrompt`），按学科裁剪；每科提示词约束 `child_profile(action:"update")` 只更新本学科维度。
@@ -106,7 +108,7 @@
 
 ## 4. 教学工具生态
 
-小星老师 **锁定 19 个工具**（§2 `DEFAULT_ASSISTANT_LOCKED_TOOL_IDS`），其中 13 个有 UI 互动卡片（含 `ask_user`，已并入锁定白名单），3 个纯后端（`child_profile`、`math_verify`、`grant_star`），2 个非互动生成类（`image_generation`、`music_generation`），外加 `get_time_info`。4 个学科助手各锁定其中一个子集（见 §2.1，均不含 image_generation / music_generation）；唯一例外是 kids_math 额外锁定小星老师集合之外的 `math_teach`（2026-09-27 起，见下表）。
+小星老师 **锁定 23 个工具**（§2 `DEFAULT_ASSISTANT_LOCKED_TOOL_IDS`），其中 17 个有 UI 互动卡片（含 `ask_user`，已并入锁定白名单），3 个纯后端（`child_profile`、`math_verify`、`grant_star`），2 个非互动生成类（`image_generation`、`music_generation`），外加 `get_time_info`。4 个学科助手各锁定其中一个子集（见 §2.1，均不含 image_generation / music_generation）；唯一例外是 kids_math 额外锁定小星老师集合之外的 `math_teach`（2026-09-27 起，见下表）。
 
 | 工具 ID | UI 卡片 | 是否锁定 | 备注 |
 |---------|---------|----------|------|
@@ -130,8 +132,14 @@
 | `pinyin_quiz` | `PinyinQuizCard.ets` | ✓ | 拼音认读，内置 72 字表 + 预校验 |
 | `matching_pairs` | `MatchingPairsCard.ets` | ✓ | 连一连观察配对，预校验 |
 | `ask_user` | `AskUserCard.ets` | ✓（v2 已并入锁定列表） | AI 反问 |
+| `hanzi_card` | `HanziCard.ets` | ✓ | 汉字小课堂（六步识字讲解 + 笔顺动画），讲解型回执，预校验 |
+| `pinyin_card` | `PinyinCard.ets` | ✓ | 拼音小课堂（拼装公式 + 四声 TTS 示范），讲解型回执，预校验 |
+| `picture_talk` | `PictureTalkCard.ets` | ✓ | 看图说话（生图 + ASR 口语），讲解型回执，预校验 |
+| `chinese_quiz` | `chinese/ChineseQuizCard.ets` | ✓ | 语文小练习 4 mode（word_build/sentence_order/lookalike/antonym），预校验 |
 
-**预校验 + should_retry**：`math_quiz` / `english_quiz` / `picture_vocab` / `listening_quiz` / `pinyin_quiz` / `matching_pairs` / `categorization` 的参数在进入 pending 前先经 `utils/*Validation.ets` 校验；坏题返回 `{error: 'validation_failed', should_retry: true}` 让 LLM 自行修正，不会渲染不可玩的卡片。
+**讲解/练习二分（2026-09-30 语文套件）**：`hanzi_card` / `pinyin_card` / `picture_talk` 为**讲解型**——无对错判定，`feedbackSuppressed = true` 永久抑制反馈横幅，孩子完成交互门槛后点「我学会了 · 继续」提交回执，`computeStars` 走 `completed === true → 1 星`（MathTeachCard 同款范式）；`chinese_quiz` 为**练习型**——即判即交，`correct === true → 1 星`。
+
+**预校验 + should_retry**：`math_quiz` / `english_quiz` / `picture_vocab` / `listening_quiz` / `pinyin_quiz` / `matching_pairs` / `categorization` / `hanzi_card` / `pinyin_card` / `picture_talk` / `chinese_quiz` 的参数在进入 pending 前先经 `utils/*Validation.ets` 校验；坏题返回 `{error: 'validation_failed', should_retry: true}` 让 LLM 自行修正，不会渲染不可玩的卡片。
 
 **`largeSize` 模式**：部分较复杂的卡片（数字华容道、学写字、分类等）支持双视图——内联（MessageBubble 内带气泡外壳）vs 全屏 sheet（ChatPage 大尺寸容器，透明背景让 sheet 接管）。其余卡片仅内联。
 
@@ -151,14 +159,14 @@
 | 缓存 | `ChildProfileService.cachedProfile` 字段 | 启动加载一次 |
 | 更新入口 | `child_profile(action:"update")` 工具 | AI 调用 → `ChildProfileExecutor.handleUpdate` (BuiltinTools.ets:817-870) |
 
-**26 维技能**（`ChildProfileService.ets` 的 `SKILL_DEFINITIONS`）：
+**28 维技能**（`ChildProfileService.ets` 的 `SKILL_DEFINITIONS`）：
 
 - **数学 10**：`math_counting` / `math_number_sense` / `math_addition` / `math_subtraction` / `math_multiply` / `math_divide` / `math_shapes` / `math_comparison` / `math_time` / `math_word_problem`
 - **英语 5**：`english_alphabet` / `english_vocab` / `english_sentence` / `english_phonics` / `english_reading`
 - **常识 3**：`general_nature` / `general_social` / `general_life`
 - **认知 3**：`logic_thinking` / `observation` / `spatial_reasoning`
 - **书写/小肌肉 4**：`fine_motor` / `english_writing` / `chinese_writing` / `categorization`
-- **语文 1**：`pinyin`（2026-09 新增，画像页归入「语文」分组，与 chinese_writing 同组）
+- **语文 3**：`pinyin` / `chinese_vocab`（识字组词）/ `chinese_reading`（阅读表达）——2026-09-30 语文套件 v2 由 1 维扩到 3 维，画像页归入「语文」分组
 
 每维 `level: 0-5`（0=未评估 1=入门 2=初步 3=中等 4=良好 5=精通），外加 `lastAssessed` 时间戳和 `notes` 观察备注。
 
@@ -277,7 +285,7 @@ ChatViewModel（会话结束路径）调 getLessonPlanningService().notifySessio
 - 模型：默认对话模型（`ModelRole.CHAT`）
 - 参数：`temperature=0.4`，`maxTokens=4096`，**关 reasoning**（避免 `<think>` 污染 JSON）
 - 提示词：`utils/LessonPlanPromptUtils.ets:27-93` 的 `PLANNER_SYSTEM_PROMPT`，以"经验丰富的 6-7 岁教学专家"人设
-- 输入 JSON：今日小星老师会话总结 + 26 维孩子画像弱项 + 昨日计划 + `planDate`（明天）
+- 输入 JSON：今日小星老师会话总结 + 28 维孩子画像弱项 + 昨日计划 + `planDate`（明天）
 - 输出清洗：`cleanPlannerJsonOutput()`（行 279-299）剥 `<think>` / 围栏 / 提取 `{...}` → `JSON.parse` → `parseLessonPlan` 带 fallback 水合
 
 ### 7.4 图片预生成（prefetchImages，行 955-1116）
@@ -307,7 +315,7 @@ ChatViewModel（会话结束路径）调 getLessonPlanningService().notifySessio
 | `daily_lesson_plans` | 每日教学计划 | `plan_date, plan_json, status, planner_provider_id/model_id, session_ids_json` |
 | `image_index` | 统一图片索引（替代原 prepared_media 表 + EnglishQuizImageIndex Preferences） | `source, key, file_path, expires_at, consumed_count, status` + 索引 `(source,key)` |
 | `prepared_media` | **已废弃**——保留表结构仅给 `getPlannerStats` 兜底读取历史统计 | `topic_key, file_path, consumed_count, expires_at, plan_id` (FK CASCADE) |
-| (Preferences) `child_profile_json` | 孩子画像 | 单条 JSON，26 维技能 + 强项/弱项标签 |
+| (Preferences) `child_profile_json` | 孩子画像 | 单条 JSON，28 维技能 + 强项/弱项标签 |
 
 ### 8.1 统一图片索引管线（`image_index` 单表 + `ImageSource` 枚举）
 
@@ -403,7 +411,7 @@ ChatViewModel（会话结束路径）调 getLessonPlanningService().notifySessio
 
 4. **4 模块非空校验**是抵御 LLM 自由发挥的关键防线——若不校验，模型倾向把内容堆到 `themeDescription`/`teacherNotes` 而 4 个模块全空，导致小星老师拿着空计划上课。
 
-5. **26 维技能 = 26 个枚举值**散落在多份 schema 定义中（`ChildProfileService.SKILL_DEFINITIONS`、`BuiltinTools.ets` 的 child_profile schema、`AssistantModels.ets` 的 5 份系统提示词——default + 4 学科各自引用维度子集）。**修改维度时必须多处同步**——不像 10 处漂移点有专门技能提醒，这个目前是 naked 风险（v2 起提示词从 1 份变 5 份，漂移面扩大）。
+5. **28 维技能 = 28 个枚举值**散落在多份 schema 定义中（`ChildProfileService.SKILL_DEFINITIONS`、`BuiltinTools.ets` 的 child_profile schema、`AssistantModels.ets` 的 5 份系统提示词——default + 4 学科各自引用维度子集）。**修改维度时必须多处同步**——不像 10 处漂移点有专门技能提醒，这个目前是 naked 风险（v2 起提示词从 1 份变 5 份，漂移面扩大）。
 
 6. **锁定工具 + 锁定系统提示词**是产品级硬约束：5 个内置助手（小星老师 + 4 学科老师）永远是它们自己，用户无法在前端"改个名字"破坏体验。这对面向低龄儿童的产品是正确取舍（避免家长/孩子误操作导致人格漂移），但也意味着任何"让内置助手更灵活"的尝试必须改注册表实现（`getBuiltInAssistantSpec` / `KIDS_SUBJECT_SPECS`）而非放开权限。
 
@@ -421,7 +429,7 @@ ChatViewModel（会话结束路径）调 getLessonPlanningService().notifySessio
 | `viewmodels/ChatViewModel.ets:311-383, 2743` | 提示词注入（`injectTeachingSections`）+ 会话结束通知 |
 | `services/LessonPlanningService.ets` | 备课老师完整管线 |
 | `utils/LessonPlanPromptUtils.ets` | 备课系统提示词 + 渲染 |
-| `services/ChildProfileService.ets` | 26 维技能定义 |
+| `services/ChildProfileService.ets` | 28 维技能定义 |
 | `services/StarRewardService.ets` | 星星计算 + 副作用 |
 | `models/StarEventModels.ets` | 10 处联合漂移点 |
 | `services/ToolExecutionService.ets` | 工具分发 + 星星事件 + 互动工具特殊处理器 |

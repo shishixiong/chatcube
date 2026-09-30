@@ -818,3 +818,32 @@ const STROKE_ORDER_ENTRIES: [string, HandwritingStroke[]][] = [
 ]
 
 const STROKE_ORDER_MAP: Map<string, HandwritingStroke[]> = new Map(STROKE_ORDER_ENTRIES)
+
+// 笔顺字典内的汉字字表（过滤掉字母描红条目），供 hanzi_card 工具 schema 描述与
+// HanziCardValidation 提示 AI 可选字范围。启动时构建一次并缓存。
+let strokeOrderHanziChars: string[] | null = null
+
+function isCJKChar(value: string): boolean {
+  if (value.length !== 1) {
+    return false
+  }
+  const code = value.charCodeAt(0)
+  return code >= 0x4E00 && code <= 0x9FFF
+}
+
+export function getStrokeOrderChars(): string[] {
+  if (strokeOrderHanziChars === null) {
+    const chars: string[] = []
+    STROKE_ORDER_ENTRIES.forEach((entry: [string, HandwritingStroke[]]) => {
+      if (isCJKChar(entry[0])) {
+        chars.push(entry[0])
+      }
+    })
+    strokeOrderHanziChars = chars
+  }
+  return strokeOrderHanziChars
+}
+
+export function getStrokeOrderCharsJoined(): string {
+  return getStrokeOrderChars().join(' ') as string
+}

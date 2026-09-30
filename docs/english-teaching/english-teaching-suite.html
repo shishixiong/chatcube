@@ -1,0 +1,1007 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>小星老师 · 英语教学台</title>
+<style>
+  /* ─── tokens ───────────────────────────────────────────────────── */
+  :root {
+    --bg:      oklch(98% 0.004 240);
+    --surface: oklch(100% 0 0);
+    --fg:      oklch(22% 0.02 240);
+    --muted:   oklch(50% 0.018 240);
+    --border:  oklch(90% 0.006 240);
+    --accent:  oklch(74% 0.16 62);
+
+    --ok:      oklch(62% 0.15 150);
+    --bad:     oklch(58% 0.19 25);
+    --info:    oklch(58% 0.11 250);
+
+    --accent-soft: color-mix(in oklch, var(--accent) 14%, transparent);
+    --fg-soft:     color-mix(in oklch, var(--fg) 6%, transparent);
+
+    --font-display: 'Yuanti SC', 'Hiragino Maru Gothic ProN', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
+    --font-body:    'PingFang SC', 'Hiragino Sans GB', system-ui, -apple-system, sans-serif;
+    --font-mono:    ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+
+    --radius: 12px;
+    --radius-lg: 18px;
+    --shadow: 0 1px 2px color-mix(in oklch, var(--fg) 6%, transparent), 0 8px 24px color-mix(in oklch, var(--fg) 5%, transparent);
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  img, svg { display: block; max-width: 100%; }
+  button { font: inherit; cursor: pointer; color: inherit; }
+  h1, h2, h3, h4, p { margin: 0; text-wrap: pretty; }
+  h2, h3 { text-wrap: balance; }
+  :focus-visible { outline: 2px solid var(--info); outline-offset: 2px; border-radius: 8px; }
+
+  /* ─── primitives ───────────────────────────────────────────────── */
+  .stack { display: flex; flex-direction: column; }
+  .stack > * + * { margin-top: 18px; }
+  .row { display: flex; align-items: center; gap: 14px; }
+  .row-between { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .grid-2-1 { display: grid; grid-template-columns: 1.9fr 1fr; gap: 26px; align-items: start; }
+
+  .h2 { font-family: var(--font-display); font-size: clamp(25px, 2.4vw, 31px); font-weight: 700; line-height: 1.3; letter-spacing: 0; }
+  .h3 { font-family: var(--font-display); font-size: 17px; font-weight: 700; letter-spacing: 0; }
+  .lead { font-size: 15px; color: var(--muted); max-width: 62ch; line-height: 1.75; }
+  .meta { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+  .eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--muted); font-size: 11.5px; background: var(--surface);
+  }
+  .tag.ok { border-color: color-mix(in oklch, var(--ok) 45%, var(--border)); color: color-mix(in oklch, var(--ok) 70%, var(--fg)); }
+  .tag.info { border-color: color-mix(in oklch, var(--info) 40%, var(--border)); color: color-mix(in oklch, var(--info) 66%, var(--fg)); }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 44px; padding: 10px 18px; border-radius: var(--radius);
+    border: 1px solid transparent; font-size: 14.5px; font-weight: 600;
+    transition: background .15s ease, border-color .15s ease, transform .06s ease;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: oklch(24% 0.03 62); border-color: var(--accent); }
+  .btn-primary:hover:not(:disabled) { background: color-mix(in oklch, var(--accent) 88%, black); }
+  .btn-secondary { background: var(--surface); color: var(--fg); border-color: var(--border); }
+  .btn-secondary:hover:not(:disabled) { border-color: var(--fg); }
+  .play { background: color-mix(in oklch, var(--info) 12%, var(--surface)); color: color-mix(in oklch, var(--info) 78%, var(--fg)); border-color: color-mix(in oklch, var(--info) 30%, var(--border)); }
+  .play:hover:not(:disabled) { background: color-mix(in oklch, var(--info) 20%, var(--surface)); }
+
+  /* ─── app shell ────────────────────────────────────────────────── */
+  .app { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: 100vh; }
+  .sidebar {
+    background: var(--surface); border-right: 1px solid var(--border);
+    padding: 20px 14px; display: flex; flex-direction: column; gap: 18px;
+    position: sticky; top: 0; height: 100vh;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 2px 6px; }
+  .brand-mark { width: 36px; height: 36px; border-radius: 11px; background: var(--accent); color: oklch(24% 0.03 62); display: grid; place-items: center; flex: none; }
+  .brand-mark svg { width: 20px; height: 20px; }
+  .brand-name { font-family: var(--font-display); font-weight: 700; font-size: 16px; display: block; }
+  .brand-sub { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+  .navgroup { display: flex; flex-direction: column; gap: 3px; }
+  .navgroup-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding: 6px 8px 4px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+    min-height: 44px; padding: 9px 10px; border-radius: 11px; border: 1px solid transparent;
+    font-size: 14px; background: transparent; transition: background .15s ease, border-color .15s ease;
+  }
+  .nav-item:hover { background: var(--fg-soft); }
+  .nav-item[aria-current="true"] { background: var(--bg); border-color: var(--border); font-weight: 600; }
+  .nav-ico { width: 18px; height: 18px; color: var(--muted); flex: none; }
+  .nav-item[aria-current="true"] .nav-ico { color: var(--fg); }
+  .nav-badge { margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; }
+
+  .learner { margin-top: auto; border: 1px solid var(--border); border-radius: 15px; padding: 13px; background: var(--bg); }
+  .learner-top { display: flex; align-items: center; gap: 10px; }
+  .avatar { width: 34px; height: 34px; border-radius: 50%; background: color-mix(in oklch, var(--info) 14%, var(--surface)); color: color-mix(in oklch, var(--info) 80%, var(--fg)); display: grid; place-items: center; font-weight: 700; font-size: 14px; flex: none; }
+  .star-count { display: inline-flex; align-items: center; gap: 4px; color: color-mix(in oklch, var(--accent) 58%, var(--fg)); font-family: var(--font-mono); font-size: 13px; font-weight: 600; }
+  .star-count svg { width: 14px; height: 14px; }
+
+  .main { min-width: 0; display: flex; flex-direction: column; }
+  .topbar { position: sticky; top: 0; z-index: 20; background: color-mix(in oklch, var(--bg) 88%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+  .topbar-inner { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 28px; }
+  .crumb { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+  .crumb b { color: var(--fg); font-weight: 600; }
+  .screen { padding: 30px 28px 72px; max-width: 1180px; width: 100%; }
+  .screen[hidden] { display: none; }
+
+  /* ─── screen header ────────────────────────────────────────────── */
+  .screen-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 30px; }
+  .screen-head .eyebrow { display: block; margin-bottom: 10px; }
+
+  /* ─── word strip (signature flourish) ──────────────────────────── */
+  .wordstrip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .wordcard {
+    display: flex; align-items: center; gap: 14px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px;
+  }
+  .wordcard img { width: 52px; height: 52px; flex: none; }
+  .wordcard .en { font-family: var(--font-display); font-size: 19px; font-weight: 700; display: block; }
+  .wordcard .zh { font-size: 12.5px; color: var(--muted); }
+  .pool { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .pool img { width: 30px; height: 30px; }
+  .pool .sep { color: var(--border); }
+
+  /* ─── stepper ──────────────────────────────────────────────────── */
+  .stepper { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .step {
+    text-align: left; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 15px; padding: 14px; transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+  }
+  .step:hover { border-color: color-mix(in oklch, var(--fg) 22%, var(--border)); }
+  .step[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in oklch, var(--accent) 7%, var(--surface)); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .step-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .step-num { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  .step-name { font-weight: 700; font-size: 14.5px; display: block; margin-top: 10px; }
+  .step-en { font-family: var(--font-mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .step-goal { font-size: 12.5px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+  .step-tool { display: block; margin-top: 10px; font-family: var(--font-mono); font-size: 10.5px; color: color-mix(in oklch, var(--info) 62%, var(--fg)); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--border); flex: none; }
+  .dot.done { background: var(--ok); border-color: var(--ok); }
+  .dot.now  { background: var(--accent); border-color: var(--accent); }
+
+  /* ─── level bars ───────────────────────────────────────────────── */
+  .levelrow { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }
+  .levelname { font-size: 13px; }
+  .levelval { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  .levelbar { grid-column: 1 / -1; display: flex; gap: 3px; }
+  .seg { flex: 1; height: 7px; border-radius: 3px; background: var(--fg-soft); }
+  .seg.on { background: var(--info); }
+
+  /* ─── timeline ─────────────────────────────────────────────────── */
+  .trow { display: grid; grid-template-columns: 78px 1fr auto; gap: 14px; align-items: center; padding: 13px 0; border-top: 1px solid var(--border); }
+  .trow:first-child { border-top: 0; }
+  .tstep { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  .tname { font-size: 14px; font-weight: 600; }
+  .tdesc { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+
+  /* ─── mode list ────────────────────────────────────────────────── */
+  .mode-item {
+    display: flex; flex-direction: column; gap: 5px; width: 100%; text-align: left;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px 13px;
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .mode-item:hover { border-color: color-mix(in oklch, var(--fg) 22%, var(--border)); }
+  .mode-item[aria-pressed="true"] { border-color: var(--info); background: color-mix(in oklch, var(--info) 6%, var(--surface)); }
+  .mode-item-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .mode-zh { font-weight: 700; font-size: 14.5px; }
+  .mode-id { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+  .mode-desc { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+
+  /* ─── stage card (interactive demo) ────────────────────────────── */
+  .stage-card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 20px; box-shadow: var(--shadow); }
+  .stage-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+  .stage-q { font-size: 17px; font-weight: 600; margin: 16px 0 14px; }
+  .stage-q small { display: block; font-weight: 400; font-size: 12.5px; color: var(--muted); margin-top: 5px; }
+  .stage-sentence { font-family: var(--font-display); font-size: 22px; font-weight: 700; }
+
+  .imgframe {
+    position: relative; border-radius: 15px; border: 1px solid var(--border); aspect-ratio: 16 / 10;
+    display: grid; place-items: center; overflow: hidden; background: var(--surface);
+  }
+  .imgframe .cap {
+    position: absolute; left: 10px; top: 10px; font-family: var(--font-mono); font-size: 10px; color: var(--muted);
+    background: color-mix(in oklch, var(--surface) 86%, transparent); border: 1px solid var(--border); border-radius: 999px; padding: 3px 8px;
+  }
+  .imgframe .note { position: absolute; left: 10px; right: 10px; bottom: 10px; font-family: var(--font-mono); font-size: 10px; line-height: 1.4; color: var(--muted); }
+  .imgframe img { width: auto; height: 62%; max-height: 62%; object-fit: contain; }
+
+  .options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 16px; }
+  .opt {
+    display: flex; align-items: center; gap: 11px; min-height: 56px; padding: 12px 15px; text-align: left;
+    background: var(--surface); border: 1.5px solid var(--border); border-radius: 13px; font-size: 16px; font-weight: 600;
+    transition: border-color .15s ease, background .15s ease, transform .06s ease;
+  }
+  .opt:hover:not(:disabled) { border-color: var(--fg); }
+  .opt:active:not(:disabled) { transform: translateY(1px); }
+  .opt .idx { width: 24px; height: 24px; border-radius: 7px; background: var(--fg-soft); color: var(--muted); display: grid; place-items: center; font-family: var(--font-mono); font-size: 11px; flex: none; }
+  .opt.correct { border-color: var(--ok); background: color-mix(in oklch, var(--ok) 11%, var(--surface)); color: color-mix(in oklch, var(--ok) 62%, var(--fg)); }
+  .opt.correct .idx { background: color-mix(in oklch, var(--ok) 22%, var(--surface)); color: color-mix(in oklch, var(--ok) 75%, var(--fg)); }
+  .opt.wrong { border-color: var(--bad); background: color-mix(in oklch, var(--bad) 9%, var(--surface)); color: color-mix(in oklch, var(--bad) 66%, var(--fg)); }
+  .opt.wrong .idx { background: color-mix(in oklch, var(--bad) 18%, var(--surface)); color: color-mix(in oklch, var(--bad) 78%, var(--fg)); }
+  .opt:disabled { cursor: default; }
+
+  .feedback { margin-top: 16px; border-radius: 14px; padding: 13px 15px; border: 1px solid var(--border); background: var(--bg); display: flex; gap: 11px; align-items: flex-start; }
+  .feedback .who { width: 28px; height: 28px; border-radius: 50%; background: color-mix(in oklch, var(--info) 14%, var(--surface)); color: color-mix(in oklch, var(--info) 78%, var(--fg)); display: grid; place-items: center; flex: none; }
+  .feedback .who svg { width: 15px; height: 15px; }
+  .feedback p { font-size: 13.5px; line-height: 1.6; }
+  .feedback.ok { border-color: color-mix(in oklch, var(--ok) 40%, var(--border)); }
+  .feedback.no { border-color: color-mix(in oklch, var(--bad) 36%, var(--border)); }
+
+  .tracepad { margin-top: 16px; border: 1.5px dashed var(--border); border-radius: 15px; aspect-ratio: 16/7; display: grid; place-items: center; position: relative; background: var(--surface); }
+  .tracepad .glyph { font-family: var(--font-display); font-size: 90px; font-weight: 700; color: color-mix(in oklch, var(--fg) 8%, var(--surface)); }
+  .tracepad .hint { position: absolute; bottom: 10px; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+  .tracepad .stroke { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 3px; height: 74px; background: var(--info); border-radius: 3px; opacity: 0; transition: opacity .3s ease; }
+  .tracepad.drawing .stroke { opacity: 1; animation: draw .9s ease forwards; }
+  @keyframes draw { 0% { height: 0; } 100% { height: 74px; } }
+
+  .score { display: grid; grid-template-columns: 1fr; gap: 9px; margin-top: 16px; }
+  .scorerow { display: grid; grid-template-columns: 74px 1fr 34px; gap: 10px; align-items: center; font-size: 12.5px; }
+  .scorebar { height: 8px; border-radius: 999px; background: var(--fg-soft); overflow: hidden; }
+  .scorebar i { display: block; height: 100%; width: 0; background: var(--ok); border-radius: 999px; transition: width .6s ease; }
+  .mic-wrap { margin-top: 16px; display: flex; align-items: center; gap: 14px; }
+  .mic-btn { width: 60px; height: 60px; border-radius: 50%; border: 1.5px solid var(--border); background: var(--surface); display: grid; place-items: center; transition: border-color .15s ease, background .15s ease; }
+  .mic-btn svg { width: 24px; height: 24px; color: color-mix(in oklch, var(--info) 80%, var(--fg)); }
+  .mic-btn:hover { border-color: var(--info); }
+  .mic-btn.rec { background: color-mix(in oklch, var(--bad) 10%, var(--surface)); border-color: var(--bad); }
+  .mic-btn.rec svg { color: var(--bad); }
+  .wave { display: flex; align-items: center; gap: 3px; height: 40px; }
+  .wave i { width: 3px; border-radius: 3px; background: color-mix(in oklch, var(--info) 45%, var(--border)); height: 8px; }
+
+  /* ─── composer ─────────────────────────────────────────────────── */
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 12.5px; color: var(--muted); font-weight: 500; }
+  .input, .select {
+    width: 100%; min-height: 42px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--fg); font: inherit; font-size: 14px;
+  }
+  .input:focus, .select:focus { outline: none; border-color: var(--info); box-shadow: 0 0 0 3px color-mix(in oklch, var(--info) 18%, transparent); }
+  input[type="range"] { width: 100%; accent-color: var(--info); min-height: 24px; }
+  .slider-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .slider-head b { font-family: var(--font-mono); font-size: 13px; }
+
+  .code { font-family: var(--font-mono); font-size: 12px; line-height: 1.7; background: color-mix(in oklch, var(--fg) 4%, var(--surface)); border: 1px solid var(--border); border-radius: 12px; padding: 14px; overflow: auto; white-space: pre; max-height: 340px; }
+  .tok-key { color: color-mix(in oklch, var(--info) 68%, var(--fg)); }
+  .tok-str { color: color-mix(in oklch, var(--ok) 78%, var(--fg)); }
+  .tok-num { color: color-mix(in oklch, var(--bad) 78%, var(--fg)); }
+  .tok-bool { color: color-mix(in oklch, var(--fg) 70%, var(--muted)); }
+
+  .check { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-top: 1px solid var(--border); font-size: 13px; }
+  .check:first-child { border-top: 0; }
+  .check .mk { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; flex: none; margin-top: 1px; }
+  .check .mk svg { width: 11px; height: 11px; }
+  .check.pass .mk { background: color-mix(in oklch, var(--ok) 16%, var(--surface)); color: color-mix(in oklch, var(--ok) 80%, var(--fg)); }
+  .check.fail .mk { background: color-mix(in oklch, var(--bad) 15%, var(--surface)); color: color-mix(in oklch, var(--bad) 82%, var(--fg)); }
+  .check.fail .lbl { color: color-mix(in oklch, var(--bad) 72%, var(--fg)); }
+  .check .lbl .fix { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+  .mini { border: 1px solid var(--border); border-radius: 16px; padding: 16px; background: var(--bg); }
+  .mini .opts { display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; margin-top: 12px; }
+  .mini .o { border: 1.5px solid var(--border); border-radius: 11px; padding: 9px 12px; font-size: 14px; font-weight: 600; background: var(--surface); }
+  .mini .o.correct { border-color: var(--ok); color: color-mix(in oklch, var(--ok) 62%, var(--fg)); background: color-mix(in oklch, var(--ok) 9%, var(--surface)); }
+  .mini .thumb { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+  .mini .thumb img { width: 56px; height: 56px; }
+
+  /* ─── compare ──────────────────────────────────────────────────── */
+  .cmp-old { border: 1px solid var(--border); border-radius: 15px; padding: 16px; background: color-mix(in oklch, var(--bad) 4%, var(--surface)); }
+  .cmp-new { border: 1px solid color-mix(in oklch, var(--ok) 42%, var(--border)); border-radius: 15px; padding: 16px; background: color-mix(in oklch, var(--ok) 5%, var(--surface)); }
+  .cmp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+
+  .ds-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .ds-table th, .ds-table td { padding: 11px 13px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .ds-table th { color: var(--muted); font-weight: 500; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .ds-table tbody tr:hover { background: var(--fg-soft); }
+  .ds-table code { font-family: var(--font-mono); font-size: 12px; background: var(--fg-soft); padding: 1px 5px; border-radius: 5px; }
+
+  .rule { border: 0; border-top: 1px solid var(--border); margin: 0; }
+  .muted { color: var(--muted); }
+
+  @media (max-width: 1040px) {
+    .stepper { grid-template-columns: repeat(2, 1fr); }
+    .wordstrip { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 920px) {
+    .app { grid-template-columns: 1fr; }
+    .sidebar { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 12px; }
+    .navgroup { flex-direction: row; flex-wrap: wrap; }
+    .navgroup-label { display: none; }
+    .learner { margin: 0; }
+    .grid-2, .grid-3, .grid-2-1, .wordstrip { grid-template-columns: 1fr; }
+    .stepper { grid-template-columns: 1fr; }
+    .screen, .topbar-inner { padding-inline: 18px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-star" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.6l2.7 5.9 6.3.7-4.7 4.3 1.3 6.2L12 16.5 6.4 19.7l1.3-6.2L3 9.2l6.3-.7z"/></symbol> <symbol id="i-board" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6"/></symbol> <symbol id="i-cards" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="14" height="14" rx="2.2"/><path d="M7 7V5.2A2.2 2.2 0 0 1 9.2 3H19a2 2 0 0 1 2 2v9.8A2.2 2.2 0 0 1 18.8 17H17"/></symbol> <symbol id="i-compose" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2.1" fill="var(--surface)"/><circle cx="15" cy="12" r="2.1" fill="var(--surface)"/><circle cx="7" cy="17" r="2.1" fill="var(--surface)"/></symbol>
+  <symbol id="i-prompt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 7.5L4 12l4.5 4.5M15.5 7.5L20 12l-4.5 4.5"/></symbol> <symbol id="i-speaker" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z"/><path d="M16 9a4 4 0 0 1 0 6M18.8 6.6a8 8 0 0 1 0 10.8"/></symbol> <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></symbol> <symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.4"/><circle cx="9" cy="10" r="1.8"/><path d="M4 18l5-5 4 4 3-3 4 4"/></symbol>
+  <symbol id="i-spell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18L9 6l5 12M5.6 14h6.8"/><path d="M17 9h4M19 9v9"/></symbol> <symbol id="i-sentence" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 7h16M4 12h9M4 17h13"/></symbol> <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1 10-10-3-3L5 16z"/><path d="M14 6l3 3"/></symbol> <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></symbol> <symbol id="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.8l12 7.2-12 7.2z"/></symbol> <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M12 6l6 6-6 6"/></symbol>
+</svg>
+
+<div class="app">
+  <aside class="sidebar" data-od-id="sidebar">
+    <div class="brand">
+      <span class="brand-mark"><svg><use href="#i-star"/></svg></span>
+      <span>
+        <span class="brand-name">小星老师</span>
+        <span class="brand-sub">ENGLISH SUITE v2</span>
+      </span>
+    </div>
+
+    <nav class="navgroup" aria-label="教学模块">
+      <span class="navgroup-label">教学</span>
+      <button class="nav-item" data-nav="teach" aria-current="true">
+        <svg class="nav-ico"><use href="#i-board"/></svg> 今日英语课 <span class="nav-badge">5 步</span>
+      </button>
+      <button class="nav-item" data-nav="cards">
+        <svg class="nav-ico"><use href="#i-cards"/></svg> 互动题型 <span class="nav-badge">6 种</span>
+      </button>
+      <button class="nav-item" data-nav="compose">
+        <svg class="nav-ico"><use href="#i-compose"/></svg> 出题工作台
+      </button>
+      <button class="nav-item" data-nav="prompt">
+        <svg class="nav-ico"><use href="#i-prompt"/></svg> Prompt 契约
+      </button>
+    </nav>
+
+    <div class="learner" data-od-id="learner-card">
+      <div class="learner-top">
+        <span class="avatar">朵</span>
+        <span style="flex:1; min-width:0;">
+          <span style="font-size:14px; font-weight:600; display:block;">朵朵 · 6 岁</span>
+          <span class="meta">英语 4 维已建档</span>
+        </span>
+      </div>
+      <div class="row-between" style="margin-top:12px;">
+        <span class="meta">今日奖励</span>
+        <span class="star-count"><svg><use href="#i-star"/></svg><span id="starCount">5</span> 星</span>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <span class="crumb">小星老师 / <b id="crumbName">今日英语课</b></span>
+        <span class="row" style="gap:8px;">
+          <span class="tag info">英语 · 4 维</span>
+          <span class="tag">备课主题 · 水果与颜色</span>
+        </span>
+      </div>
+    </header>
+
+    <!-- ═══ Screen 1 · 今日英语课 ═══ -->
+    <section class="screen" id="screen-teach" data-od-id="screen-teach">
+      <div class="screen-head">
+        <div>
+          <p class="eyebrow">TODAY · ENGLISH</p>
+          <h2 class="h2">水果与颜色 · Fruit &amp; Colours</h2>
+          <p class="lead" style="margin-top:10px;">今日目标：认识 3 个水果词、会用 <b>I like ___.</b> 表达喜好。先复习旧词，再开口说一句完整的话。</p>
+        </div>
+        <div class="row" style="gap:8px;">
+          <span class="tag">本课约 12 分钟</span>
+          <span class="tag info">难度 L2–L3</span>
+        </div>
+      </div>
+
+      <div class="card" data-od-id="lesson-words" style="padding:18px 20px;">
+        <div class="row-between" style="margin-bottom:14px;">
+          <h3 class="h3">本课核心词</h3>
+          <span class="meta">主题 Fruit · 3 词</span>
+        </div>
+        <div class="wordstrip" id="wordStrip"></div>
+        <div class="row" style="margin-top:16px; gap:12px; flex-wrap:wrap;">
+          <span class="meta" style="flex:none;">主题词池</span>
+          <span class="pool" id="wordPool"></span>
+        </div>
+      </div>
+
+      <p class="eyebrow" style="margin:30px 0 14px;">五步英语课 · 点一步看怎么上</p>
+      <div class="stepper" id="stepper" data-od-id="stepper"></div>
+
+      <div class="grid-2-1" style="margin-top:30px;">
+        <div class="card" data-od-id="lesson-flow">
+          <div class="row-between" style="margin-bottom:6px;">
+            <h3 class="h3">本课卡片流程</h3>
+            <span class="meta" id="flowStageNote">当前聚焦 · 操练 Practice</span>
+          </div>
+          <div id="flowList"></div>
+        </div>
+
+        <div class="stack">
+          <div class="card" data-od-id="english-profile">
+            <h3 class="h3" style="margin-bottom:4px;">朵朵 · 英语画像</h3>
+            <p class="meta" style="margin-bottom:16px;">来自 child_profile，决定每步难度</p>
+            <div class="stack" id="profileBars" style="gap:14px;"></div>
+          </div>
+          <div class="card" data-od-id="lesson-outcome">
+            <h3 class="h3" style="margin-bottom:14px;">本课产出</h3>
+            <div class="stack" style="gap:10px;">
+              <div class="row-between"><span style="font-size:13.5px;">核心词</span><span class="num" style="font-size:13px;">apple · pear · grape</span></div>
+              <div class="row-between"><span style="font-size:13.5px;">核心句型</span><span class="num" style="font-size:13px;">I like ___.</span></div>
+              <div class="row-between"><span style="font-size:13.5px;">拼读规则</span><span class="num" style="font-size:13px;">short a (/æ/)</span></div>
+              <hr class="rule" style="margin:4px 0;">
+              <p class="meta" style="line-height:1.7;">复习钩子：明天用「Do you like ___?」接今天的水果词。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Screen 2 · 互动题型 ═══ -->
+    <section class="screen" id="screen-cards" hidden data-od-id="screen-cards">
+      <div class="screen-head">
+        <div>
+          <p class="eyebrow">INTERACTIONS · 6 MODES</p>
+          <h2 class="h2">六种题型，一条主线</h2>
+          <p class="lead" style="margin-top:10px;">不再是「看图认单词」一种。每种题型对不同的英语能力，按五步课的顺序出现。点左侧切换，右侧可直接作答。</p>
+        </div>
+        <span class="tag">真实交互 · 授星</span>
+      </div>
+
+      <div class="grid-2-1">
+        <div class="stack" style="gap:10px;" id="modeList" data-od-id="mode-list"></div>
+        <div class="stack">
+          <div class="stage-card" id="stageCard" data-od-id="stage-card"></div>
+          <div class="card" style="padding:14px 16px;">
+            <p class="meta" id="modeSkillNote" style="line-height:1.7;"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Screen 3 · 出题工作台 ═══ -->
+    <section class="screen" id="screen-compose" hidden data-od-id="screen-compose">
+      <div class="screen-head">
+        <div>
+          <p class="eyebrow">QUIZ COMPOSER</p>
+          <h2 class="h2">出题工作台</h2>
+          <p class="lead" style="margin-top:10px;">选阶段、选题型、填目标词——右侧实时生成 <b>english_quiz</b> 工具调用，并在渲染前跑一遍预校验。坏题不再直接给孩子。</p>
+        </div>
+        <span class="tag info">english_quiz v2</span>
+      </div>
+
+      <div class="grid-2-1">
+        <div class="card stack" data-od-id="composer-form">
+          <div class="grid-2">
+            <div class="field">
+              <label for="fStage">教学阶段 stage</label>
+              <select class="select" id="fStage">
+                <option value="warm_up">① 热身 Warm-up</option>
+                <option value="presentation">② 呈现 Presentation</option>
+                <option value="practice" selected>③ 操练 Practice</option>
+                <option value="production">④ 输出 Production</option>
+                <option value="review">⑤ 复习 Review</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="fMode">题型 mode</label>
+              <select class="select" id="fMode"></select>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label for="fTheme">主题 theme</label>
+              <input class="input" id="fTheme" value="短元音 a" />
+            </div>
+            <div class="field">
+              <label for="fTarget">目标词 / 句型</label>
+              <input class="input" id="fTarget" value="ham" />
+            </div>
+          </div>
+          <div class="field">
+            <span class="slider-head"><label for="fDiff">难度 difficulty</label><b><span id="diffVal">2</span> / 5</b></span>
+            <input type="range" id="fDiff" min="1" max="5" step="1" value="2" />
+          </div>
+          <hr class="rule">
+          <div class="row-between">
+            <button class="btn btn-primary" id="btnPreview"><svg width="16" height="16"><use href="#i-arrow"/></svg> 出题预览</button>
+            <span class="meta" id="composeHint">预校验通过后才可出题</span>
+          </div>
+          <div id="previewSlot"></div>
+        </div>
+
+        <div class="stack">
+          <div class="card" data-od-id="compose-json">
+            <div class="row-between" style="margin-bottom:10px;">
+              <h3 class="h3">生成的工具调用</h3>
+              <span class="meta">arguments</span>
+            </div>
+            <div class="code" id="jsonOut"></div>
+          </div>
+          <div class="card" data-od-id="compose-checks">
+            <h3 class="h3" style="margin-bottom:6px;">预校验</h3>
+            <div id="checkList"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Screen 4 · Prompt 契约 ═══ -->
+    <section class="screen" id="screen-prompt" hidden data-od-id="screen-prompt">
+      <div class="screen-head">
+        <div>
+          <p class="eyebrow">PROMPT &amp; CONTRACT</p>
+          <h2 class="h2">把「即兴发挥」换成「有契约」</h2>
+          <p class="lead" style="margin-top:10px;">英语段从 3 行扩成五步协议，出题从「随便出」变成「按 mode 出，且能被程序校验」。整体行数基本持平，token 不显著增加。</p>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:28px;">
+        <div class="cmp-old" data-od-id="prompt-before">
+          <div class="cmp-head"><span class="tag" style="border-color:color-mix(in oklch,var(--bad) 40%,var(--border));color:color-mix(in oklch,var(--bad) 75%,var(--fg));">改动前</span><span class="meta">3 行 · 只讲用什么工具</span></div>
+          <div class="code" style="background:transparent;border:0;padding:0;max-height:none;">【英语】4 维:english_alphabet / vocab /
+sentence / phonics。出题用 english_quiz,
+自然拼读用 phonics_choice 类型…</div>
+        </div>
+        <div class="cmp-new" data-od-id="prompt-after">
+          <div class="cmp-head"><span class="tag ok">改动后</span><span class="meta">五步协议 · mode 契约 · 纠错话术</span></div>
+          <div class="code" style="background:transparent;border:0;padding:0;max-height:none;">## 英语（五步课）
+① 热身:english_quiz(listen_choice) 听音选词
+② 呈现:picture_vocab(en) + read_aloud 跟读
+③ 操练:phonics_blend 拼读 + listening_quiz
+④ 输出:sentence_fill 句型 + read_aloud 整句
+⑤ 复习:matching_pairs 配对 + letter_trace
+…每步 1-2 题，词不离句，主题不跨类</div>
+        </div>
+      </div>
+
+      <div class="card" data-od-id="mode-contract" style="margin-bottom:24px;">
+        <h3 class="h3" style="margin-bottom:4px;">english_quiz v2 · mode 六选一</h3>
+        <p class="meta" style="margin-bottom:16px;">不新增工具，把 question_type 升级为 mode；旧调用保留兼容映射。</p>
+        <div style="overflow:auto;">
+          <table class="ds-table">
+            <thead><tr><th>mode</th><th>关键参数</th><th>对应能力</th></tr></thead>
+            <tbody>
+              <tr><td><code>listen_choice</code></td><td>word · tts_text · options[4]</td><td>听音辨词 english_alphabet</td></tr>
+              <tr><td><code>picture_word</code></td><td>image_prompt · options[4]</td><td>看图识词 english_vocab</td></tr>
+              <tr><td><code>phonics_blend</code></td><td>word · phonics_rule · options[4]</td><td>自然拼读 english_phonics</td></tr>
+              <tr><td><code>sentence_fill</code></td><td>pattern · answer · options[4]</td><td>句型操练 english_sentence</td></tr>
+              <tr><td><code>read_aloud</code></td><td>target_text · phonetic_hint</td><td>跟读评测 english_sentence</td></tr>
+              <tr><td><code>letter_trace</code></td><td>letter · case</td><td>字母书写 english_writing</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card" data-od-id="validation-rules">
+          <h3 class="h3" style="margin-bottom:14px;">预校验新增规则</h3>
+          <div id="ruleList"></div>
+        </div>
+        <div class="card" data-od-id="anti-patterns">
+          <h3 class="h3" style="margin-bottom:14px;">明确禁止的坏题</h3>
+          <div class="stack" style="gap:12px;">
+            <p style="font-size:13.5px;"><b>跨类干扰项</b><br><span class="muted">apple / bus / red 混在一道看图题里。</span></p>
+            <p style="font-size:13.5px;"><b>拼读规则不成立</b><br><span class="muted">声明 short a，却混进 car（r 控制音）。</span></p>
+            <p style="font-size:13.5px;"><b>空格数不对</b><br><span class="muted">句型里出现 0 个或 2 个 ___。</span></p>
+            <p style="font-size:13.5px;"><b>超长跟读句</b><br><span class="muted">L1 孩子却给 9 个词的长句。</span></p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+
+  /* ── first-party illustrated word icons ──────────────────────────
+     apple/pear/grapes/banana/orange/peach/cat/car/bat/ham copied from the
+     chatcube repo · entry/src/main/resources/rawfile/kids/icons
+     (MIT License, Copyright (c) 2026 longlivey).
+     cap/can/map/grape hand-authored in the same 64×64 flat-vector style
+     (media generation was unavailable in this run). */
+  var ICON = {
+    apple: 'assets/icons/apple.svg', pear: 'assets/icons/pear.svg', grapes: 'assets/icons/grapes.svg',
+    banana: 'assets/icons/banana.svg', orange: 'assets/icons/orange.svg', peach: 'assets/icons/peach.svg',
+    grape: 'assets/icons/grape.svg', cap: 'assets/icons/cap.svg', can: 'assets/icons/can.svg', map: 'assets/icons/map.svg',
+    cat: 'assets/icons/cat.svg', car: 'assets/icons/car.svg', bat: 'assets/icons/bat.svg', ham: 'assets/icons/ham.svg'
+  };
+  var WORD_ZH = { apple: '苹果', pear: '梨', grapes: '葡萄', banana: '香蕉', orange: '橙子', peach: '桃子', grape: '葡萄', cap: '帽子', can: '易拉罐', map: '地图', cat: '小猫', car: '汽车', bat: '蝙蝠', ham: '火腿' };
+  function wordImg(w, cls, size) {
+    var src = ICON[w]; if (!src) return '';
+    return '<img src="' + src + '"' + (cls ? ' class="' + cls + '"' : '') + ' width="' + (size || 64) + '" height="' + (size || 64) + '" alt="' + (WORD_ZH[w] || w) + '" loading="lazy" />';
+  }
+
+  /* ── shared data ─────────────────────────────────────────────── */
+  var PROFILE = { english_alphabet: 2, english_vocab: 3, english_sentence: 1, english_phonics: 2, english_writing: 1 };
+  var PROFILE_LABEL = {
+    english_alphabet: '字母与字母音', english_vocab: '词汇量', english_sentence: '句子表达', english_phonics: '自然拼读', english_writing: '字母书写'
+  };
+  var POOL = {
+    '动物': ['cat', 'dog', 'pig', 'duck', 'hen', 'cow'],
+    '水果': ['apple', 'pear', 'banana', 'orange', 'grapes', 'peach', 'grape'],
+    '食物': ['cake', 'milk', 'rice', 'bread', 'egg', 'fish'],
+    'SHORT_A': ['ham', 'cat', 'map', 'bat', 'cap', 'can']
+  };
+  var STAGES = [
+    { id: 'warm_up', zh: '热身', en: 'Warm-up', goal: '唤醒旧词，先开口', tool: 'listen_choice' },
+    { id: 'presentation', zh: '呈现', en: 'Presentation', goal: '新词首次输入：音—形—义', tool: 'picture_word' },
+    { id: 'practice', zh: '操练', en: 'Practice', goal: '高频重复，辨音辨形', tool: 'phonics_blend' },
+    { id: 'production', zh: '输出', en: 'Production', goal: '词不离句，真实表达', tool: 'sentence_fill' },
+    { id: 'review', zh: '复习', en: 'Review', goal: '归因巩固，留个钩子', tool: 'letter_trace' }
+  ];
+  var MODES = [
+    { id: 'listen_choice', zh: '听音选词', icon: 'i-speaker', desc: 'TTS 朗读一个词，从 4 个同韵词里选出听到的', skill: 'english_alphabet', stage: 'warm_up', theme: '动物', target: 'cat', pool: '动物', diff: 2 },
+    { id: 'picture_word', zh: '看图选词', icon: 'i-image', desc: '看图，从 4 个同主题词里选出对应的英文', skill: 'english_vocab', stage: 'presentation', theme: '水果', target: 'apple', pool: '水果', diff: 3 },
+    { id: 'phonics_blend', zh: '拼读拼词', icon: 'i-spell', desc: '按自然拼读规则辨音选词，干扰项同音族', skill: 'english_phonics', stage: 'practice', theme: '短元音 a', target: 'ham', pool: 'SHORT_A', diff: 2 },
+    { id: 'sentence_fill', zh: '句型操练', icon: 'i-sentence', desc: '词不离句，从 4 个词里选词补全句型', skill: 'english_sentence', stage: 'production', theme: '食物', target: 'apples', pool: '食物', diff: 1 },
+    { id: 'read_aloud', zh: '跟读评测', icon: 'i-mic', desc: '看清句跟读，录音后给出发音评分', skill: 'english_sentence', stage: 'production', theme: '日常', target: 'I like red apples.', pool: '', diff: 1 },
+    { id: 'letter_trace', zh: '字母书写', icon: 'i-pencil', desc: '按笔顺描红一个字母，联动学写字', skill: 'english_writing', stage: 'review', theme: '字母', target: 'A', pool: '', diff: 1 }
+  ];
+  function modeById(id) { for (var i = 0; i < MODES.length; i++) { if (MODES[i].id === id) return MODES[i]; } return MODES[0]; }
+  function deriveOptions(target, key) {
+    var pool = POOL[key] || [], out = [];
+    if (target) out.push(target);
+    for (var i = 0; i < pool.length; i++) { if (out.length >= 4) break; if (out.indexOf(pool[i]) === -1) out.push(pool[i]); }
+    return out.slice(0, 4);
+  }
+
+  /* ── navigation ──────────────────────────────────────────────── */
+  var NAV = { teach: '今日英语课', cards: '互动题型', compose: '出题工作台', prompt: 'Prompt 契约' };
+  var SCREENS = { teach: 'screen-teach', cards: 'screen-cards', compose: 'screen-compose', prompt: 'screen-prompt' };
+  function showScreen(key) {
+    Object.keys(SCREENS).forEach(function (k) {
+      var el = document.getElementById(SCREENS[k]);
+      if (el) el.hidden = (k !== key);
+    });
+    $$('.nav-item').forEach(function (b) { b.setAttribute('aria-current', String(b.dataset.nav === key)); });
+    $('#crumbName').textContent = NAV[key] || '';
+    try { localStorage.setItem('od_en_screen', key); } catch (e) {}
+  }
+  $$('.nav-item').forEach(function (b) { b.addEventListener('click', function () { showScreen(b.dataset.nav); }); });
+
+  /* ── stars ───────────────────────────────────────────────────── */
+  var stars = 5;
+  try { stars = Number(localStorage.getItem('od_en_stars')) || 5; } catch (e) {}
+  function setStars(n) { stars = n; $('#starCount').textContent = String(n); try { localStorage.setItem('od_en_stars', String(n)); } catch (e) {} }
+  setStars(stars);
+
+  /* ── screen 1 · words + stepper + flow + profile ─────────────── */
+  (function renderWords() {
+    var core = ['apple', 'pear', 'grapes'];
+    var strip = $('#wordStrip');
+    strip.innerHTML = core.map(function (w) {
+      return '<div class="wordcard">' + wordImg(w, null, 52) +
+        '<span><span class="en">' + w + '</span><span class="zh">' + WORD_ZH[w] + '</span></span></div>';
+    }).join('');
+    var pool = ['apple', 'pear', 'grapes', 'banana', 'orange', 'peach'];
+    $('#wordPool').innerHTML = pool.map(function (w) { return wordImg(w, null, 30); }).join('');
+  })();
+
+  var currentStage = 'practice';
+  function renderStepper() {
+    var host = $('#stepper'); host.innerHTML = '';
+    STAGES.forEach(function (s, i) {
+      var b = document.createElement('button');
+      b.className = 'step'; b.setAttribute('aria-pressed', String(s.id === currentStage));
+      b.innerHTML =
+        '<span class="step-top"><span class="step-num">STEP ' + (i + 1) + '</span>' +
+        '<span class="dot ' + (s.id === currentStage ? 'now' : (i < 2 ? 'done' : '')) + '"></span></span>' +
+        '<span class="step-name">' + s.zh + '</span>' +
+        '<span class="step-en">' + s.en + '</span>' +
+        '<span class="step-goal">' + s.goal + '</span>' +
+        '<span class="step-tool">→ ' + s.tool + '</span>';
+      b.addEventListener('click', function () { currentStage = s.id; renderStepper(); renderFlow(); });
+      host.appendChild(b);
+    });
+  }
+  function renderFlow() {
+    var host = $('#flowList'); host.innerHTML = '';
+    var order = [{ m: 'listen_choice', n: '热身 · 复习旧词' }, { m: 'picture_word', n: '呈现 · 新词输入' }, { m: 'phonics_blend', n: '操练 · 辨音拼读' }, { m: 'sentence_fill', n: '输出 · 句型表达' }, { m: 'read_aloud', n: '输出 · 整句跟读' }, { m: 'letter_trace', n: '复习 · 字母书写' }];
+    order.forEach(function (row, i) {
+      var m = modeById(row.m);
+      var el = document.createElement('div'); el.className = 'trow';
+      el.innerHTML = '<span class="tstep">CARD ' + (i + 1) + '</span>' +
+        '<span><span class="tname">' + m.zh + ' <span class="mode-id">' + m.id + '</span></span>' +
+        '<span class="tdesc">' + row.n + ' · ' + m.desc + '</span></span>' +
+        '<span class="tag">' + m.skill.replace('english_', '') + '</span>';
+      host.appendChild(el);
+    });
+    var s = null; STAGES.forEach(function (x) { if (x.id === currentStage) s = x; });
+    $('#flowStageNote').textContent = '当前聚焦 · ' + (s ? s.zh + ' ' + s.en : '');
+  }
+  function renderProfile() {
+    var host = $('#profileBars'); host.innerHTML = '';
+    Object.keys(PROFILE).forEach(function (k) {
+      var v = PROFILE[k];
+      var segs = ''; for (var i = 0; i < 5; i++) segs += '<span class="seg ' + (i < v ? 'on' : '') + '"></span>';
+      var row = document.createElement('div'); row.className = 'levelrow';
+      row.innerHTML = '<span class="levelname">' + PROFILE_LABEL[k] + '</span>' +
+        '<span class="levelval">L' + v + '</span><span class="levelbar">' + segs + '</span>';
+      host.appendChild(row);
+    });
+  }
+  renderStepper(); renderFlow(); renderProfile();
+
+  /* ── screen 2 · interactive cards ────────────────────────────── */
+  var PRAISE = { listen_choice: '完全正确！你听出了 /kæt/ 开头的 /k/ 音。', picture_word: '对啦！“apple”是苹果，你认得很准。', phonics_blend: '太棒了，“ham”里的 a 就是短音 /æ/。', sentence_fill: '正确！“I like apples.”说得很完整。', read_aloud: '读得很棒，句尾的 s 也读出来了。', letter_trace: '这一笔很稳，大写 A 写对啦。' };
+  var CORRECT_SCRIPT = { listen_choice: '差一点点～你听到的是 “cat”，开头是 k 的音，不是 c-a-r 的 car。我们再来一次：cat。', picture_word: '再看一眼图里的水果，它是红色的、圆圆的，英文是 “apple”。跟我读：apple。', phonics_blend: '这个词里不是短 a 哦。听我读 “ham”，a 发 /æ/。再选一次吧。', sentence_fill: '意思是“我喜欢苹果”，要用复数 “apples”。再说一次：I like apples.', read_aloud: '大部分读对啦，注意 “apples” 结尾的 /s/ 轻轻的。再读一次。', letter_trace: '别急，先竖再撇——大写 A 是这样写的。再描一次。' };
+  var demoState = { mode: 'listen_choice', picked: null, answered: false };
+
+  function pips(n) { var s = ''; for (var i = 0; i < n; i++) s += '<i></i>'; return s; }
+
+  function stageCardHTML(m) {
+    var head = '<div class="stage-head"><span class="row" style="gap:8px;"><span class="tag info">' + m.zh + '</span>' +
+      '<span class="mode-id">' + m.id + '</span></span>' +
+      '<span class="row" style="gap:7px;"><span class="tag">难度 ' + m.diff + '</span>' +
+      '<span class="tag">' + m.skill.replace('english_', '') + '</span></span></div>';
+
+    if (m.id === 'listen_choice') {
+      return head +
+        '<p class="stage-q">听一听，选出你听到的单词。<small>点击播放，可重复听；干扰项都是同韵词。</small></p>' +
+        '<button class="btn play" data-action="speak" data-text="cat"><svg width="17" height="17"><use href="#i-speaker"/></svg> 播放 cat</button>' +
+        optionsHTML(['cat', 'cap', 'can', 'car'], 'cat');
+    }
+    if (m.id === 'picture_word') {
+      return head +
+        '<div class="imgframe">' +
+        '<span class="cap">AI 生成图 · image_generation</span>' +
+        '<img src="' + ICON.apple + '" width="64" height="64" alt="苹果词卡插图" />' +
+        '<span class="note">预览用第一方图标库占位 · 上线由 image_generation 出图</span>' +
+        '</div>' +
+        '<p class="stage-q" style="margin-top:14px;">What is this? 选出正确的英文单词。</p>' +
+        optionsHTML(['apple', 'pear', 'banana', 'orange'], 'apple');
+    }
+    if (m.id === 'phonics_blend') {
+      return head +
+        '<p class="stage-q">哪个单词里有短 a 音 /æ/？<small>phonics_rule = short a · 4 个选项都符合该规则。</small></p>' +
+        '<button class="btn play" data-action="speak" data-text="ham"><svg width="17" height="17"><use href="#i-speaker"/></svg> 播放 /hæm/</button>' +
+        optionsHTML(['ham', 'cat', 'map', 'bat'], 'ham');
+    }
+    if (m.id === 'sentence_fill') {
+      return head +
+        '<p class="stage-q"><span class="stage-sentence">I like <span style="color:var(--info);">___</span>.</span><small>从下面 4 个词里选一个补全句子。</small></p>' +
+        optionsHTML(['apples', 'apple', 'cats', 'the'], 'apples');
+    }
+    if (m.id === 'read_aloud') {
+      return head +
+        '<p class="stage-q">跟我读一句：<span class="stage-sentence">I like red apples.</span><small>点麦克风开始录音，读完给你发音反馈。</small></p>' +
+        '<div class="mic-wrap"><button class="mic-btn" data-action="record" aria-label="开始录音"><svg><use href="#i-mic"/></svg></button>' +
+        '<div class="wave" id="wave">' + pips(22) + '</div></div>' +
+        '<div class="score" id="score" hidden>' +
+        scoreRow('准确度', 88) + scoreRow('流利度', 80) + scoreRow('完整度', 100) + '</div>';
+    }
+    return head +
+      '<p class="stage-q">描一描大写字母 <b class="stage-sentence">A</b>。<small>先左斜、再右斜、最后横——联动 handwriting_practice。</small></p>' +
+      '<div class="tracepad" id="tracepad"><span class="glyph">A</span><span class="stroke"></span><span class="hint">字母书写 · english_writing</span></div>' +
+      '<div class="row" style="margin-top:14px;"><button class="btn btn-secondary" data-action="trace"><svg width="16" height="16"><use href="#i-play"/></svg> 演示笔顺</button></div>';
+  }
+  function optionsHTML(opts, answer) {
+    var html = '';
+    opts.forEach(function (o, i) {
+      var cls = '';
+      if (demoState.answered && o === answer) cls = ' correct';
+      else if (demoState.answered && demoState.picked === o) cls = ' wrong';
+      html += '<button class="opt' + cls + '" data-opt="' + o + '"' + (demoState.answered ? ' disabled' : '') + '>' +
+        '<span class="idx">' + 'ABCD'[i] + '</span>' + o + '</button>';
+    });
+    return '<div class="options">' + html + '</div>';
+  }
+  function scoreRow(name, val) {
+    return '<div class="scorerow"><span class="muted">' + name + '</span><span class="scorebar"><i data-val="' + val + '"></i></span><span class="num">' + val + '</span></div>';
+  }
+
+  function getAnswer(m) {
+    if (m.id === 'sentence_fill') return 'apples';
+    if (m.id === 'phonics_blend') return 'ham';
+    if (m.id === 'picture_word') return 'apple';
+    if (m.id === 'listen_choice') return 'cat';
+    if (m.id === 'read_aloud') return 'read';
+    return '';
+  }
+
+  function renderStageCard() {
+    var m = modeById(demoState.mode);
+    var host = $('#stageCard');
+    host.innerHTML = stageCardHTML(m);
+    $('#modeSkillNote').textContent = '对应画像维度：' + PROFILE_LABEL[m.skill] + '（' + m.skill + '，当前 L' + PROFILE[m.skill] + '）· 阶段：' + m.stage;
+    if (demoState.answered && getAnswer(m)) {
+      var ok = demoState.picked === getAnswer(m);
+      var fb = document.createElement('div');
+      fb.className = 'feedback ' + (ok ? 'ok' : 'no');
+      fb.innerHTML = '<span class="who"><svg><use href="#i-star"/></svg></span><p><b>小星老师：</b>' + (ok ? PRAISE[m.id] : CORRECT_SCRIPT[m.id]) + (ok ? ' <span class="tag ok">+1 星</span>' : '') + '</p>';
+      host.appendChild(fb);
+    }
+    if (demoState.answered && m.id === 'read_aloud') {
+      var sc = $('#score');
+      if (sc) { sc.hidden = false; $$('#score .scorebar i').forEach(function (i) { i.style.width = i.dataset.val + '%'; }); }
+    }
+  }
+
+  function renderModeList() {
+    var host = $('#modeList'); host.innerHTML = '';
+    MODES.forEach(function (m) {
+      var b = document.createElement('button');
+      b.className = 'mode-item'; b.setAttribute('aria-pressed', String(m.id === demoState.mode));
+      b.innerHTML = '<span class="mode-item-top"><span class="row" style="gap:9px;"><svg class="nav-ico" style="width:16px;height:16px;"><use href="#' + m.icon + '"/></svg><span class="mode-zh">' + m.zh + '</span></span><span class="mode-id">' + m.id + '</span></span>' +
+        '<span class="mode-desc">' + m.desc + '</span>' +
+        '<span class="row" style="gap:6px; margin-top:2px;"><span class="tag">' + m.stage + '</span><span class="tag info">' + m.skill.replace('english_', '') + '</span></span>';
+      b.addEventListener('click', function () { demoState = { mode: m.id, picked: null, answered: false }; renderModeList(); renderStageCard(); });
+      host.appendChild(b);
+    });
+  }
+
+  function speak(text) {
+    if (!('speechSynthesis' in window)) return;
+    try {
+      var u = new SpeechSynthesisUtterance(text);
+      u.lang = 'en-US'; u.rate = 0.82;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+
+  $('#stageCard').addEventListener('click', function (e) {
+    var t = e.target.closest('[data-action],[data-opt]'); if (!t) return;
+    var m = modeById(demoState.mode);
+    if (t.dataset.action === 'speak') { speak(t.dataset.text); return; }
+    if (t.dataset.action === 'trace') {
+      var pad = $('#tracepad'); if (!pad) return;
+      pad.classList.remove('drawing'); void pad.offsetWidth; pad.classList.add('drawing');
+      return;
+    }
+    if (t.dataset.action === 'record') {
+      var btn = t, wave = $('#wave');
+      if (btn.classList.contains('rec')) return;
+      btn.classList.add('rec');
+      var bars = wave ? $$('i', wave) : [];
+      var iv = setInterval(function () {
+        bars.forEach(function (b) { b.style.height = (6 + Math.random() * 30) + 'px'; });
+      }, 90);
+      setTimeout(function () {
+        clearInterval(iv); btn.classList.remove('rec');
+        bars.forEach(function (b) { b.style.height = '8px'; });
+        demoState.picked = 'read'; demoState.answered = true;
+        var sc = $('#score'); if (sc) { sc.hidden = false; $$('#score .scorebar i').forEach(function (i) { i.style.width = i.dataset.val + '%'; }); }
+        if (demoState.starsGiven !== true) { setStars(stars + 1); demoState.starsGiven = true; }
+        renderStageCard();
+      }, 1400);
+      return;
+    }
+    if (t.dataset.opt && !demoState.answered) {
+      demoState.picked = t.dataset.opt; demoState.answered = true;
+      if (demoState.picked === getAnswer(m)) setStars(stars + 1);
+      renderStageCard();
+    }
+  });
+
+  renderModeList(); renderStageCard();
+
+  /* ── screen 3 · composer ─────────────────────────────────────── */
+  var compose = { stage: 'practice', mode: 'phonics_blend', theme: '短元音 a', target: 'ham', difficulty: 2 };
+  var modeSelect = $('#fMode');
+  MODES.forEach(function (m) { var o = document.createElement('option'); o.value = m.id; o.textContent = m.zh + '（' + m.id + '）'; modeSelect.appendChild(o); });
+  modeSelect.value = compose.mode;
+
+  function composeArgs() {
+    var m = modeById(compose.mode);
+    var opts = (m.pool ? deriveOptions(compose.target, m.pool) : []);
+    var base = { mode: compose.mode, stage: compose.stage, theme: compose.theme, difficulty: compose.difficulty };
+    var out;
+    if (compose.mode === 'listen_choice') out = Object.assign(base, { word: compose.target, tts_text: compose.target, options: opts, correct_answer: compose.target, skill_key: 'english_alphabet' });
+    else if (compose.mode === 'picture_word') out = Object.assign(base, { image_prompt: 'a cute ' + compose.target + ', children illustration style, single object, bright colors, simple background', options: opts, correct_answer: compose.target, skill_key: 'english_vocab' });
+    else if (compose.mode === 'phonics_blend') out = Object.assign(base, { phonics_rule: 'short a', word: compose.target, options: opts, correct_answer: compose.target, skill_key: 'english_phonics' });
+    else if (compose.mode === 'sentence_fill') out = Object.assign(base, { pattern: 'I like ___.', answer: compose.target, options: opts, correct_answer: compose.target, skill_key: 'english_sentence' });
+    else if (compose.mode === 'read_aloud') out = Object.assign(base, { target_text: compose.target, phonetic_hint: 'apples 结尾轻读 /s/', skill_key: 'english_sentence' });
+    else out = Object.assign(base, { letter: compose.target, case: 'upper', skill_key: 'english_writing' });
+    return out;
+  }
+  function escapeHTML(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function highlight(obj) {
+    var json = escapeHTML(JSON.stringify(obj, null, 2));
+    return json
+      .replace(/"([^"]+)":/g, '<span class="tok-key">"$1"</span>:')
+      .replace(/: ("(?:[^"\\]|\\.)*")/g, ': <span class="tok-str">$1</span>')
+      .replace(/: (\d+)(,?)/g, ': <span class="tok-num">$1</span>$2')
+      .replace(/\b(true|false|null)\b/g, '<span class="tok-bool">$1</span>');
+  }
+  function checks() {
+    var m = modeById(compose.mode);
+    var isChoice = ['listen_choice', 'picture_word', 'phonics_blend', 'sentence_fill'].indexOf(compose.mode) !== -1;
+    var opts = m.pool ? deriveOptions(compose.target, m.pool) : [];
+    var uniq = opts.filter(function (v, i, a) { return a.indexOf(v) === i; });
+    var list = [];
+    if (isChoice) {
+      list.push({ ok: opts.length === 4 && uniq.length === 4, label: '选项恰好 4 个且互不重复', fix: '当前：' + opts.length + ' 个（去重后 ' + uniq.length + ' 个）' });
+      list.push({ ok: opts.indexOf(compose.target) !== -1, label: '正确答案在选项内', fix: '把「' + compose.target + '」放进选项' });
+    }
+    if (compose.mode === 'picture_word' || compose.mode === 'listen_choice') {
+      var t = POOL[compose.theme];
+      list.push({ ok: !!(t && t.indexOf(compose.target) !== -1), label: '目标词属于主题「' + compose.theme + '」词表', fix: '换一个同主题的词，或改主题' });
+    }
+    if (compose.mode === 'phonics_blend') {
+      list.push({ ok: POOL['SHORT_A'].indexOf(compose.target) !== -1, label: '目标词完全符合 phonics_rule「short a」', fix: 'car 属 r 控制音，不能进 short a 组' });
+    }
+    if (compose.mode === 'sentence_fill') {
+      var blanks = (('I like ___.').match(/___/g) || []).length;
+      list.push({ ok: blanks === 1, label: '句型恰好一个空格 ___', fix: '当前 ' + blanks + ' 个空格' });
+    }
+    if (compose.mode === 'read_aloud') {
+      var n = compose.target.trim().split(/\s+/).filter(Boolean).length;
+      list.push({ ok: n > 0 && n <= 5, label: '目标句 ' + n + ' 词 ≤ 当前句长上限 5 词', fix: '英语句子等级 L1，句长上限 5 词' });
+    }
+    var lvl = PROFILE[m.skill] || 2;
+    list.push({ ok: Math.abs(compose.difficulty - lvl) <= 1, label: '难度 ' + compose.difficulty + ' 与画像等级 L' + lvl + ' 偏差 ≤1', fix: '建议难度 ' + lvl });
+    return list;
+  }
+
+  function renderCompose() {
+    $('#jsonOut').innerHTML = highlight(composeArgs());
+    var list = checks(), allOk = true, html = '';
+    list.forEach(function (c) {
+      if (!c.ok) allOk = false;
+      html += '<div class="check ' + (c.ok ? 'pass' : 'fail') + '">' +
+        '<span class="mk"><svg><use href="#' + (c.ok ? 'i-check' : 'i-x') + '"/></svg></span>' +
+        '<span class="lbl">' + c.label + (c.ok ? '' : '<span class="fix">' + c.fix + '</span>') + '</span></div>';
+    });
+    $('#checkList').innerHTML = html;
+    $('#btnPreview').disabled = !allOk;
+    $('#composeHint').textContent = allOk ? '预校验通过，可出题' : '有 ' + list.filter(function (c) { return !c.ok; }).length + ' 项未通过，先修正';
+    $('#fDiff').value = compose.difficulty; $('#diffVal').textContent = compose.difficulty;
+  }
+  function renderPreview() {
+    var m = modeById(compose.mode);
+    var args = composeArgs();
+    var slot = $('#previewSlot');
+    var opts = args.options || [];
+    var optsHTML = opts.map(function (o) {
+      return '<span class="o' + (o === args.correct_answer ? ' correct' : '') + '">' + o + '</span>';
+    }).join('');
+    var q = '';
+    if (compose.mode === 'listen_choice') q = '听一听，选出你听到的单词。';
+    else if (compose.mode === 'picture_word') q = 'What is this? 选出正确的英文单词。';
+    else if (compose.mode === 'phonics_blend') q = '哪个单词里有短 a 音 /æ/？';
+    else if (compose.mode === 'sentence_fill') q = 'I like ___. · 选出正确的词';
+    else if (compose.mode === 'read_aloud') q = '跟读：' + compose.target;
+    else q = '描一描字母 ' + compose.target;
+    var thumb = ICON[compose.target] ? '<div class="thumb">' + wordImg(compose.target, null, 56) + '<span class="meta">image_generation · ' + compose.target + '</span></div>' : '';
+    var body = optsHTML ? '<div class="opts">' + optsHTML + '</div>' : '<p class="meta" style="margin-top:10px;">' + (compose.mode === 'read_aloud' ? '麦克风跟读 + 发音评分' : '笔顺描红 · 联动 handwriting_practice') + '</p>';
+    slot.innerHTML = '<div class="mini" style="margin-top:16px;"><div class="row-between"><span class="tag info">' + m.zh + '</span><span class="tag ok">预校验通过</span></div>' +
+      '<p style="font-size:14.5px; font-weight:600; margin-top:10px;">' + q + '</p>' + thumb + body + '</div>';
+  }
+
+  $('#fStage').addEventListener('change', function () { compose.stage = this.value; renderCompose(); });
+  $('#fMode').addEventListener('change', function () {
+    var m = modeById(this.value);
+    compose = { stage: m.stage, mode: m.id, theme: m.theme, target: m.target, difficulty: m.diff };
+    $('#fStage').value = m.stage; $('#fTheme').value = m.theme; $('#fTarget').value = m.target;
+    $('#diffVal').textContent = m.diff; $('#previewSlot').innerHTML = '';
+    renderCompose();
+  });
+  $('#fTheme').addEventListener('input', function () { compose.theme = this.value; renderCompose(); });
+  $('#fTarget').addEventListener('input', function () { compose.target = this.value; $('#previewSlot').innerHTML = ''; renderCompose(); });
+  $('#fDiff').addEventListener('input', function () { compose.difficulty = Number(this.value); $('#diffVal').textContent = this.value; renderCompose(); });
+  $('#btnPreview').addEventListener('click', renderPreview);
+  renderCompose();
+
+  /* ── screen 4 · rule list ────────────────────────────────────── */
+  var RULES = [
+    '选项数量与唯一性：options 必须 4 个且去重后仍为 4',
+    '干扰项同质：4 个词必须同主题 / 同音族',
+    'phonics 一致性：word 结构匹配声明的 phonics_rule',
+    '句型空格：pattern 恰含一个 ___，answer 词性贴句型',
+    '跟读长度：目标句词数 ≤ 当前句子等级上限'
+  ];
+  (function () {
+    var host = $('#ruleList');
+    RULES.forEach(function (r) {
+      var d = document.createElement('div'); d.className = 'check pass';
+      d.innerHTML = '<span class="mk"><svg><use href="#i-check"/></svg></span><span class="lbl">' + r + '</span>';
+      host.appendChild(d);
+    });
+  })();
+
+  /* ── restore ─────────────────────────────────────────────────── */
+  try {
+    var saved = localStorage.getItem('od_en_screen');
+    if (saved && SCREENS[saved]) showScreen(saved);
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>

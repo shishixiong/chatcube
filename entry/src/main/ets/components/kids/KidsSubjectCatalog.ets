@@ -84,7 +84,7 @@ export const KIDS_SUBJECTS: KidsSubjectItem[] = [
     countUnit: '题',
     dailyLimit: 10,
     startPrompt: '我想学语文：拼音认读和学写字换着练，请给我安排吧',
-    activityTypes: ['pinyin_quiz', 'handwriting_practice']
+    activityTypes: ['pinyin_quiz', 'handwriting_practice', 'hanzi_card', 'pinyin_card', 'picture_talk', 'chinese_quiz']
   },
   {
     id: 'games',

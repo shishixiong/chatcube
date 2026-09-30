@@ -24,6 +24,12 @@ export const PICTURE_VOCAB_TOOL_ID: string = 'picture_vocab'
 export const LISTENING_QUIZ_TOOL_ID: string = 'listening_quiz'
 export const PINYIN_QUIZ_TOOL_ID: string = 'pinyin_quiz'
 export const MATCHING_PAIRS_TOOL_ID: string = 'matching_pairs'
+// 语文 v2（2026-09-29）：讲解型 hanzi_card / pinyin_card + 表达型 picture_talk
+// + 练习路由器 chinese_quiz（word_build / sentence_order / lookalike / antonym 四 mode）。
+export const HANZI_CARD_TOOL_ID: string = 'hanzi_card'
+export const PINYIN_CARD_TOOL_ID: string = 'pinyin_card'
+export const PICTURE_TALK_TOOL_ID: string = 'picture_talk'
+export const CHINESE_QUIZ_TOOL_ID: string = 'chinese_quiz'
 
 
 export function normalizeToolFunctionName(raw: string): string {
@@ -128,6 +134,27 @@ export function isMatchingPairsFunctionName(functionName: string): boolean {
     normalized === 'match_pairs'
 }
 
+export function isHanziCardFunctionName(functionName: string): boolean {
+  return normalizeToolFunctionName(functionName) === HANZI_CARD_TOOL_ID
+}
+
+export function isPinyinCardFunctionName(functionName: string): boolean {
+  return normalizeToolFunctionName(functionName) === PINYIN_CARD_TOOL_ID
+}
+
+export function isPictureTalkFunctionName(functionName: string): boolean {
+  const normalized = normalizeToolFunctionName(functionName)
+  return normalized === PICTURE_TALK_TOOL_ID ||
+    normalized === 'look_and_say' ||
+    normalized === 'picture_description'
+}
+
+export function isChineseQuizFunctionName(functionName: string): boolean {
+  const normalized = normalizeToolFunctionName(functionName)
+  return normalized === CHINESE_QUIZ_TOOL_ID ||
+    normalized === 'chinese_practice'
+}
+
 export function isHuarongdaoFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === HUARONGDAO_TOOL_ID
 }
@@ -194,7 +221,11 @@ export function isInteractiveQuizFunctionName(functionName: string): boolean {
     isCategorizationFunctionName(functionName) ||
     isVerticalMathFunctionName(functionName) ||
     isMazeFunctionName(functionName) ||
-    isSudokuFunctionName(functionName)
+    isSudokuFunctionName(functionName) ||
+    isHanziCardFunctionName(functionName) ||
+    isPinyinCardFunctionName(functionName) ||
+    isPictureTalkFunctionName(functionName) ||
+    isChineseQuizFunctionName(functionName)
 }
 
 

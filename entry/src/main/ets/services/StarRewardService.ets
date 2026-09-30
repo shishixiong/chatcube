@@ -163,6 +163,26 @@ export class StarRewardService {
       }
       return MATCHING_DIFFICULTY_STARS[difficulty] ?? 1
     }
+    if (activityType === 'hanzi_card') {
+      // 汉字小课堂 (讲解型): 完成「我学会了」回执即授星
+      const completed = payload['completed']
+      return completed === true ? 1 : 0
+    }
+    if (activityType === 'pinyin_card') {
+      // 拼音小课堂 (讲解型): 完成「我学会了」回执即授星
+      const completed = payload['completed']
+      return completed === true ? 1 : 0
+    }
+    if (activityType === 'picture_talk') {
+      // 看图说话 (表达型): 完成一次表达即授星
+      const completed = payload['completed']
+      return completed === true ? 1 : 0
+    }
+    if (activityType === 'chinese_quiz') {
+      // 语文小练习 (练习型): 答对授星, 答错 0
+      const correct = payload['correct']
+      return correct === true ? 1 : 0
+    }
     return 0
   }
 

@@ -1,0 +1,1119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>小星语文老师 · 语文教学台</title>
+<style>
+  /* ─── tokens · 儿童端品牌规范（docs/brand-spec.md）─────────────── */
+  :root {
+    --bg:      #FAF8F3;   /* 暖米白 */
+    --surface: #FFFDF8;   /* 卡片表面 */
+    --fg:      #24211C;   /* 暖黑 */
+    --muted:   #6F6A60;   /* 次级文字 */
+    --subtle:  #746E64;   /* 三级文字 */
+    --border:  #DED8CC;   /* 分隔线 */
+    --accent:  #FF9F43;   /* 小星橙 · 唯一强调色 */
+    --accent-2:#FFC46B;
+    --star:    #F5B301;
+    --on-hero: #3A2506;
+    --on-gold: #8A5A00;
+
+    --chinese: #E2603C;   /* 语文识别色（仅淡底 / 图标） */
+    --chinese-ink: #B53917; /* 语文墨色（文字 / 图标） */
+    --ok:      #22735D;   /* 答对（借英语墨绿） */
+    --bad:     #B53917;   /* 答错（借语文墨橙红） */
+    --info:    #B53917;   /* 领域色 · 语文 */
+
+    --accent-soft:  color-mix(in oklch, var(--accent) 18%, transparent);
+    --fg-soft:      color-mix(in oklch, var(--fg) 6%, transparent);
+    --chinese-soft: color-mix(in oklch, var(--chinese) 15%, var(--surface));
+
+    --font-display: 'Yuanti SC', 'Hiragino Maru Gothic ProN', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
+    --font-body:    'PingFang SC', 'Hiragino Sans GB', system-ui, -apple-system, sans-serif;
+    --font-mono:    ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+
+    --radius: 12px;
+    --radius-lg: 18px;
+    --shadow: 0 1px 2px color-mix(in oklch, var(--fg) 6%, transparent), 0 8px 24px color-mix(in oklch, var(--fg) 5%, transparent);
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: var(--font-body); font-size: 15px; line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  img, svg { display: block; max-width: 100%; }
+  button { font: inherit; cursor: pointer; color: inherit; }
+  h1, h2, h3, h4, p { margin: 0; text-wrap: pretty; }
+  h2, h3 { text-wrap: balance; }
+  :focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+
+  /* ─── primitives ───────────────────────────────────────────────── */
+  .stack { display: flex; flex-direction: column; }
+  .stack > * + * { margin-top: 18px; }
+  .row { display: flex; align-items: center; gap: 14px; }
+  .row-between { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .grid-2-1 { display: grid; grid-template-columns: 1.9fr 1fr; gap: 26px; align-items: start; }
+
+  .h2 { font-family: var(--font-display); font-size: clamp(25px, 2.4vw, 31px); font-weight: 700; line-height: 1.35; }
+  .h3 { font-family: var(--font-display); font-size: 17px; font-weight: 700; }
+  .lead { font-size: 15px; color: var(--muted); max-width: 64ch; line-height: 1.75; }
+  .meta { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+  .eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--muted); font-size: 11.5px; background: var(--surface);
+  }
+  .tag.ok { border-color: color-mix(in oklch, var(--ok) 45%, var(--border)); color: color-mix(in oklch, var(--ok) 72%, var(--fg)); }
+  .tag.info { border-color: color-mix(in oklch, var(--chinese-ink) 40%, var(--border)); color: var(--chinese-ink); }
+  .tag.warn { border-color: color-mix(in oklch, var(--bad) 42%, var(--border)); color: var(--bad); }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 44px; padding: 10px 18px; border-radius: var(--radius);
+    border: 1px solid transparent; font-size: 14.5px; font-weight: 600;
+    transition: background .15s ease, border-color .15s ease, transform .06s ease;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.is-loading { opacity: 1; cursor: progress; }
+  .btn-primary { background: var(--accent); color: var(--on-hero); border-color: var(--accent); }
+  .btn-primary:hover:not(:disabled) { background: color-mix(in oklch, var(--accent) 88%, black); }
+  .btn-secondary { background: var(--surface); color: var(--fg); border-color: var(--border); }
+  .btn-secondary:hover:not(:disabled) { border-color: var(--fg); }
+  .play { background: var(--chinese-soft); color: var(--chinese-ink); border-color: color-mix(in oklch, var(--chinese) 32%, var(--border)); }
+  .play:hover:not(:disabled) { background: color-mix(in oklch, var(--chinese) 22%, var(--surface)); }
+
+  /* ─── app shell ────────────────────────────────────────────────── */
+  .app { display: grid; grid-template-columns: 252px minmax(0, 1fr); min-height: 100vh; }
+  .sidebar {
+    background: var(--surface); border-right: 1px solid var(--border);
+    padding: 20px 14px; display: flex; flex-direction: column; gap: 18px;
+    position: sticky; top: 0; height: 100vh;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 2px 6px; }
+  .brand-mark { width: 36px; height: 36px; border-radius: 11px; background: var(--chinese-soft); color: var(--chinese-ink); display: grid; place-items: center; flex: none; border: 1px solid color-mix(in oklch, var(--chinese) 30%, var(--border)); }
+  .brand-mark svg { width: 20px; height: 20px; }
+  .brand-name { font-family: var(--font-display); font-weight: 700; font-size: 16px; display: block; }
+  .brand-sub { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.08em; color: var(--muted); }
+  .navgroup { display: flex; flex-direction: column; gap: 3px; }
+  .navgroup-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding: 6px 8px 4px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+    min-height: 44px; padding: 9px 10px; border-radius: 11px; border: 1px solid transparent;
+    font-size: 14px; background: transparent; transition: background .15s ease, border-color .15s ease;
+  }
+  .nav-item:hover { background: var(--fg-soft); }
+  .nav-item[aria-current="true"] { background: var(--bg); border-color: var(--border); font-weight: 600; }
+  .nav-ico { width: 18px; height: 18px; color: var(--muted); flex: none; }
+  .nav-item[aria-current="true"] .nav-ico { color: var(--chinese-ink); }
+  .nav-badge { margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; }
+
+  .learner { margin-top: auto; border: 1px solid var(--border); border-radius: 15px; padding: 13px; background: var(--bg); }
+  .learner-top { display: flex; align-items: center; gap: 10px; }
+  .avatar { width: 34px; height: 34px; border-radius: 50%; background: color-mix(in oklch, var(--chinese) 16%, var(--surface)); color: var(--chinese-ink); display: grid; place-items: center; font-weight: 700; font-size: 14px; flex: none; }
+  .star-count { display: inline-flex; align-items: center; gap: 4px; color: var(--on-gold); font-family: var(--font-mono); font-size: 13px; font-weight: 600; }
+  .star-count svg { width: 14px; height: 14px; }
+
+  .main { min-width: 0; display: flex; flex-direction: column; }
+  .topbar { position: sticky; top: 0; z-index: 20; background: color-mix(in oklch, var(--bg) 88%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+  .topbar-inner { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 28px; }
+  .crumb { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+  .crumb b { color: var(--fg); font-weight: 600; }
+  .screen { padding: 30px 28px 72px; max-width: 1180px; width: 100%; }
+  .screen[hidden] { display: none; }
+
+  .screen-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 30px; }
+  .screen-head .eyebrow { display: block; margin-bottom: 10px; }
+
+  /* ─── char strip ───────────────────────────────────────────────── */
+  .charstrip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .charcard { display: flex; align-items: center; gap: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 12px 16px; }
+  .charcard .glyph { font-family: var(--font-display); font-size: 40px; font-weight: 700; line-height: 1; width: 52px; flex: none; text-align: center; color: var(--fg); }
+  .charcard .py { font-family: var(--font-mono); font-size: 14px; color: var(--chinese-ink); display: block; }
+  .charcard .cmeta { flex: 1; min-width: 0; }
+  .charcard .zh { font-size: 12.5px; color: var(--muted); }
+  .cflag { display: inline-block; font-family: var(--font-mono); font-size: 10px; line-height: 1.4; border-radius: 999px; padding: 1px 7px; margin-right: 6px; border: 1px solid var(--border); color: var(--muted); vertical-align: 1px; }
+  .cflag.new { color: var(--chinese-ink); border-color: color-mix(in oklch, var(--chinese) 40%, var(--border)); background: var(--chinese-soft); }
+  .pool { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pool .pg { font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--muted); }
+
+  /* ─── stepper ──────────────────────────────────────────────────── */
+  .stepper { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+  .step { text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 15px; padding: 14px; transition: border-color .15s ease, background .15s ease, box-shadow .15s ease; }
+  .step:hover { border-color: color-mix(in oklch, var(--fg) 22%, var(--border)); }
+  .step[aria-pressed="true"] { border-color: var(--chinese-ink); background: var(--chinese-soft); box-shadow: 0 0 0 3px color-mix(in oklch, var(--chinese) 18%, transparent); }
+  .step-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .step-num { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  .step-name { font-weight: 700; font-size: 14.5px; display: block; margin-top: 10px; }
+  .step-en { font-family: var(--font-mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .step-goal { font-size: 12.5px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+  .step-tool { display: block; margin-top: 10px; font-family: var(--font-mono); font-size: 10.5px; color: var(--chinese-ink); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--border); flex: none; }
+  .dot.done { background: var(--ok); border-color: var(--ok); }
+  .dot.now  { background: var(--accent); border-color: var(--accent); }
+
+  /* ─── level bars ───────────────────────────────────────────────── */
+  .levelrow { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }
+  .levelname { font-size: 13px; }
+  .levelval { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  .levelbar { grid-column: 1 / -1; display: flex; gap: 3px; }
+  .seg { flex: 1; height: 7px; border-radius: 3px; background: var(--fg-soft); }
+  .seg.on { background: var(--chinese-ink); }
+
+  /* ─── timeline ─────────────────────────────────────────────────── */
+  .trow { display: grid; grid-template-columns: 78px 1fr auto; gap: 14px; align-items: center; padding: 13px 0; border-top: 1px solid var(--border); }
+  .trow:first-child { border-top: 0; }
+  .tstep { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  .tname { font-size: 14px; font-weight: 600; }
+  .tdesc { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+
+  /* ─── mode list ────────────────────────────────────────────────── */
+  .mode-item { display: flex; flex-direction: column; gap: 5px; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px 13px; transition: border-color .15s ease, background .15s ease; }
+  .mode-item:hover { border-color: color-mix(in oklch, var(--fg) 22%, var(--border)); }
+  .mode-item[aria-pressed="true"] { border-color: var(--chinese-ink); background: var(--chinese-soft); }
+  .mode-item-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .mode-zh { font-weight: 700; font-size: 14.5px; }
+  .mode-id { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+  .mode-desc { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+
+  /* ─── stage card ───────────────────────────────────────────────── */
+  .stage-card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 20px; box-shadow: var(--shadow); }
+  .stage-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+  .stage-q { font-size: 17px; font-weight: 600; margin: 16px 0 14px; }
+  .stage-q small { display: block; font-weight: 400; font-size: 12.5px; color: var(--muted); margin-top: 5px; }
+
+  /* 米字格 */
+  .mizige { position: relative; width: 168px; height: 168px; margin: 18px auto 8px; border: 2px solid color-mix(in oklch, var(--chinese) 45%, var(--border)); border-radius: 10px; background: var(--surface); overflow: hidden; }
+  .mizige canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .mizige .grid { position: absolute; inset: 0; pointer-events: none; }
+  .mizige .grid i { position: absolute; background: color-mix(in oklch, var(--chinese) 32%, transparent); }
+  .mizige .grid i.h { left: 0; right: 0; top: 50%; height: 1px; }
+  .mizige .grid i.v { top: 0; bottom: 0; left: 50%; width: 1px; }
+  .mizige .grid i.d1 { left: -21%; right: -21%; top: 50%; height: 1px; transform: translateY(-50%) rotate(45deg); }
+  .mizige .grid i.d2 { left: -21%; right: -21%; top: 50%; height: 1px; transform: translateY(-50%) rotate(-45deg); }
+
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 14px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; font-size: 12.5px; background: var(--bg); }
+  .chip b { font-family: var(--font-mono); font-weight: 600; color: var(--chinese-ink); }
+
+  .kv { display: grid; grid-template-columns: 74px 1fr; gap: 8px 12px; margin-top: 16px; font-size: 13.5px; }
+  .kv dt { color: var(--muted); font-size: 12.5px; }
+  .kv dd { margin: 0; }
+  .words-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .wordpill { border: 1px solid var(--border); border-radius: 10px; padding: 5px 12px; font-size: 14px; font-weight: 600; background: var(--bg); }
+
+  /* 拼音公式 */
+  .formula { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 18px 0 6px; flex-wrap: wrap; }
+  .formula .blk { min-width: 64px; text-align: center; border: 1.5px solid var(--border); border-radius: 14px; padding: 12px 16px; background: var(--bg); }
+  .formula .blk b { font-family: var(--font-display); font-size: 30px; font-weight: 700; display: block; line-height: 1.1; }
+  .formula .blk small { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+  .formula .eq { font-family: var(--font-mono); font-size: 22px; color: var(--muted); }
+  .formula .blk.res { border-color: var(--chinese-ink); background: var(--chinese-soft); }
+  .formula .blk.res b { color: var(--chinese-ink); }
+  .tonegrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 16px; }
+  .tone { border: 1px solid var(--border); border-radius: 14px; padding: 12px 8px; text-align: center; background: var(--surface); }
+  .tone b { font-family: var(--font-display); font-size: 22px; display: block; color: var(--fg); }
+  .tone .ch { font-size: 15px; font-weight: 700; margin-top: 4px; }
+  .tone small { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); display: block; margin-top: 3px; }
+  .tone.hl { border-color: var(--accent); background: color-mix(in oklch, var(--accent) 8%, var(--surface)); }
+
+  /* 看图说话 */
+  .imgframe { position: relative; border-radius: 15px; border: 1px solid var(--border); aspect-ratio: 16 / 10; display: grid; place-items: center; overflow: hidden; background: var(--bg); }
+  .imgframe .cap { position: absolute; left: 10px; top: 10px; font-family: var(--font-mono); font-size: 10px; color: var(--muted); background: color-mix(in oklch, var(--surface) 88%, transparent); border: 1px solid var(--border); border-radius: 999px; padding: 3px 8px; }
+  .imgframe .art { display: grid; place-items: center; gap: 8px; color: var(--chinese-ink); }
+  .imgframe .art svg { width: 46px; height: 46px; opacity: .8; }
+  .imgframe .art span { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  .qlist { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+  .qitem { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: var(--surface); }
+  .qitem .qn { width: 22px; height: 22px; border-radius: 7px; background: var(--chinese-soft); color: var(--chinese-ink); display: grid; place-items: center; font-family: var(--font-mono); font-size: 11px; flex: none; }
+  .qitem p { font-size: 14px; }
+
+  /* 选择 / 排序 */
+  .options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 16px; }
+  .opt { display: flex; align-items: center; gap: 11px; min-height: 56px; padding: 12px 15px; text-align: left; background: var(--surface); border: 1.5px solid var(--border); border-radius: 13px; font-size: 16px; font-weight: 600; transition: border-color .15s ease, background .15s ease, transform .06s ease; }
+  .opt:hover:not(:disabled) { border-color: var(--fg); }
+  .opt:active:not(:disabled) { transform: translateY(1px); }
+  .opt .idx { width: 24px; height: 24px; border-radius: 7px; background: var(--fg-soft); color: var(--muted); display: grid; place-items: center; font-family: var(--font-mono); font-size: 11px; flex: none; }
+  .opt.correct { border-color: var(--ok); background: color-mix(in oklch, var(--ok) 11%, var(--surface)); color: color-mix(in oklch, var(--ok) 66%, var(--fg)); }
+  .opt.correct .idx { background: color-mix(in oklch, var(--ok) 22%, var(--surface)); color: color-mix(in oklch, var(--ok) 78%, var(--fg)); }
+  .opt.wrong { border-color: var(--bad); background: color-mix(in oklch, var(--bad) 9%, var(--surface)); color: color-mix(in oklch, var(--bad) 70%, var(--fg)); }
+  .opt.wrong .idx { background: color-mix(in oklch, var(--bad) 18%, var(--surface)); color: color-mix(in oklch, var(--bad) 82%, var(--fg)); }
+  .opt:disabled { cursor: default; }
+  .opt .glyph { font-family: var(--font-display); font-size: 24px; font-weight: 700; }
+
+  .builder { margin-top: 16px; }
+  .builder-label { font-family: var(--font-mono); font-size: 11px; color: var(--muted); margin-bottom: 8px; display: block; }
+  .slot { min-height: 62px; border: 1.5px dashed var(--border); border-radius: 13px; padding: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .slot.filled { border-style: solid; border-color: color-mix(in oklch, var(--chinese) 40%, var(--border)); background: var(--chinese-soft); }
+  .wcard { border: 1.5px solid var(--border); border-radius: 11px; padding: 9px 14px; font-size: 16px; font-weight: 600; background: var(--surface); transition: border-color .15s ease, transform .06s ease; }
+  .wcard:hover { border-color: var(--chinese-ink); }
+  .wcard:active, .nav-item:active, .mode-item:active, .step:active { transform: translateY(1px); }
+  .wcard.small { padding: 6px 11px; font-size: 14px; }
+  .slot .placeholder { font-size: 13px; color: var(--subtle); }
+
+  .feedback { margin-top: 16px; border-radius: 14px; padding: 13px 15px; border: 1px solid var(--border); background: var(--bg); display: flex; gap: 11px; align-items: flex-start; }
+  .feedback .who { width: 28px; height: 28px; border-radius: 50%; background: var(--chinese-soft); color: var(--chinese-ink); display: grid; place-items: center; flex: none; font-size: 14px; font-weight: 700; }
+  .feedback p { font-size: 13.5px; line-height: 1.6; }
+  .feedback.ok { border-color: color-mix(in oklch, var(--ok) 40%, var(--border)); }
+  .feedback.no { border-color: color-mix(in oklch, var(--bad) 36%, var(--border)); }
+
+  .mic-wrap { margin-top: 16px; display: flex; align-items: center; gap: 14px; }
+  .mic-btn { width: 60px; height: 60px; border-radius: 50%; border: 1.5px solid var(--border); background: var(--surface); display: grid; place-items: center; transition: border-color .15s ease, background .15s ease; }
+  .mic-btn svg { width: 24px; height: 24px; color: var(--chinese-ink); }
+  .mic-btn:hover { border-color: var(--chinese-ink); }
+  .mic-btn.rec { background: color-mix(in oklch, var(--bad) 10%, var(--surface)); border-color: var(--bad); }
+  .mic-btn.rec svg { color: var(--bad); }
+
+  /* ─── composer ─────────────────────────────────────────────────── */
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 12.5px; color: var(--muted); font-weight: 500; }
+  .input, .select { width: 100%; min-height: 42px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--fg); font: inherit; font-size: 14px; }
+  .input:focus, .select:focus { border-color: var(--chinese-ink); box-shadow: 0 0 0 3px color-mix(in oklch, var(--chinese) 26%, transparent); }
+  input[type="range"] { width: 100%; accent-color: var(--chinese-ink); min-height: 24px; }
+  .slider-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .slider-head b { font-family: var(--font-mono); font-size: 13px; }
+
+  .code { font-family: var(--font-mono); font-size: 12px; line-height: 1.7; background: color-mix(in oklch, var(--fg) 4%, var(--surface)); border: 1px solid var(--border); border-radius: 12px; padding: 14px; overflow: auto; white-space: pre; max-height: 360px; }
+  .tok-key { color: var(--chinese-ink); }
+  .tok-str { color: color-mix(in oklch, var(--ok) 80%, var(--fg)); }
+  .tok-num { color: color-mix(in oklch, var(--bad) 80%, var(--fg)); }
+  .tok-bool { color: var(--muted); }
+
+  .check { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-top: 1px solid var(--border); font-size: 13px; }
+  .check:first-child { border-top: 0; }
+  .check .mk { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; flex: none; margin-top: 1px; }
+  .check .mk svg { width: 11px; height: 11px; }
+  .check.pass .mk { background: color-mix(in oklch, var(--ok) 16%, var(--surface)); color: color-mix(in oklch, var(--ok) 82%, var(--fg)); }
+  .check.fail .mk { background: color-mix(in oklch, var(--bad) 15%, var(--surface)); color: color-mix(in oklch, var(--bad) 84%, var(--fg)); }
+  .check.fail .lbl { color: color-mix(in oklch, var(--bad) 74%, var(--fg)); }
+  .check .lbl .fix { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+  .cmp-old { border: 1px solid var(--border); border-radius: 15px; padding: 16px; background: color-mix(in oklch, var(--bad) 4%, var(--surface)); }
+  .cmp-new { border: 1px solid color-mix(in oklch, var(--ok) 42%, var(--border)); border-radius: 15px; padding: 16px; background: color-mix(in oklch, var(--ok) 5%, var(--surface)); }
+  .cmp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+
+  .ds-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .ds-table th, .ds-table td { padding: 11px 13px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .ds-table th { color: var(--muted); font-weight: 500; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .ds-table tbody tr:hover { background: var(--fg-soft); }
+  .ds-table code { font-family: var(--font-mono); font-size: 12px; background: var(--fg-soft); padding: 1px 5px; border-radius: 5px; }
+  .scroll-x { overflow: auto; }
+
+  .rule { border: 0; border-top: 1px solid var(--border); margin: 0; }
+  .muted { color: var(--muted); }
+
+  @media (max-width: 1080px) { .stepper { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 920px) {
+    .app { grid-template-columns: 1fr; }
+    .sidebar { position: static; height: auto; flex-direction: column; align-items: stretch; gap: 12px; }
+    .navgroup { flex-direction: column; }
+    .navgroup-label { display: none; }
+    .learner { margin: 0; }
+    .grid-2, .grid-3, .grid-2-1, .charstrip { grid-template-columns: 1fr; }
+    .stepper { grid-template-columns: repeat(2, 1fr); }
+    .tonegrid { grid-template-columns: repeat(2, 1fr); }
+    .screen, .topbar-inner { padding-inline: 18px; }
+  }
+  @media (max-width: 600px) {
+    .trow { grid-template-columns: 1fr; gap: 6px; }
+    .trow .tag { justify-self: start; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-star" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.6l2.7 5.9 6.3.7-4.7 4.3 1.3 6.2L12 16.5 6.4 19.7l1.3-6.2L3 9.2l6.3-.7z"/></symbol>
+  <symbol id="i-board" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.4"/><path d="M3 12h18M12 3v18"/></symbol>
+  <symbol id="i-cards" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="14" height="14" rx="2.2"/><path d="M7 7V5.2A2.2 2.2 0 0 1 9.2 3H19a2 2 0 0 1 2 2v9.8A2.2 2.2 0 0 1 18.8 17H17"/></symbol>
+  <symbol id="i-compose" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2.1" fill="var(--surface)"/><circle cx="15" cy="12" r="2.1" fill="var(--surface)"/><circle cx="7" cy="17" r="2.1" fill="var(--surface)"/></symbol>
+  <symbol id="i-prompt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 7.5L4 12l4.5 4.5M15.5 7.5L20 12l-4.5 4.5"/></symbol>
+  <symbol id="i-hanzi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M3.5 12h17M12 3.5v17M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-pinyin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z"/><path d="M16 9a4 4 0 0 1 0 6M18.8 6.6a8 8 0 0 1 0 10.8"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.4"/><circle cx="9" cy="10" r="1.8"/><path d="M4 18l5-5 4 4 3-3 4 4"/></symbol>
+  <symbol id="i-sentence" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 7h16M4 12h6M14 12h6M4 17h13"/></symbol>
+  <symbol id="i-lookalike" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="11" height="11" rx="2"/><rect x="10" y="9" width="11" height="11" rx="2"/></symbol>
+  <symbol id="i-antonym" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13M14 5l3 3-3 3M20 16H7M10 13l-3 3 3 3"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1 10-10-3-3L5 16z"/><path d="M14 6l3 3"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.8l12 7.2-12 7.2z"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M12 6l6 6-6 6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+</svg>
+
+<div class="app">
+  <aside class="sidebar" data-od-id="sidebar">
+    <div class="brand">
+      <span class="brand-mark"><svg><use href="#i-hanzi"/></svg></span>
+      <div>
+        <h1 class="brand-name">小星语文老师</h1>
+        <span class="brand-sub">CHINESE SUITE v2</span>
+      </div>
+    </div>
+
+    <nav class="navgroup" aria-label="教学模块">
+      <span class="navgroup-label">教学</span>
+      <button class="nav-item" data-nav="teach" aria-current="true">
+        <svg class="nav-ico"><use href="#i-board"/></svg> 今日语文课 <span class="nav-badge">6 步</span>
+      </button>
+      <button class="nav-item" data-nav="cards">
+        <svg class="nav-ico"><use href="#i-cards"/></svg> 互动题型 <span class="nav-badge">6 种</span>
+      </button>
+      <button class="nav-item" data-nav="compose">
+        <svg class="nav-ico"><use href="#i-compose"/></svg> 讲解工作台
+      </button>
+      <button class="nav-item" data-nav="prompt">
+        <svg class="nav-ico"><use href="#i-prompt"/></svg> Prompt 契约
+      </button>
+    </nav>
+
+    <div class="learner" data-od-id="learner-card">
+      <div class="learner-top">
+        <span class="avatar">朵</span>
+        <span style="flex:1; min-width:0;">
+          <span style="font-size:14px; font-weight:600; display:block;">朵朵 · 6 岁</span>
+          <span class="meta">语文 4 维已建档</span>
+        </span>
+      </div>
+      <div class="row-between" style="margin-top:12px;">
+        <span class="meta">今日奖励</span>
+        <span class="star-count"><svg><use href="#i-star"/></svg><span id="starCount">3</span> 星</span>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <span class="crumb">小星语文老师 / <b id="crumbName">今日语文课</b></span>
+        <span class="row" style="gap:8px;">
+          <span class="tag info">语文 · 4 维</span>
+          <span class="tag">备课主题 · 大自然里的字</span>
+        </span>
+      </div>
+    </header>
+
+    <!-- ═══ Screen 1 · 今日语文课 ═══ -->
+    <section class="screen" id="screen-teach" data-od-id="screen-teach" aria-labelledby="screen-teach-title">
+      <div class="screen-head">
+        <div>
+          <p class="eyebrow">TODAY · 今日课</p>
+          <h2 class="h2" id="screen-teach-title">识字 · 山与水</h2>
+          <p class="lead" style="margin-top:10px;">今日目标：认识「山」这个字——读准 <b>shān</b>、知道它的意思、看笔顺写出来，再用它组词造句。<b>先讲后练，讲完一定练一次。</b></p>
+        </div>
+        <div class="row" style="gap:8px;">
+          <span class="tag">本课约 10 分钟</span>
+          <span class="tag info">难度 L1–L2</span>
+        </div>
+      </div>
+
+      <div class="card" data-od-id="lesson-chars" style="padding:18px 20px;">
+        <div class="row-between" style="margin-bottom:14px;">
+          <h3 class="h3">本课核心字</h3>
+          <span class="meta">主题 大自然 · 新字 1 + 复习 2</span>
+        </div>
+        <div class="charstrip" id="charStrip"></div>
+        <div class="row" style="margin-top:16px; gap:12px; flex-wrap:wrap;">
+          <span class="meta" style="flex:none;">主题字池</span>
+          <span class="pool" id="charPool"></span>
+        </div>
+      </div>
+
+      <p class="eyebrow" style="margin:30px 0 14px;">六步识字法 · 点一步看怎么讲</p>
+      <div class="stepper" id="stepper" data-od-id="stepper"></div>
+
+      <div class="grid-2-1" style="margin-top:30px;">
+        <div class="card" data-od-id="lesson-flow">
+          <div class="row-between" style="margin-bottom:6px;">
+            <h3 class="h3">本课卡片流程</h3>
+            <span class="meta" id="flowStageNote">当前聚焦 · 观形 Stroke</span>
+          </div>
+          <div id="flowList"></div>
+        </div>
+
+        <div class="stack">
+          <div class="card" data-od-id="chinese-profile">
+            <h3 class="h3" style="margin-bottom:4px;">朵朵 · 语文画像</h3>
+            <p class="meta" style="margin-bottom:16px;">来自 child_profile，决定每步难度</p>
+            <div class="stack" id="profileBars" style="gap:14px;"></div>
+          </div>
+          <div class="card" data-od-id="lesson-outcome">
+            <h3 class="h3" style="margin-bottom:14px;">本课产出</h3>
+            <div class="stack" style="gap:10px;">
+              <div class="row-between"><span style="font-size:13.5px;">新字</span><span class="num" style="font-size:13px;">山 shān</span></div>
+              <div class="row-between"><span style="font-size:13.5px;">部首 / 结构</span><span class="num" style="font-size:13px;">山 · 独体字</span></div>
+              <div class="row-between"><span style="font-size:13.5px;">组词</span><span class="num" style="font-size:13px;">大山 · 山水 · 山羊</span></div>
+              <div class="row-between"><span style="font-size:13.5px;">笔画</span><span class="num" style="font-size:13px;">3 画（竖 · 折 · 竖）</span></div>
+              <hr class="rule" style="margin:4px 0;">
+              <p class="meta" style="line-height:1.7;">复习钩子：明天学「木」，试着用「山、水、木」说一句完整的话。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Screen 2 · 互动题型 ═══ -->
+    <section class="screen" id="screen-cards" hidden data-od-id="screen-cards" aria-labelledby="screen-cards-title">
+      <div class="screen-head">
+        <div>
+          <p class="eyebrow">CARDS · 题型</p>
+          <h2 class="h2" id="screen-cards-title">先讲后练，一条主线</h2>
+          <p class="lead" style="margin-top:10px;">不再是「只会出拼音题」。讲字用<b>汉字小课堂</b>、讲音用<b>拼音小课堂</b>，练字用米字格，表达用<b>看图说话</b>——按六步识字顺序出现。点左侧切换，右侧可直接操作。</p>
+        </div>
+        <span class="tag">真实交互 · 授星</span>
+      </div>
+
+      <div class="grid-2-1">
+        <div class="stack" style="gap:10px;" id="modeList" data-od-id="mode-list"></div>
+        <div class="stack">
+          <div class="stage-card" id="stageCard" data-od-id="stage-card"></div>
+          <div class="card" style="padding:14px 16px;">
+            <p class="meta" id="modeSkillNote" style="line-height:1.7;"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Screen 3 · 讲解工作台 ═══ -->
+    <section class="screen" id="screen-compose" hidden data-od-id="screen-compose" aria-labelledby="screen-compose-title">
+      <div class="screen-head">
+        <div>
+          <p class="eyebrow">COMPOSER · 出卡</p>
+          <h2 class="h2" id="screen-compose-title">讲解工作台</h2>
+          <p class="lead" style="margin-top:10px;">选环节、选工具、填目标字——右侧实时生成工具调用，并在渲染前跑一遍预校验。<b>讲不清的字、对不上的拼音</b>不再直接给孩子。</p>
+        </div>
+        <span class="tag info">hanzi_card / pinyin_card v2</span>
+      </div>
+
+      <div class="grid-2-1">
+        <div class="card stack" data-od-id="composer-form">
+          <div class="grid-2">
+            <div class="field">
+              <label for="fStep">教学环节 step</label>
+              <select class="select" id="fStep"></select>
+            </div>
+            <div class="field">
+              <label for="fTool">工具 tool</label>
+              <select class="select" id="fTool"></select>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label for="fChar">目标字 character</label>
+              <input class="input" id="fChar" value="山" />
+            </div>
+            <div class="field">
+              <label for="fTopic">主题 theme</label>
+              <input class="input" id="fTopic" value="大自然" />
+            </div>
+          </div>
+          <div class="field">
+            <span class="slider-head"><label for="fDiff">难度 difficulty</label><b><span id="diffVal">1</span> / 3</b></span>
+            <input type="range" id="fDiff" min="1" max="3" step="1" value="1" />
+          </div>
+          <hr class="rule">
+          <div class="row-between">
+            <button class="btn btn-primary" id="btnPreview"><svg width="16" height="16"><use href="#i-arrow"/></svg> 生成讲解卡</button>
+            <span class="meta" id="composeHint">预校验通过后才可出卡</span>
+          </div>
+          <div id="previewSlot"></div>
+        </div>
+
+        <div class="stack">
+          <div class="card" data-od-id="compose-json">
+            <div class="row-between" style="margin-bottom:10px;">
+              <h3 class="h3">生成的工具调用</h3>
+              <span class="meta">arguments</span>
+            </div>
+            <div class="code" id="jsonOut"></div>
+          </div>
+          <div class="card" data-od-id="compose-checks">
+            <h3 class="h3" style="margin-bottom:6px;">预校验</h3>
+            <div id="checkList"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Screen 4 · Prompt 契约 ═══ -->
+    <section class="screen" id="screen-prompt" hidden data-od-id="screen-prompt" aria-labelledby="screen-prompt-title">
+      <div class="screen-head">
+        <div>
+          <p class="eyebrow">PROMPT · 契约</p>
+          <h2 class="h2" id="screen-prompt-title">把「只出题」换成「先讲后练」</h2>
+          <p class="lead" style="margin-top:10px;">语文段从 2 行扩成六步识字协议，工具从 2 个增到 6 个，画像从 24 维扩到 26 维。新增内容都指向「讲解」，整体 token 增幅有限。</p>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:28px;">
+        <div class="cmp-old" data-od-id="prompt-before">
+          <div class="cmp-head"><span class="tag warn">改动前</span><span class="meta">2 行 · 只会出题与练字</span></div>
+          <div class="code" style="background:transparent;border:0;padding:0;max-height:none;">【拼音】1 维:pinyin。用 pinyin_quiz,
+给孩子看汉字选读音…
+【学写字】3 维:fine_motor / chinese_writing。
+用 handwriting_practice,每次只练 1 个字。</div>
+        </div>
+        <div class="cmp-new" data-od-id="prompt-after">
+          <div class="cmp-head"><span class="tag ok">改动后</span><span class="meta">六步识字 · 讲解契约 · 字理纪律</span></div>
+          <div class="code" style="background:transparent;border:0;padding:0;max-height:none;">## 语文（六步识字）
+① 认字+正音:hanzi_card 讲字 + pinyin_card 讲音
+② 明义:hanzi_card 的字义与字理小故事
+③ 观形:hanzi_card 看笔顺 + handwriting_practice 跟写
+④ 组词:chinese_quiz(word_build)
+⑤ 表达:picture_talk 看图说话 / sentence_order
+⑥ 测:pinyin_quiz / handwriting_practice
+…先讲后练，讲完必须给孩子练一次</div>
+        </div>
+      </div>
+
+      <div class="card" data-od-id="tool-contract" style="margin-bottom:24px;">
+        <h3 class="h3" style="margin-bottom:4px;">新增工具契约 · 讲解 / 练习二分</h3>
+        <p class="meta" style="margin-bottom:16px;">讲字与讲音独立成卡；练习走一个 <code>chinese_quiz</code> 路由器（四 mode），避免白名单膨胀。</p>
+        <div class="scroll-x">
+          <table class="ds-table">
+            <thead><tr><th scope="col">工具</th><th scope="col">类型</th><th scope="col">关键参数</th><th scope="col">对应能力</th></tr></thead>
+            <tbody>
+              <tr><td><code>hanzi_card</code></td><td>讲解</td><td>character · pinyin · radical · structure · stroke_count · meaning · words · sentence · origin · lookalikes</td><td>识字 chinese_vocab</td></tr>
+              <tr><td><code>pinyin_card</code></td><td>讲解</td><td>initial · final · tone · syllable · examples[] · mnemonic · contrast</td><td>拼音 pinyin</td></tr>
+              <tr><td><code>picture_talk</code></td><td>表达</td><td>image_prompt · scene · questions[] · words[] · sample</td><td>阅读表达 chinese_reading</td></tr>
+              <tr><td><code>chinese_quiz</code></td><td>练习</td><td>mode = word_build / sentence_order / lookalike / antonym</td><td>识字组词 / 阅读表达</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:24px;">
+        <div class="card" data-od-id="profile-extension">
+          <h3 class="h3" style="margin-bottom:4px;">child_profile 扩展 · 24 → 26 维</h3>
+          <p class="meta" style="margin-bottom:14px;">语文从 1 维（pinyin）扩到 4 维，识字与表达终于有处可记。</p>
+          <div class="scroll-x">
+            <table class="ds-table">
+              <thead><tr><th scope="col">新增 key</th><th scope="col">label</th><th scope="col">分组</th><th scope="col">含义</th></tr></thead>
+              <tbody>
+                <tr><td><code>chinese_vocab</code></td><td>识字组词</td><td>语文</td><td>认字量、部首结构、组词</td></tr>
+                <tr><td><code>chinese_reading</code></td><td>阅读表达</td><td>语文</td><td>看图说话、连词成句</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="meta" style="margin-top:14px; line-height:1.7;">同步触点：ChildProfileService · BuiltinTools（2 处枚举）· SkillLabelUtils · LearningProfilePage · 系统提示词维度子集。</p>
+        </div>
+        <div class="card" data-od-id="validation-rules">
+          <h3 class="h3" style="margin-bottom:14px;">预校验新增规则</h3>
+          <div id="ruleList"></div>
+        </div>
+      </div>
+
+      <div class="card" data-od-id="anti-patterns">
+        <h3 class="h3" style="margin-bottom:14px;">明确禁止的坏卡</h3>
+        <div class="grid-3">
+          <p style="font-size:13.5px;"><b>没有笔顺数据的字</b><br><span class="muted">hanzi_card 的字不在 StrokeOrderData 内，动画放不出来。</span></p>
+          <p style="font-size:13.5px;"><b>拼音对不上</b><br><span class="muted">pinyin 与 PinyinData 字典读音不一致，孩子被教错。</span></p>
+          <p style="font-size:13.5px;"><b>组词不含该字</b><br><span class="muted">words 里混进无关词，讲解与字脱节。</span></p>
+          <p style="font-size:13.5px;"><b>只出题不讲解</b><br><span class="muted">直接 pinyin_quiz，没有 hanzi_card 先讲。</span></p>
+          <p style="font-size:13.5px;"><b>只讲解不练</b><br><span class="muted">讲完字不给孩子写一次，学完就忘。</span></p>
+          <p style="font-size:13.5px;"><b>连词成句多解</b><br><span class="muted">词卡排列有多个通顺答案，判分不公。</span></p>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+  var REDUCE = false;
+  try { REDUCE = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+
+  /* ── shared data ─────────────────────────────────────────────── */
+  var PROFILE = { pinyin: 2, chinese_vocab: 1, chinese_writing: 2, chinese_reading: 1 };
+  var PROFILE_LABEL = { pinyin: '拼音认读', chinese_vocab: '识字组词', chinese_writing: '中文书写', chinese_reading: '阅读表达' };
+
+  var STEPS = [
+    { id: 'ren',  zh: '认字', en: 'Recognize', goal: '看清字形，认结构部首', tool: 'hanzi_card' },
+    { id: 'yin',  zh: '正音', en: 'Sound',     goal: '读准声母韵母与声调', tool: 'pinyin_card' },
+    { id: 'yi',   zh: '明义', en: 'Meaning',   goal: '懂字义，听字理小故事', tool: 'hanzi_card' },
+    { id: 'xing', zh: '观形', en: 'Stroke',    goal: '数笔画，看逐笔笔顺', tool: 'hanzi_card' },
+    { id: 'ci',   zh: '组词', en: 'Words',     goal: '组词造句，会用', tool: 'chinese_quiz' },
+    { id: 'xie',  zh: '练写', en: 'Write',     goal: '米字格跟写一个字', tool: 'handwriting_practice' }
+  ];
+
+  var MODES = [
+    { id: 'hanzi_card',    zh: '汉字小课堂', icon: 'i-hanzi',    kind: '讲解', skill: 'chinese_vocab',   stage: 'ren',  desc: '讲一个字：拼音 / 部首 / 结构 / 笔画 / 字义 / 字源 / 组词 / 例句，附逐笔笔顺动画' },
+    { id: 'pinyin_card',   zh: '拼音小课堂', icon: 'i-pinyin',   kind: '讲解', skill: 'pinyin',          stage: 'yin',  desc: '讲一个音节：声母 + 韵母 = 音节，四声示范与拼读口诀' },
+    { id: 'picture_talk',  zh: '看图说话',   icon: 'i-image',    kind: '表达', skill: 'chinese_reading', stage: 'ci',   desc: '看一张图，回答「谁 / 在哪里 / 在做什么」，说一句完整的话' },
+    { id: 'sentence_order',zh: '连词成句',   icon: 'i-sentence', kind: '练习', skill: 'chinese_reading', stage: 'ci',   desc: '把打乱的词卡排成一句通顺的话' },
+    { id: 'lookalike',     zh: '形近字辨析', icon: 'i-lookalike',kind: '练习', skill: 'chinese_vocab',   stage: 'xing', desc: '句子留空，从形近字里选出正确的字填空' },
+    { id: 'antonym',       zh: '近反义词',   icon: 'i-antonym',  kind: '练习', skill: 'chinese_vocab',   stage: 'ci',   desc: '给一个字，从 4 个词里找出意思相反的' }
+  ];
+  function modeById(id) { for (var i = 0; i < MODES.length; i++) { if (MODES[i].id === id) return MODES[i]; } return null; }
+  function flowMeta(id) {
+    var m = modeById(id);
+    if (m) return { zh: m.zh, skill: m.skill, desc: m.desc };
+    if (id === 'chinese_quiz') return { zh: '组词练习', skill: 'chinese_vocab', desc: 'chinese_quiz(mode:"word_build") 给字选词，练组词' };
+    return { zh: '学写字', skill: 'chinese_writing', desc: 'handwriting_practice 米字格跟写一个汉字' };
+  }
+
+  /* 山 · 笔顺数据（来自 chatcube config/StrokeOrderData.ets，hanzi-writer 1024 网格 Y-up） */
+  var SHAN = [
+    { path: 'M 536 209 Q 546 407 552 587 Q 556 633 562 664 Q 569 691 574 710 Q 578 723 554 740 Q 512 762 484 767 Q 465 771 456 760 Q 447 751 457 734 Q 488 688 489 655 Q 499 444 488 200 C 487 170 534 179 536 209 Z', label: '竖' },
+    { path: 'M 796 244 Q 657 232 536 209 L 488 200 Q 379 182 284 155 Q 256 148 263 180 Q 267 253 272 329 Q 275 357 263 373 Q 220 416 190 409 Q 178 403 188 382 Q 224 309 215 236 Q 211 166 182 133 Q 161 112 170 96 Q 183 78 203 66 Q 219 57 230 67 Q 243 83 283 99 Q 440 151 606 182 Q 757 210 789 197 C 819 193 826 247 796 244 Z', label: '折' },
+    { path: 'M 789 197 Q 783 166 774 145 Q 756 118 785 55 Q 795 36 809 49 Q 837 73 846 173 Q 868 386 890 427 Q 900 443 889 460 Q 867 479 831 501 Q 816 510 802 503 Q 793 499 796 484 Q 823 435 796 244 L 789 197 Z', label: '竖' }
+  ];
+
+  /* ── navigation ──────────────────────────────────────────────── */
+  var NAV = { teach: '今日语文课', cards: '互动题型', compose: '讲解工作台', prompt: 'Prompt 契约' };
+  var SCREENS = { teach: 'screen-teach', cards: 'screen-cards', compose: 'screen-compose', prompt: 'screen-prompt' };
+  function showScreen(key) {
+    Object.keys(SCREENS).forEach(function (k) {
+      var el = document.getElementById(SCREENS[k]);
+      if (el) el.hidden = (k !== key);
+    });
+    $$('.nav-item').forEach(function (b) { b.setAttribute('aria-current', String(b.dataset.nav === key)); });
+    $('#crumbName').textContent = NAV[key] || '';
+    try { localStorage.setItem('od_zh_screen', key); } catch (e) {}
+  }
+  $$('.nav-item').forEach(function (b) { b.addEventListener('click', function () { showScreen(b.dataset.nav); }); });
+
+  /* ── stars ───────────────────────────────────────────────────── */
+  var stars = 3;
+  try { stars = Number(localStorage.getItem('od_zh_stars')) || 3; } catch (e) {}
+  function setStars(n) { stars = n; $('#starCount').textContent = String(n); try { localStorage.setItem('od_zh_stars', String(n)); } catch (e) {} }
+  setStars(stars);
+
+  /* ── screen 1 ────────────────────────────────────────────────── */
+  (function renderChars() {
+    var core = [['山', 'shān', 'new', '地面上高起的部分'], ['水', 'shuǐ', 'review', '会读会写，今天复习'], ['火', 'huǒ', 'review', '会读会写，今天复习']];
+    $('#charStrip').innerHTML = core.map(function (c) {
+      var flag = c[2] === 'new' ? '<span class="cflag new">新字</span>' : '<span class="cflag">复习</span>';
+      return '<div class="charcard"><span class="glyph">' + c[0] + '</span><span class="cmeta"><span class="py">' + c[1] + '</span><span class="zh">' + flag + c[3] + '</span></span></div>';
+    }).join('');
+    var pool = ['一', '二', '三', '人', '大', '小', '天', '木', '田', '日', '月'];
+    $('#charPool').innerHTML = pool.map(function (c) { return '<span class="pg">' + c + '</span>'; }).join('');
+  })();
+
+  var currentStep = 'xing';
+  function renderStepper() {
+    var host = $('#stepper'); host.innerHTML = '';
+    STEPS.forEach(function (s, i) {
+      var b = document.createElement('button');
+      b.className = 'step'; b.setAttribute('aria-pressed', String(s.id === currentStep));
+      b.innerHTML =
+        '<span class="step-top"><span class="step-num">STEP ' + (i + 1) + '</span>' +
+        '<span class="dot ' + (s.id === currentStep ? 'now' : (i < 3 ? 'done' : '')) + '"></span></span>' +
+        '<span class="step-name">' + s.zh + '</span>' +
+        '<span class="step-en">' + s.en + '</span>' +
+        '<span class="step-goal">' + s.goal + '</span>' +
+        '<span class="step-tool">→ ' + s.tool + '</span>';
+      b.addEventListener('click', function () { currentStep = s.id; renderStepper(); renderFlow(); });
+      host.appendChild(b);
+    });
+  }
+  function renderFlow() {
+    var host = $('#flowList'); host.innerHTML = '';
+    var order = [
+      { m: 'hanzi_card', n: '认字 · 看字形结构' },
+      { m: 'pinyin_card', n: '正音 · 拼读音节' },
+      { m: 'hanzi_card', n: '明义 · 字义与字理' },
+      { m: 'hanzi_card', n: '观形 · 逐笔笔顺' },
+      { m: 'chinese_quiz', n: '组词 · 词语搭配' },
+      { m: 'handwriting_practice', n: '练写 · 米字格跟写' }
+    ];
+    order.forEach(function (row, i) {
+      var m = flowMeta(row.m);
+      var el = document.createElement('div'); el.className = 'trow';
+      el.innerHTML = '<span class="tstep">CARD ' + (i + 1) + '</span>' +
+        '<span><span class="tname">' + m.zh + ' <span class="mode-id">' + row.m + '</span></span>' +
+        '<span class="tdesc">' + row.n + ' · ' + m.desc + '</span></span>' +
+        '<span class="tag">' + String(m.skill).replace('chinese_', '') + '</span>';
+      host.appendChild(el);
+    });
+    var s = null; STEPS.forEach(function (x) { if (x.id === currentStep) s = x; });
+    $('#flowStageNote').textContent = '当前聚焦 · ' + (s ? s.zh + ' ' + s.en : '');
+  }
+  function renderProfile() {
+    var host = $('#profileBars'); host.innerHTML = '';
+    Object.keys(PROFILE).forEach(function (k) {
+      var v = PROFILE[k];
+      var segs = ''; for (var i = 0; i < 5; i++) segs += '<span class="seg ' + (i < v ? 'on' : '') + '"></span>';
+      var row = document.createElement('div'); row.className = 'levelrow';
+      row.innerHTML = '<span class="levelname">' + PROFILE_LABEL[k] + '</span>' +
+        '<span class="levelval">L' + v + '</span><span class="levelbar">' + segs + '</span>';
+      host.appendChild(row);
+    });
+  }
+  renderStepper(); renderFlow(); renderProfile();
+
+  /* ── screen 2 · mode list + stage card ───────────────────────── */
+  var currentMode = 'hanzi_card';
+  function renderModeList() {
+    var host = $('#modeList'); host.innerHTML = '';
+    MODES.forEach(function (m) {
+      var b = document.createElement('button');
+      b.className = 'mode-item'; b.setAttribute('aria-pressed', String(m.id === currentMode));
+      b.innerHTML = '<span class="mode-item-top"><span class="mode-zh"><svg class="nav-ico" style="display:inline-block;vertical-align:-3px;margin-right:6px;color:var(--chinese-ink)"><use href="#' + m.icon + '"/></svg>' + m.zh + '</span>' +
+        '<span class="mode-id">' + m.id + '</span></span>' +
+        '<span class="mode-desc">' + m.desc + '</span>';
+      b.addEventListener('click', function () { currentMode = m.id; renderModeList(); renderStage(); });
+      host.appendChild(b);
+    });
+  }
+  function stageHead(m) {
+    return '<div class="stage-head"><span class="tag info">' + m.kind + '型卡片</span>' +
+      '<span class="mode-id">' + m.id + ' · skill_key=' + m.skill + '</span></div>';
+  }
+
+  /* — 汉字小课堂 — */
+  var hz = { timer: null, played: 0, cur: -1, alpha: 0, ready: false, ctx: null, w: 0, h: 0 };
+  function hanziCardHtml() {
+    return stageHead(modeById('hanzi_card')) +
+      '<div class="stage-q">认一认这个字：山<small>象形字，像三座山峰并立</small></div>' +
+      '<div class="mizige"><div class="grid" aria-hidden="true"><i class="h"></i><i class="v"></i><i class="d1"></i><i class="d2"></i></div><canvas id="hzCanvas" width="336" height="336" aria-hidden="true"></canvas></div>' +
+      '<div class="chips"><span class="chip">部首 <b>山</b></span><span class="chip">结构 <b>独体字</b></span><span class="chip">笔画 <b>3 画</b></span><span class="chip">拼音 <b>shān</b></span></div>' +
+      '<dl class="kv">' +
+      '<dt>字义</dt><dd>地面上高起的部分。</dd>' +
+      '<dt>组词</dt><dd><span class="words-row"><span class="wordpill">大山</span><span class="wordpill">山水</span><span class="wordpill">山羊</span></span></dd>' +
+      '<dt>例句</dt><dd>远处有一座大山。</dd>' +
+      '<dt>字源</dt><dd>古人照着山峰画出来的，中间高、两边低。</dd>' +
+      '<dt>形近字</dt><dd>山 <span class="muted">shān</span> ↔ 出 <span class="muted">chū</span>（「出」像两座山叠起来，意思不同）</dd>' +
+      '</dl>' +
+      '<div class="row" style="margin-top:18px; gap:10px; flex-wrap:wrap;">' +
+      '<button class="btn play" id="hzPlay"><svg width="16" height="16"><use href="#i-play"/></svg> 看笔顺</button>' +
+      '<button class="btn btn-secondary" id="hzWrite"><svg width="16" height="16"><use href="#i-pencil"/></svg> 跟着写一遍</button>' +
+      '<span class="meta" id="hzHint" style="margin-left:auto;">3 笔 · 竖 · 折 · 竖</span>' +
+      '</div><div id="hzFeedback"></div>';
+  }
+  function hzInitCanvas() {
+    var c = $('#hzCanvas'); if (!c) { hz.ready = false; return; }
+    hz.ctx = c.getContext('2d');
+    hz.w = c.width; hz.h = c.height; hz.ready = true;
+    hzDraw();
+  }
+  function hzDraw() {
+    var ctx = hz.ctx; if (!ctx) return;
+    ctx.clearRect(0, 0, hz.w, hz.h);
+    var scale = Math.min(hz.w, hz.h) / 1024;
+    var ox = (hz.w - 1024 * scale) / 2, oy = (hz.h - 1024 * scale) / 2;
+    ctx.fillStyle = '#B53917';
+    for (var i = 0; i < Math.min(hz.played, SHAN.length); i++) { ctx.beginPath(); hzPath(ctx, SHAN[i].path, scale, ox, oy); ctx.fill(); }
+    if (hz.cur >= 0 && hz.cur < SHAN.length) {
+      ctx.fillStyle = '#22735D';
+      ctx.globalAlpha = Math.max(0, Math.min(1, hz.alpha));
+      ctx.beginPath(); hzPath(ctx, SHAN[hz.cur].path, scale, ox, oy); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+  function hzPath(ctx, path, scale, ox, oy) {
+    var tokens = path.match(/[MQLCZmqlcz]|-?\d+\.?\d*/g);
+    if (!tokens) return;
+    var i = 0;
+    while (i < tokens.length) {
+      var cmd = tokens[i]; i += 1;
+      if (cmd === 'M' || cmd === 'm') { ctx.moveTo(parseFloat(tokens[i]) * scale + ox, (1024 - parseFloat(tokens[i + 1])) * scale + oy); i += 2; }
+      else if (cmd === 'Q' || cmd === 'q') { ctx.quadraticCurveTo(parseFloat(tokens[i]) * scale + ox, (1024 - parseFloat(tokens[i + 1])) * scale + oy, parseFloat(tokens[i + 2]) * scale + ox, (1024 - parseFloat(tokens[i + 3])) * scale + oy); i += 4; }
+      else if (cmd === 'C' || cmd === 'c') { ctx.bezierCurveTo(parseFloat(tokens[i]) * scale + ox, (1024 - parseFloat(tokens[i + 1])) * scale + oy, parseFloat(tokens[i + 2]) * scale + ox, (1024 - parseFloat(tokens[i + 3])) * scale + oy, parseFloat(tokens[i + 4]) * scale + ox, (1024 - parseFloat(tokens[i + 5])) * scale + oy); i += 6; }
+      else if (cmd === 'L' || cmd === 'l') { ctx.lineTo(parseFloat(tokens[i]) * scale + ox, (1024 - parseFloat(tokens[i + 1])) * scale + oy); i += 2; }
+      else if (cmd === 'Z' || cmd === 'z') { ctx.closePath(); }
+    }
+  }
+  function hzPlay() {
+    if (hz.timer) clearInterval(hz.timer);
+    if (REDUCE) { hz.played = SHAN.length; hz.cur = -1; hz.alpha = 1; hzDraw(); return; }
+    hz.played = 0; hz.cur = 0; hz.alpha = 0; hzDraw();
+    hz.timer = setInterval(function () {
+      if (hz.cur < 0 || hz.cur >= SHAN.length) { clearInterval(hz.timer); hz.timer = null; hz.cur = -1; hzDraw(); return; }
+      hz.alpha += 0.06;
+      if (hz.alpha >= 1) { hz.played = hz.cur + 1; hz.cur += 1; hz.alpha = 0; }
+      hzDraw();
+    }, 40);
+  }
+
+  /* — 拼音小课堂 — */
+  function pinyinCardHtml() {
+    return stageHead(modeById('pinyin_card')) +
+      '<div class="stage-q">把声母和韵母拼起来，读一读<small>「b + a」拼成 bā，像「八」的读音</small></div>' +
+      '<div class="formula"><span class="blk"><b>b</b><small>声母</small></span><span class="eq">+</span>' +
+      '<span class="blk"><b>a</b><small>韵母</small></span><span class="eq">=</span>' +
+      '<span class="blk res"><b>bā</b><small>第一声</small></span></div>' +
+      '<p class="meta" style="text-align:center; margin-top:6px;">标调规则：有 a 找 a，没 a 找 o e</p>' +
+      '<div class="tonegrid">' +
+      '<div class="tone hl"><b>bā</b><span class="ch">八</span><small>第一声 ˉ</small></div>' +
+      '<div class="tone"><b>bá</b><span class="ch">拔</span><small>第二声 ˊ</small></div>' +
+      '<div class="tone"><b>bǎ</b><span class="ch">把</span><small>第三声 ˇ</small></div>' +
+      '<div class="tone"><b>bà</b><span class="ch">爸</span><small>第四声 ˋ</small></div>' +
+      '</div>' +
+      '<dl class="kv">' +
+      '<dt>口诀</dt><dd>b 像收音机，听广播「bbb」。</dd>' +
+      '<dt>易混</dt><dd>b / p：把纸放嘴前，读 b 纸不动，读 p 纸会动（送气）。</dd>' +
+      '</dl>' +
+      '<div class="row" style="margin-top:18px; gap:10px; flex-wrap:wrap;">' +
+      '<button class="btn play" id="pyQuiz"><svg width="16" height="16"><use href="#i-arrow"/></svg> 去考一考（pinyin_quiz）</button>' +
+      '<span class="meta" style="margin-left:auto;">四声示范 · 声母 b</span>' +
+      '</div><div id="pyFeedback"></div>';
+  }
+
+  /* — 看图说话 — */
+  function pictureTalkHtml() {
+    return stageHead(modeById('picture_talk')) +
+      '<div class="stage-q">看看这幅图，说说发生了什么<small>先回答三个小问题，再连成一句话</small></div>' +
+      '<div class="imgframe"><span class="cap">AI 生成图 · 场景</span>' +
+      '<div class="art"><svg><use href="#i-image"/></svg><span>小朋友在公园里种树</span></div></div>' +
+      '<div class="qlist">' +
+      '<div class="qitem"><span class="qn">1</span><p>图上有谁？ <span class="muted">（提示：小明）</span></p></div>' +
+      '<div class="qitem"><span class="qn">2</span><p>他在哪里？ <span class="muted">（提示：公园里）</span></p></div>' +
+      '<div class="qitem"><span class="qn">3</span><p>他在做什么？ <span class="muted">（提示：种树）</span></p></div>' +
+      '</div>' +
+      '<div class="mic-wrap"><button class="mic-btn" id="ptMic" aria-label="开始录音，说出你看到的一句话" aria-pressed="false"><svg aria-hidden="true"><use href="#i-mic"/></svg></button>' +
+      '<div style="flex:1; min-width:0;"><p id="ptSay" style="font-size:15px;">按住话筒，把三句话连起来说一句完整的话。</p>' +
+      '<p class="meta">示范：小明在公园里种树。</p></div></div>' +
+      '<div id="ptFeedback"></div>';
+  }
+
+  /* — 连词成句 — */
+  var so = { pool: ['树上', '小鸟', '唱歌', '在'], answer: ['小鸟', '在', '树上', '唱歌'], chosen: [], done: false };
+  function sentenceOrderHtml() {
+    return stageHead(modeById('sentence_order')) +
+      '<div class="stage-q">把词卡排成一句通顺的话<small>点词卡放进句子框；点句子里的词可以放回去</small></div>' +
+      '<div class="builder"><span class="builder-label">我排的句子</span><div class="slot" id="soSlot"></div></div>' +
+      '<div class="builder"><span class="builder-label">剩下的词卡</span><div class="slot" id="soPool"></div></div>' +
+      '<div class="row" style="margin-top:16px; gap:10px; flex-wrap:wrap;">' +
+      '<button class="btn btn-primary" id="soCheck"><svg width="16" height="16"><use href="#i-check"/></svg> 检查</button>' +
+      '<button class="btn btn-secondary" id="soReset">重来</button></div>' +
+      '<div id="soFeedback"></div>';
+  }
+  function soRender() {
+    var slot = $('#soSlot'), pool = $('#soPool'); if (!slot || !pool) return;
+    slot.className = 'slot' + (so.chosen.length ? ' filled' : '');
+    slot.innerHTML = so.chosen.length
+      ? so.chosen.map(function (w, i) { return '<button class="wcard" data-from="slot" data-i="' + i + '">' + w + '</button>'; }).join('')
+      : '<span class="placeholder">点下面的词卡，按顺序排好</span>';
+    pool.innerHTML = so.pool.map(function (w, i) { return '<button class="wcard" data-from="pool" data-i="' + i + '">' + w + '</button>'; }).join('');
+    $$('[data-from="pool"]', pool).forEach(function (b) { b.addEventListener('click', function () { so.chosen.push(so.pool[Number(b.dataset.i)]); so.pool.splice(Number(b.dataset.i), 1); soRender(); }); });
+    $$('[data-from="slot"]', slot).forEach(function (b) { b.addEventListener('click', function () { so.pool.push(so.chosen[Number(b.dataset.i)]); so.chosen.splice(Number(b.dataset.i), 1); soRender(); }); });
+  }
+  function soCheck() {
+    if (so.chosen.length !== so.answer.length) { feedback('#soFeedback', 'no', '再想想，先把所有词卡都放进句子里哦。'); return; }
+    var ok = so.chosen.join('') === so.answer.join('');
+    feedback('#soFeedback', ok ? 'ok' : 'no', ok ? '完全正确！「小鸟在树上唱歌。」说得很通顺。' : '顺序还不太顺，读一读试试：「谁 + 在 + 哪里 + 做什么」。');
+  }
+
+  /* — 选择型（形近字 / 近反义词） — */
+  function lookalikeHtml() {
+    return stageHead(modeById('lookalike')) +
+      '<div class="stage-q">选一个正确的字填进括号里<small>小朋友们一起去爬（　）。</small></div>' +
+      choiceOptions(['山', '出', '士', '土'], '山', '「山」是三座山峰；「出」是两山相叠，意思完全不同。') +
+      '<div id="laFeedback"></div>';
+  }
+  function antonymHtml() {
+    return stageHead(modeById('antonym')) +
+      '<div class="stage-q">「大」的反义词是哪一个？<small>反义词就是意思相反的词</small></div>' +
+      choiceOptions(['小', '高', '多', '长'], '小', '大 ↔ 小；高 ↔ 矮，多 ↔ 少，长 ↔ 短。') +
+      '<div id="anFeedback"></div>';
+  }
+  function choiceOptions(options, answer, explain) {
+    var idx = ['A', 'B', 'C', 'D'];
+    return '<div class="options" data-answer="' + answer + '" data-explain="' + explain + '">' +
+      options.map(function (o, i) {
+        return '<button class="opt" data-val="' + o + '"><span class="idx">' + idx[i] + '</span><span class="glyph">' + o + '</span></button>';
+      }).join('') + '</div>';
+  }
+
+  function feedback(sel, kind, text) {
+    var host = $(sel); if (!host) return;
+    host.innerHTML = '<div class="feedback ' + kind + '"><span class="who">星</span><p>' + text + '</p></div>';
+  }
+
+  function renderStage() {
+    var host = $('#stageCard'); if (!host) return;
+    var m = modeById(currentMode) || MODES[0];
+    if (currentMode === 'hanzi_card') host.innerHTML = hanziCardHtml();
+    else if (currentMode === 'pinyin_card') host.innerHTML = pinyinCardHtml();
+    else if (currentMode === 'picture_talk') host.innerHTML = pictureTalkHtml();
+    else if (currentMode === 'sentence_order') host.innerHTML = sentenceOrderHtml();
+    else if (currentMode === 'lookalike') host.innerHTML = lookalikeHtml();
+    else host.innerHTML = antonymHtml();
+
+    var note = '当前卡片对应 child_profile 的 <b>' + m.skill + '</b> 维度；' +
+      (m.kind === '讲解' ? '讲解型卡片不判分，看完由孩子选择「跟着写 / 去考一考」。' : '练习型卡片答对自动记 1 星。');
+    $('#modeSkillNote').innerHTML = note;
+
+    if (hz.timer && currentMode !== 'hanzi_card') { clearInterval(hz.timer); hz.timer = null; hz.cur = -1; }
+    if (currentMode === 'hanzi_card') {
+      hzInitCanvas();
+      var pb = $('#hzPlay'); if (pb) pb.addEventListener('click', hzPlay);
+      var wb = $('#hzWrite'); if (wb) wb.addEventListener('click', function () { feedback('#hzFeedback', 'ok', '已接着打开米字格，让孩子跟着写「山」——先看笔顺，再动手。'); });
+      setTimeout(hzPlay, 150);
+    }
+    if (currentMode === 'pinyin_card') { var q = $('#pyQuiz'); if (q) q.addEventListener('click', function () { feedback('#pyFeedback', 'ok', '已接着出「bā / bá / bǎ / bà」拼音题——讲完就练，孩子自己选读音。'); }); }
+    if (currentMode === 'sentence_order') { soRender(); $('#soCheck').addEventListener('click', soCheck); $('#soReset').addEventListener('click', function () { so = { pool: ['树上', '小鸟', '唱歌', '在'], answer: ['小鸟', '在', '树上', '唱歌'], chosen: [], done: false }; renderStage(); }); }
+    if (currentMode === 'lookalike' || currentMode === 'antonym') { bindChoice(currentMode === 'lookalike' ? '#laFeedback' : '#anFeedback'); }
+    if (currentMode === 'picture_talk') { bindMic(); }
+  }
+  function bindChoice(fbSel) {
+    var box = $('.options', $('#stageCard')); if (!box) return;
+    var answer = box.dataset.answer, explain = box.dataset.explain, locked = false;
+    $$('.opt', box).forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (locked) return; locked = true;
+        var ok = b.dataset.val === answer;
+        $$('.opt', box).forEach(function (o) { o.disabled = true; if (o.dataset.val === answer) o.classList.add('correct'); });
+        if (!ok) b.classList.add('wrong');
+        feedback(fbSel, ok ? 'ok' : 'no', ok ? '答对啦！' + explain : '再想想～' + explain);
+        if (ok) setStars(stars + 1);
+      });
+    });
+  }
+  function bindMic() {
+    var btn = $('#ptMic'), say = $('#ptSay'); if (!btn) return;
+    var rec = false;
+    btn.addEventListener('click', function () {
+      rec = !rec; btn.classList.toggle('rec', rec); btn.setAttribute('aria-pressed', String(rec));
+      if (rec) { say.textContent = '正在听你说……'; }
+      else {
+        say.textContent = '小明在公园里种树。';
+        feedback('#ptFeedback', 'ok', '说得真好！你用了「谁 + 在哪里 + 做什么」，是一句完整的话。');
+        setStars(stars + 1);
+      }
+    });
+  }
+
+  renderModeList(); renderStage();
+
+  /* ── screen 3 · composer ─────────────────────────────────────── */
+  (function initCompose() {
+    var stepSel = $('#fStep'), toolSel = $('#fTool');
+    if (!stepSel) return;
+    STEPS.forEach(function (s) { var o = document.createElement('option'); o.value = s.id; o.textContent = s.zh + ' · ' + s.en; stepSel.appendChild(o); });
+    stepSel.value = 'xing';
+    var TOOLS = [
+      { id: 'hanzi_card', zh: '汉字小课堂（讲解）' },
+      { id: 'pinyin_card', zh: '拼音小课堂（讲解）' },
+      { id: 'picture_talk', zh: '看图说话（表达）' },
+      { id: 'chinese_quiz', zh: 'chinese_quiz（练习）' }
+    ];
+    TOOLS.forEach(function (t) { var o = document.createElement('option'); o.value = t.id; o.textContent = t.zh; toolSel.appendChild(o); });
+    toolSel.value = 'hanzi_card';
+
+    function buildArgs() {
+      var tool = toolSel.value, ch = ($('#fChar').value || '山').trim(), diff = Number($('#fDiff').value);
+      if (tool === 'hanzi_card') {
+        return { tool: tool, args: { character: ch, pinyin: 'shān', radical: '山', structure: '独体字', stroke_count: 3, meaning: '地面上高起的部分', words: ['大山', '山水', '山羊'], sentence: '远处有一座大山。', origin: '象形字，像三座山峰并立', lookalikes: [{ char: '出', pinyin: 'chū', note: '两山相叠，意思不同' }], difficulty: diff, skill_key: 'chinese_vocab' } };
+      }
+      if (tool === 'pinyin_card') {
+        return { tool: tool, args: { initial: 'b', final: 'a', tone: 1, syllable: 'bā', examples: [{ tone: 1, syllable: 'bā', char: '八', word: '八月' }, { tone: 4, syllable: 'bà', char: '爸', word: '爸爸' }], mnemonic: 'b 像收音机，听广播 bbb', contrast: [{ a: 'b', b: 'p', tip: 'b 不送气，p 送气' }], difficulty: diff, skill_key: 'pinyin' } };
+      }
+      if (tool === 'picture_talk') {
+        return { tool: tool, args: { image_prompt: 'a child planting a tree in a sunny park', scene: '小朋友在公园里种树', questions: [{ q: '图上有谁？' }, { q: '他在哪里？' }, { q: '他在做什么？' }], words: ['小明', '公园里', '种树', '开心'], sample: '小明在公园里种树。', difficulty: diff, skill_key: 'chinese_reading' } };
+      }
+      return { tool: tool, args: { mode: 'sentence_order', words: ['树上', '小鸟', '唱歌', '在'], answer: '小鸟在树上唱歌', difficulty: diff, skill_key: 'chinese_reading' } };
+    }
+
+    function checks(tool, args) {
+      var list = [];
+      if (tool === 'hanzi_card') {
+        list.push([args.character === '山' || args.character.length === 1, 'character 是单个汉字', '当前字表内：一 二 三 … 明 林']);
+        list.push([args.character === '山', 'character 在 StrokeOrderData 内（有笔顺数据）', '字典外字符会 should_retry']);
+        list.push([args.stroke_count === 3, 'stroke_count 与笔顺条数一致', '山 = 3 笔（竖 · 折 · 竖）']);
+        list.push([args.words.every(function (w) { return w.indexOf(args.character) >= 0; }), '组词每个都含该字', '大山 / 山水 / 山羊']);
+        list.push([['独体字', '上下', '左右', '左中右', '上中下', '半包围', '全包围'].indexOf(args.structure) >= 0, 'structure 在固定枚举内', '']);
+      } else if (tool === 'pinyin_card') {
+        list.push([args.initial + args.final === 'ba', 'syllable = 声母 + 韵母', 'b + a = ba']);
+        list.push([args.examples.length >= 2, 'examples 至少 2 条四声示范', '']);
+        list.push([args.mnemonic !== '', 'mnemonic 口诀非空', '']);
+      } else if (tool === 'picture_talk') {
+        list.push([args.image_prompt !== '', 'image_prompt 非空且为单场景', '']);
+        list.push([args.questions.length >= 1 && args.questions.length <= 3, 'questions 1-3 个', '谁 / 在哪里 / 在做什么']);
+        list.push([args.sample !== '', 'sample 示范句非空', '']);
+      } else {
+        list.push([args.words.length >= 2 && args.words.length <= 6, 'words 2-6 个词卡', '']);
+        list.push([args.answer === '小鸟在树上唱歌', 'answer 与词卡可还原为唯一通顺句', '']);
+      }
+      return list;
+    }
+
+    function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+    function highlight(json) {
+      return escapeHtml(json)
+        .replace(/&quot;/g, '"')
+        .replace(/"([^"]+)":/g, '<span class="tok-key">"$1"</span>:')
+        .replace(/: "([^"]*)"/g, ': <span class="tok-str">"$1"</span>')
+        .replace(/: (\d+)/g, ': <span class="tok-num">$1</span>');
+    }
+
+    function update() {
+      var built = buildArgs(), tool = built.tool, args = built.args;
+      $('#diffVal').textContent = String(args.difficulty);
+      var payload = { name: tool, arguments: args };
+      $('#jsonOut').innerHTML = highlight(JSON.stringify(payload, null, 2));
+      var list = checks(tool, args);
+      $('#checkList').innerHTML = list.map(function (c) {
+        return '<div class="check ' + (c[0] ? 'pass' : 'fail') + '"><span class="mk"><svg><use href="#' + (c[0] ? 'i-check' : 'i-x') + '"/></svg></span><span class="lbl">' + c[1] + (c[2] ? '<span class="fix">' + c[2] + '</span>' : '') + '</span></div>';
+      }).join('');
+      var allPass = list.every(function (c) { return c[0]; });
+      $('#composeHint').textContent = allPass ? '预校验通过，可以出卡' : '有 ' + list.filter(function (c) { return !c[0]; }).length + ' 项未通过，请修正';
+      var btn = $('#btnPreview'); if (btn) btn.disabled = !allPass;
+    }
+    ['fStep', 'fTool', 'fChar', 'fTopic', 'fDiff'].forEach(function (id) {
+      var el = $('#' + id); if (el) { el.addEventListener('input', update); el.addEventListener('change', update); }
+    });
+    var preview = $('#btnPreview');
+    if (preview) preview.addEventListener('click', function () {
+      var tool = $('#fTool').value, host = $('#previewSlot');
+      if (tool === 'hanzi_card') { currentMode = 'hanzi_card'; }
+      else if (tool === 'pinyin_card') { currentMode = 'pinyin_card'; }
+      else if (tool === 'picture_talk') { currentMode = 'picture_talk'; }
+      else { currentMode = 'sentence_order'; }
+      var restore = preview.innerHTML;
+      preview.disabled = true;
+      preview.classList.add('is-loading');
+      preview.textContent = '生成中…';
+      host.innerHTML = '<p class="meta" style="margin-top:14px;">正在按预校验结果生成讲解卡…</p>';
+      window.setTimeout(function () {
+        preview.disabled = false;
+        preview.classList.remove('is-loading');
+        preview.innerHTML = restore;
+        host.innerHTML = '<p class="meta" style="margin-top:14px;">已生成讲解卡，正在打开「互动题型」预览…</p>';
+        renderModeList(); renderStage();
+        showScreen('cards');
+      }, REDUCE ? 0 : 460);
+    });
+    update();
+  })();
+
+  /* ── screen 4 · validation rules list ────────────────────────── */
+  (function renderRules() {
+    var host = $('#ruleList'); if (!host) return;
+    var rules = [
+      ['character 单字且在 StrokeOrderData 内', '保证笔顺动画可播放'],
+      ['stroke_count 与笔顺条数一致', '防止笔画数讲错'],
+      ['pinyin 命中 PinyinData 时须与字典一致', '防止教错读音'],
+      ['words 非空且每个都含该字', '组词不跑题'],
+      ['syllable = initial + final + 调号', '拼音拼合自洽'],
+      ['chinese_quiz options 恰 4 且互异、答案在选项内', '选择型坏题拦截'],
+      ['sentence_order words 2-6 且答案唯一', '连词成句可判分']
+    ];
+    host.innerHTML = rules.map(function (r) {
+      return '<div class="check pass"><span class="mk"><svg><use href="#i-check"/></svg></span><span class="lbl">' + r[0] + '<span class="fix">' + r[1] + '</span></span></div>';
+    }).join('');
+  })();
+
+  /* ── restore screen ──────────────────────────────────────────── */
+  var saved = 'teach';
+  try { saved = localStorage.getItem('od_zh_screen') || 'teach'; } catch (e) {}
+  if (NAV[saved]) showScreen(saved);
+})();
+</script>
+</body>
+</html>

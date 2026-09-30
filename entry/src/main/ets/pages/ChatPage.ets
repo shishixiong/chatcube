@@ -122,6 +122,10 @@ import {
   isSearchToolId,
   MATH_QUIZ_TOOL_ID,
   MATH_TEACH_TOOL_ID,
+  HANZI_CARD_TOOL_ID,
+  PINYIN_CARD_TOOL_ID,
+  PICTURE_TALK_TOOL_ID,
+  CHINESE_QUIZ_TOOL_ID,
   ENGLISH_QUIZ_TOOL_ID,
   NUMBER_PUZZLE_TOOL_ID,
   HANDWRITING_PRACTICE_TOOL_ID,
@@ -4810,13 +4814,17 @@ export struct ChatPage {
     this.applyPendingToolExecutionApproval(interaction)
   }
 
-  // 语音模式：互动工具（math_quiz / math_teach / english_quiz / number_puzzle / handwriting_practice / categorization / vertical_math / maze / sudoku / picture_vocab / pinyin_quiz / matching_pairs）出现 pending 交互时自动朗读题目
+  // 语音模式：互动工具（math_quiz / math_teach / hanzi_card / pinyin_card / picture_talk / chinese_quiz / english_quiz / number_puzzle / handwriting_practice / categorization / vertical_math / maze / sudoku / picture_vocab / pinyin_quiz / matching_pairs）出现 pending 交互时自动朗读题目
   private tryAutoTtsForQuizInteraction(interaction: PendingToolInteractionSnapshot): void {
     if (!this.isVoiceMode || this.isRecording) {
       return
     }
     const isAutoTtsTool = interaction.toolId === MATH_QUIZ_TOOL_ID ||
       interaction.toolId === MATH_TEACH_TOOL_ID ||
+      interaction.toolId === HANZI_CARD_TOOL_ID ||
+      interaction.toolId === PINYIN_CARD_TOOL_ID ||
+      interaction.toolId === PICTURE_TALK_TOOL_ID ||
+      interaction.toolId === CHINESE_QUIZ_TOOL_ID ||
       interaction.toolId === ENGLISH_QUIZ_TOOL_ID ||
       interaction.toolId === NUMBER_PUZZLE_TOOL_ID ||
       interaction.toolId === HANDWRITING_PRACTICE_TOOL_ID ||
@@ -4902,6 +4910,61 @@ export struct ChatPage {
         // 不读 mode 专属参数——具体数字由孩子在板上动手摆,板出现即承接,
         // 前面的 AI 正文已作为 aiText 在本次朗读。
         quizText = ((parsed['concept'] as string) ?? '').trim()
+      } else if (interaction.toolId === HANZI_CARD_TOOL_ID) {
+        // 汉字小课堂(讲解型)：只读一句认字引导 + 汉字本身。
+        // TTS 读出该字即标准发音(兼作正音);六步讲解由卡片分步呈现,
+        // 前面的 AI 正文已作为 aiText 在本次朗读,确认后的衔接语由
+        // onSendingCompleted 按增量朗读。
+        const character = (parsed['character'] as string) ?? ''
+        if (character.trim() !== '') {
+          quizText = '我们来认识汉字：' + character.trim() + '。'
+        }
+      } else if (interaction.toolId === PINYIN_CARD_TOOL_ID) {
+        // 拼音小课堂(讲解型)：读任务引导 + 带调音节。
+        // 声母/韵母字母串与口诀不读——交由卡片的四声示范按钮
+        // (TTS 读例字+例词, 本项目验证过的安全读法)逐条演示。
+        const syllable = ((parsed['syllable'] as string) ?? '').trim()
+        quizText = syllable !== '' ? ('我们来学拼音：' + syllable + '。') : '我们来学习拼音。'
+      } else if (interaction.toolId === PICTURE_TALK_TOOL_ID) {
+        // 看图说话(表达型)：读场景说明 + 全部引导问题(卡片一次性展示)。
+        // 不读 sample——示范句是孩子要自己说出来的内容,读出即代答。
+        let spoken = ((parsed['scene'] as string) ?? '').trim()
+        const questionsRaw = parsed['questions'] as Array<Record<string, Object>> | undefined
+        if (questionsRaw !== undefined) {
+          const upper = questionsRaw.length < 3 ? questionsRaw.length : 3
+          for (let i = 0; i < upper; i++) {
+            const q = ((questionsRaw[i]['q'] as string) ?? '').trim()
+            if (q !== '') {
+              spoken += (spoken === '' ? '' : ' ') + q
+            }
+          }
+        }
+        quizText = spoken !== '' ? spoken : '我们来看图说话。'
+      } else if (interaction.toolId === CHINESE_QUIZ_TOOL_ID) {
+        // 语文小练习(练习型)四 mode：读题型引导 + 题面。
+        // 不读 answer / options——选项在屏幕上由孩子自己挑,读出答案即泄底;
+        // sentence_order 不逐词朗读——打乱词卡念出来是支离破碎的听感,
+        // 排序任务由孩子在屏幕上完成。
+        const mode = ((parsed['mode'] as string) ?? '').trim()
+        const character = ((parsed['character'] as string) ?? '').trim()
+        if (mode === 'word_build' && character !== '') {
+          quizText = '我们来玩组词游戏：哪个词里藏着「' + character + '」字？'
+        } else if (mode === 'sentence_order') {
+          quizText = '我们来连词成句，把词卡排成一句通顺的话。'
+        } else if (mode === 'lookalike') {
+          // 校验层保证 stem 恰含一个 '___'；朗读时把空位说成「什么」,
+          // 「一___饭」→「一什么饭」, 正是口头提问的说法。
+          const stem = ((parsed['stem'] as string) ?? '').trim()
+          if (stem !== '') {
+            quizText = '把句子补充完整：' + stem.replace('___', '什么') + ' 空里该填哪个字？'
+          } else {
+            quizText = '我们来做形近字辨析，选出空格里该填的字。'
+          }
+        } else if (mode === 'antonym' && character !== '') {
+          quizText = '「' + character + '」的反义词是什么？'
+        } else {
+          quizText = '我们来做语文小练习。'
+        }
       } else if (interaction.toolId === ENGLISH_QUIZ_TOOL_ID) {
         // v2 六 mode 各朗读对应字段 (listen_choice 读 tts_text / read_aloud 读 target_text /
         // letter_trace 读字母 / 三个选择题读 question); 无 mode 的历史调用保持 legacy 行为逐字不变

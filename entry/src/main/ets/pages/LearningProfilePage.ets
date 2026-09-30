@@ -66,6 +66,8 @@ const SKILL_GROUPS: LearningSkillGroup[] = [
     sectionIcon: $r('sys.symbol.character_textbox'),
     keys: [
       'pinyin',
+      'chinese_vocab',
+      'chinese_reading',
       'chinese_writing'
     ]
   },

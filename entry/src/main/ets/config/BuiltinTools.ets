@@ -37,9 +37,14 @@ import {
   LISTENING_QUIZ_TOOL_ID,
   PINYIN_QUIZ_TOOL_ID,
   MATCHING_PAIRS_TOOL_ID,
-  GRANT_STAR_TOOL_ID
+  GRANT_STAR_TOOL_ID,
+  HANZI_CARD_TOOL_ID,
+  PINYIN_CARD_TOOL_ID,
+  PICTURE_TALK_TOOL_ID,
+  CHINESE_QUIZ_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { getPinyinCharsJoined } from './PinyinData'
+import { getStrokeOrderCharsJoined } from './StrokeOrderData'
 import { i18n } from '@kit.LocalizationKit'
 import {
   GeneratedMedia,
@@ -1253,7 +1258,7 @@ function createChildProfileToolDefinition(): ToolDefinition {
           "properties": {
             "key": {
               "type": "string",
-              "description": "Skill dimension key: math_counting, math_number_sense, math_addition, math_subtraction, math_multiply, math_divide, math_shapes, math_comparison, math_time, math_word_problem, english_alphabet, english_vocab, english_sentence, english_phonics, english_reading, general_nature, general_social, general_life, logic_thinking, observation, spatial_reasoning, fine_motor, english_writing, chinese_writing, pinyin, categorization"
+              "description": "Skill dimension key: math_counting, math_number_sense, math_addition, math_subtraction, math_multiply, math_divide, math_shapes, math_comparison, math_time, math_word_problem, english_alphabet, english_vocab, english_sentence, english_phonics, english_reading, general_nature, general_social, general_life, logic_thinking, observation, spatial_reasoning, fine_motor, english_writing, chinese_writing, pinyin, chinese_vocab, chinese_reading, categorization"
             },
             "level": {
               "type": "number",
@@ -1298,7 +1303,7 @@ function createChildProfileToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     CHILD_PROFILE_TOOL_ID,
-    'Read or update the child\'s learning profile. Call \'read\' at the START of each conversation to understand the child\'s current level across math, English, general knowledge, and cognitive dimensions. Call \'update\' after observing the child\'s actual performance on a topic to track their progress. Levels are 0-5 (0=unassessed, 5=mastery). Always update based on demonstrated ability, not guesses. Available skill keys: math_counting, math_number_sense, math_addition, math_subtraction, math_multiply, math_divide, math_shapes, math_comparison, math_time, math_word_problem, english_alphabet, english_vocab, english_sentence, english_phonics, english_reading, general_nature, general_social, general_life, logic_thinking, observation, spatial_reasoning, fine_motor, english_writing, chinese_writing, pinyin, categorization.',
+    'Read or update the child\'s learning profile. Call \'read\' at the START of each conversation to understand the child\'s current level across math, English, general knowledge, and cognitive dimensions. Call \'update\' after observing the child\'s actual performance on a topic to track their progress. Levels are 0-5 (0=unassessed, 5=mastery). Always update based on demonstrated ability, not guesses. Available skill keys: math_counting, math_number_sense, math_addition, math_subtraction, math_multiply, math_divide, math_shapes, math_comparison, math_time, math_word_problem, english_alphabet, english_vocab, english_sentence, english_phonics, english_reading, general_nature, general_social, general_life, logic_thinking, observation, spatial_reasoning, fine_motor, english_writing, chinese_writing, pinyin, chinese_vocab, chinese_reading, categorization.',
     parameters
   )
 
@@ -1609,18 +1614,18 @@ function createMathTeachToolDefinition(): ToolDefinition {
   const rawSchemaJson: string = `{
     "type": "object",
     "properties": {
-      "mode": {"type": "string", "enum": ["number_bond","ten_frame","balance","clock"], "description": "讲解板类型四选一。number_bond 数的分与合（skill_key 配 math_number_sense）/ ten_frame 十格阵凑十（math_addition）/ balance 天平比大小（math_comparison）/ clock 时钟整点半点（math_time）"},
+      "mode": {"type": "string", "enum": ["number_bond","ten_frame","balance","clock"], "description": "讲解板类型四选一。number_bond 数的分与合（skill_key 配 math_number_sense）/ ten_frame 十格阵凑十（math_addition）/ balance 天平比大小（math_comparison）/ clock 时钟拨一拨认读（math_time）"},
       "stage": {"type": "string", "enum": ["warm_up","presentation","practice","production","review"], "description": "五步课当前环节标签，缺省 presentation。只影响卡片头部显示，不影响玩法"},
       "difficulty": {"type": "number", "description": "难度 1-5 整数，须与画像等级偏差不超过 1；画像该维度 level 为 0（未评估）时可自选"},
       "concept": {"type": "string", "description": "给孩子看的一句话知识点标题，如「凑十法：先凑成 10 再加」"},
       "skill_key": {"type": "string", "description": "对应画像维度，与 mode 的映射见 mode 描述。用于难度校验与画像更新提示"},
-      "total": {"type": "number", "description": "number_bond 专用：分成两部分的合数，2-20 整数"},
+      "total": {"type": "number", "description": "number_bond 专用：分成两部分的合数，2-10 整数（分与合引导课会带孩子逐个数点并枚举全部分法，10 以内最合适）"},
       "a": {"type": "number", "description": "ten_frame 专用：十格阵里已有的个数，5-9 整数"},
       "b": {"type": "number", "description": "ten_frame 专用：框外散点个数，1-10 整数。a+b 必须大于 10 且不超过 20（⚠️ 严禁 a+b 不超过 10 时使用 ten_frame）"},
       "left": {"type": "number", "description": "balance 专用：天平左盘数，1-20 整数"},
       "right": {"type": "number", "description": "balance 专用：天平右盘数，1-20 整数"},
       "hour": {"type": "number", "description": "clock 专用：时针位置，1-12 整数"},
-      "minute": {"type": "number", "description": "clock 专用：分针位置，只能 0（整点）或 30（半点）"}
+      "minute": {"type": "number", "description": "clock 专用：分针位置，0-55 且为 5 的倍数（0=整点，30=半点，其余指 5 分钟刻度）"}
     },
     "required": ["mode", "difficulty", "concept", "skill_key"]
   }`
@@ -2840,6 +2845,518 @@ function createMatchingPairsToolConfig(): ToolConfig {
 }
 
 
+// ===== hanzi_card 工具 =====
+// 汉字小课堂（讲解型）：按六步识字法讲一个汉字——认字→正音→明义→观形（笔顺动画）→组词→练写。
+// character 必须在 StrokeOrderData 笔顺字典内（保证米字格笔顺动画可播放）。
+// 交互由前端 HanziCard 组件处理。
+
+interface HanziCardArgs {
+  character: string
+  pinyin: string
+  radical: string
+  structure: string
+  stroke_count: number
+  meaning: string
+  words: string[]
+  sentence: string
+  origin?: string
+  lookalikes?: HanziCardLookalike[]
+  difficulty: number
+  skill_key: string
+}
+
+interface HanziCardLookalike {
+  char: string
+  pinyin: string
+  note: string
+}
+
+class HanziCardExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // hanzi_card 工具的交互由前端 HanziCard 组件处理。
+    // 后台由 ToolExecutionService.handleHanziCard 拦截处理。
+    try {
+      const params = JSON.parse(_args) as HanziCardArgs
+      return JSON.stringify({
+        answered: false,
+        character: params.character ?? '',
+        pinyin: params.pinyin ?? '',
+        meaning: params.meaning ?? '',
+        skill_key: 'chinese_vocab'
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`hanzi_card error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createHanziCardToolDefinition(): ToolDefinition {
+  const supportedChars = getStrokeOrderCharsJoined()
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "character": {
+        "type": "string",
+        "description": "要讲的汉字，必须是单个汉字且在笔顺字表内：${supportedChars}。字典外的字会被拒绝（笔顺动画无法播放）。"
+      },
+      "pinyin": {
+        "type": "string",
+        "description": "该字的带调拼音，如「huā」。必须与字典读音一致。"
+      },
+      "radical": {
+        "type": "string",
+        "description": "部首，如「艹」。独体字可填「独体字」本身或主要笔画名。"
+      },
+      "structure": {
+        "type": "string",
+        "description": "字结构，只能是：独体字 / 上下 / 左右 / 左中右 / 上中下 / 半包围 / 全包围。"
+      },
+      "stroke_count": {
+        "type": "number",
+        "description": "笔画数，必须与笔顺字典一致（如「花」是 7 笔）。"
+      },
+      "meaning": {
+        "type": "string",
+        "description": "一句话字义，用 6-7 岁孩子能懂的话，如「花是植物开出来的，漂亮又有香味」。"
+      },
+      "words": {
+        "type": "array",
+        "items": { "type": "string", "minLength": 1 },
+        "minItems": 2,
+        "maxItems": 3,
+        "description": "2-3 个组词，每个词都必须包含本字，如「花」配「花朵 / 看花 / 花猫」。"
+      },
+      "sentence": {
+        "type": "string",
+        "description": "一个例句，必须包含本字，贴近孩子生活，如「春天公园里开满了花」。"
+      },
+      "origin": {
+        "type": "string",
+        "description": "可选：字源小故事（象形/会意），1-2 句，如「「木」像一棵树，上面是枝，下面是根」。没有把握就不要填。"
+      },
+      "lookalikes": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "char": { "type": "string", "description": "易混字，单个汉字，不能与本字相同。" },
+            "pinyin": { "type": "string", "description": "易混字的带调拼音。" },
+            "note": { "type": "string", "description": "一句话区分口诀，如「鸟有点，乌没点」。" }
+          },
+          "required": ["char", "pinyin", "note"]
+        },
+        "maxItems": 2,
+        "description": "可选：易混字对比，最多 2 组（如「午/牛」）。"
+      },
+      "difficulty": {
+        "type": "number",
+        "description": "Difficulty 1-3. 1=笔画少笔画少的常见字，3=结构复杂或易混字。"
+      },
+      "skill_key": {
+        "type": "string",
+        "description": "固定填 chinese_vocab。"
+      }
+    },
+    "required": ["character", "pinyin", "radical", "structure", "stroke_count", "meaning", "words", "sentence", "difficulty", "skill_key"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    HANZI_CARD_TOOL_ID,
+    'Present a hanzi lesson card (汉字小课堂): teach ONE Chinese character with the six-step literacy method — recognize the character, correct pronunciation (pinyin), meaning, stroke-order animation, word-building, and a sample sentence. Use this INSTEAD of explaining a character in plain text — the child needs the interactive card with stroke animation. The character MUST come from the supported char list in the character parameter description. words must all contain the character. skill_key is always chinese_vocab.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createHanziCardToolConfig(): ToolConfig {
+  return new ToolConfig(
+    HANZI_CARD_TOOL_ID,
+    '汉字小课堂',
+    '按六步识字法讲一个汉字：正音、字义、笔顺动画、组词、例句, 配易混字对比。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    HANZI_CARD_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
+// ===== pinyin_card 工具 =====
+// 拼音小课堂（讲解型）：讲一个音节——声母+韵母=音节 拼读公式、四声示范、拼读口诀、易混对比。
+// syllable 必须等于 initial+final+调号 的程序拼合结果（防止标调错误）。
+// 交互由前端 PinyinCard 组件处理。
+
+interface PinyinCardExample {
+  tone: number
+  syllable: string
+  char: string
+  word: string
+}
+
+interface PinyinCardContrast {
+  a: string
+  b: string
+  tip: string
+}
+
+interface PinyinCardArgs {
+  initial: string
+  final: string
+  tone: number
+  syllable: string
+  examples: PinyinCardExample[]
+  mnemonic: string
+  contrast?: PinyinCardContrast[]
+  difficulty: number
+  skill_key: string
+}
+
+class PinyinCardExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // pinyin_card 工具的交互由前端 PinyinCard 组件处理。
+    // 后台由 ToolExecutionService.handlePinyinCard 拦截处理。
+    try {
+      const params = JSON.parse(_args) as PinyinCardArgs
+      return JSON.stringify({
+        answered: false,
+        syllable: params.syllable ?? '',
+        mnemonic: params.mnemonic ?? '',
+        skill_key: 'pinyin'
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`pinyin_card error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createPinyinCardToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "initial": {
+        "type": "string",
+        "description": "声母，如「sh」。零声母音节（如「安 ān」）填空字符串。"
+      },
+      "final": {
+        "type": "string",
+        "description": "不带调韵母，只用小写字母，如「an」「eng」「iu」。ü 写作 v 或 ü 均可，程序会统一。"
+      },
+      "tone": {
+        "type": "number",
+        "description": "声调 0-4：0=轻声，1=一声，2=二声，3=三声，4=四声。"
+      },
+      "syllable": {
+        "type": "string",
+        "description": "带调音节，必须等于 声母+带调韵母，如「shān」。调号位置按标调规则（a 优先，其次 o e，iu/ui 标在后）。填错会被拒绝。"
+      },
+      "examples": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "tone": { "type": "number", "description": "该示范的声调 0-4。" },
+            "syllable": { "type": "string", "description": "该声调下的带调音节，如「shā」。" },
+            "char": { "type": "string", "description": "该音节的例字，单个汉字，如「沙」。" },
+            "word": { "type": "string", "description": "含例字的常用词，如「沙子」。" }
+          },
+          "required": ["tone", "syllable", "char", "word"]
+        },
+        "minItems": 2,
+        "maxItems": 5,
+        "description": "四声示范，至少 2 条（最好覆盖四个声调），如 shā 沙 / shá 啥 / shǎ 傻 / shà 厦。"
+      },
+      "mnemonic": {
+        "type": "string",
+        "description": "拼读或记忆口诀，一句押韵最好，如「sh 加 an，翘舌山山山」。"
+      },
+      "contrast": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "a": { "type": "string", "description": "易混音节 A，如「an」。" },
+            "b": { "type": "string", "description": "易混音节 B，如「ang」。" },
+            "tip": { "type": "string", "description": "一句话区分技巧，如「an 前鼻音，ang 后鼻音，嘴巴张大发 ang」。" }
+          },
+          "required": ["a", "b", "tip"]
+        },
+        "maxItems": 2,
+        "description": "可选：易混音节对比（an/ang、iu/ui 等），最多 2 组。"
+      },
+      "difficulty": {
+        "type": "number",
+        "description": "Difficulty 1-3. 1=单韵母音节，3=复韵母或前后鼻音易混。"
+      },
+      "skill_key": {
+        "type": "string",
+        "description": "固定填 pinyin。"
+      }
+    },
+    "required": ["initial", "final", "tone", "syllable", "examples", "mnemonic", "difficulty", "skill_key"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    PINYIN_CARD_TOOL_ID,
+    'Present a pinyin lesson card (拼音小课堂): teach ONE syllable with the spelling formula — initial + final = syllable with tone mark, four-tone examples with real characters, a catchy mnemonic, and optional confusable-pairs contrast (an/ang etc). Use this INSTEAD of explaining pinyin in plain text. syllable must equal initial plus toned final exactly. skill_key is always pinyin.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createPinyinCardToolConfig(): ToolConfig {
+  return new ToolConfig(
+    PINYIN_CARD_TOOL_ID,
+    '拼音小课堂',
+    '讲一个拼音音节: 声母+韵母=音节 拼读公式、四声示范、拼读口诀、易混对比。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    PINYIN_CARD_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
+// ===== picture_talk 工具 =====
+// 看图说话（讲解+表达型）：生成一张场景图，孩子看图回答引导问题、用提示词说完整句子。
+// 图片经 ImageIndexService 生成缓存（按字面 prompt 键复用）。口语识别走 SpeechRecognitionService。
+// 交互由前端 PictureTalkCard 组件处理。
+
+interface PictureTalkQuestion {
+  q: string
+}
+
+interface PictureTalkArgs {
+  image_prompt: string
+  scene: string
+  questions: PictureTalkQuestion[]
+  words: string[]
+  sample: string
+  difficulty: number
+  skill_key: string
+}
+
+class PictureTalkExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // picture_talk 工具的交互由前端 PictureTalkCard 组件处理。
+    // 后台由 ToolExecutionService.handlePictureTalk 拦截处理。
+    try {
+      const params = JSON.parse(_args) as PictureTalkArgs
+      return JSON.stringify({
+        answered: false,
+        scene: params.scene ?? '',
+        sample: params.sample ?? '',
+        skill_key: 'chinese_reading'
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`picture_talk error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createPictureTalkToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "image_prompt": {
+        "type": "string",
+        "description": "英文单场景图像描述（给图像生成用），如「A little girl feeding a white rabbit in a sunny garden, storybook illustration style」。不超过 500 字符，一个场景不要多个事件。"
+      },
+      "scene": {
+        "type": "string",
+        "description": "给孩子看的一句话场景说明（中文），如「看看这幅图：小女孩在花园里」。"
+      },
+      "questions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "q": { "type": "string", "description": "引导问题，围绕 谁 / 在哪里 / 在做什么 / 怎么样，如「图里都有谁呀？」。" }
+          },
+          "required": ["q"]
+        },
+        "minItems": 1,
+        "maxItems": 3,
+        "description": "1-3 个看图引导问题，从简单到开放。"
+      },
+      "words": {
+        "type": "array",
+        "items": { "type": "string", "minLength": 1 },
+        "minItems": 2,
+        "maxItems": 6,
+        "description": "3-5 个可用词提示（中文词卡），孩子说句子时可以点选，如「小女孩 / 白兔 / 胡萝卜」。"
+      },
+      "sample": {
+        "type": "string",
+        "description": "示范完整句，如「小女孩在花园里喂小白兔吃胡萝卜」。"
+      },
+      "difficulty": {
+        "type": "number",
+        "description": "Difficulty 1-3. 1=说一个词，2=说一句完整话，3=说两三句连贯的话。"
+      },
+      "skill_key": {
+        "type": "string",
+        "description": "固定填 chinese_reading。"
+      }
+    },
+    "required": ["image_prompt", "scene", "questions", "words", "sample", "difficulty", "skill_key"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    PICTURE_TALK_TOOL_ID,
+    'Present a picture-talk card (看图说话): generate ONE scene image, then the child describes it aloud — guided questions (who/where/what/how), word hints they can tap, and a sample sentence. Use this INSTEAD of asking the child to describe a picture in plain text — the child needs the interactive card with voice input. image_prompt must be a single-scene English description. skill_key is always chinese_reading.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createPictureTalkToolConfig(): ToolConfig {
+  return new ToolConfig(
+    PICTURE_TALK_TOOL_ID,
+    '看图说话',
+    '生成一张场景图, 孩子看图答引导问题、点词卡、开口说完整句。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    PICTURE_TALK_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
+// ===== chinese_quiz 工具 =====
+// 语文小练习（练习型路由）：一个工具承载四种 mode——
+//   word_build 组词造句（选择题）/ sentence_order 连词成句（词卡排序）/ lookalike 形近字辨析 / antonym 近反义词。
+// 设计参考 english_quiz v2 的薄路由模式：mode 解析 → 中文 Card 内分发到各 mode 渲染体。
+// 交互由前端 ChineseQuizCard 组件处理。
+
+interface ChineseQuizArgs {
+  mode: string
+  stem?: string
+  character?: string
+  words?: string[]
+  options?: string[]
+  answer: string
+  difficulty: number
+  skill_key: string
+}
+
+class ChineseQuizExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // chinese_quiz 工具的交互由前端 ChineseQuizCard 组件处理。
+    // 后台由 ToolExecutionService.handleChineseQuiz 拦截处理。
+    try {
+      const params = JSON.parse(_args) as ChineseQuizArgs
+      return JSON.stringify({
+        answered: false,
+        mode: params.mode ?? '',
+        answer: params.answer ?? '',
+        skill_key: params.mode === 'sentence_order' ? 'chinese_reading' : 'chinese_vocab'
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`chinese_quiz error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createChineseQuizToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "mode": {
+        "type": "string",
+        "enum": ["word_build", "sentence_order", "lookalike", "antonym"],
+        "description": "题型：word_build=组词造句选择（哪个词能跟本字组词），sentence_order=连词成句（把打乱的词卡排成通顺句），lookalike=形近字辨析（句中空位选正确的字），antonym=近反义词（选出意思相反的词）。"
+      },
+      "stem": {
+        "type": "string",
+        "description": "lookalike 必填：含恰好一个 ___ 空位的句子，如「小明中午吃了一___饭」。其他 mode 不填。"
+      },
+      "character": {
+        "type": "string",
+        "description": "word_build / antonym 必填：本字，单个汉字，如「花」。lookalike / sentence_order 不填。"
+      },
+      "words": {
+        "type": "array",
+        "items": { "type": "string", "minLength": 1 },
+        "minItems": 2,
+        "maxItems": 6,
+        "description": "sentence_order 必填：2-6 个互不相同的打乱词卡（必须是打乱后的顺序，不能就是正确语序），如「花园 / 在 / 里 / 小猫」。其他 mode 不填。"
+      },
+      "options": {
+        "type": "array",
+        "items": { "type": "string", "minLength": 1 },
+        "minItems": 4,
+        "maxItems": 4,
+        "description": "word_build / lookalike / antonym 必填：恰好 4 个互不相同的选项，必须包含 answer。lookalike 的选项必须是单个汉字。sentence_order 不填。"
+      },
+      "answer": {
+        "type": "string",
+        "description": "正确答案。word_build=能跟本字组词的那个词（必须含本字）；sentence_order=按正确语序拼接的完整句子；lookalike=填入空位的正确单字；antonym=意思相反的词。"
+      },
+      "difficulty": {
+        "type": "number",
+        "description": "Difficulty 1-3. 1=明显，3=易混。"
+      },
+      "skill_key": {
+        "type": "string",
+        "description": "sentence_order 填 chinese_reading，其余填 chinese_vocab。"
+      }
+    },
+    "required": ["mode", "answer", "difficulty", "skill_key"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    CHINESE_QUIZ_TOOL_ID,
+    'Present a Chinese practice quiz (语文小练习) in one of four modes: word_build (pick the word that combines with the character), sentence_order (reorder shuffled word cards into a fluent sentence), lookalike (pick the correct single character for the blank in a sentence), antonym (pick the antonym). Use this INSTEAD of asking practice questions in plain text. For sentence_order the words array MUST be shuffled (not the correct order) and answer must be the joined correct sentence. skill_key is chinese_reading for sentence_order, chinese_vocab otherwise.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createChineseQuizToolConfig(): ToolConfig {
+  return new ToolConfig(
+    CHINESE_QUIZ_TOOL_ID,
+    '语文小练习',
+    '四种语文练习: 组词造句 / 连词成句 / 形近字辨析 / 近反义词。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    CHINESE_QUIZ_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
 // 注册所有内置工具
 export function registerBuiltinTools(): void {
   const registry = getToolRegistry()
@@ -3098,6 +3615,50 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(HANZI_CARD_TOOL_ID)) {
+    const hanziCardTool = new RegisteredTool(
+      HANZI_CARD_TOOL_ID,
+      createHanziCardToolConfig(),
+      createHanziCardToolDefinition(),
+      new HanziCardExecutor()
+    )
+    registry.registerTool(hanziCardTool)
+    registeredNow += 1
+  }
+
+  if (!registry.isToolRegistered(PINYIN_CARD_TOOL_ID)) {
+    const pinyinCardTool = new RegisteredTool(
+      PINYIN_CARD_TOOL_ID,
+      createPinyinCardToolConfig(),
+      createPinyinCardToolDefinition(),
+      new PinyinCardExecutor()
+    )
+    registry.registerTool(pinyinCardTool)
+    registeredNow += 1
+  }
+
+  if (!registry.isToolRegistered(PICTURE_TALK_TOOL_ID)) {
+    const pictureTalkTool = new RegisteredTool(
+      PICTURE_TALK_TOOL_ID,
+      createPictureTalkToolConfig(),
+      createPictureTalkToolDefinition(),
+      new PictureTalkExecutor()
+    )
+    registry.registerTool(pictureTalkTool)
+    registeredNow += 1
+  }
+
+  if (!registry.isToolRegistered(CHINESE_QUIZ_TOOL_ID)) {
+    const chineseQuizTool = new RegisteredTool(
+      CHINESE_QUIZ_TOOL_ID,
+      createChineseQuizToolConfig(),
+      createChineseQuizToolDefinition(),
+      new ChineseQuizExecutor()
+    )
+    registry.registerTool(chineseQuizTool)
+    registeredNow += 1
+  }
+
   console.info(
     'BuiltinTools',
     `Builtin tools ready: total=${registry.getToolCount()}, newlyRegistered=${registeredNow}`
@@ -3106,5 +3667,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, GRANT_STAR_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID]
 }

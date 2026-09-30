@@ -67,6 +67,8 @@ const SKILL_DEFINITIONS: [string, string][] = [
   ['english_writing', '英文书写'],
   ['chinese_writing', '中文书写'],
   ['pinyin', '拼音认读'],
+  ['chinese_vocab', '识字组词'],
+  ['chinese_reading', '阅读表达'],
   ['categorization', '分类归纳']
 ]
 

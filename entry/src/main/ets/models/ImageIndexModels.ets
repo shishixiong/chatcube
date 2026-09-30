@@ -15,10 +15,12 @@
  *
  * - LESSON_PLAN: 备课老师预生成的图（7 天 TTL，写入 prepared_media 风格的 row）
  * - ENGLISH_QUIZ: 英语题出题时生成的图（永不过期，写入 EnglishQuizImageIndex 风格的 row）
+ * - PICTURE_TALK: 看图说话场景图（永不过期，按字面 prompt 键复用）
  */
 export enum ImageSource {
   LESSON_PLAN = 'lesson_plan',
-  ENGLISH_QUIZ = 'english_quiz'
+  ENGLISH_QUIZ = 'english_quiz',
+  PICTURE_TALK = 'picture_talk'
 }
 
 // =================== Row 类型 ===================
