@@ -1796,7 +1796,8 @@ function createEnglishQuizToolDefinition(): ToolDefinition {
       "sound_text": {
         "type": "string",
         "description": "仅 legacy phonics_choice 用: TTS 可读的字母音拼写 (如 /k/ 写作「kuh」)。新调用不要发此字段."
-      }
+      },
+      "purpose": {"type": "string", "enum": ["new", "review"], "description": "出题目的。new=考新词或常规巩固(默认);review=显式复习近期学过的词,可绕过同题型冷却但仍受会话间隔限制。复现旧词时必须传 review,缺省视为 new"}
     },
     "required": ["question", "mode", "correct_answer"]
   }`
@@ -2485,7 +2486,8 @@ function createPictureVocabToolDefinition(): ToolDefinition {
       "skill_key": {
         "type": "string",
         "description": "The child profile skill dimension: mode=en 用 english_vocab，mode=zh 用 chinese_writing。"
-      }
+      },
+      "purpose": {"type": "string", "enum": ["new", "review"], "description": "出题目的。new=考新词或常规巩固(默认);review=显式复习近期学过的词,可绕过同题型冷却但仍受会话间隔限制。复现旧词时必须传 review,缺省视为 new"}
     },
     "required": ["mode", "image_prompt", "correct_answer", "options", "difficulty", "skill_key"]
   }`
@@ -2590,7 +2592,8 @@ function createListeningQuizToolDefinition(): ToolDefinition {
       "skill_key": {
         "type": "string",
         "description": "The child profile skill dimension: 字母听力用 english_alphabet，单词听力用 english_vocab，phonics 辨音用 english_phonics。"
-      }
+      },
+      "purpose": {"type": "string", "enum": ["new", "review"], "description": "出题目的。new=考新词或常规巩固(默认);review=显式复习近期学过的词,可绕过同题型冷却但仍受会话间隔限制。复现旧词时必须传 review,缺省视为 new"}
     },
     "required": ["word", "question", "correct_answer", "options", "difficulty", "skill_key"]
   }`
@@ -2690,7 +2693,8 @@ function createPinyinQuizToolDefinition(): ToolDefinition {
       "skill_key": {
         "type": "string",
         "description": "固定填 pinyin。"
-      }
+      },
+      "purpose": {"type": "string", "enum": ["new", "review"], "description": "出题目的。new=考新词或常规巩固(默认);review=显式复习近期学过的词,可绕过同题型冷却但仍受会话间隔限制。复现旧词时必须传 review,缺省视为 new"}
     },
     "required": ["character", "correct_answer", "options", "difficulty", "skill_key"]
   }`
@@ -3323,7 +3327,8 @@ function createChineseQuizToolDefinition(): ToolDefinition {
       "skill_key": {
         "type": "string",
         "description": "sentence_order 填 chinese_reading，其余填 chinese_vocab。"
-      }
+      },
+      "purpose": {"type": "string", "enum": ["new", "review"], "description": "出题目的。new=考新词或常规巩固(默认);review=显式复习近期学过的词,可绕过同题型冷却但仍受会话间隔限制。复现旧词时必须传 review,缺省视为 new"}
     },
     "required": ["mode", "answer", "difficulty", "skill_key"]
   }`

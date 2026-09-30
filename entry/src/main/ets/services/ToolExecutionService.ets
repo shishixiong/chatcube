@@ -83,6 +83,7 @@ import { StarActivityType } from '../models/StarEventModels'
 import { getLearningLedgerService } from './LearningLedgerService'
 import { extractLedgerItemsFromTool, extractLedgerAnswerItems, normalizeItemKey } from '../utils/LedgerExtractUtils'
 import { LedgerRecord } from '../models/LearningLedgerModels'
+import { parsePurpose, buildRepeatBlockedMessage } from '../utils/VocabRepeatValidation'
 
 
 // 取消检查回调类型
@@ -502,6 +503,49 @@ export class ToolExecutionService {
     })
   }
 
+  /**
+   * 出题重复度硬门禁 (spec §9): 预校验通过后、进 pending 前调用。
+   * 返回 null = 放行; 非 null = 已构造 repeat_blocked ToolResult (should_retry, LLM 自纠换词)。
+   * 台账任何异常 → 放行 (静默失败铁律)。
+   */
+  private async runVocabRepeatGate(toolId: string, toolCall: ToolCall,
+    context: ToolExecutionContext): Promise<ToolResult | null> {
+    try {
+      const items = extractLedgerItemsFromTool(toolId, toolCall.arguments)
+      if (items.length === 0) {
+        return null
+      }
+      const purpose = parsePurpose(toolCall.arguments)
+      const now = Date.now()
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i]
+        const itemKey = normalizeItemKey(item.subject, item.itemType, item.display)
+        const check = await getLearningLedgerService()
+          .checkRepeat(context.sessionId, itemKey, item.mode, purpose, now, item.display)
+        if (!check.allowed) {
+          const message = buildRepeatBlockedMessage(check.reason, check.display)
+          console.warn('ToolExecutionService', `${toolId} repeat blocked (${check.reason}): ${check.display}`)
+          toolCall.approvalState = 'denied'
+          // ToolResult 构造: 逐字镜像各 handler 内 validation_failed 失败分支的构造方式
+          return new ToolResult(
+            toolCall.id,
+            JSON.stringify({
+              error: 'repeat_blocked',
+              message: message,
+              should_retry: true
+            }),
+            true,
+            toolCall.displayName,
+            toolCall.sourceLabel
+          )
+        }
+      }
+      return null
+    } catch (_e) {
+      return null
+    }
+  }
+
   private buildCancelledResult(toolCall: ToolCall, displayName: string, sourceLabel: string): ToolResult {
     return new ToolResult(
       toolCall.id,
@@ -870,6 +914,12 @@ export class ToolExecutionService {
       )
     }
 
+    // 0.5 词级重复度硬门禁 (spec §9): 台账判定重复出题 → 回 repeat_blocked, LLM 自纠换词
+    const repeatBlock = await this.runVocabRepeatGate('english_quiz', toolCall, context)
+    if (repeatBlock !== null) {
+      return repeatBlock
+    }
+
     // 1. 立即设置 pending 状态, 让卡片立即出现
     toolCall.approvalState = 'pending'
     this.recordLedgerServed('english_quiz', toolCall, context)
@@ -1055,6 +1105,12 @@ export class ToolExecutionService {
       )
     }
 
+    // 0.5 词级重复度硬门禁 (spec §9): 台账判定重复出题 → 回 repeat_blocked, LLM 自纠换词
+    const repeatBlock = await this.runVocabRepeatGate('picture_vocab', toolCall, context)
+    if (repeatBlock !== null) {
+      return repeatBlock
+    }
+
     // 1. 立即设置 pending 状态, 让卡片立即出现
     toolCall.approvalState = 'pending'
     this.recordLedgerServed('picture_vocab', toolCall, context)
@@ -1178,6 +1234,12 @@ export class ToolExecutionService {
       )
     }
 
+    // 0.5 词级重复度硬门禁 (spec §9): 台账判定重复出题 → 回 repeat_blocked, LLM 自纠换词
+    const repeatBlock = await this.runVocabRepeatGate('listening_quiz', toolCall, context)
+    if (repeatBlock !== null) {
+      return repeatBlock
+    }
+
     // 1. 立即设置 pending 状态, 让卡片立即出现
     toolCall.approvalState = 'pending'
     this.recordLedgerServed('listening_quiz', toolCall, context)
@@ -1268,6 +1330,12 @@ export class ToolExecutionService {
         toolCall.displayName,
         toolCall.sourceLabel
       )
+    }
+
+    // 0.5 词级重复度硬门禁 (spec §9): 台账判定重复出题 → 回 repeat_blocked, LLM 自纠换词
+    const repeatBlock = await this.runVocabRepeatGate('pinyin_quiz', toolCall, context)
+    if (repeatBlock !== null) {
+      return repeatBlock
     }
 
     // 1. 立即设置 pending 状态, 让卡片立即出现
@@ -1661,6 +1729,12 @@ export class ToolExecutionService {
         toolCall.displayName,
         toolCall.sourceLabel
       )
+    }
+
+    // 0.5 词级重复度硬门禁 (spec §9): 台账判定重复出题 → 回 repeat_blocked, LLM 自纠换词
+    const repeatBlock = await this.runVocabRepeatGate('chinese_quiz', toolCall, context)
+    if (repeatBlock !== null) {
+      return repeatBlock
     }
 
     // 1. 立即设置 pending 状态, 让卡片立即出现
