@@ -10,7 +10,7 @@ import { getAppSettingsState } from '../../state/AppSettingsState'
 const MIMO_ENGINE_ID: string = 'mimo'
 
 export class MiMoTtsEngine implements ITtsEngine {
-  private apiKey: string = 'sk-cwidkyxovc7trbn06hbp4y4uvvtembyouazogcrdixm15xke'
+  private apiKey: string = ''
   private baseUrl: string = MIMO_TTS_CONFIG.apiUrl
   private speaking: boolean = false
   private currentCallback: TTSCallback | null = null
