@@ -89,6 +89,9 @@ import { getTeachingStyleAdjustmentService } from './TeachingStyleAdjustmentServ
 import { TeachingStyleAdjustmentSummary } from '../models/TeachingReflectionModels'
 import { setAppUiStateValue } from '../state/AppUiState'
 import { AppStorageKeys } from '../config/AppStorageKeys'
+import { getLearningLedgerService } from './LearningLedgerService'
+import { extractLedgerSeeds } from '../utils/LedgerExtractUtils'
+import { LedgerSummary } from '../models/LearningLedgerModels'
 
 /** 触发后 5min 静默窗口：合并多次会话结束 */
 const DEBOUNCE_MS: number = 5 * 60 * 1000
@@ -189,6 +192,14 @@ class ImageModelResolution {
   provider: ModelProvider | null = null
   model: ModelInfo | null = null
   reason: string = ''
+}
+
+/** 备课输入的词级台账载荷 (spec §8.2); 台账不可用时为 null */
+interface PlannerLedgerPayload {
+  newCandidates: string[]
+  dueReview: string[]
+  mastered: string[]
+  cooling: string[]
 }
 
 export class LessonPlanningService {
@@ -570,11 +581,13 @@ export class LessonPlanningService {
       const currentAdj = await getTeachingStyleAdjustmentService().getCurrentAdjustment('', Date.now())
       const currentStyleSummary: TeachingStyleAdjustmentSummary | null =
         currentAdj !== null ? getTeachingStyleAdjustmentService().toSummary(currentAdj) : null
+      const ledgerPayload = await this.buildPlannerLedgerPayload()
       const userInput = JSON.stringify({
         todaysSessions: summaries,
         childProfile: this.buildChildProfileForPlanner(profile),
         yesterdayPlan: yesterdayPlanJson === '' ? null : JSON.parse(yesterdayPlanJson),
         recentTopics: recentTopics,
+        ledger: ledgerPayload,
         currentStyleAdjustment: currentStyleSummary,
         planDate: planDate,
         sessionCount: sessions.length,
@@ -672,6 +685,7 @@ export class LessonPlanningService {
         // 成功 → 重置失败计数 + 通知 UI 刷新
         await this.resetTodayFailCount()
         setAppUiStateValue(AppStorageKeys.LESSON_PLAN_REFRESH_TICK, Date.now())
+        await this.recordPlanSeeds(baseline)
         console.info('LessonPlanningService',
           `Plan for ${planDate} (baseline) generated. ` +
           `vocab=${baseline.vocab.length}, math=${baseline.math.length}, ` +
@@ -693,6 +707,8 @@ export class LessonPlanningService {
 
       // 10. 通知 UI 刷新（已关注 LESSON_PLAN_REFRESH_TICK 的页面会重建 prompt）
       setAppUiStateValue(AppStorageKeys.LESSON_PLAN_REFRESH_TICK, Date.now())
+
+      await this.recordPlanSeeds(plan)
 
       console.info('LessonPlanningService',
         `Plan for ${planDate} generated successfully. sessions=${sessions.length}, messages=${messageCount}, ` +
@@ -728,6 +744,42 @@ export class LessonPlanningService {
       await this.markFailed(planId, planDate, `pipeline 异常: ${JSON.stringify(error)}`, 0, 0, '[]')
     } finally {
       this.inFlight = false
+    }
+  }
+
+  /** 合并 en+zh 台账摘要为备课输入载荷; 失败返回 null (prompt 端容错) */
+  private async buildPlannerLedgerPayload(): Promise<PlannerLedgerPayload | null> {
+    try {
+      const nowMs = Date.now()
+      const ledger = getLearningLedgerService()
+      const enSummary: LedgerSummary = await ledger.buildSummary('en', nowMs)
+      const zhSummary: LedgerSummary = await ledger.buildSummary('zh', nowMs)
+      const dueDisplays: string[] = []
+      for (let i = 0; i < enSummary.dueReview.length; i++) {
+        dueDisplays.push(enSummary.dueReview[i].display)
+      }
+      for (let i = 0; i < zhSummary.dueReview.length; i++) {
+        dueDisplays.push(zhSummary.dueReview[i].display)
+      }
+      const payload: PlannerLedgerPayload = {
+        newCandidates: enSummary.newPool.concat(zhSummary.newPool),
+        dueReview: dueDisplays,
+        mastered: enSummary.mastered.concat(zhSummary.mastered),
+        cooling: enSummary.cooling.concat(zhSummary.cooling)
+      }
+      return payload
+    } catch (error) {
+      console.warn('LessonPlanningService', `buildPlannerLedgerPayload failed (ignored): ${String(error)}`)
+      return null
+    }
+  }
+
+  /** 计划落库后登记台账种子 (source=plan, 只建行); 静默失败 */
+  private async recordPlanSeeds(plan: LessonPlan): Promise<void> {
+    try {
+      await getLearningLedgerService().upsertPlanItems(extractLedgerSeeds(plan), Date.now())
+    } catch (error) {
+      console.warn('LessonPlanningService', `recordPlanSeeds failed (ignored): ${String(error)}`)
     }
   }
 
