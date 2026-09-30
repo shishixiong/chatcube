@@ -17,6 +17,7 @@ import { StarEventInsert, StarEventRow } from '../models/StarEventModels'
 import { DailyLessonPlanRow, PreparedMediaRow, PlannerStats } from '../models/LessonPlanModels'
 import { TeachingStyleAdjustmentRow, WeeklyTrendRow } from '../models/TeachingReflectionModels'
 import { ImageIndexRow } from '../models/ImageIndexModels'
+import { LearningItem, LedgerEventInsert, RepeatStat } from '../models/LearningLedgerModels'
 import { deserializeMessageParts, serializeMessageParts } from '../models/MessageParts'
 import { ensureMessageParts, buildMessagePartsFromLegacy } from '../utils/ChatMessagePartsHelper'
 import { formatYMD } from '../utils/DateFormatUtils'
@@ -117,6 +118,9 @@ export class TableNames {
   // 教学反思层（评估老师 + 备课老师）新增
   static readonly TEACHING_STYLE_ADJUSTMENTS: string = 'teaching_style_adjustments'
   static readonly WEEKLY_TRENDS: string = 'weekly_trends'
+  // 词汇台账（重复控制）新增
+  static readonly LEARNING_ITEMS: string = 'learning_items'
+  static readonly LEARNING_ITEM_EVENTS: string = 'learning_item_events'
 	}
 
 // 拼图记录数据接口
@@ -572,6 +576,57 @@ export class DatabaseService {
       await this.rdbStore.executeSql(createImageIndexTable)
       await this.rdbStore.executeSql(createTeachingStyleAdjustmentsTable)
       await this.rdbStore.executeSql(createWeeklyTrendsTable)
+      // 词汇台账表（重复控制）：events 表冗余 display 列，高频词聚合免 JOIN 主表；
+      // FK 为逻辑关联，SQLite 端不启用外键
+      const createLearningItemsSql = `CREATE TABLE IF NOT EXISTS learning_items (
+      item_key            TEXT PRIMARY KEY,
+      subject             TEXT NOT NULL,
+      item_type           TEXT NOT NULL,
+      display             TEXT NOT NULL,
+      skill_key           TEXT DEFAULT '',
+      first_taught_at     INTEGER NOT NULL,
+      last_seen_at        INTEGER NOT NULL,
+      exposure_count      INTEGER NOT NULL DEFAULT 0,
+      correct_count       INTEGER NOT NULL DEFAULT 0,
+      wrong_count         INTEGER NOT NULL DEFAULT 0,
+      mastery             INTEGER NOT NULL DEFAULT 0,
+      consecutive_correct  INTEGER NOT NULL DEFAULT 0,
+      modes_seen_json     TEXT DEFAULT '[]',
+      last_mode           TEXT DEFAULT '',
+      last_session_id     TEXT DEFAULT '',
+      next_review_at      INTEGER NOT NULL DEFAULT 0,
+      mastered_at         INTEGER NOT NULL DEFAULT 0,
+      source              TEXT DEFAULT 'session',
+      created_at          INTEGER NOT NULL,
+      updated_at          INTEGER NOT NULL
+    )`
+      const createLearningItemEventsSql = `CREATE TABLE IF NOT EXISTS learning_item_events (
+      id           TEXT PRIMARY KEY,
+      item_key     TEXT NOT NULL,
+      session_id   TEXT DEFAULT '',
+      mode         TEXT DEFAULT '',
+      tool_id      TEXT DEFAULT '',
+      served_at    INTEGER NOT NULL,
+      answered_at  INTEGER DEFAULT 0,
+      is_correct   INTEGER DEFAULT -1,
+      display      TEXT DEFAULT ''
+    )`
+      await this.rdbStore.executeSql(createLearningItemsSql)
+      await this.rdbStore.executeSql(createLearningItemEventsSql)
+      const createIdxLiSubjectSql = `CREATE INDEX IF NOT EXISTS idx_li_subject ON learning_items(subject)`
+      const createIdxLiNextRevSql = `CREATE INDEX IF NOT EXISTS idx_li_next_rev ON learning_items(next_review_at)`
+      const createIdxLiMasterySql = `CREATE INDEX IF NOT EXISTS idx_li_mastery ON learning_items(mastery)`
+      const createIdxLiLastSeenSql = `CREATE INDEX IF NOT EXISTS idx_li_last_seen ON learning_items(last_seen_at DESC)`
+      const createIdxLieItemSql = `CREATE INDEX IF NOT EXISTS idx_lie_item ON learning_item_events(item_key, served_at DESC)`
+      const createIdxLieServedSql = `CREATE INDEX IF NOT EXISTS idx_lie_served ON learning_item_events(served_at DESC)`
+      const createIdxLieSessionSql = `CREATE INDEX IF NOT EXISTS idx_lie_session ON learning_item_events(session_id)`
+      await this.rdbStore.executeSql(createIdxLiSubjectSql)
+      await this.rdbStore.executeSql(createIdxLiNextRevSql)
+      await this.rdbStore.executeSql(createIdxLiMasterySql)
+      await this.rdbStore.executeSql(createIdxLiLastSeenSql)
+      await this.rdbStore.executeSql(createIdxLieItemSql)
+      await this.rdbStore.executeSql(createIdxLieServedSql)
+      await this.rdbStore.executeSql(createIdxLieSessionSql)
       await this.rdbStore.executeSql(
         `CREATE INDEX IF NOT EXISTS idx_generated_media_created_at ON ${TableNames.GENERATED_MEDIA}(created_at DESC)`
       )
@@ -3312,6 +3367,273 @@ export class DatabaseService {
       totals.set(dayKey, (totals.get(dayKey) ?? 0) + events[i].stars)
     }
     return totals
+  }
+
+  // ============ 词汇台账操作（learning_items + learning_item_events）============
+
+  private learningItemFromResultSet(rs: relationalStore.ResultSet): LearningItem {
+    const item = new LearningItem()
+    item.itemKey = rs.getString(rs.getColumnIndex('item_key'))
+    item.subject = rs.getString(rs.getColumnIndex('subject'))
+    item.itemType = rs.getString(rs.getColumnIndex('item_type'))
+    item.display = rs.getString(rs.getColumnIndex('display'))
+    item.skillKey = rs.getString(rs.getColumnIndex('skill_key'))
+    item.firstTaughtAt = rs.getLong(rs.getColumnIndex('first_taught_at'))
+    item.lastSeenAt = rs.getLong(rs.getColumnIndex('last_seen_at'))
+    item.exposureCount = rs.getLong(rs.getColumnIndex('exposure_count'))
+    item.correctCount = rs.getLong(rs.getColumnIndex('correct_count'))
+    item.wrongCount = rs.getLong(rs.getColumnIndex('wrong_count'))
+    item.mastery = rs.getLong(rs.getColumnIndex('mastery'))
+    item.consecutiveCorrect = rs.getLong(rs.getColumnIndex('consecutive_correct'))
+    try {
+      const modesJson = rs.getString(rs.getColumnIndex('modes_seen_json'))
+      const parsed = JSON.parse(modesJson) as Object
+      if (Array.isArray(parsed)) {
+        const arr = parsed as Object[]
+        for (let i = 0; i < arr.length; i++) {
+          if (typeof arr[i] === 'string') {
+            item.modesSeen.push(arr[i] as string)
+          }
+        }
+      }
+    } catch (_e) {
+      item.modesSeen = []
+    }
+    item.lastMode = rs.getString(rs.getColumnIndex('last_mode'))
+    item.lastSessionId = rs.getString(rs.getColumnIndex('last_session_id'))
+    item.nextReviewAt = rs.getLong(rs.getColumnIndex('next_review_at'))
+    item.masteredAt = rs.getLong(rs.getColumnIndex('mastered_at'))
+    item.source = rs.getString(rs.getColumnIndex('source'))
+    item.createdAt = rs.getLong(rs.getColumnIndex('created_at'))
+    item.updatedAt = rs.getLong(rs.getColumnIndex('updated_at'))
+    return item
+  }
+
+  private learningItemToBucket(item: LearningItem): relationalStore.ValuesBucket {
+    const bucket: relationalStore.ValuesBucket = {
+      'item_key': item.itemKey,
+      'subject': item.subject,
+      'item_type': item.itemType,
+      'display': item.display,
+      'skill_key': item.skillKey,
+      'first_taught_at': item.firstTaughtAt,
+      'last_seen_at': item.lastSeenAt,
+      'exposure_count': item.exposureCount,
+      'correct_count': item.correctCount,
+      'wrong_count': item.wrongCount,
+      'mastery': item.mastery,
+      'consecutive_correct': item.consecutiveCorrect,
+      'modes_seen_json': JSON.stringify(item.modesSeen),
+      'last_mode': item.lastMode,
+      'last_session_id': item.lastSessionId,
+      'next_review_at': item.nextReviewAt,
+      'mastered_at': item.masteredAt,
+      'source': item.source,
+      'created_at': item.createdAt,
+      'updated_at': item.updatedAt
+    }
+    return bucket
+  }
+
+  async findLearningItemByKey(itemKey: string): Promise<LearningItem | null> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return null
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.LEARNING_ITEMS)
+      predicates.equalTo('item_key', itemKey).limitAs(1)
+      const rs = await this.rdbStore.query(predicates)
+      let item: LearningItem | null = null
+      if (rs.goToFirstRow()) {
+        item = this.learningItemFromResultSet(rs)
+      }
+      rs.close()
+      return item
+    } catch (error) {
+      console.warn('DatabaseService', `findLearningItemByKey failed: ${String(error)}`)
+      return null
+    }
+  }
+
+  async insertLearningItem(item: LearningItem): Promise<boolean> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return false
+    }
+    try {
+      const rowId = await this.rdbStore.insert(TableNames.LEARNING_ITEMS, this.learningItemToBucket(item))
+      return rowId >= 0
+    } catch (error) {
+      console.warn('DatabaseService', `insertLearningItem failed: ${String(error)}`)
+      return false
+    }
+  }
+
+  /** update-first: 命中 0 行再 insert (codebase 无 CONFLICT_RESOLUTION 用法, 与既有 upsert 语义一致) */
+  async upsertLearningItem(item: LearningItem): Promise<boolean> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return false
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.LEARNING_ITEMS)
+      predicates.equalTo('item_key', item.itemKey)
+      const rows = await this.rdbStore.update(this.learningItemToBucket(item), predicates)
+      if (rows > 0) {
+        return true
+      }
+      return await this.insertLearningItem(item)
+    } catch (error) {
+      console.warn('DatabaseService', `upsertLearningItem failed: ${String(error)}`)
+      return false
+    }
+  }
+
+  private async queryLedgerItems(predicates: relationalStore.RdbPredicates): Promise<LearningItem[]> {
+    const items: LearningItem[] = []
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return items
+    }
+    try {
+      const rs = await this.rdbStore.query(predicates)
+      while (rs.goToNextRow()) {
+        items.push(this.learningItemFromResultSet(rs))
+      }
+      rs.close()
+    } catch (error) {
+      console.warn('DatabaseService', `queryLedgerItems failed: ${String(error)}`)
+    }
+    return items
+  }
+
+  async queryLedgerNewPool(subject: string, limit: number): Promise<LearningItem[]> {
+    const predicates = new relationalStore.RdbPredicates(TableNames.LEARNING_ITEMS)
+    predicates.equalTo('subject', subject).lessThanOrEqualTo('mastery', 1)
+      .orderByDesc('last_seen_at').limitAs(limit)
+    return await this.queryLedgerItems(predicates)
+  }
+
+  async queryLedgerDueReview(subject: string, now: number, limit: number): Promise<LearningItem[]> {
+    const predicates = new relationalStore.RdbPredicates(TableNames.LEARNING_ITEMS)
+    predicates.equalTo('subject', subject).between('mastery', 2, 4)
+      .lessThanOrEqualTo('next_review_at', now)
+      .orderByAsc('next_review_at').limitAs(limit)
+    return await this.queryLedgerItems(predicates)
+  }
+
+  async queryLedgerMastered(subject: string, limit: number): Promise<LearningItem[]> {
+    const predicates = new relationalStore.RdbPredicates(TableNames.LEARNING_ITEMS)
+    predicates.equalTo('subject', subject).equalTo('mastery', 5)
+      .orderByDesc('last_seen_at').limitAs(limit)
+    return await this.queryLedgerItems(predicates)
+  }
+
+  async queryLedgerCooling(subject: string, sinceMs: number, limit: number): Promise<LearningItem[]> {
+    const predicates = new relationalStore.RdbPredicates(TableNames.LEARNING_ITEMS)
+    predicates.equalTo('subject', subject).greaterThanOrEqualTo('last_seen_at', sinceMs)
+      .orderByDesc('last_seen_at').limitAs(limit)
+    return await this.queryLedgerItems(predicates)
+  }
+
+  async insertLearningItemEvent(event: LedgerEventInsert): Promise<boolean> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return false
+    }
+    try {
+      const bucket: relationalStore.ValuesBucket = {
+        'id': event.id,
+        'item_key': event.itemKey,
+        'session_id': event.sessionId,
+        'mode': event.mode,
+        'tool_id': event.toolId,
+        'served_at': event.servedAt,
+        'answered_at': 0,
+        'is_correct': -1,
+        'display': event.display
+      }
+      const rowId = await this.rdbStore.insert(TableNames.LEARNING_ITEM_EVENTS, bucket)
+      return rowId >= 0
+    } catch (error) {
+      console.warn('DatabaseService', `insertLearningItemEvent failed: ${String(error)}`)
+      return false
+    }
+  }
+
+  async updateLatestOpenLedgerEvent(itemKey: string, answeredAt: number, isCorrect: boolean): Promise<void> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return
+    }
+    try {
+      const sql = `UPDATE learning_item_events SET answered_at = ?, is_correct = ?
+        WHERE id = (SELECT id FROM learning_item_events
+          WHERE item_key = ? AND answered_at = 0 ORDER BY served_at DESC LIMIT 1)`
+      await this.rdbStore.executeSql(sql, [answeredAt, isCorrect ? 1 : 0, itemKey])
+    } catch (error) {
+      console.warn('DatabaseService', `updateLatestOpenLedgerEvent failed: ${String(error)}`)
+    }
+  }
+
+  async getTopRepeatedEvents(subjectPrefix: string, sinceMs: number, limit: number): Promise<RepeatStat[]> {
+    const stats: RepeatStat[] = []
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return stats
+    }
+    try {
+      const sql = `SELECT display, COUNT(*) AS cnt FROM learning_item_events
+        WHERE item_key LIKE ? AND served_at >= ?
+        GROUP BY display ORDER BY cnt DESC LIMIT ?`
+      const rs = await this.rdbStore.querySql(sql, [subjectPrefix, sinceMs, limit])
+      while (rs.goToNextRow()) {
+        const stat = new RepeatStat()
+        stat.display = rs.getString(rs.getColumnIndex('display'))
+        stat.count = rs.getLong(rs.getColumnIndex('cnt'))
+        stats.push(stat)
+      }
+      rs.close()
+    } catch (error) {
+      console.warn('DatabaseService', `getTopRepeatedEvents failed: ${String(error)}`)
+    }
+    return stats
+  }
+
+  async deleteLedgerEventsBefore(cutoffMs: number): Promise<number> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return 0
+    }
+    try {
+      const predicates = new relationalStore.RdbPredicates(TableNames.LEARNING_ITEM_EVENTS)
+      predicates.lessThan('served_at', cutoffMs)
+      return await this.rdbStore.delete(predicates)
+    } catch (error) {
+      console.warn('DatabaseService', `deleteLedgerEventsBefore failed: ${String(error)}`)
+      return 0
+    }
+  }
+
+  async countLedgerMastered(subject: string): Promise<number> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return 0
+    }
+    try {
+      const sql = `SELECT COUNT(*) AS cnt FROM learning_items WHERE subject = ? AND mastery = 5`
+      const rs = await this.rdbStore.querySql(sql, [subject])
+      let count = 0
+      if (rs.goToFirstRow()) {
+        count = rs.getLong(rs.getColumnIndex('cnt'))
+      }
+      rs.close()
+      return count
+    } catch (error) {
+      console.warn('DatabaseService', `countLedgerMastered failed: ${String(error)}`)
+      return 0
+    }
   }
 
   async deleteStarEventsOlderThan(cutoffMs: number): Promise<number> {
