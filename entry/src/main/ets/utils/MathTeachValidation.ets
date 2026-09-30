@@ -95,7 +95,9 @@ export function validateMathTeachArgs(rawArgs: string,
 function validateModeArgs(mode: string, args: Record<string, Object>): MathTeachValidationResult {
   if (mode === 'number_bond') {
     const total: number = getNumber(args, 'total')
-    if (!inRange(total, 2, 20)) { return fail('number_bond 的 total 必须是 2-20 的整数') }
+    if (!inRange(total, 2, 10)) {
+      return fail('number_bond 的 total 必须是 2-10 的整数（分与合引导课要逐个数点、枚举全部分法，太大讲不动）')
+    }
   } else if (mode === 'ten_frame') {
     const a: number = getNumber(args, 'a')
     const b: number = getNumber(args, 'b')
@@ -116,8 +118,8 @@ function validateModeArgs(mode: string, args: Record<string, Object>): MathTeach
     const hour: number = getNumber(args, 'hour')
     const minute: number = getNumber(args, 'minute')
     if (!inRange(hour, 1, 12)) { return fail('clock 的 hour 必须是 1-12 的整数') }
-    if (minute !== 0 && minute !== 30) {
-      return fail('clock 的 minute 只能是 0（整点）或 30（半点）')
+    if (!inRange(minute, 0, 55) || minute % 5 !== 0) {
+      return fail('clock 的 minute 必须是 0-55 的 5 分钟步长整数（0/5/10/.../55）')
     }
   }
   return pass()

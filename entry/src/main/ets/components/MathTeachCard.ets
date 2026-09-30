@@ -148,8 +148,12 @@ export struct MathTeachCard {
   }
 
   private interactionThreshold(): number {
+    // number_bond 分与合引导课：4 步各计一次（数一数/分一分/合一合/找全部）
+    if (this.argsView.mode === 'number_bond') { return 4 }
     // ten_frame 凑十引导课：8 步各计一次（完成步数，见 TenFrameBoard）
     if (this.argsView.mode === 'ten_frame') { return 8 }
+    // clock 时钟拨一拨：认一认图例 / 拖拽松手 / 步进 / 步长切换 / 引导步进 各计一次（见 ClockBoard）
+    if (this.argsView.mode === 'clock') { return 4 }
     return 1
   }
 
@@ -207,7 +211,17 @@ export struct MathTeachCard {
         .fontSize(14).fontColor(KIDS_MUTED)
         .padding({ top: 8, bottom: 8 })
     } else if (this.argsView.mode === 'number_bond') {
-      NumberBondBoard({ total: this.argsView.total, readonly: this.isAnswered, onInteract: () => { this.countInteract() } })
+      NumberBondBoard({
+        total: this.argsView.total,
+        readonly: this.isAnswered,
+        onInteract: () => {
+          this.countInteract()
+        },
+        onFinish: () => {
+          // 板内「本课完成」提前结课：markStepDone 已先计一次，这里直接提交（幂等守卫在 submit 内）
+          this.submit()
+        }
+      })
     } else if (this.argsView.mode === 'ten_frame') {
       TenFrameBoard({ a: this.argsView.a, b: this.argsView.b, readonly: this.isAnswered, onInteract: () => { this.countInteract() } })
     } else if (this.argsView.mode === 'balance') {

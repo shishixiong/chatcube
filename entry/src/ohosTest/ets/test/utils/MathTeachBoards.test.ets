@@ -1,10 +1,10 @@
 import { describe, it, expect } from '@ohos/hypium'
-import { clockAngles, balanceTilt, bondSplit, ClockAngles } from '../../../../main/ets/utils/MathTeachBoards'
+import { clockAngles, balanceTilt, ClockAngles } from '../../../../main/ets/utils/MathTeachBoards'
 
 /**
  * MathTeachBoards 单元测试
  *
- * 覆盖钟面角度 / 天平倾角 / 数的分解。
+ * 覆盖钟面角度 / 天平倾角。
  * 运行: DevEco Studio → 右键该文件 → Run 'hypium test'
  * CLI `hvigorw test` 不可用 (pre-existing scaffold mismatch, 详见 MEMORY.md)
  */
@@ -26,11 +26,6 @@ export default function mathTeachBoardsTest() {
       expect(balanceTilt(5, 9) === 12).assertTrue()
       expect(balanceTilt(5, 6) === 4).assertTrue()
       expect(balanceTilt(5, 5) === 0).assertTrue()
-    })
-    it('bondSplit_越界取0或total', 0, () => {
-      expect(bondSplit(9, 4) === 5).assertTrue()
-      expect(bondSplit(9, -1) === 9).assertTrue()
-      expect(bondSplit(9, 12) === 0).assertTrue()
     })
   })
 }

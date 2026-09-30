@@ -1,0 +1,1260 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>小星老师 · 数学教学台</title>
+<style>
+  /* ─── tokens — 绑定 docs/brand-spec.md（儿童端锁定令牌） ─────────── */
+  :root {
+    --bg:       oklch(98% 0.004 240);
+    --surface:  oklch(100% 0 0);
+    --fg:       oklch(22% 0.02 240);
+    --muted:    oklch(50% 0.018 240);
+    --border:   oklch(90% 0.006 240);
+    --accent:   oklch(74% 0.16 62);
+    --on-accent: oklch(24% 0.03 62);
+
+    --math:     oklch(64% 0.15 255);
+    --math-ink: oklch(46% 0.15 258);
+    --ok:       oklch(62% 0.15 150);
+    --bad:      oklch(58% 0.19 25);
+
+    --accent-soft: color-mix(in oklch, var(--accent) 14%, transparent);
+    --math-soft:   color-mix(in oklch, var(--math) 13%, var(--surface));
+    --fg-soft:     color-mix(in oklch, var(--fg) 6%, transparent);
+
+    --font-display: 'Yuanti SC', 'Hiragino Maru Gothic ProN', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
+    --font-body:    'PingFang SC', 'Hiragino Sans GB', system-ui, -apple-system, sans-serif;
+    --font-mono:    ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+
+    --radius: 12px;
+    --radius-lg: 18px;
+    --shadow: 0 1px 2px color-mix(in oklch, var(--fg) 6%, transparent), 0 8px 24px color-mix(in oklch, var(--fg) 5%, transparent);
+
+    /* motion — 教学优先：统一时长与缓动，服务算理，不做装饰 */
+    --ease-standard: cubic-bezier(.22, .61, .36, 1);
+    --ease-spring:   cubic-bezier(.34, 1.25, .5, 1);
+    --ease-out:      cubic-bezier(.3, .9, .4, 1);
+    --dur-fast: .15s;
+    --dur-base: .32s;
+    --dur-slow: .5s;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  img, svg { display: block; max-width: 100%; }
+  button { font: inherit; cursor: pointer; color: inherit; }
+  h1, h2, h3, h4, p { margin: 0; text-wrap: pretty; }
+  h2, h3 { text-wrap: balance; }
+  :focus-visible { outline: 2px solid var(--math-ink); outline-offset: 2px; border-radius: 8px; }
+
+  /* ─── primitives ───────────────────────────────────────────────── */
+  .stack { display: flex; flex-direction: column; }
+  .stack > * + * { margin-top: 18px; }
+  .row { display: flex; align-items: center; gap: 14px; }
+  .row-between { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .grid-2-1 { display: grid; grid-template-columns: 1.9fr 1fr; gap: 26px; align-items: start; }
+
+  .h2 { font-family: var(--font-display); font-size: clamp(25px, 2.4vw, 31px); font-weight: 700; line-height: 1.3; }
+  .h3 { font-family: var(--font-display); font-size: 17px; font-weight: 700; }
+  .lead { font-size: 15px; color: var(--muted); max-width: 62ch; line-height: 1.75; }
+  .meta { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+  .eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--muted); font-size: 11.5px; background: var(--surface);
+  }
+  .tag.ok { border-color: color-mix(in oklch, var(--ok) 45%, var(--border)); color: color-mix(in oklch, var(--ok) 70%, var(--fg)); }
+  .tag.info { border-color: color-mix(in oklch, var(--math-ink) 34%, var(--border)); color: var(--math-ink); }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 44px; padding: 10px 18px; border-radius: var(--radius);
+    border: 1px solid transparent; font-size: 14.5px; font-weight: 600;
+    transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard), transform .06s var(--ease-standard);
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+  .btn-primary:hover:not(:disabled) { background: color-mix(in oklch, var(--accent) 88%, black); }
+  .btn-secondary { background: var(--surface); color: var(--fg); border-color: var(--border); }
+  .btn-secondary:hover:not(:disabled) { border-color: var(--fg); }
+  .btn-math { background: var(--math-soft); color: var(--math-ink); border-color: color-mix(in oklch, var(--math) 30%, var(--border)); }
+  .btn-math:hover:not(:disabled) { background: color-mix(in oklch, var(--math) 20%, var(--surface)); }
+  .stepper-btn { min-width: 44px; min-height: 44px; width: 44px; height: 44px; padding: 0; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); font-size: 20px; font-weight: 700; color: var(--math-ink); display: grid; place-items: center; }
+  .stepper-btn:hover { border-color: var(--math); }
+
+  /* ─── app shell ────────────────────────────────────────────────── */
+  .app { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: 100vh; }
+  .sidebar {
+    background: var(--surface); border-right: 1px solid var(--border);
+    padding: 20px 14px; display: flex; flex-direction: column; gap: 18px;
+    position: sticky; top: 0; height: 100vh;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 2px 6px; }
+  .brand-mark { width: 36px; height: 36px; border-radius: 11px; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; flex: none; }
+  .brand-mark svg { width: 20px; height: 20px; }
+  .brand-name { font-family: var(--font-display); font-weight: 700; font-size: 16px; display: block; }
+  .brand-sub { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+  .navgroup { display: flex; flex-direction: column; gap: 3px; }
+  .navgroup-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding: 6px 8px 4px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+    min-height: 44px; padding: 9px 10px; border-radius: 11px; border: 1px solid transparent;
+    font-size: 14px; background: transparent; transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
+  }
+  .nav-item:hover { background: var(--fg-soft); }
+  .nav-item[aria-current="true"] { background: var(--bg); border-color: var(--border); font-weight: 600; }
+  .nav-ico { width: 18px; height: 18px; color: var(--muted); flex: none; }
+  .nav-item[aria-current="true"] .nav-ico { color: var(--math-ink); }
+  .nav-badge { margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; }
+
+  .learner { margin-top: auto; border: 1px solid var(--border); border-radius: 15px; padding: 13px; background: var(--bg); }
+  .learner-top { display: flex; align-items: center; gap: 10px; }
+  .avatar { width: 34px; height: 34px; border-radius: 50%; background: color-mix(in oklch, var(--math) 16%, var(--surface)); color: var(--math-ink); display: grid; place-items: center; font-weight: 700; font-size: 14px; flex: none; }
+  .star-count { display: inline-flex; align-items: center; gap: 4px; color: color-mix(in oklch, var(--accent) 58%, var(--fg)); font-family: var(--font-mono); font-size: 13px; font-weight: 600; }
+  .star-count svg { width: 14px; height: 14px; }
+
+  .main { min-width: 0; display: flex; flex-direction: column; }
+  .topbar { position: sticky; top: 0; z-index: 20; background: color-mix(in oklch, var(--bg) 88%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+  .topbar-inner { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 28px; }
+  .crumb { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+  .crumb b { color: var(--fg); font-weight: 600; }
+  .screen { padding: 30px 28px 72px; max-width: 1180px; width: 100%; }
+  .screen[hidden] { display: none; }
+  .screen-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 30px; }
+  .screen-head .eyebrow { display: block; margin-bottom: 10px; }
+
+  /* ─── stepper (5-step lesson) ──────────────────────────────────── */
+  .stepper { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .step {
+    text-align: left; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 15px; padding: 14px; transition: border-color var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
+  }
+  .step:hover { border-color: color-mix(in oklch, var(--fg) 22%, var(--border)); }
+  .step[aria-pressed="true"] { border-color: var(--math); background: var(--math-soft); box-shadow: 0 0 0 3px color-mix(in oklch, var(--math) 14%, transparent); }
+  .step-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .step-num { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  .step-name { font-weight: 700; font-size: 14.5px; display: block; margin-top: 10px; }
+  .step-en { font-family: var(--font-mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .step-goal { font-size: 12.5px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+  .step-tool { display: block; margin-top: 10px; font-family: var(--font-mono); font-size: 10.5px; color: var(--math-ink); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--border); flex: none; }
+  .dot.done { background: var(--ok); border-color: var(--ok); }
+  .dot.now { background: var(--accent); border-color: var(--accent); }
+
+  /* ─── level bars ───────────────────────────────────────────────── */
+  .levelrow { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }
+  .levelname { font-size: 13px; }
+  .levelval { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  .levelbar { grid-column: 1 / -1; display: flex; gap: 3px; }
+  .seg { flex: 1; height: 7px; border-radius: 3px; background: var(--fg-soft); }
+  .seg.on { background: var(--math); }
+  .seg.new { background: var(--accent); }
+
+  /* ─── timeline ─────────────────────────────────────────────────── */
+  .trow { display: grid; grid-template-columns: 86px 1fr auto; gap: 14px; align-items: center; padding: 13px 0; border-top: 1px solid var(--border); }
+  .trow:first-child { border-top: 0; }
+  .tstep { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  .tname { font-size: 14px; font-weight: 600; }
+  .tdesc { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+
+  /* ─── mode list ────────────────────────────────────────────────── */
+  .mode-item {
+    display: flex; flex-direction: column; gap: 5px; width: 100%; text-align: left;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px 13px;
+    transition: border-color var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard);
+  }
+  .mode-item:hover { border-color: color-mix(in oklch, var(--fg) 22%, var(--border)); }
+  .mode-item[aria-pressed="true"] { border-color: var(--math); background: var(--math-soft); }
+  .mode-item-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .mode-zh { font-weight: 700; font-size: 14.5px; }
+  .mode-id { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+  .mode-desc { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+
+  /* ─── teaching board (interactive demo) ────────────────────────── */
+  .board-card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 20px; box-shadow: var(--shadow); }
+  .board-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+  .board-q { font-size: 16.5px; font-weight: 600; margin: 16px 0 14px; }
+  .board-q small { display: block; font-weight: 400; font-size: 12.5px; color: var(--muted); margin-top: 5px; }
+  .board-stage { background: var(--bg); border: 1px solid var(--border); border-radius: 15px; padding: 18px; min-height: 232px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
+  .board-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+  .board-eq { font-family: var(--font-display); font-size: 22px; font-weight: 700; text-align: center; }
+  .board-eq b { color: var(--math-ink); }
+
+  /* number bond */
+  .bond-row { display: flex; gap: 8px; }
+  .bdot { width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--border); background: var(--surface); }
+  .bdot.a { background: var(--math); border-color: var(--math); }
+  .bdot.b { background: var(--accent); border-color: var(--accent); }
+  .bdot.ghost { border-style: dashed; background: transparent; }
+  .bond-eq { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 700; font-size: 20px; }
+  .bond-chip { padding: 4px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); }
+  .bond-chip.a { color: var(--math-ink); border-color: color-mix(in oklch, var(--math) 40%, var(--border)); }
+  .bond-chip.b { color: color-mix(in oklch, var(--accent) 55%, var(--fg)); border-color: color-mix(in oklch, var(--accent) 45%, var(--border)); }
+
+  /* number line */
+  .nline { width: 100%; max-width: 460px; height: 120px; }
+  .nline-token { transform-box: view-box; }
+  .nline-hop { animation: nl-hop 1s var(--ease-standard) both; }
+  @keyframes nl-hop {
+    0%, 12% { transform: translateX(-102.5px); }
+    46%, 58% { transform: translateX(-82px); }
+    100% { transform: translateX(0); }
+  }
+  .nl-arc { fill: none; stroke: var(--math); stroke-width: 1.6; stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: 100; animation: nl-draw .4s ease both; }
+  .nl-arc.a1 { animation-delay: .15s; }
+  .nl-arc.a2 { animation-delay: .62s; }
+  @keyframes nl-draw { to { stroke-dashoffset: 0; } }
+  .nl-plus { opacity: 0; font-family: var(--font-mono); animation: nl-fade .3s ease both; }
+  .nl-plus.a1 { animation-delay: .42s; }
+  .nl-plus.a2 { animation-delay: .98s; }
+  @keyframes nl-fade { to { opacity: 1; } }
+
+  /* ten frame */
+  .tenframe { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .tcell { width: 40px; height: 40px; border: 1.5px solid var(--border); border-radius: 9px; background: var(--surface); display: grid; place-items: center; }
+  .tcell .d { width: 22px; height: 22px; border-radius: 50%; background: var(--math); }
+  .tcell.add .d { background: var(--accent); }
+  .tcell.add { border-color: color-mix(in oklch, var(--accent) 55%, var(--border)); }
+  .loose { display: flex; gap: 6px; }
+  .loose .d { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); }
+  .tcell.add { animation: tf-ring .6s ease both; }
+  .tcell.add .d.fly { animation: tf-fly .5s var(--ease-spring) both; }
+  @keyframes tf-fly { 0% { transform: translate(34px,3px) scale(.45); opacity: .25; } 100% { transform: none; opacity: 1; } }
+  @keyframes tf-ring { 0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 50%, transparent); } 100% { box-shadow: 0 0 0 9px color-mix(in oklch, var(--accent) 0%, transparent); } }
+
+  /* place value */
+  .pv-wrap { display: flex; gap: 40px; align-items: flex-end; }
+  .pv-col { display: flex; flex-direction: column; align-items: center; gap: 10px; min-width: 84px; }
+  .pv-label { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  .pv-items { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; min-height: 46px; align-items: flex-end; }
+  .bundle { width: 34px; height: 40px; border-radius: 6px; background: var(--math); position: relative; }
+  .bundle::after { content: ''; position: absolute; left: 50%; top: 4px; bottom: 4px; width: 1.5px; background: color-mix(in oklch, var(--surface) 70%, transparent); box-shadow: -8px 0 0 color-mix(in oklch, var(--surface) 70%, transparent), 8px 0 0 color-mix(in oklch, var(--surface) 70%, transparent); }
+  .stick { width: 8px; height: 34px; border-radius: 4px; background: var(--accent); }
+  .stick.ready { box-shadow: 0 0 0 2px color-mix(in oklch, var(--math) 40%, transparent); }
+  .bundle-in { animation: pv-bundle .45s var(--ease-spring) both; }
+  @keyframes pv-bundle { 0% { transform: scale(.35) translateX(46px); opacity: .15; } 60% { transform: scale(1.1); opacity: 1; } 100% { transform: none; } }
+  .pv-count { font-family: var(--font-display); font-size: 26px; font-weight: 700; }
+
+  /* balance */
+  .balance-svg { width: 100%; max-width: 340px; height: 180px; }
+  .pan-label { font-family: var(--font-display); font-size: 20px; font-weight: 700; }
+  .balance-beam { transform-box: view-box; transform-origin: 170px 42px; transition: transform var(--dur-slow) var(--ease-spring); }
+
+  /* shapes */
+  .shape-tiles { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+  .shape-tile { width: 96px; height: 96px; border-radius: 14px; border: 1.5px solid var(--border); background: var(--surface); display: grid; place-items: center; transition: border-color var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard); }
+  .shape-tile[aria-pressed="true"] { border-color: var(--math); background: var(--math-soft); }
+  .shape-tile svg { width: 46px; height: 46px; color: var(--math-ink); }
+  .shape-stat { display: flex; gap: 22px; font-size: 13.5px; }
+
+  /* clock */
+  .clock-svg { width: 168px; height: 168px; }
+  .clock-hand { transform-box: view-box; transform-origin: 84px 84px; transition: transform var(--dur-slow) var(--ease-spring); }
+
+  /* bar model */
+  .bar-wrap { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 12px; }
+  .bar-row { display: flex; align-items: center; gap: 12px; }
+  .bar-track { flex: 1; height: 30px; border-radius: 8px; background: var(--fg-soft); display: flex; overflow: hidden; }
+  .bar-a { background: var(--math); }
+  .bar-b { background: var(--accent); }
+  .bar-lab { font-family: var(--font-mono); font-size: 12px; color: var(--muted); min-width: 68px; }
+  .bar-a, .bar-b { transition: width var(--dur-base) var(--ease-out); }
+
+  /* ─── composer ─────────────────────────────────────────────────── */
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 12.5px; color: var(--muted); font-weight: 500; }
+  .input, .select {
+    width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--fg); font: inherit; font-size: 14px;
+  }
+  .input:focus, .select:focus { outline: none; border-color: var(--math); box-shadow: 0 0 0 3px color-mix(in oklch, var(--math) 18%, transparent); }
+  input[type="range"] { width: 100%; accent-color: var(--math); min-height: 24px; }
+  .slider-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .slider-head b { font-family: var(--font-mono); font-size: 13px; }
+
+  .code { font-family: var(--font-mono); font-size: 12px; line-height: 1.7; background: color-mix(in oklch, var(--fg) 4%, var(--surface)); border: 1px solid var(--border); border-radius: 12px; padding: 14px; overflow: auto; white-space: pre; max-height: 340px; }
+  .tok-key { color: var(--math-ink); }
+  .tok-str { color: color-mix(in oklch, var(--ok) 78%, var(--fg)); }
+  .tok-num { color: color-mix(in oklch, var(--bad) 78%, var(--fg)); }
+  .tok-bool { color: color-mix(in oklch, var(--fg) 70%, var(--muted)); }
+
+  .check { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-top: 1px solid var(--border); font-size: 13px; }
+  .check:first-child { border-top: 0; }
+  .check .mk { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; flex: none; margin-top: 1px; }
+  .check .mk svg { width: 11px; height: 11px; }
+  .check.pass .mk { background: color-mix(in oklch, var(--ok) 16%, var(--surface)); color: color-mix(in oklch, var(--ok) 80%, var(--fg)); }
+  .check.fail .mk { background: color-mix(in oklch, var(--bad) 15%, var(--surface)); color: color-mix(in oklch, var(--bad) 82%, var(--fg)); }
+  .check.fail .lbl { color: color-mix(in oklch, var(--bad) 72%, var(--fg)); }
+  .check .lbl .fix { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+  .mini { border: 1px solid var(--border); border-radius: 16px; padding: 16px; background: var(--bg); }
+  .mini .opts { display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; margin-top: 12px; }
+  .mini .o { border: 1.5px solid var(--border); border-radius: 11px; padding: 9px 12px; font-size: 15px; font-weight: 600; background: var(--surface); font-family: var(--font-mono); }
+  .mini .o.correct { border-color: var(--ok); color: color-mix(in oklch, var(--ok) 62%, var(--fg)); background: color-mix(in oklch, var(--ok) 9%, var(--surface)); }
+
+  /* ─── contract · 概览条 + 前后对照 ─────────────────────────────── */
+  .summary-strip {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    border: 1px solid var(--border); border-radius: var(--radius-lg);
+    background: var(--surface); overflow: hidden; margin-bottom: 26px;
+  }
+  .sum-item { padding: 16px 18px; border-left: 1px solid var(--border); display: flex; flex-direction: column; gap: 5px; }
+  .sum-item:first-child { border-left: 0; }
+  .sum-num { font-family: var(--font-display); font-size: 30px; font-weight: 700; line-height: 1; }
+  .sum-item.lead .sum-num { color: color-mix(in oklch, var(--accent) 60%, var(--fg)); }
+  .sum-label { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+  .sum-label b { color: var(--fg); font-weight: 600; }
+
+  .ba-grid { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: stretch; margin-bottom: 26px; }
+  .ba-col { border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px; background: var(--surface); min-width: 0; }
+  .ba-col.old { background: color-mix(in oklch, var(--bad) 4%, var(--surface)); border-color: color-mix(in oklch, var(--bad) 22%, var(--border)); }
+  .ba-col.new { background: color-mix(in oklch, var(--ok) 5%, var(--surface)); border-color: color-mix(in oklch, var(--ok) 36%, var(--border)); }
+  .ba-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-bottom: 14px; }
+  .ba-tag { font-size: 12px; font-weight: 700; padding: 3px 11px; border-radius: 999px; border: 1px solid var(--border); }
+  .ba-tag.old { color: color-mix(in oklch, var(--bad) 74%, var(--fg)); border-color: color-mix(in oklch, var(--bad) 36%, var(--border)); }
+  .ba-tag.new { color: color-mix(in oklch, var(--ok) 66%, var(--fg)); border-color: color-mix(in oklch, var(--ok) 42%, var(--border)); }
+  .ba-body { font-size: 13.5px; line-height: 1.95; }
+  .ba-body p { margin: 0; }
+  .ba-body code { font-family: var(--font-mono); font-size: 12px; background: color-mix(in oklch, var(--fg) 6%, var(--surface)); padding: 1px 5px; border-radius: 5px; }
+  .ba-step { display: flex; gap: 9px; }
+  .ba-step .s { font-family: var(--font-mono); color: var(--math-ink); flex: none; }
+  .ba-note { color: var(--muted); font-size: 12.5px; margin-top: 10px; }
+  .ba-note.strong {
+    color: color-mix(in oklch, var(--ok) 60%, var(--fg)); font-weight: 600;
+    padding-top: 11px; border-top: 1px dashed color-mix(in oklch, var(--ok) 32%, var(--border));
+  }
+  .ba-arrow { display: grid; place-items: center; color: color-mix(in oklch, var(--accent) 62%, var(--fg)); }
+  .ba-arrow svg { width: 22px; height: 22px; }
+
+  .anti { border: 1px solid color-mix(in oklch, var(--bad) 26%, var(--border)); border-radius: 14px; padding: 15px; background: color-mix(in oklch, var(--bad) 3%, var(--surface)); }
+  .anti-t { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 14px; }
+  .anti-mk { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; flex: none; background: color-mix(in oklch, var(--bad) 15%, var(--surface)); color: color-mix(in oklch, var(--bad) 82%, var(--fg)); }
+  .anti-mk svg { width: 11px; height: 11px; }
+  .anti p { font-size: 13px; color: var(--muted); margin-top: 9px; line-height: 1.65; }
+
+  /* 进场：克制、指向「改动」，非装饰 */
+  @keyframes reveal-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  .reveal { animation: reveal-up var(--dur-slow) var(--ease-standard) both; }
+
+  /* ─── tables ───────────────────────────────────────────────────── */
+  .ds-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .ds-table th, .ds-table td { padding: 11px 13px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .ds-table th { color: var(--muted); font-weight: 500; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .ds-table tbody tr:hover { background: var(--fg-soft); }
+  .ds-table code { font-family: var(--font-mono); font-size: 12px; background: var(--fg-soft); padding: 1px 5px; border-radius: 5px; }
+  .rule { border: 0; border-top: 1px solid var(--border); margin: 0; }
+  .muted { color: var(--muted); }
+
+  @media (max-width: 1040px) { .stepper { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 920px) {
+    .app { grid-template-columns: 1fr; }
+    .sidebar { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 12px; }
+    .navgroup { flex-direction: row; flex-wrap: wrap; }
+    .navgroup-label { display: none; }
+    .learner { margin: 0; }
+    .grid-2, .grid-3, .grid-2-1 { grid-template-columns: 1fr; }
+    .stepper { grid-template-columns: 1fr; }
+    .screen, .topbar-inner { padding-inline: 18px; }
+    .summary-strip { grid-template-columns: repeat(2, 1fr); }
+    .sum-item:nth-child(odd) { border-left: 0; }
+    .sum-item:nth-child(n+3) { border-top: 1px solid var(--border); }
+    .ba-grid { grid-template-columns: 1fr; }
+    .ba-arrow { transform: rotate(90deg); padding: 2px 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-star" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.6l2.7 5.9 6.3.7-4.7 4.3 1.3 6.2L12 16.5 6.4 19.7l1.3-6.2L3 9.2l6.3-.7z"/></symbol>
+  <symbol id="i-board" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.4"/><path d="M3 9h18M9 9v12"/></symbol>
+  <symbol id="i-cards" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="14" height="14" rx="2.2"/><path d="M7 7V5.2A2.2 2.2 0 0 1 9.2 3H19a2 2 0 0 1 2 2v9.8A2.2 2.2 0 0 1 18.8 17H17"/></symbol>
+  <symbol id="i-compose" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2.1" fill="var(--surface)"/><circle cx="15" cy="12" r="2.1" fill="var(--surface)"/><circle cx="7" cy="17" r="2.1" fill="var(--surface)"/></symbol>
+  <symbol id="i-prompt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 7.5L4 12l4.5 4.5M15.5 7.5L20 12l-4.5 4.5"/></symbol>
+  <symbol id="i-bond" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="5.5" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="18" r="3"/><path d="M12 8.5L7 15.4M12 8.5l5 6.9"/></symbol>
+  <symbol id="i-line" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3 17h18"/><path d="M6 14l0 6M12 14l0 6M18 14l0 6"/><path d="M8 9c2-3 6-3 8 0"/><path d="M14.5 8.4l1.6.6-.7 1.6"/></symbol>
+  <symbol id="i-ten" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="6" width="18" height="12" rx="1.5"/><path d="M6.6 6v12M10.2 6v12M13.8 6v12M17.4 6v12M3 12h18"/></symbol>
+  <symbol id="i-blocks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="13" width="6" height="8" rx="1"/><rect x="15" y="13" width="6" height="8" rx="1"/><rect x="9" y="5" width="6" height="16" rx="1"/></symbol>
+  <symbol id="i-balance" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M5 21h14M4 7h16"/><path d="M4 7l-2 5a2.6 2.6 0 0 0 5 0zM20 7l-2 5a2.6 2.6 0 0 0 5 0z" transform="translate(-1.5 0)"/></symbol>
+  <symbol id="i-shape" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="7.5" r="4.5"/><rect x="13" y="3" width="8" height="8" rx="1.4"/><path d="M12 12.5l5.5 8.5h-11z"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></symbol>
+  <symbol id="i-bar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="5" rx="1.4"/><rect x="3" y="14" width="11" height="5" rx="1.4"/><rect x="15" y="14" width="6" height="5" rx="1.4"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.8l12 7.2-12 7.2z"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M12 6l6 6-6 6"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M18 6l-2.5 2.5M8.5 15.5L6 18"/></symbol>
+</svg>
+
+<div class="app">
+  <aside class="sidebar" data-od-id="sidebar">
+    <div class="brand">
+      <span class="brand-mark"><svg><use href="#i-star"/></svg></span>
+      <span>
+        <span class="brand-name">小星数学老师</span>
+        <span class="brand-sub">MATH SUITE v2</span>
+      </span>
+    </div>
+
+    <nav class="navgroup" aria-label="教学模块">
+      <span class="navgroup-label">教学</span>
+      <button class="nav-item" data-nav="lesson" aria-current="true">
+        <svg class="nav-ico"><use href="#i-board"/></svg> 今日数学课 <span class="nav-badge">5 步</span>
+      </button>
+      <button class="nav-item" data-nav="board">
+        <svg class="nav-ico"><use href="#i-cards"/></svg> 讲解演示板 <span class="nav-badge">8 种</span>
+      </button>
+      <button class="nav-item" data-nav="compose">
+        <svg class="nav-ico"><use href="#i-compose"/></svg> 讲解工作台
+      </button>
+      <button class="nav-item" data-nav="contract">
+        <svg class="nav-ico"><use href="#i-prompt"/></svg> Prompt 契约
+      </button>
+    </nav>
+
+    <div class="learner" data-od-id="learner-card">
+      <div class="learner-top">
+        <span class="avatar">朵</span>
+        <span style="flex:1; min-width:0;">
+          <span style="font-size:14px; font-weight:600; display:block;">朵朵 · 6 岁</span>
+          <span class="meta">数学 10 维已建档</span>
+        </span>
+      </div>
+      <div class="row-between" style="margin-top:12px;">
+        <span class="meta">今日奖励</span>
+        <span class="star-count"><svg><use href="#i-star"/></svg><span id="starCount">4</span> 星</span>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <span class="crumb">小星数学老师 / <b id="crumbName">今日数学课</b></span>
+        <span class="row" style="gap:8px;">
+          <span class="tag info">数学 · 10 维</span>
+          <span class="tag">本课主题 · 20 以内进位加法</span>
+        </span>
+      </div>
+    </header>
+
+    <!-- ═══ Screen 1 · 今日数学课 ═══ -->
+    <section class="screen" id="screen-lesson" data-od-id="screen-lesson">
+      <div class="screen-head">
+        <div>
+          <p class="eyebrow">TODAY · MATH</p>
+          <h2 class="h2">20 以内进位加法 · 凑十法</h2>
+          <p class="lead" style="margin-top:10px;">今日目标：看懂「凑十」的道理，会用 <b>9 + 5 → 9 + 1 + 4 → 10 + 4 = 14</b>。先动手摆一摆，再开口讲一讲，最后才算。</p>
+        </div>
+        <div class="row" style="gap:8px;">
+          <span class="tag">本课约 15 分钟</span>
+          <span class="tag info">难度 L1–L2</span>
+        </div>
+      </div>
+
+      <div class="card" data-od-id="lesson-concept" style="padding:18px 20px;">
+        <div class="row-between" style="margin-bottom:14px;">
+          <h3 class="h3">本课核心概念</h3>
+          <span class="meta">math_number_sense · ten_frame</span>
+        </div>
+        <div class="grid-3">
+          <div><span class="meta">概念</span><p style="font-size:14.5px; font-weight:600; margin-top:4px;">凑十法（把 5 拆成 1 和 4）</p></div>
+          <div><span class="meta">先备知识</span><p style="font-size:14.5px; font-weight:600; margin-top:4px;">10 的组成 · 9 的分与合</p></div>
+          <div><span class="meta">算理一句话</span><p style="font-size:14.5px; font-weight:600; margin-top:4px;">9 差 1 凑成 10，余下的 4 再加</p></div>
+        </div>
+      </div>
+
+      <p class="eyebrow" style="margin:30px 0 14px;">五步数学课 · 点一步看怎么上</p>
+      <div class="stepper" id="stepper" data-od-id="stepper"></div>
+
+      <div class="grid-2-1" style="margin-top:30px;">
+        <div class="card" data-od-id="lesson-flow">
+          <div class="row-between" style="margin-bottom:6px;">
+            <h3 class="h3">本课卡片流程</h3>
+            <span class="meta" id="flowStageNote">当前聚焦 · 讲解 Presentation</span>
+          </div>
+          <div id="flowList"></div>
+        </div>
+
+        <div class="stack">
+          <div class="card" data-od-id="math-profile">
+            <h3 class="h3" style="margin-bottom:4px;">朵朵 · 数学画像</h3>
+            <p class="meta" style="margin-bottom:16px;">来自 child_profile，决定每步难度；橙色为本次新增维度</p>
+            <div class="stack" id="profileBars" style="gap:14px;"></div>
+          </div>
+          <div class="card" data-od-id="lesson-outcome">
+            <h3 class="h3" style="margin-bottom:14px;">本课产出</h3>
+            <div class="stack" style="gap:10px;">
+              <div class="row-between"><span style="font-size:13.5px;">核心算式</span><span class="num" style="font-size:13px;">9 + 5 = 14</span></div>
+              <div class="row-between"><span style="font-size:13.5px;">讲解板</span><span class="num" style="font-size:13px;">number_bond · ten_frame</span></div>
+              <div class="row-between"><span style="font-size:13.5px;">巩固题</span><span class="num" style="font-size:13px;">math_quiz × 2</span></div>
+              <hr class="rule" style="margin:4px 0;">
+              <p class="meta" style="line-height:1.7;">复习钩子：明天用「8 + 6」验证孩子是否迁移了凑十法。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Screen 2 · 讲解演示板 ═══ -->
+    <section class="screen" id="screen-board" hidden data-od-id="screen-board">
+      <div class="screen-head">
+        <div>
+          <p class="eyebrow">TEACHING BOARD · 8 MODES</p>
+          <h2 class="h2">先讲道理，再做题</h2>
+          <p class="lead" style="margin-top:10px;">八块讲解板覆盖低段数与代数、图形、量的比较与时间。点左侧切换，右侧能动手操作——不再是「只出题、不讲算理」。</p>
+        </div>
+        <span class="tag">真实交互 · 授星</span>
+      </div>
+
+      <div class="grid-2-1">
+        <div class="stack" style="gap:10px;" id="modeList" data-od-id="mode-list"></div>
+        <div class="stack">
+          <div class="board-card" id="boardCard" data-od-id="board-card"></div>
+          <div class="card" style="padding:14px 16px;">
+            <p class="meta" id="modeSkillNote" style="line-height:1.7;"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Screen 3 · 讲解工作台 ═══ -->
+    <section class="screen" id="screen-compose" hidden data-od-id="screen-compose">
+      <div class="screen-head">
+        <div>
+          <p class="eyebrow">LESSON COMPOSER</p>
+          <h2 class="h2">讲解工作台</h2>
+          <p class="lead" style="margin-top:10px;">选阶段、选讲解板、填知识点——右侧实时生成 <b>math_teach</b> / <b>math_quiz</b> 工具调用，并在渲染前跑一遍预校验。算理不成立的演示不再直接给孩子。</p>
+        </div>
+        <span class="tag info">math_teach v2</span>
+      </div>
+
+      <div class="grid-2-1">
+        <div class="card stack" data-od-id="composer-form">
+          <div class="grid-2">
+            <div class="field">
+              <label for="fTool">工具</label>
+              <select class="select" id="fTool">
+                <option value="math_teach" selected>math_teach · 讲解演示</option>
+                <option value="math_quiz">math_quiz · 巩固出题</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="fStage">教学阶段 stage</label>
+              <select class="select" id="fStage">
+                <option value="warm_up">① 热身 Warm-up</option>
+                <option value="presentation" selected>② 讲解 Presentation</option>
+                <option value="practice">③ 操练 Practice</option>
+                <option value="production">④ 输出 Production</option>
+                <option value="review">⑤ 复习 Review</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label for="fMode">模式 mode / 题型 type</label>
+              <select class="select" id="fMode"></select>
+            </div>
+            <div class="field">
+              <label for="fConcept">知识点 / 算式</label>
+              <input class="input" id="fConcept" value="9 + 5" />
+            </div>
+          </div>
+          <div class="field">
+            <span class="slider-head"><label for="fDiff">难度 difficulty</label><b><span id="diffVal">2</span> / 5</b></span>
+            <input type="range" id="fDiff" min="1" max="5" step="1" value="2" />
+          </div>
+          <hr class="rule">
+          <div class="row-between">
+            <button class="btn btn-primary" id="btnPreview"><svg width="16" height="16"><use href="#i-arrow"/></svg> 生成预览</button>
+            <span class="meta" id="composeHint">预校验通过后才可出题</span>
+          </div>
+          <div id="previewSlot"></div>
+        </div>
+
+        <div class="stack">
+          <div class="card" data-od-id="compose-json">
+            <div class="row-between" style="margin-bottom:10px;">
+              <h3 class="h3">生成的工具调用</h3>
+              <span class="meta">arguments</span>
+            </div>
+            <div class="code" id="jsonOut"></div>
+          </div>
+          <div class="card" data-od-id="compose-checks">
+            <h3 class="h3" style="margin-bottom:6px;">预校验</h3>
+            <div id="checkList"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Screen 4 · Prompt 契约与画像 ═══ -->
+    <section class="screen" id="screen-contract" hidden data-od-id="screen-contract">
+      <div class="screen-head">
+        <div>
+          <p class="eyebrow">PROMPT · CONTRACT · PROFILE</p>
+          <h2 class="h2">把「只出题」换成「先讲后练」</h2>
+          <p class="lead" style="margin-top:10px;">数学段从「出题为主」升级为五步课协议并增加讲解工具钩子；画像补齐数感与解决问题两维，并为每个维度记录策略与常错点。</p>
+        </div>
+        <span class="tag info">math_teach v2</span>
+      </div>
+
+      <div class="summary-strip" data-od-id="contract-summary" data-reveal>
+        <div class="sum-item lead"><span class="sum-num">1</span><span class="sum-label">新增讲解工具<br><b>math_teach</b></span></div>
+        <div class="sum-item"><span class="sum-num">8</span><span class="sum-label">讲解板 mode<br><b>八选一</b></span></div>
+        <div class="sum-item"><span class="sum-num">2</span><span class="sum-label">新增画像维度<br><b>数感 · 解决问题</b></span></div>
+        <div class="sum-item"><span class="sum-num">5</span><span class="sum-label">预校验规则<br><b>拦下坏课</b></span></div>
+      </div>
+
+      <div class="ba-grid" data-reveal>
+        <div class="ba-col old" data-od-id="prompt-before">
+          <div class="ba-head"><span class="ba-tag old">改动前</span><span class="meta">6 条策略 · 4 条在讲出题</span></div>
+          <div class="ba-body">
+            <p>聚焦 8 个数学维度…</p>
+            <p>出题必须用 <code>math_quiz</code>（带 type 字段）…</p>
+            <p>题型要轮换，不要连续同一种…</p>
+            <p>教「怎么算」用 <code>vertical_math</code> 演示竖式…</p>
+            <p>演示后用 <code>math_quiz</code> 出 1–2 题巩固。</p>
+            <p class="ba-note">（讲解只有竖式一种，其余全靠出题）</p>
+          </div>
+        </div>
+        <div class="ba-arrow" aria-hidden="true"><svg><use href="#i-arrow"/></svg></div>
+        <div class="ba-col new" data-od-id="prompt-after">
+          <div class="ba-head"><span class="ba-tag new">改动后</span><span class="meta">五步课 · 讲解优先 · 算理话术</span></div>
+          <div class="ba-body">
+            <p class="ba-step"><span class="s">①</span><span>热身：<code>math_quiz(arithmetic)</code> 口算接龙</span></p>
+            <p class="ba-step"><span class="s">②</span><span>讲解：<code>math_teach(mode)</code> 先摆一摆，再讲算理</span></p>
+            <p class="ba-step"><span class="s">③</span><span>操练：<code>math_quiz</code> / <code>vertical_math</code> 巩固</span></p>
+            <p class="ba-step"><span class="s">④</span><span>输出：<code>ask_user</code> 让孩子讲题 / <code>math_verify</code> 验算</span></p>
+            <p class="ba-step"><span class="s">⑤</span><span>复习：<code>matching_pairs</code> 算式配对 + <code>number_puzzle</code></span></p>
+            <p class="ba-note strong">讲解必须先发生；不让孩子在没看懂算理前刷题</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" data-od-id="mode-contract" style="margin-bottom:24px;" data-reveal>
+        <div class="row-between" style="margin-bottom:4px;">
+          <h3 class="h3">math_teach · mode 八选一</h3>
+          <span class="tag info">新增 1 个工具</span>
+        </div>
+        <p class="meta" style="margin-bottom:16px;">新增 1 个讲解工具（不是 8 个），按 mode 渲染对应讲解板；旧调用不受影响。</p>
+        <div style="overflow:auto;">
+          <table class="ds-table">
+            <thead><tr><th>mode</th><th>关键参数</th><th>对应维度</th><th>算理</th></tr></thead>
+            <tbody>
+              <tr><td><code>number_bond</code></td><td>total · left_part · right_part</td><td>math_number_sense</td><td>数的分与合（为凑十打底）</td></tr>
+              <tr><td><code>number_line</code></td><td>start · step · cost</td><td>math_addition</td><td>数轴上向右跳、向左跳</td></tr>
+              <tr><td><code>ten_frame</code></td><td>a · b</td><td>math_addition</td><td>十格阵凑十</td></tr>
+              <tr><td><code>place_value</code></td><td>ones · tens</td><td>math_counting</td><td>小棒捆扎、十位与个位</td></tr>
+              <tr><td><code>balance</code></td><td>left · right</td><td>math_comparison</td><td>天平比大小</td></tr>
+              <tr><td><code>shape</code></td><td>focus</td><td>math_shapes</td><td>图形边与角</td></tr>
+              <tr><td><code>clock</code></td><td>hour · minute</td><td>math_time</td><td>认读整点与半点</td></tr>
+              <tr><td><code>bar_model</code></td><td>part_a · part_b</td><td>math_word_problem</td><td>长条图解「一共 / 还剩」</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:24px;">
+        <div class="card" data-od-id="profile-new" data-reveal>
+          <h3 class="h3" style="margin-bottom:14px;">child_profile 改动</h3>
+          <table class="ds-table">
+            <thead><tr><th>项</th><th>改动</th></tr></thead>
+            <tbody>
+              <tr><td><code>math_number_sense</code></td><td>新增：数感与数的组成、分与合</td></tr>
+              <tr><td><code>math_word_problem</code></td><td>新增：解决问题 / 应用题</td></tr>
+              <tr><td><code>SkillDimension.strategy</code></td><td>新增：记录孩子用的方法（凑十 / 数数 / 掰手指）</td></tr>
+              <tr><td><code>SkillDimension.misconceptions</code></td><td>新增：记录常错点（忘记进位 / 方向反了）</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card" data-od-id="validation-rules" data-reveal>
+          <h3 class="h3" style="margin-bottom:14px;">预校验新增规则</h3>
+          <div id="ruleList"></div>
+        </div>
+      </div>
+
+      <div class="card" data-od-id="anti-patterns" data-reveal>
+        <div class="row-between" style="margin-bottom:14px;">
+          <h3 class="h3">明确禁止的坏演示</h3>
+          <span class="tag" style="border-color:color-mix(in oklch,var(--bad) 34%,var(--border));color:color-mix(in oklch,var(--bad) 74%,var(--fg));">3 类</span>
+        </div>
+        <div class="grid-3">
+          <div class="anti"><span class="anti-t"><span class="anti-mk"><svg><use href="#i-x"/></svg></span>只出题不讲理</span><p>一节课 10 道题，孩子没看过一次凑十的过程。</p></div>
+          <div class="anti"><span class="anti-t"><span class="anti-mk"><svg><use href="#i-x"/></svg></span>演示与算理不符</span><p>ten_frame 声明凑十，却填成 9+5=15。</p></div>
+          <div class="anti"><span class="anti-t"><span class="anti-mk"><svg><use href="#i-x"/></svg></span>超龄难度</span><p>L1 孩子直接上三位数进位。</p></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+
+  /* ── shared data ─────────────────────────────────────────────── */
+  var PROFILE = {
+    math_counting: 3, math_number_sense: 2, math_addition: 2, math_subtraction: 1,
+    math_multiply: 0, math_divide: 0, math_shapes: 3, math_comparison: 2,
+    math_time: 1, math_word_problem: 1
+  };
+  var PROFILE_LABEL = {
+    math_counting: '数数与数位', math_number_sense: '数感与数的组成', math_addition: '加法',
+    math_subtraction: '减法', math_multiply: '乘法', math_divide: '除法', math_shapes: '图形认知',
+    math_comparison: '比较排序', math_time: '时间认知', math_word_problem: '解决问题'
+  };
+  var NEW_DIMS = { math_number_sense: 1, math_word_problem: 1 };
+
+  var STAGES = [
+    { id: 'warm_up', zh: '热身', en: 'Warm-up', goal: '口算接龙，唤醒旧知', tool: 'math_quiz' },
+    { id: 'presentation', zh: '讲解', en: 'Presentation', goal: '动手摆一摆，讲清算理', tool: 'math_teach' },
+    { id: 'practice', zh: '操练', en: 'Practice', goal: '模仿练习，形成技能', tool: 'math_quiz' },
+    { id: 'production', zh: '输出', en: 'Production', goal: '让孩子讲题、自己出题', tool: 'ask_user' },
+    { id: 'review', zh: '复习', en: 'Review', goal: '归因巩固，留个钩子', tool: 'matching_pairs' }
+  ];
+
+  var MODES = [
+    { id: 'number_bond', zh: '数的分与合', icon: 'i-bond', skill: 'math_number_sense', stage: 'presentation', concept: '9 的分与合', desc: '把一个数拆成两部分，为凑十打底' },
+    { id: 'number_line', zh: '数轴跳一跳', icon: 'i-line', skill: 'math_addition', stage: 'presentation', concept: '9 + 5', desc: '在数轴上向右跳，先跳到 10 再跳余数' },
+    { id: 'ten_frame', zh: '十格阵凑十', icon: 'i-ten', skill: 'math_addition', stage: 'presentation', concept: '9 + 5', desc: '放进十格阵，先凑满 10 再看外面剩几' },
+    { id: 'place_value', zh: '小棒与数位', icon: 'i-blocks', skill: 'math_counting', stage: 'presentation', concept: '满十进一', desc: '十根捆一捆，理解十位与个位' },
+    { id: 'balance', zh: '天平比大小', icon: 'i-balance', skill: 'math_comparison', stage: 'presentation', concept: '9 与 5', desc: '两边一放，看天平往哪边沉' },
+    { id: 'shape', zh: '图形拼摆', icon: 'i-shape', skill: 'math_shapes', stage: 'presentation', concept: '圆 / 方 / 三角', desc: '数一数边和角，认识平面图形' },
+    { id: 'clock', zh: '时钟拨一拨', icon: 'i-clock', skill: 'math_time', stage: 'presentation', concept: '9 时 30 分', desc: '拨动时针分针，认读整点半点' },
+    { id: 'bar_model', zh: '应用题图解', icon: 'i-bar', skill: 'math_word_problem', stage: 'production', concept: '一共几个', desc: '用长条图把「一共 / 还剩」画出来' }
+  ];
+  function modeById(id) { for (var i = 0; i < MODES.length; i++) { if (MODES[i].id === id) return MODES[i]; } return MODES[0]; }
+  var QUIZ_TYPES = [
+    { id: 'arithmetic', zh: '口算 / 应用题' }, { id: 'shape', zh: '图形认知' },
+    { id: 'comparison', zh: '大小比较' }, { id: 'time', zh: '读时间' }, { id: 'elapsed_time', zh: '经过时间' }
+  ];
+
+  /* ── navigation ──────────────────────────────────────────────── */
+  var NAV = { lesson: '今日数学课', board: '讲解演示板', compose: '讲解工作台', contract: 'Prompt 契约' };
+  var SCREENS = { lesson: 'screen-lesson', board: 'screen-board', compose: 'screen-compose', contract: 'screen-contract' };
+  function showScreen(key) {
+    Object.keys(SCREENS).forEach(function (k) {
+      var el = document.getElementById(SCREENS[k]);
+      if (el) el.hidden = (k !== key);
+    });
+    $$('.nav-item').forEach(function (b) { b.setAttribute('aria-current', String(b.dataset.nav === key)); });
+    $('#crumbName').textContent = NAV[key] || '';
+    try { localStorage.setItem('od_math_screen', key); } catch (e) {}
+    if (key === 'contract') playReveal(document.getElementById('screen-contract'));
+  }
+  $$('.nav-item').forEach(function (b) { b.addEventListener('click', function () { showScreen(b.dataset.nav); }); });
+
+  /* ── stars ───────────────────────────────────────────────────── */
+  var stars = 4;
+  try { stars = Number(localStorage.getItem('od_math_stars')); if (isNaN(stars)) stars = 4; } catch (e) {}
+  function setStars(n) { stars = n; $('#starCount').textContent = String(n); try { localStorage.setItem('od_math_stars', String(n)); } catch (e) {} }
+  setStars(stars);
+
+  /* ── screen 1 · stepper + flow + profile ─────────────────────── */
+  var currentStage = 'presentation';
+  function renderStepper() {
+    var host = $('#stepper'); host.innerHTML = '';
+    STAGES.forEach(function (s, i) {
+      var b = document.createElement('button');
+      b.className = 'step'; b.setAttribute('aria-pressed', String(s.id === currentStage));
+      b.innerHTML =
+        '<span class="step-top"><span class="step-num">STEP ' + (i + 1) + '</span>' +
+        '<span class="dot ' + (s.id === currentStage ? 'now' : (i < 1 ? 'done' : '')) + '"></span></span>' +
+        '<span class="step-name">' + s.zh + '</span>' +
+        '<span class="step-en">' + s.en + '</span>' +
+        '<span class="step-goal">' + s.goal + '</span>' +
+        '<span class="step-tool">→ ' + s.tool + '</span>';
+      b.addEventListener('click', function () { currentStage = s.id; renderStepper(); renderFlow(); });
+      host.appendChild(b);
+    });
+  }
+  function renderFlow() {
+    var host = $('#flowList'); host.innerHTML = '';
+    var order = [
+      { t: 'CARD 1', n: '热身 · 口算接龙', m: 'math_quiz(arithmetic, stage=warm_up)', d: '3 道 10 以内口算，唤醒旧知' },
+      { t: 'CARD 2', n: '讲解 · 数的分与合', m: 'math_teach(number_bond)', d: '先摆 9 的分与合，为凑十打底' },
+      { t: 'CARD 3', n: '讲解 · 十格阵凑十', m: 'math_teach(ten_frame)', d: '9 差 1 凑满 10，余 4 再加' },
+      { t: 'CARD 4', n: '操练 · 竖式验证', m: 'vertical_math(add)', d: '用竖式核对 9 + 5 的数位' },
+      { t: 'CARD 5', n: '输出 · 讲一讲', m: 'ask_user', d: '让孩子用自己的话讲凑十的过程' },
+      { t: 'CARD 6', n: '复习 · 配对', m: 'matching_pairs', d: '算式 ↔ 结果配对，留 8+6 的钩子' }
+    ];
+    order.forEach(function (row) {
+      var el = document.createElement('div'); el.className = 'trow';
+      el.innerHTML = '<span class="tstep">' + row.t + '</span>' +
+        '<span><span class="tname">' + row.n + '</span>' +
+        '<span class="tdesc">' + row.d + '</span></span>' +
+        '<span class="tag info">' + row.m + '</span>';
+      host.appendChild(el);
+    });
+    var s = null; STAGES.forEach(function (x) { if (x.id === currentStage) s = x; });
+    $('#flowStageNote').textContent = '当前聚焦 · ' + (s ? s.zh + ' ' + s.en : '');
+  }
+  function renderProfile() {
+    var host = $('#profileBars'); host.innerHTML = '';
+    Object.keys(PROFILE).forEach(function (k) {
+      var v = PROFILE[k];
+      var segs = ''; for (var i = 0; i < 5; i++) segs += '<span class="seg ' + (i < v ? (NEW_DIMS[k] ? 'new' : 'on') : '') + '"></span>';
+      var row = document.createElement('div'); row.className = 'levelrow';
+      row.innerHTML = '<span class="levelname">' + PROFILE_LABEL[k] + (NEW_DIMS[k] ? ' <span class="tag info" style="padding:1px 6px;font-size:10px;">新增</span>' : '') + '</span>' +
+        '<span class="levelval">L' + v + '</span><span class="levelbar">' + segs + '</span>';
+      host.appendChild(row);
+    });
+  }
+  renderStepper(); renderFlow(); renderProfile();
+
+  /* ── screen 2 · teaching boards ──────────────────────────────── */
+  var board = { mode: 'number_bond', bondLeft: 4, nl: { jumped: false }, ten: { wrapped: false }, pv: { ones: 9, tens: 0 }, bal: { left: 9, right: 5 }, shape: 0, clock: { h: 9, m: 30 }, bar: { a: 9, b: 5 } };
+
+  var MOTION = null;
+  function reduced() { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
+  function rAF2(fn) { requestAnimationFrame(function () { requestAnimationFrame(fn); }); }
+  function playReveal(scope) {
+    if (!scope || reduced()) return;
+    $$('[data-reveal]', scope).forEach(function (el, i) {
+      el.classList.remove('reveal');
+      void el.offsetWidth;
+      el.style.animationDelay = (i * 70) + 'ms';
+      el.classList.add('reveal');
+    });
+  }
+  function balTilt() { return Math.max(-12, Math.min(12, (board.bal.right - board.bal.left) * 4)); }
+  function barPct(a, b) { var t = a + b; return { a: a / t * 100, b: b / t * 100 }; }
+  function clockAngles(h, m) { return { h: ((h % 12) + m / 60) * 30, m: m * 6 }; }
+  function playMotion() {
+    var mo = MOTION; MOTION = null;
+    if (!mo) return;
+    if (mo.kind === 'bal') { var beam = $('#balBeam'); rAF2(function () { if (beam) beam.style.transform = 'rotate(' + mo.to + 'deg)'; }); return; }
+    if (mo.kind === 'clk') {
+      var hh = $('#clockHour'), mm = $('#clockMin');
+      rAF2(function () { if (hh) hh.style.transform = 'rotate(' + mo.toH + 'deg)'; if (mm) mm.style.transform = 'rotate(' + mo.toM + 'deg)'; });
+      return;
+    }
+    if (mo.kind === 'bar') {
+      var fa = $$('.js-fill-a'), fb = $$('.js-fill-b');
+      rAF2(function () { fa.forEach(function (n) { n.style.width = mo.toA + '%'; }); fb.forEach(function (n) { n.style.width = mo.toB + '%'; }); });
+      return;
+    }
+    if (mo.kind === 'nl' && !reduced()) {
+      window.setTimeout(function () { var e = $('#nlTokText'); if (e) e.textContent = '10'; }, 480);
+      window.setTimeout(function () { var e = $('#nlTokText'); if (e) e.textContent = '14'; }, 1010);
+    }
+  }
+
+  function boardHTML(m) {
+    var head = '<div class="board-head"><span class="row" style="gap:8px;"><span class="tag info">' + m.zh + '</span>' +
+      '<span class="mode-id">' + m.id + '</span></span>' +
+      '<span class="row" style="gap:7px;"><span class="tag">' + PROFILE_LABEL[m.skill] + '</span>' +
+      '<span class="tag">L' + (PROFILE[m.skill] || 1) + '</span></span></div>';
+
+    if (m.id === 'number_bond') {
+      var total = 9, left = board.bondLeft, right = total - left;
+      var rowA = dots(left, 'a'), rowB = dots(right, 'b');
+      return head +
+        '<p class="board-q">把 <b>9</b> 分成两部分，看看 9 的好朋友是谁。<small>用左右按钮改变左边，右边会跟着变；浅色虚圈就是那个「好朋友」。</small></p>' +
+        '<div class="board-stage">' +
+        '<div class="bond-eq"><span class="bond-chip a">' + left + '</span><span>+</span><span class="bond-chip b">' + right + '</span><span>=</span><span class="bond-chip">' + total + '</span></div>' +
+        '<div class="bond-row">' + rowA + rowB + '<span class="bdot ghost" role="img" aria-label="还差 1 个就满十"></span></div>' +
+        '<div class="board-eq">' + left + ' 和 ' + right + ' 合起来是 <b>' + total + '</b>；9 再和 <b>1</b> 做朋友，就能凑成十。</div>' +
+        '</div>' +
+        '<div class="board-controls"><span class="meta" style="flex:none;">左部分</span>' +
+        '<button class="stepper-btn" data-act="bond-" aria-label="左边减一">−</button><button class="stepper-btn" data-act="bond+" aria-label="左边加一">+</button>' +
+        '<span class="meta">左 ' + left + ' · 右 ' + right + '</span></div>';
+    }
+
+    if (m.id === 'number_line') {
+      var jumped = board.nl.jumped;
+      var hop = !!(MOTION && MOTION.kind === 'nl') && !reduced();
+      var pos = jumped ? 14 : 9;
+      return head +
+        '<p class="board-q">从 <b>9</b> 出发加上 <b>5</b>，在数轴上怎么跳？<small>先跳 1 格到 10，再跳 4 格到 14。</small></p>' +
+        '<div class="board-stage">' + numberLineSVG(pos, hop) +
+        '<div class="board-eq">9 <b>+ 1</b> = 10，10 <b>+ 4</b> = 14</div></div>' +
+        '<div class="board-controls"><button class="btn btn-math" data-act="jump"' + (jumped ? ' disabled' : '') + '><svg width="16" height="16"><use href="#i-play"/></svg> 凑十跳</button>' +
+        '<button class="btn btn-secondary" data-act="reset">重来</button></div>';
+    }
+
+    if (m.id === 'ten_frame') {
+      var filled = 9, wrapped = board.ten.wrapped;
+      var cells = '';
+      for (var i = 0; i < 10; i++) {
+        var on = i < filled, add = wrapped && i === filled;
+        cells += '<span class="tcell' + (add ? ' add' : '') + '">' + ((on || add) ? '<span class="d' + (add ? ' fly' : '') + '"></span>' : '') + '</span>';
+      }
+      var looseN = wrapped ? 4 : 5, loose = '';
+      for (var k = 0; k < looseN; k++) loose += '<span class="d"></span>';
+      return head +
+        '<p class="board-q">十格阵里已有 <b>9</b> 个，外面还有 <b>5</b> 个，怎么加？<small>先借外面 1 个把十格阵填满，剩下 4 个留到外面。</small></p>' +
+        '<div class="board-stage">' +
+        '<div style="display:flex;align-items:center;gap:18px;"><div class="tenframe">' + cells + '</div><div class="loose">' + loose + '</div></div>' +
+        '<div class="board-eq">' + (wrapped ? '9 + 1 = <b>10</b>，10 + 4 = <b>14</b>' : '框里 9 个 + 外面 5 个，还差 <b>1</b> 个就满十格') + '</div>' +
+        '</div>' +
+        '<div class="board-controls"><button class="btn btn-math" data-act="wrap"' + (wrapped ? ' disabled' : '') + '><svg width="16" height="16"><use href="#i-spark"/></svg> 借一个凑十</button>' +
+        '<button class="btn btn-secondary" data-act="unwrap">重来</button></div>';
+    }
+
+    if (m.id === 'place_value') {
+      var tens = board.pv.tens, ones = board.pv.ones, canBundle = ones >= 10;
+      var flash = !!(MOTION && MOTION.kind === 'pv');
+      var bundles = ''; for (var t = 0; t < tens; t++) bundles += '<span class="bundle' + (flash && t === tens - 1 ? ' bundle-in' : '') + '" aria-label="一捆十根"></span>';
+      var sticks = ''; for (var o = 0; o < ones; o++) sticks += '<span class="stick' + (canBundle ? ' ready' : '') + '"></span>';
+      var total2 = tens * 10 + ones;
+      return head +
+        '<p class="board-q">用小棒摆出 <b>' + total2 + '</b>。<small>个位满十根就捆成一捆，放进十位。</small></p>' +
+        '<div class="board-stage"><div class="pv-wrap">' +
+        '<div class="pv-col"><span class="pv-label">十位</span><div class="pv-items">' + bundles + '</div><span class="pv-count num">' + tens + '</span></div>' +
+        '<div class="pv-col"><span class="pv-label">个位</span><div class="pv-items">' + sticks + '</div><span class="pv-count num">' + ones + '</span></div>' +
+        '</div><div class="board-eq">' + (canBundle ? '个位满 <b>10</b> 根了，捆成一捆放进十位' : total2 + ' = <b>' + tens + ' 个十</b> + <b>' + ones + ' 个一</b>') + '</div></div>' +
+        '<div class="board-controls"><span class="meta" style="flex:none;">个位</span>' +
+        '<button class="stepper-btn" data-act="ones-">−</button><button class="stepper-btn" data-act="ones+"' + (canBundle ? ' disabled' : '') + '>+</button>' +
+        '<span class="meta" style="flex:none;">十位</span>' +
+        '<button class="stepper-btn" data-act="tens-">−</button><button class="stepper-btn" data-act="tens+"' + (canBundle ? ' disabled' : '') + '>+</button>' +
+        (canBundle ? '<button class="btn btn-math" data-act="bundle" style="margin-left:6px;"><svg width="16" height="16"><use href="#i-spark"/></svg> 10 根捆成一捆</button>' : '') +
+        '</div>';
+    }
+
+    if (m.id === 'balance') {
+      var L = board.bal.left, R = board.bal.right;
+      var tilt = balTilt();
+      var from = (MOTION && MOTION.kind === 'bal') ? MOTION.from : tilt;
+      var sym = L > R ? '>' : (L < R ? '<' : '=');
+      return head +
+        '<p class="board-q"><b>' + L + '</b> 和 <b>' + R + '</b>，谁大呢？<small>两边一样重才平衡；哪边沉，哪边的数就大。</small></p>' +
+        '<div class="board-stage">' + balanceSVG(L, R, from) +
+        '<div class="board-eq">' + L + ' <b>' + sym + '</b> ' + R + '</div></div>' +
+        '<div class="board-controls"><span class="meta" style="flex:none;">左</span>' +
+        '<button class="stepper-btn" data-act="balL-">−</button><button class="stepper-btn" data-act="balL+">+</button>' +
+        '<span class="meta" style="flex:none;">右</span>' +
+        '<button class="stepper-btn" data-act="balR-">−</button><button class="stepper-btn" data-act="balR+">+</button></div>';
+    }
+
+    if (m.id === 'shape') {
+      var defs = shapeDefs(), f = board.shape, cur = defs[f];
+      var tiles = defs.map(function (s, i) {
+        return '<button class="shape-tile" data-act="shape" data-i="' + i + '" aria-pressed="' + (i === f) + '" aria-label="' + s.name + '">' + s.svg + '</button>';
+      }).join('');
+      return head +
+        '<p class="board-q">认识平面图形：点一点，数数它有几条边、几个角。<small>圆没有直边和角，这是它和方、三角最大的不同。</small></p>' +
+        '<div class="board-stage"><div class="shape-tiles">' + tiles + '</div>' +
+        '<div class="shape-stat"><span>名称 <b>' + cur.name + '</b></span><span>边 <b class="num">' + cur.sides + '</b></span><span>角 <b class="num">' + cur.corners + '</b></span></div></div>';
+    }
+
+    if (m.id === 'clock') {
+      var h = board.clock.h, mi = board.clock.m;
+      var ang = clockAngles(h, mi);
+      var cfrom = (MOTION && MOTION.kind === 'clk') ? { h: MOTION.fromH, m: MOTION.fromM } : null;
+      return head +
+        '<p class="board-q">钟面上是几时几分？<small>短针指时、长针指分；长针指 6 是半点（30 分）。</small></p>' +
+        '<div class="board-stage">' + clockSVG(ang, cfrom) +
+        '<div class="board-eq"><b>' + h + '</b> 时 <b>' + (mi === 0 ? '整' : mi + ' 分') + '</b> · ' + h + ':' + (mi < 10 ? '0' + mi : mi) + '</div></div>' +
+        '<div class="board-controls"><span class="meta" style="flex:none;">时</span>' +
+        '<button class="stepper-btn" data-act="clkH-">−</button><button class="stepper-btn" data-act="clkH+">+</button>' +
+        '<span class="meta" style="flex:none;">分</span>' +
+        '<button class="stepper-btn" data-act="clkM-">−</button><button class="stepper-btn" data-act="clkM+">+</button></div>';
+    }
+
+    var A = board.bar.a, B = board.bar.b, tot = A + B;
+    var pct = barPct(A, B);
+    var pa = (MOTION && MOTION.kind === 'bar') ? MOTION.fromA : pct.a;
+    var pb = (MOTION && MOTION.kind === 'bar') ? MOTION.fromB : pct.b;
+    return head +
+      '<p class="board-q">小明有 <b>' + A + '</b> 个苹果，妈妈又给了 <b>' + B + '</b> 个，一共几个？<small>两条长条拼成的全长，就是「一共」。</small></p>' +
+      '<div class="board-stage"><div class="bar-wrap">' +
+      '<div class="bar-row"><span class="bar-lab">小明</span><span class="bar-track"><span class="bar-a js-fill-a" style="width:' + pa + '%"></span></span></div>' +
+      '<div class="bar-row"><span class="bar-lab">妈妈</span><span class="bar-track"><span class="bar-b js-fill-b" style="width:' + pb + '%"></span></span></div>' +
+      '<div class="bar-row"><span class="bar-lab">一共</span><span class="bar-track"><span class="bar-a js-fill-a" style="width:' + pa + '%"></span><span class="bar-b js-fill-b" style="width:' + pb + '%"></span></span></div>' +
+      '</div><div class="board-eq">' + A + ' + ' + B + ' = <b>' + tot + '</b></div></div>' +
+      '<div class="board-controls"><span class="meta" style="flex:none;">小明</span>' +
+      '<button class="stepper-btn" data-act="barA-">−</button><button class="stepper-btn" data-act="barA+">+</button>' +
+      '<span class="meta" style="flex:none;">妈妈</span>' +
+      '<button class="stepper-btn" data-act="barB-">−</button><button class="stepper-btn" data-act="barB+">+</button></div>';
+  }
+
+  function dots(n, cls) { var s = ''; for (var i = 0; i < n; i++) s += '<span class="bdot ' + cls + '"></span>'; return s; }
+  function numberLineSVG(pos, hop) {
+    var x0 = 24, gap = 20.5, y = 78, ticks = '', labels = '';
+    for (var i = 0; i <= 20; i++) {
+      var x = x0 + i * gap;
+      var major = (i % 5 === 0);
+      ticks += '<line x1="' + x + '" y1="' + (y - (major ? 9 : 5)) + '" x2="' + x + '" y2="' + (y + 9) + '" stroke="var(--border)" stroke-width="1.5"/>';
+      if (major) labels += '<text x="' + x + '" y="' + (y + 28) + '" text-anchor="middle" font-size="11" font-family="var(--font-mono)" fill="var(--muted)">' + i + '</text>';
+    }
+    var tx = x0 + pos * gap, arcs = '';
+    if (hop) {
+      var x9 = x0 + 9 * gap, x10 = x0 + 10 * gap, x14 = x0 + 14 * gap;
+      arcs = '<path class="nl-arc a1" pathLength="100" d="M' + x9 + ' ' + (y - 16) + ' Q' + ((x9 + x10) / 2) + ' ' + (y - 44) + ' ' + x10 + ' ' + (y - 16) + '"/>' +
+        '<path class="nl-arc a2" pathLength="100" d="M' + x10 + ' ' + (y - 16) + ' Q' + ((x10 + x14) / 2) + ' ' + (y - 50) + ' ' + x14 + ' ' + (y - 16) + '"/>' +
+        '<text class="nl-plus a1" x="' + ((x9 + x10) / 2) + '" y="' + (y - 48) + '" text-anchor="middle" font-size="12" font-weight="700" fill="var(--math-ink)">+1</text>' +
+        '<text class="nl-plus a2" x="' + ((x10 + x14) / 2) + '" y="' + (y - 54) + '" text-anchor="middle" font-size="12" font-weight="700" fill="var(--math-ink)">+4</text>';
+    }
+    return '<svg class="nline" viewBox="0 0 440 120" role="img" aria-label="数轴，从 9 向右跳 5 格到 ' + pos + '">' +
+      '<line x1="' + x0 + '" y1="' + y + '" x2="' + (x0 + 20 * gap) + '" y2="' + y + '" stroke="var(--fg)" stroke-width="1.6"/>' + ticks + labels + arcs +
+      '<g class="nline-token' + (hop ? ' nline-hop' : '') + '">' +
+      '<rect x="' + (tx - 11) + '" y="' + (y - 11) + '" width="22" height="22" rx="6" fill="var(--accent)"/>' +
+      '<text id="nlTokText" x="' + tx + '" y="' + (y + 5) + '" text-anchor="middle" font-size="12" font-weight="700" style="fill:var(--on-accent)">' + (hop ? 9 : pos) + '</text>' +
+      '</g></svg>';
+  }
+  function balanceSVG(L, R, tilt) {
+    return '<svg class="balance-svg" viewBox="0 0 340 180" role="img" aria-label="天平，左 ' + L + ' 右 ' + R + '">' +
+      '<line x1="170" y1="34" x2="170" y2="150" stroke="var(--fg)" stroke-width="2.4"/>' +
+      '<path d="M132 150h76l-10 12h-56z" fill="var(--border)"/>' +
+      '<g id="balBeam" class="balance-beam" style="transform: rotate(' + tilt + 'deg)">' +
+      '<line x1="52" y1="42" x2="288" y2="42" stroke="var(--fg)" stroke-width="2.2"/>' +
+      '<line x1="52" y1="42" x2="52" y2="86" stroke="var(--border)" stroke-width="1.4"/>' +
+      '<line x1="288" y1="42" x2="288" y2="86" stroke="var(--border)" stroke-width="1.4"/>' +
+      '<path d="M22 86h60l-8 10H30z" fill="var(--math)"/>' +
+      '<path d="M258 86h60l-8 10h-44z" fill="var(--accent)"/>' +
+      '<text x="52" y="120" text-anchor="middle" class="pan-label" fill="var(--math-ink)">' + L + '</text>' +
+      '<text x="288" y="120" text-anchor="middle" class="pan-label" fill="var(--fg)">' + R + '</text>' +
+      '</g></svg>';
+  }
+  function shapeDefs() {
+    return [
+      { name: '圆形', sides: 0, corners: 0, svg: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>' },
+      { name: '正方形', sides: 4, corners: 4, svg: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>' },
+      { name: '三角形', sides: 3, corners: 3, svg: '<svg viewBox="0 0 24 24"><path d="M12 4l8.5 15h-17z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>' },
+      { name: '长方形', sides: 4, corners: 4, svg: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>' }
+    ];
+  }
+  function clockSVG(ang, from) {
+    var hourAng = from ? from.h : ang.h, minAng = from ? from.m : ang.m;
+    var ticks = '';
+    for (var i = 0; i < 12; i++) {
+      var a = i * 30 * Math.PI / 180;
+      var x1 = 84 + 62 * Math.sin(a), y1 = 84 - 62 * Math.cos(a);
+      var x2 = 84 + 70 * Math.sin(a), y2 = 84 - 70 * Math.cos(a);
+      ticks += '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="var(--border)" stroke-width="2"/>';
+    }
+    return '<svg class="clock-svg" viewBox="0 0 168 168" role="img" aria-label="钟面 ' + (ang.h / 30 | 0 || 12) + ' 时">' +
+      '<circle cx="84" cy="84" r="76" fill="var(--surface)" stroke="var(--border)" stroke-width="2"/>' + ticks +
+      '<line id="clockHour" class="clock-hand" x1="84" y1="84" x2="84" y2="48" stroke="var(--fg)" stroke-width="5" stroke-linecap="round" style="transform: rotate(' + hourAng + 'deg)"/>' +
+      '<line id="clockMin" class="clock-hand" x1="84" y1="84" x2="84" y2="34" stroke="var(--math)" stroke-width="3.4" stroke-linecap="round" style="transform: rotate(' + minAng + 'deg)"/>' +
+      '<circle cx="84" cy="84" r="5" fill="var(--accent)"/></svg>';
+  }
+
+  function renderBoardList() {
+    var host = $('#modeList'); host.innerHTML = '';
+    MODES.forEach(function (m) {
+      var b = document.createElement('button');
+      b.className = 'mode-item'; b.setAttribute('aria-pressed', String(m.id === board.mode));
+      b.innerHTML = '<span class="mode-item-top"><span class="row" style="gap:9px;"><svg class="nav-ico" style="width:16px;height:16px;"><use href="#' + m.icon + '"/></svg><span class="mode-zh">' + m.zh + '</span></span><span class="mode-id">' + m.id + '</span></span>' +
+        '<span class="mode-desc">' + m.desc + '</span>' +
+        '<span class="row" style="gap:6px; margin-top:2px;"><span class="tag">' + m.stage + '</span><span class="tag info">' + PROFILE_LABEL[m.skill] + '</span></span>';
+      b.addEventListener('click', function () { board.mode = m.id; MOTION = null; renderBoardList(); renderBoard(); });
+      host.appendChild(b);
+    });
+  }
+  function renderBoard() {
+    var m = modeById(board.mode);
+    $('#boardCard').innerHTML = boardHTML(m);
+    $('#modeSkillNote').textContent = '对应画像维度：' + PROFILE_LABEL[m.skill] + '（' + m.skill + '，当前 L' + (PROFILE[m.skill] || 0) + '）· 阶段：' + m.stage + ' · 讲解完成后紧接 1 题 math_quiz 巩固。';
+    playMotion();
+  }
+  function grantOnce(flag) { if (!board[flag]) { setStars(stars + 1); board[flag] = true; } }
+
+  $('#boardCard').addEventListener('click', function (e) {
+    var t = e.target.closest('[data-act]'); if (!t) return;
+    var a = t.dataset.act;
+    if (a === 'bond-') { board.bondLeft = Math.max(0, board.bondLeft - 1); MOTION = null; renderBoard(); return; }
+    if (a === 'bond+') { board.bondLeft = Math.min(9, board.bondLeft + 1); MOTION = null; renderBoard(); return; }
+    if (a === 'jump') { board.nl.jumped = true; MOTION = { kind: 'nl' }; grantOnce('jumpedStar'); renderBoard(); return; }
+    if (a === 'reset') { board.nl.jumped = false; MOTION = null; renderBoard(); return; }
+    if (a === 'wrap') { board.ten.wrapped = true; grantOnce('wrapStar'); renderBoard(); return; }
+    if (a === 'unwrap') { board.ten.wrapped = false; renderBoard(); return; }
+    if (a === 'shape') { board.shape = Number(t.dataset.i); renderBoard(); return; }
+    if (a === 'ones+') { if (board.pv.ones < 10) { board.pv.ones++; MOTION = null; renderBoard(); } return; }
+    if (a === 'ones-') { board.pv.ones = Math.max(0, board.pv.ones - 1); MOTION = null; renderBoard(); return; }
+    if (a === 'bundle') { board.pv.ones = 0; board.pv.tens = Math.min(9, board.pv.tens + 1); MOTION = { kind: 'pv' }; grantOnce('bundleStar'); renderBoard(); return; }
+    if (a === 'tens+') { board.pv.tens = Math.min(9, board.pv.tens + 1); MOTION = null; renderBoard(); return; }
+    if (a === 'tens-') { board.pv.tens = Math.max(0, board.pv.tens - 1); MOTION = null; renderBoard(); return; }
+    if (a === 'balL+' || a === 'balL-' || a === 'balR+' || a === 'balR-') {
+      var f = balTilt();
+      if (a === 'balL+') board.bal.left = Math.min(20, board.bal.left + 1);
+      if (a === 'balL-') board.bal.left = Math.max(1, board.bal.left - 1);
+      if (a === 'balR+') board.bal.right = Math.min(20, board.bal.right + 1);
+      if (a === 'balR-') board.bal.right = Math.max(1, board.bal.right - 1);
+      MOTION = { kind: 'bal', from: f, to: balTilt() }; renderBoard(); return;
+    }
+    if (a === 'clkH+' || a === 'clkH-' || a === 'clkM+' || a === 'clkM-') {
+      var cf = clockAngles(board.clock.h, board.clock.m);
+      if (a === 'clkH+') board.clock.h = board.clock.h % 12 + 1;
+      if (a === 'clkH-') board.clock.h = (board.clock.h + 10) % 12 + 1;
+      if (a === 'clkM+') board.clock.m = (board.clock.m + 5) % 60;
+      if (a === 'clkM-') board.clock.m = (board.clock.m + 55) % 60;
+      var ct = clockAngles(board.clock.h, board.clock.m);
+      MOTION = { kind: 'clk', fromH: cf.h, fromM: cf.m, toH: ct.h, toM: ct.m }; renderBoard(); return;
+    }
+    if (a === 'barA+' || a === 'barA-' || a === 'barB+' || a === 'barB-') {
+      var bp = barPct(board.bar.a, board.bar.b);
+      if (a === 'barA+') board.bar.a = Math.min(9, board.bar.a + 1);
+      if (a === 'barA-') board.bar.a = Math.max(1, board.bar.a - 1);
+      if (a === 'barB+') board.bar.b = Math.min(9, board.bar.b + 1);
+      if (a === 'barB-') board.bar.b = Math.max(1, board.bar.b - 1);
+      var np = barPct(board.bar.a, board.bar.b);
+      MOTION = { kind: 'bar', fromA: bp.a, fromB: bp.b, toA: np.a, toB: np.b }; renderBoard(); return;
+    }
+  });
+
+  renderBoardList(); renderBoard();
+
+  /* ── screen 3 · composer ─────────────────────────────────────── */
+  var compose = { tool: 'math_teach', stage: 'presentation', mode: 'ten_frame', concept: '9 + 5', difficulty: 2 };
+  var modeSelect = $('#fMode');
+  function rebuildModeSelect() {
+    modeSelect.innerHTML = '';
+    if (compose.tool === 'math_teach') {
+      MODES.forEach(function (m) { var o = document.createElement('option'); o.value = m.id; o.textContent = m.zh + '（' + m.id + '）'; modeSelect.appendChild(o); });
+      modeSelect.value = compose.mode;
+    } else {
+      QUIZ_TYPES.forEach(function (t) { var o = document.createElement('option'); o.value = t.id; o.textContent = t.zh + '（' + t.id + '）'; modeSelect.appendChild(o); });
+      modeSelect.value = compose.quizType || 'arithmetic';
+    }
+  }
+  function numeric(expr) {
+    var m = String(expr).replace(/\s/g, '').match(/^(\d+)\+(\d+)$/);
+    return m ? { a: Number(m[1]), b: Number(m[2]), sum: Number(m[1]) + Number(m[2]) } : null;
+  }
+  function composeArgs() {
+    var base = { stage: compose.stage, difficulty: compose.difficulty };
+    if (compose.tool === 'math_teach') {
+      var m = modeById(compose.mode);
+      var out = Object.assign({ mode: compose.mode }, base, { concept: compose.concept, skill_key: m.skill });
+      if (compose.mode === 'ten_frame' || compose.mode === 'number_line') {
+        var n = numeric(compose.concept);
+        if (n) { out.a = n.a; out.b = n.b; if (compose.mode === 'number_line') out.cost = 10 - n.a; }
+      }
+      if (compose.mode === 'number_bond') { var nb = numeric(compose.concept); out.total = nb ? nb.a : 9; }
+      if (compose.mode === 'bar_model') { var bm = numeric(compose.concept); out.part_a = bm ? bm.a : 9; out.part_b = bm ? bm.b : 5; }
+      return out;
+    }
+    var n2 = numeric(compose.concept);
+    var ans = n2 ? n2.sum : 0;
+    var opts = [ans, ans + 1, ans - 1, ans + 2];
+    return Object.assign({ type: compose.quizType || 'arithmetic' }, base, {
+      question: '算一算：' + compose.concept.replace(/\s/g, '') + ' = ?',
+      expression: compose.concept, correct_answer: ans, options: opts, skill_key: 'math_addition'
+    });
+  }
+  function escapeHTML(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function highlight(obj) {
+    var json = escapeHTML(JSON.stringify(obj, null, 2));
+    return json.replace(/"([^"]+)":/g, '<span class="tok-key">"$1"</span>:')
+      .replace(/: ("(?:[^"\\]|\\.)*")/g, ': <span class="tok-str">$1</span>')
+      .replace(/: (\d+)(,?)/g, ': <span class="tok-num">$1</span>$2')
+      .replace(/\b(true|false|null)\b/g, '<span class="tok-bool">$1</span>');
+  }
+  function checks() {
+    var list = [];
+    if (compose.tool === 'math_teach') {
+      var m = modeById(compose.mode);
+      list.push({ ok: true, label: 'mode「' + compose.mode + '」在 math_teach 白名单内', fix: '' });
+      if (compose.mode === 'ten_frame' || compose.mode === 'number_line') {
+        var n = numeric(compose.concept);
+        list.push({ ok: !!n, label: '算式可解析为 a + b（当前「' + compose.concept + '」）', fix: '写成「9 + 5」这样的两数加法' });
+        if (n) list.push({ ok: n.a + n.b <= 20, label: '结果 ' + n.sum + ' 在 20 以内进位加法范围内', fix: '低段凑十法控制在 20 以内' });
+      }
+      if (compose.mode === 'balance') { list.push({ ok: true, label: '两数均 ≥ 1，天平可比较', fix: '' }); }
+      var lvl = PROFILE[m.skill] || 2;
+      list.push({ ok: Math.abs(compose.difficulty - lvl) <= 1, label: '难度 ' + compose.difficulty + ' 与画像等级 L' + lvl + ' 偏差 ≤1', fix: '建议难度 ' + lvl });
+    } else {
+      var a2 = composeArgs();
+      var uniq = a2.options.filter(function (v, i, arr) { return arr.indexOf(v) === i; });
+      list.push({ ok: a2.options.length === 4, label: 'options 恰好 4 个', fix: '补足 4 个选项' });
+      list.push({ ok: uniq.length === 4, label: 'options 去重后仍为 4 个', fix: '去掉重复选项' });
+      list.push({ ok: a2.options.indexOf(a2.correct_answer) !== -1, label: '正确答案在选项内', fix: '把答案放进 options' });
+      list.push({ ok: numeric(compose.concept) !== null, label: 'expression 可被复算引擎解析', fix: '写成「9 + 5」' });
+    }
+    return list;
+  }
+  function renderCompose() {
+    $('#jsonOut').innerHTML = highlight(composeArgs());
+    var list = checks(), allOk = true, html = '';
+    list.forEach(function (c) {
+      if (!c.ok) allOk = false;
+      html += '<div class="check ' + (c.ok ? 'pass' : 'fail') + '">' +
+        '<span class="mk"><svg><use href="#' + (c.ok ? 'i-check' : 'i-x') + '"/></svg></span>' +
+        '<span class="lbl">' + c.label + (c.ok ? '' : '<span class="fix">' + c.fix + '</span>') + '</span></div>';
+    });
+    $('#checkList').innerHTML = html;
+    $('#btnPreview').disabled = !allOk;
+    $('#composeHint').textContent = allOk ? '预校验通过，可发送' : '有 ' + list.filter(function (c) { return !c.ok; }).length + ' 项未通过，先修正';
+    $('#fDiff').value = compose.difficulty; $('#diffVal').textContent = compose.difficulty;
+  }
+  function renderPreview() {
+    var args = composeArgs(), slot = $('#previewSlot'), body = '', q = '';
+    if (compose.tool === 'math_teach') {
+      var m = modeById(compose.mode);
+      q = '讲解板：' + m.zh + ' · 知识点「' + compose.concept + '」';
+      body = '<p class="meta" style="margin-top:10px;">将由 ' + m.id + ' 讲解板渲染（与左侧演示板同款交互）。</p>';
+    } else {
+      q = args.question;
+      body = '<div class="opts">' + args.options.map(function (o) {
+        return '<span class="o' + (o === args.correct_answer ? ' correct' : '') + '">' + o + '</span>';
+      }).join('') + '</div>';
+    }
+    slot.innerHTML = '<div class="mini" style="margin-top:16px;"><div class="row-between"><span class="tag info">' + compose.tool + '</span><span class="tag ok">预校验通过</span></div>' +
+      '<p style="font-size:14.5px; font-weight:600; margin-top:10px;">' + q + '</p>' + body + '</div>';
+  }
+  $('#fTool').addEventListener('change', function () {
+    compose.tool = this.value;
+    if (compose.tool === 'math_teach') { compose.mode = 'ten_frame'; compose.concept = '9 + 5'; compose.stage = 'presentation'; }
+    else { compose.quizType = 'arithmetic'; compose.concept = '9 + 5'; }
+    $('#fConcept').value = compose.concept; $('#fStage').value = compose.stage; $('#previewSlot').innerHTML = '';
+    rebuildModeSelect(); renderCompose();
+  });
+  $('#fStage').addEventListener('change', function () { compose.stage = this.value; renderCompose(); });
+  $('#fMode').addEventListener('change', function () {
+    if (compose.tool === 'math_teach') {
+      var m = modeById(this.value);
+      compose.mode = m.id; compose.stage = m.stage; compose.concept = m.concept;
+      $('#fStage').value = m.stage; $('#fConcept').value = m.concept;
+    } else { compose.quizType = this.value; }
+    $('#previewSlot').innerHTML = ''; renderCompose();
+  });
+  $('#fConcept').addEventListener('input', function () { compose.concept = this.value; $('#previewSlot').innerHTML = ''; renderCompose(); });
+  $('#fDiff').addEventListener('input', function () { compose.difficulty = Number(this.value); $('#diffVal').textContent = this.value; renderCompose(); });
+  $('#btnPreview').addEventListener('click', renderPreview);
+  rebuildModeSelect(); renderCompose();
+
+  /* ── screen 4 · rule list ────────────────────────────────────── */
+  var RULES = [
+    'math_teach mode 白名单：八选一，越界即拒绝',
+    '凑十一致性：ten_frame/number_line 的 a+b 必须 ≤20 且可解析',
+    '概念—模式匹配：number_bond 必须给 total，bar_model 必须给两部分',
+    '难度—维度一致：difficulty 与画像等级偏差 ≤1',
+    '演示后必练：讲解板之后紧跟 1 题 math_quiz 才算一课'
+  ];
+  (function () {
+    var host = $('#ruleList');
+    RULES.forEach(function (r) {
+      var d = document.createElement('div'); d.className = 'check pass';
+      d.innerHTML = '<span class="mk"><svg><use href="#i-check"/></svg></span><span class="lbl">' + r + '</span>';
+      host.appendChild(d);
+    });
+  })();
+
+  /* ── restore ─────────────────────────────────────────────────── */
+  try {
+    var saved = localStorage.getItem('od_math_screen');
+    if (saved && SCREENS[saved]) showScreen(saved);
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>

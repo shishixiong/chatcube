@@ -19,10 +19,3 @@ export function balanceTilt(left: number, right: number): number {
   if (raw < -12) { return -12 }
   return raw
 }
-
-export function bondSplit(total: number, left: number): number {
-  let l: number = left
-  if (l < 0) { l = 0 }
-  if (l > total) { l = total }
-  return total - l
-}

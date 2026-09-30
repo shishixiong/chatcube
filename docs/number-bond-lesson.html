@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>数的分与合 · 深度讲解课｜小星数学老师</title>
+<style>
+  /* ─── tokens · 绑定 docs/brand-spec.md（儿童端锁定令牌） ───────────── */
+  :root{
+    --bg:#FAF8F3; --surface:#FFFDF8; --fg:#24211C; --muted:#6F6A60; --border:#DED8CC; --accent:#FF9F43;
+    --accent-2:#FFC46B; --accent-deep:#7A3D00; --star:#F5B301; --on-hero:#3A2506; --on-gold:#8A5A00;
+    --math:#4E8FE0; --math-ink:#1D64BE; --subtle:#746E64;
+    --ok:#35A98A; --ok-ink:#22735D; --bad:#E2603C; --bad-ink:#B53917;
+
+    --math-soft:color-mix(in oklch, var(--math) 14%, var(--surface));
+    --accent-soft:color-mix(in oklch, var(--accent) 18%, var(--surface));
+    --star-soft:color-mix(in oklch, var(--star) 20%, var(--surface));
+    --fg-soft:color-mix(in oklch, var(--fg) 6%, transparent);
+
+    --font-display:'Yuanti SC','Hiragino Maru Gothic ProN','PingFang SC','Hiragino Sans GB',system-ui,sans-serif;
+    --font-body:'PingFang SC','Hiragino Sans GB',system-ui,-apple-system,sans-serif;
+    --font-mono:ui-monospace,'SF Mono','JetBrains Mono',Menlo,monospace;
+
+    --r:14px; --r-lg:22px;
+    --shadow:0 1px 2px color-mix(in oklch,var(--fg) 5%,transparent),0 10px 28px color-mix(in oklch,var(--fg) 6%,transparent);
+    --ease:cubic-bezier(.22,.61,.36,1);
+  }
+  *,*::before,*::after{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:16px;line-height:1.7;-webkit-font-smoothing:antialiased;}
+  h1,h2,h3,p{margin:0;text-wrap:pretty;}
+  h1,h2,h3{text-wrap:balance;}
+  button{font:inherit;cursor:pointer;color:inherit;}
+  :focus-visible{outline:3px solid var(--fg);outline-offset:2px;border-radius:10px;}
+  .num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;}
+
+  /* ─── topbar ─────────────────────────────────────────────────────── */
+  .topbar{position:sticky;top:0;z-index:20;background:color-mix(in oklch,var(--bg) 88%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 22px;}
+  .topbar-inner{display:flex;align-items:center;gap:14px;min-height:64px;padding:8px 0;}
+  .back{width:44px;height:44px;border-radius:13px;border:1px solid var(--border);background:var(--surface);display:grid;place-items:center;flex:none;transition:border-color .15s var(--ease);}
+  .back:hover{border-color:var(--fg);}
+  .back svg{width:20px;height:20px;color:var(--fg);}
+  .lesson-title{display:flex;flex-direction:column;gap:1px;min-width:0;}
+  .lesson-title b{font-family:var(--font-display);font-size:19px;line-height:1.25;}
+  .lesson-title span{font-family:var(--font-mono);font-size:11.5px;color:var(--muted);}
+  .progress{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-family:var(--font-mono);font-weight:600;font-size:14px;color:var(--math-ink);background:var(--math-soft);border:1px solid color-mix(in oklch,var(--math) 34%,var(--border));border-radius:999px;padding:8px 14px;}
+  .progress svg{width:16px;height:16px;color:var(--math-ink);}
+
+  /* ─── step rail ──────────────────────────────────────────────────── */
+  .rail{display:flex;gap:9px;overflow-x:auto;padding:16px 0 4px;scrollbar-width:none;}
+  .rail::-webkit-scrollbar{display:none;}
+  .rstep{flex:none;display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:9px 14px;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:14px;white-space:nowrap;transition:border-color .15s var(--ease),background .15s var(--ease),color .15s var(--ease);}
+  .rstep:hover{border-color:color-mix(in oklch,var(--fg) 26%,var(--border));color:var(--fg);}
+  .rstep .rdot{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-family:var(--font-mono);font-size:12px;font-weight:600;border:1.5px solid var(--border);flex:none;}
+  .rstep[data-on="true"]{border-color:var(--math);background:var(--math-soft);color:var(--math-ink);font-weight:600;}
+  .rstep[data-on="true"] .rdot{border-color:var(--math-ink);background:var(--math-ink);color:var(--surface);}
+  .rstep[data-done="true"] .rdot{background:var(--ok-ink);border-color:var(--ok-ink);color:var(--surface);}
+
+  /* ─── grid ───────────────────────────────────────────────────────── */
+  .grid{display:grid;grid-template-columns:minmax(0,1fr) 336px;gap:22px;align-items:start;padding:18px 0 72px;}
+
+  /* ─── stage card ─────────────────────────────────────────────────── */
+  .stage{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow);overflow:hidden;}
+  .stage-head{padding:20px 24px 16px;border-bottom:1px solid var(--border);}
+  .eyebrow{font-family:var(--font-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--math-ink);}
+  .stage-head h1{font-family:var(--font-display);font-size:clamp(22px,2.6vw,28px);font-weight:700;margin-top:8px;line-height:1.3;}
+  .tip{display:flex;gap:9px;align-items:flex-start;margin-top:14px;padding:12px 14px;border-radius:var(--r);background:var(--math-soft);border:1px solid color-mix(in oklch,var(--math) 26%,var(--border));}
+  .tip b{font-size:12px;color:var(--math-ink);font-weight:700;flex:none;padding-top:2px;}
+  .tip p{font-size:14px;color:var(--fg);line-height:1.7;}
+  .tip p em{font-style:normal;color:var(--math-ink);font-weight:700;}
+  .stage-body{padding:26px 24px;min-height:360px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;text-align:center;}
+  .stage-foot{display:flex;align-items:center;gap:12px;padding:16px 24px;border-top:1px solid var(--border);flex-wrap:wrap;}
+  .narration{flex:1;min-width:180px;font-size:14px;color:var(--muted);line-height:1.7;text-align:left;}
+  .narration b{color:var(--fg);font-weight:600;}
+  .foot-actions{display:flex;gap:10px;flex-wrap:wrap;}
+
+  /* ─── buttons ────────────────────────────────────────────────────── */
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:46px;padding:11px 20px;border-radius:var(--r);border:1px solid transparent;font-size:15px;font-weight:600;transition:background .15s var(--ease),border-color .15s var(--ease),transform .06s var(--ease);}
+  .btn:active{transform:translateY(1px);}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+  .btn-primary{background:var(--accent);color:var(--on-hero);border-color:var(--accent);}
+  .btn-primary:hover:not(:disabled){background:color-mix(in oklch,var(--accent) 90%,var(--accent-deep));}
+  .btn-secondary{background:var(--surface);color:var(--fg);border-color:var(--border);}
+  .btn-secondary:hover:not(:disabled){border-color:var(--fg);}
+  .btn-math{background:var(--math-soft);color:var(--math-ink);border-color:color-mix(in oklch,var(--math) 34%,var(--border));}
+  .btn-math:hover:not(:disabled){background:color-mix(in oklch,var(--math) 22%,var(--surface));}
+
+  /* ─── counting (step 1) ──────────────────────────────────────────── */
+  .tray{border:1.5px solid var(--border);border-radius:var(--r-lg);padding:16px;background:var(--bg);}
+  .tray-cap{font-size:13px;color:var(--muted);margin-bottom:12px;}
+  .dots{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;max-width:216px;}
+  .cdot{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;position:relative;}
+  .cdot .sdot{width:28px;height:28px;border-radius:50%;background:color-mix(in oklch,var(--math) 26%,var(--surface));border:2px solid transparent;transition:transform .2s var(--ease),background .2s var(--ease);}
+  .cdot:not(.counted):hover .sdot{transform:scale(1.08);}
+  .cdot.counted .sdot{background:var(--math-ink);border-color:var(--math-ink);}
+  .cdot .cnum{position:absolute;font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--surface);opacity:0;transition:opacity .2s var(--ease);}
+  .cdot.counted .cnum{opacity:1;}
+  .count-line{font-family:var(--font-display);font-size:clamp(26px,3.6vw,36px);font-weight:700;}
+  .count-line b{color:var(--math-ink);}
+
+  /* ─── split (step 2) ─────────────────────────────────────────────── */
+  .plates{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;align-items:stretch;width:100%;}
+  .plate{flex:1 1 190px;min-width:170px;border:1.5px dashed var(--border);border-radius:var(--r-lg);padding:14px;background:var(--bg);display:flex;flex-direction:column;align-items:center;gap:10px;transition:border-color .2s var(--ease),background .2s var(--ease);}
+  .plate.b{background:color-mix(in oklch,var(--accent) 8%,var(--bg));}
+  .plate.ready{border-color:var(--math);border-style:solid;}
+  .plate-cap{font-size:13px;color:var(--muted);}
+  .plate-items{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;min-height:52px;align-items:center;}
+  .plate-count{font-family:var(--font-display);font-size:22px;font-weight:700;color:var(--fg);}
+  .pile{border:1.5px dashed var(--border);border-radius:var(--r-lg);padding:12px 14px;background:var(--surface);width:100%;max-width:520px;}
+  .pile-cap{font-size:12.5px;color:var(--muted);margin-bottom:8px;}
+  .sitem{width:44px;height:44px;border-radius:50%;border:none;background:transparent;display:grid;place-items:center;transition:transform .15s var(--ease);}
+  .sitem:hover{transform:translateY(-2px);}
+  .sitem .sdot{width:28px;height:28px;border-radius:50%;background:var(--math);border:2px solid var(--math-ink);}
+  .plate.b .sitem .sdot{background:var(--accent);border-color:color-mix(in oklch,var(--accent) 60%,var(--accent-deep));}
+  .plate .sitem .sdot{width:26px;height:26px;}
+  .sdot.a{background:var(--accent);border-color:color-mix(in oklch,var(--accent) 60%,var(--accent-deep));}
+  .split-eq{font-family:var(--font-display);font-size:clamp(22px,3.2vw,30px);font-weight:700;}
+  .split-eq .m{color:var(--math-ink);}
+  .split-eq .a{color:color-mix(in oklch,var(--accent) 60%,var(--on-hero));}
+
+  /* ─── number bond svg ────────────────────────────────────────────── */
+  .bond-svg{width:232px;height:146px;}
+  .bond-svg text{font-family:var(--font-display);font-weight:700;text-anchor:middle;dominant-baseline:central;font-size:25px;}
+  .bond-svg .ln{stroke:var(--border);stroke-width:2.4;stroke-linecap:round;stroke-dasharray:46;stroke-dashoffset:0;}
+  .bond-svg .top{fill:var(--accent);stroke:color-mix(in oklch,var(--accent) 58%,var(--accent-deep));stroke-width:2;}
+  .bond-svg .t-top{fill:var(--on-hero);}
+  .bond-svg .keep{fill:var(--math-soft);stroke:var(--math);stroke-width:2.4;}
+  .bond-svg .t-keep{fill:var(--math-ink);}
+  .bond-svg .give{fill:var(--accent-soft);stroke:var(--accent);stroke-width:2.4;}
+  .bond-svg .t-give{fill:color-mix(in oklch,var(--accent) 58%,var(--on-hero));}
+  .bond-svg.draw .ln{animation:ln-draw .45s var(--ease) both;}
+  @keyframes ln-draw{from{stroke-dashoffset:46;}to{stroke-dashoffset:0;}}
+  .bond-svg .ar{fill:none;stroke:var(--math-ink);stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;}
+  .bond-svg.draw .ar{animation:ar-in .32s var(--ease) .42s both;}
+  @keyframes ar-in{from{opacity:0;transform:translateY(7px);}to{opacity:1;transform:none;}}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;}
+
+  .eq-big{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,3.6vw,36px);letter-spacing:.01em;}
+  .eq-big .m{color:var(--math-ink);}
+  .eq-big .a{color:color-mix(in oklch,var(--accent) 60%,var(--on-hero));}
+  .eq-big .ok{color:var(--ok-ink);}
+
+  .why{padding:12px 16px;border-radius:var(--r);background:var(--star-soft);border:1px solid color-mix(in oklch,var(--star) 48%,var(--border));font-size:14px;color:var(--fg);max-width:540px;text-align:left;line-height:1.7;}
+  .why b{color:var(--on-gold);}
+  .practice-note{font-size:14px;color:var(--muted);max-width:540px;}
+
+  /* ─── merge (step 3) ─────────────────────────────────────────────── */
+  .merge-row{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;max-width:280px;}
+  .merge-row .sdot{width:28px;height:28px;border-radius:50%;background:var(--math);border:2px solid var(--math-ink);}
+  .merge-row .sdot.a{background:var(--accent);border-color:color-mix(in oklch,var(--accent) 60%,var(--accent-deep));}
+  .merge-row .sdot.pop{animation:pop .45s cubic-bezier(.34,1.25,.5,1) both;}
+
+  /* ─── all splits (step 4) ────────────────────────────────────────── */
+  .splits{display:flex;flex-direction:column;gap:9px;width:100%;max-width:500px;}
+  .srow{display:grid;grid-template-columns:104px 1fr;gap:14px;align-items:center;padding:11px 14px;border-radius:var(--r);border:1px dashed var(--border);background:var(--bg);transition:border-color .3s var(--ease),background .3s var(--ease);}
+  .srow.on{border-style:solid;border-color:color-mix(in oklch,var(--math) 34%,var(--border));background:var(--surface);}
+  .seq{font-family:var(--font-display);font-size:19px;font-weight:700;text-align:left;color:var(--fg);}
+  .seq.masked{color:var(--muted);}
+  .seq .lnum{color:var(--math-ink);}
+  .seq .rnum{color:color-mix(in oklch,var(--accent) 60%,var(--on-hero));}
+  .smini{display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-start;}
+  .smini span{width:15px;height:15px;border-radius:50%;background:var(--math);}
+  .smini span.o{background:var(--accent);}
+  .smini span.phd{background:transparent;border:1.5px dashed var(--border);}
+
+  /* ─── side / scaffold ────────────────────────────────────────────── */
+  .side{display:flex;flex-direction:column;gap:16px;position:sticky;top:80px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:18px 20px;}
+  .card h2{font-family:var(--font-display);font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;}
+  .card .meta{font-family:var(--font-mono);font-size:11px;color:var(--muted);}
+  .scaf{display:flex;flex-direction:column;gap:8px;margin-top:14px;}
+  .sline{display:flex;align-items:baseline;gap:10px;padding:9px 12px;border-radius:11px;background:var(--bg);border:1px solid var(--border);opacity:.32;transition:opacity .4s var(--ease),border-color .4s var(--ease);}
+  .sline.on{opacity:1;border-color:color-mix(in oklch,var(--math) 32%,var(--border));}
+  .sline .se{font-family:var(--font-display);font-size:15px;font-weight:700;min-width:0;}
+  .sline.on .se{color:var(--math-ink);}
+  .sline .sl{font-size:11.5px;color:var(--muted);margin-left:auto;flex:none;}
+  .lesson-done{margin-top:14px;padding:14px;border-radius:var(--r);background:var(--star-soft);border:1px solid color-mix(in oklch,var(--star) 50%,var(--border));text-align:center;display:none;}
+  .lesson-done.show{display:block;}
+  .lesson-done b{font-family:var(--font-display);font-size:16px;color:var(--on-gold);display:block;margin-bottom:3px;}
+  .lesson-done span{font-size:13px;color:var(--fg);}
+
+  /* ─── motion · 一套语言：快、只动 transform/opacity ─────────────────── */
+  @keyframes step-in{from{opacity:0;transform:translateX(10px);}to{opacity:1;transform:none;}}
+  @keyframes step-in-back{from{opacity:0;transform:translateX(-10px);}to{opacity:1;transform:none;}}
+  .stage-head.enter,.stage-body.enter{animation:step-in .18s var(--ease) both;}
+  .stage-head.enter-back,.stage-body.enter-back{animation:step-in-back .18s var(--ease) both;}
+  .stage-body.enter,.stage-body.enter-back{animation-delay:.04s;}
+  @keyframes pop{0%{transform:scale(.2);opacity:.2;}100%{transform:scale(1);opacity:1;}}
+  @keyframes shake{0%,100%{transform:translateX(0);}25%{transform:translateX(-5px);}75%{transform:translateX(5px);}}
+  @keyframes ring{0%{box-shadow:0 0 0 0 color-mix(in oklch,var(--accent) 55%,transparent);}100%{box-shadow:0 0 0 12px color-mix(in oklch,var(--accent) 0%,transparent);}}
+  .land{animation:ring .7s var(--ease) both;}
+
+  @media (max-width:960px){
+    .grid{grid-template-columns:1fr;}
+    .side{position:static;flex-direction:column;}
+  }
+  @media (max-width:600px){
+    .plate-items{gap:6px;}
+    .bond-svg{width:200px;height:126px;}
+    .stage-body{padding:20px 16px;}
+    .stage-head,.stage-foot{padding-inline:16px;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar" data-od-id="topbar">
+  <div class="wrap topbar-inner">
+    <button class="back" id="btnBack" aria-label="返回上一步">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <div class="lesson-title">
+      <b>数的分与合 · 5</b>
+      <span>先把数分开，再合起来 · 讲解课</span>
+    </div>
+    <span class="progress" id="progress" aria-live="polite">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13l5 5L20 6"/></svg>
+      <span id="progText">0 / 8 步</span>
+    </span>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="rail" id="rail" aria-label="本课步骤" data-od-id="step-rail"></nav>
+
+  <main class="grid">
+    <section class="stage" data-od-id="stage-card">
+      <div class="stage-head">
+        <p class="eyebrow" id="stepEyebrow">STEP 1 / 8</p>
+        <h1 id="stepTitle" data-od-id="step-title">一共有几个？先数一数</h1>
+        <div class="tip"><b>小星老师说</b><p id="stepTip"></p></div>
+      </div>
+      <div class="stage-body" id="stageBody"></div>
+      <div class="stage-foot">
+        <p class="narration" id="narration" role="status"></p>
+        <p class="sr-only" id="srFeedback" aria-live="polite"></p>
+        <div class="foot-actions">
+          <button class="btn btn-secondary" id="btnPrev" data-od-id="btn-prev">上一步</button>
+          <button class="btn btn-primary" id="btnNext" data-od-id="btn-next">下一步</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="side" data-od-id="side-panel">
+      <div class="card" data-od-id="scaffold">
+        <h2>分合记录 <span class="meta" id="scafHint">跟着步骤点亮</span></h2>
+        <p class="meta">每学会一步，这里就多一行，最后连成完整的分与合。</p>
+        <div class="scaf" id="scaf"></div>
+        <div class="lesson-done" id="lessonDone" role="status">
+          <b>本课完成</b>
+          <span>分与合已经学会。明天用「8 的分与合」考考自己。</span>
+        </div>
+      </div>
+      <div class="card" data-od-id="concept-note">
+        <h2>什么是「分与合」</h2>
+        <p style="font-size:13.5px;color:var(--muted);line-height:1.7;margin-top:8px;">把一个数<strong style="color:var(--fg)">分成两部分</strong>，这两部分再<strong style="color:var(--fg)">合起来</strong>，还是原来的数。分得越熟、合得越快，凑十和加减就越好算。</p>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  var $ = function(s,r){ return (r||document).querySelector(s); };
+  var $$ = function(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
+  var TOTAL = 5;
+  var ALL_SPLITS = [[0,5],[1,4],[2,3],[3,2],[4,1],[5,0]];
+
+  var STEPS = [
+    { n:'数一数', en:'SEE' },
+    { n:'分一分', en:'SPLIT' },
+    { n:'合一合', en:'COMPOSE' },
+    { n:'找全部', en:'FIND ALL' }
+  ];
+
+  var state = {
+    step:0,
+    counted:0, countNums:[0,0,0,0,0],   // 数一数
+    splitDone:false, splitLeft:2, splitRight:3,
+    composed:false,
+    splitCount:0        // 找全部 revealed rows
+  };
+  var done = {};
+  var saved = null;
+  try { saved = parseInt(localStorage.getItem('od_fenhe_step_v2'),10); } catch(e){}
+
+  function reduce(){ try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e){ return false; } }
+  function save(){ try { localStorage.setItem('od_fenhe_step_v2', String(state.step)); } catch(e){} }
+  function focusNext(){ try { $('#btnNext').focus({ preventScroll:true }); } catch(e){} }
+
+  function animateEnter(dir){
+    if (reduce()) return;
+    var cls = dir < 0 ? 'enter-back' : 'enter';
+    [$('.stage-head'), $('#stageBody')].forEach(function(el){
+      if (!el) return;
+      el.classList.remove('enter','enter-back');
+      void el.offsetWidth;
+      el.classList.add(cls);
+    });
+  }
+
+  /* ── helpers ─────────────────────────────────────────────────── */
+  function dots(n, cls){ var s=''; for (var i=0;i<n;i++) s += '<span class="sdot'+(cls?' '+cls:'')+'"></span>'; return s; }
+  function bondSVG(total, left, right, merged){
+    var label = merged ? ('把 '+left+' 和 '+right+' 合起来是 '+total) : ('把 '+total+' 分成 '+left+' 和 '+right);
+    var arrow = merged ? '<path class="ar" d="M108 80 L116 70 L124 80"/>' : '';
+    return '<svg class="bond-svg draw" viewBox="0 0 232 146" role="img" aria-label="'+label+'">' +
+      '<path class="ln" d="M100 56 L66 84"/><path class="ln" d="M132 56 L166 84"/>' + arrow +
+      '<circle class="top" cx="116" cy="34" r="31"/><text class="t-top" x="116" y="36">'+total+'</text>' +
+      '<circle class="keep" cx="48" cy="112" r="28"/><text class="t-keep" x="48" y="114">'+left+'</text>' +
+      '<circle class="give" cx="184" cy="112" r="28"/><text class="t-give" x="184" y="114">'+right+'</text>' +
+    '</svg>';
+  }
+
+  /* ── rail & scaffold ─────────────────────────────────────────── */
+  function renderRail(){
+    var host = $('#rail'); host.innerHTML='';
+    STEPS.forEach(function(s,i){
+      var b=document.createElement('button');
+      b.className='rstep'; b.dataset.on=String(i===state.step); b.dataset.done=String(!!done[i]);
+      b.innerHTML='<span class="rdot">'+(done[i]?'\u2713':(i+1))+'</span>'+s.n;
+      b.setAttribute('aria-current', i===state.step?'step':'false');
+      b.addEventListener('click', function(){ go(i); });
+      host.appendChild(b);
+    });
+  }
+  function renderScaf(){
+    var L=state.splitLeft, R=state.splitRight;
+    var lines=[
+      { on:state.counted>=TOTAL, eq:TOTAL, label:'整体' },
+      { on:state.splitDone,     eq:TOTAL+' = '+L+' + '+R, label:'分' },
+      { on:state.composed,      eq:L+' + '+R+' = '+TOTAL, label:'合' },
+      { on:state.splitCount>=6, eq:'5 的 6 种分法', label:'有序' }
+    ];
+    $('#scaf').innerHTML = lines.map(function(l){
+      return '<div class="sline'+(l.on?' on':'')+'"><span class="se">'+l.eq+'</span><span class="sl">'+l.label+'</span></div>';
+    }).join('');
+    $('#lessonDone').classList.toggle('show', !!done[3]);
+  }
+  function renderProgress(){
+    var n=0; for (var k=0;k<STEPS.length;k++){ if (done[k]) n++; }
+    $('#progText').textContent = n+' / '+STEPS.length+' 步';
+  }
+
+  /* ── step bodies ─────────────────────────────────────────────── */
+  function bodyCount(){
+    var items='';
+    for (var i=0;i<TOTAL;i++){
+      var num=state.countNums[i], on=num>0;
+      items += '<button class="cdot'+(on?' counted':'')+'" data-c="'+i+'"'+(on?' disabled':'')+
+        ' aria-label="'+(on?('第 '+num+' 个，已经数过'):'还没数的小球')+'"><span class="sdot"></span><span class="cnum">'+(on?num:'')+'</span></button>';
+    }
+    var full = state.counted>=TOTAL;
+    return '<div class="tray"><div class="tray-cap">盘子里的小球 · 点一点，一个一个数</div><div class="dots">'+items+'</div></div>' +
+      '<div class="count-line">已经数了 <b>'+state.counted+'</b> 个'+(full?'，一共就是 <b>'+TOTAL+'</b>':'' )+'</div>' +
+      '<p class="practice-note">'+(full
+        ? '一个一个数，最后数到的数字，就是<strong>一共有几个</strong>。整体就是 '+TOTAL+'。'
+        : '点一点每个小球，边点边数：1、2、3……')+'</p>';
+  }
+
+  function bodySplit(){
+    if (state.splitDone){
+      var L=state.splitLeft, R=state.splitRight;
+      return '<div class="plates">' +
+        '<div class="plate ready"><div class="plate-cap">左边盘子</div><div class="plate-items">'+dots(L)+'</div><div class="plate-count num">'+L+' 个</div></div>' +
+        '<div class="plate b ready"><div class="plate-cap">右边盘子</div><div class="plate-items">'+dots(R,'a')+'</div><div class="plate-count num">'+R+' 个</div></div>' +
+        '</div>' +
+        bondSVG(5,L,R,false) +
+        '<div class="split-eq">5 分成 <span class="m">'+L+'</span> 和 <span class="a">'+R+'</span></div>' +
+        '<p class="practice-note"><strong>分，就是把整体拆成两部分。</strong>上面是整体 5，下面两部分是 '+L+' 和 '+R+'。</p>' +
+        '<button class="btn btn-secondary" id="btnSay"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg> 读一读</button>';
+    }
+    return '<div class="pile"><div class="pile-cap">还没分的小球（点一下：中间 → 左盘 → 右盘 → 中间）</div>' +
+      '<div class="plate-items" id="pileC">'+pileItems()+'</div></div>' +
+      '<div class="plates">' +
+      '<div class="plate" id="plateL"><div class="plate-cap">左边盘子</div><div class="plate-items" data-zone="l"></div><div class="plate-count num" id="cntL">0 个</div></div>' +
+      '<div class="plate b" id="plateR"><div class="plate-cap">右边盘子</div><div class="plate-items" data-zone="r"></div><div class="plate-count num" id="cntR">0 个</div></div>' +
+      '</div>' +
+      '<p class="practice-note" id="splitHint">把 5 个小球都分到两个盘子里，每个盘子都要有。</p>';
+  }
+  function pileItems(){
+    var s='';
+    for (var i=0;i<TOTAL;i++) s += '<button class="sitem" data-zone="c" aria-label="一个小球，点一下移动它"><span class="sdot"></span></button>';
+    return s;
+  }
+
+  function bodyCompose(){
+    var L=state.splitLeft, R=state.splitRight;
+    if (state.composed){
+      var merged='';
+      for (var i=0;i<L;i++) merged += '<span class="sdot'+(i?' pop':'')+'" style="animation-delay:'+(i*60)+'ms"></span>';
+      for (var j=0;j<R;j++) merged += '<span class="sdot a pop" style="animation-delay:'+((L+j)*60)+'ms"></span>';
+      return '<div class="merge-row">'+merged+'</div>' +
+        '<div class="eq-big"><span class="m">'+L+'</span> + <span class="a">'+R+'</span> = <span class="ok">5</span></div>' +
+        bondSVG(5,L,R,true) +
+        '<div class="why"><b>合起来，还是原来的 5。</b><br>分出来的两部分再合起来，就回到整体。同一张分合树，从上往下是「分」，从下往上是「合」——分完可以用「合」来检查。</div>';
+    }
+    return '<div class="plates">' +
+      '<div class="plate ready"><div class="plate-cap">左 '+L+' 个</div><div class="plate-items">'+dots(L)+'</div></div>' +
+      '<div class="plate b ready"><div class="plate-cap">右 '+R+' 个</div><div class="plate-items">'+dots(R,'a')+'</div></div>' +
+      '</div>' +
+      bondSVG(5,L,R,false) +
+      '<button class="btn btn-math" id="btnMerge">把两部分合起来</button>' +
+      '<p class="practice-note">'+L+' 和 '+R+' 分开放在两个盘子里。把它们<strong>合到一起</strong>，一共有几个？</p>';
+  }
+
+  function bodyAll(){
+    var rows=ALL_SPLITS;
+    var html = rows.map(function(p,i){
+      var on = i < state.splitCount;
+      if (!on){
+        var ph=''; for (var q=0;q<TOTAL;q++) ph += '<span class="phd"></span>';
+        return '<div class="srow" aria-label="还没展开的分法"><span class="seq masked">5 = ? + ?</span><span class="smini">'+ph+'</span></div>';
+      }
+      var mini='';
+      for (var a=0;a<p[0];a++) mini += '<span></span>';
+      for (var b=0;b<p[1];b++) mini += '<span class="o"></span>';
+      return '<div class="srow on"><span class="seq">5 = <span class="lnum">'+p[0]+'</span> + <span class="rnum">'+p[1]+'</span></span><span class="smini">'+mini+'</span></div>';
+    }).join('');
+    var doneAll = state.splitCount>=6;
+    return '<div class="splits">'+html+'</div>' +
+      (doneAll
+        ? '<p class="practice-note">一共 <strong>6 种</strong>分法。左边每次多 1，右边就每次少 1——<strong>有序地想，不重不漏。</strong></p>'
+        : '<button class="btn btn-math" id="btnReveal">'+(state.splitCount===0?'开始有序地分':'再分下一种')+'</button>' +
+          '<p class="practice-note">从「左边 0 个」开始，一边多 1、一边少 1，把 5 的分法全部找出来。</p>');
+  }
+
+  /* ── render ──────────────────────────────────────────────────── */
+  var TITLE=[
+    '一共有几个？先数一数',
+    '把 5 分成两堆',
+    '合起来看看',
+    '5 一共有几种分法？'
+  ];
+  var TIP=[
+    '先看清整体。一个一个数，<em>最后数到的数</em>就是一共有几个。',
+    '把 5 个小球<em>分到两个盘子</em>里，每个盘子都要有。分完就有分合式。',
+    '把分开的两部分<em>合起来</em>，看看还是不是 5。分与合是一对好朋友。',
+    '<em>有序地想</em>：左边每次多 1，右边就每次少 1，这样不重不漏。'
+  ];
+  var NARR=[
+    '盘子里一共有几个？一个一个数出来。',
+    '把 5 个小球都分到两个盘子里，每个盘子都要有。',
+    '动手把两部分合起来，数一数还是不是 5。',
+    '从左边 0 个开始，把 5 的分法全部找出来。'
+  ];
+  var NARR_DONE=[
+    '数到 5 就是一共 5 个——整体就是 5。',
+    '5 分成了两部分，分合式也写好了。',
+    '两部分合起来还是 5——分与合是一对好朋友。',
+    '6 种分法都找到了：左边多 1、右边少 1，有序又不漏。'
+  ];
+  var BODY=[bodyCount, bodySplit, bodyCompose, bodyAll];
+
+  function render(){
+    var i=state.step;
+    $('#stepEyebrow').textContent='STEP '+(i+1)+' / '+STEPS.length+' · '+STEPS[i].en;
+    $('#stepTitle').textContent=TITLE[i];
+    $('#stepTip').innerHTML=TIP[i];
+    $('#narration').innerHTML = done[i] ? NARR_DONE[i] : NARR[i];
+    $('#stageBody').innerHTML = BODY[i]();
+    $('#btnPrev').disabled = (i===0);
+    $('#btnNext').textContent = (i===STEPS.length-1) ? '完成本课' : '下一步';
+    wire(i);
+    renderScaf(); renderRail(); renderProgress(); save();
+  }
+
+  /* ── wiring ──────────────────────────────────────────────────── */
+  function wire(i){
+    var body=$('#stageBody');
+
+    if (i===0){
+      $$('.cdot', body).forEach(function(b){
+        b.addEventListener('click', function(){
+          var idx=Number(b.dataset.c);
+          if (state.countNums[idx]) return;
+          state.counted++;
+          state.countNums[idx]=state.counted;
+          b.classList.add('counted'); b.disabled=true;
+          b.setAttribute('aria-label','第 '+state.counted+' 个，已经数过');
+          var cn=b.querySelector('.cnum'); if (cn) cn.textContent=String(state.counted);
+          if (state.counted>=TOTAL){ done[0]=true; render(); focusNext(); }
+          else { $('.count-line').innerHTML='已经数了 <b>'+state.counted+'</b> 个'; }
+        });
+      });
+    }
+
+    if (i===1 && !state.splitDone){
+      var flipMove = function(el, first){
+        if (reduce()) return;
+        var last = el.getBoundingClientRect();
+        var dx = first.left - last.left, dy = first.top - last.top;
+        if (!dx && !dy) return;
+        el.style.transition = 'none';
+        el.style.transform = 'translate('+dx+'px,'+dy+'px)';
+        void el.getBoundingClientRect();
+        el.style.transition = 'transform .22s var(--ease)';
+        el.style.transform = 'none';
+        window.setTimeout(function(){ el.style.transition=''; el.style.transform=''; }, 260);
+      };
+      $$('.sitem', body).forEach(function(it){
+        it.addEventListener('click', function(){
+          if (state.splitDone) return;
+          var first = reduce() ? null : it.getBoundingClientRect();
+          var z=it.dataset.zone;
+          var next = z==='c' ? 'l' : (z==='l' ? 'r' : 'c');
+          var target = next==='l' ? $('[data-zone="l"]', body) : (next==='r' ? $('[data-zone="r"]', body) : $('#pileC', body));
+          it.dataset.zone=next; target.appendChild(it);
+          if (first) flipMove(it, first);
+          var L=$$('[data-zone="l"] .sitem', body).length;
+          var R=$$('[data-zone="r"] .sitem', body).length;
+          var C=$$('#pileC .sitem', body).length;
+          $('#cntL').textContent=L+' 个';
+          $('#cntR').textContent=R+' 个';
+          var hint=$('#splitHint');
+          if (C===0 && L>=1 && R>=1){
+            state.splitLeft=L; state.splitRight=R; state.splitDone=true; done[1]=true;
+            if (first) window.setTimeout(function(){ render(); focusNext(); }, 230);
+            else { render(); focusNext(); }
+          } else if (C===0){
+            hint.textContent='还有一边是空的。两边都要有小球才算分好。';
+          } else {
+            hint.textContent='还剩 '+C+' 个没分，把它们也分到盘子里。';
+          }
+        });
+      });
+    }
+
+    if (i===1 && state.splitDone){
+      var sy=$('#btnSay');
+      if (sy) sy.addEventListener('click', function(){
+        sayText('5 可以分成 '+state.splitLeft+' 和 '+state.splitRight);
+      });
+    }
+
+    if (i===2 && !state.composed){
+      var bm=$('#btnMerge');
+      if (bm) bm.addEventListener('click', function(){
+        state.composed=true; done[2]=true; render(); focusNext();
+      });
+    }
+
+    if (i===3 && state.splitCount<6){
+      var br=$('#btnReveal');
+      if (br) br.addEventListener('click', function(){
+        state.splitCount++;
+        var p=ALL_SPLITS[state.splitCount-1];
+        announce('第 '+state.splitCount+' 种：5 分成 '+p[0]+' 和 '+p[1]+'。');
+        if (state.splitCount>=6) done[3]=true;
+        render();
+        if (state.splitCount>=6) focusNext();
+      });
+    }
+  }
+  function markAllDone(){ $('#lessonDone').classList.add('show'); }
+
+  function sayText(t){
+    try {
+      if (!('speechSynthesis' in window)) return;
+      var u=new SpeechSynthesisUtterance(t); u.lang='zh-CN'; u.rate=.92; u.pitch=1.05;
+      window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
+    } catch(e){ /* silent */ }
+  }
+  function announce(t){ var el=$('#srFeedback'); if (el) el.textContent=t; }
+
+  function go(i){
+    if (i<0 || i>=STEPS.length) return;
+    var dir = i < state.step ? -1 : 1;
+    state.step=i; render(); animateEnter(dir);
+    try { window.scrollTo({ top:0, behavior: reduce()?'auto':'smooth' }); } catch(e){ window.scrollTo(0,0); }
+  }
+
+  $('#btnPrev').addEventListener('click', function(){ go(state.step-1); });
+  $('#btnNext').addEventListener('click', function(){
+    if (state.step===STEPS.length-1){ renderProgress(); markAllDone(); return; }
+    go(state.step+1);
+  });
+  $('#btnBack').addEventListener('click', function(){ go(Math.max(0, state.step-1)); });
+
+  /* ── restore ─────────────────────────────────────────────────── */
+  if (!isNaN(saved) && saved>=0 && saved<STEPS.length){
+    state.step=saved;
+    for (var k=1;k<saved;k++){ done[k]=true; }
+    if (saved>0){ state.counted=TOTAL; state.countNums=[1,2,3,4,5]; done[0]=true; }
+    if (saved>1){ state.splitDone=true; done[1]=true; }
+    if (saved>2){ state.composed=true; done[2]=true; }
+  }
+  render();
+})();
+</script>
+</body>
+</html>

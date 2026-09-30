@@ -28,47 +28,7 @@ import {
 } from '../utils/MathQuizGame'
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import { PreferenceKeys } from '../services/PreferencesService'
-
-// 钟面数字 1-12 的绝对定位 (200vp 钟面圆心 100,100, 半径 78vp)
-interface ClockNumberPos {
-  label: number
-  x: number
-  y: number
-}
-
-// 12 个分钟刻度小竖线的旋转角度
-interface ClockTickPos {
-  index: number
-  angle: number
-}
-
-// 钟面渲染所需的所有缩放后尺寸/坐标 (@Builder 体内不能写 const, 抽到 helper 方法)
-interface ClockFaceMetrics {
-  size: number
-  cx: number
-  tickX: number
-  tickY: number
-  tickLen: number
-  tickW: number
-  handHourW: number
-  handHourH: number
-  handHourX: number
-  handHourY: number
-  handMinW: number
-  handMinH: number
-  handMinX: number
-  handMinY: number
-  dotSize: number
-  numFontSize: number
-  numW: number
-  numH: number
-  shadowR: number
-  handShadowR: number
-  tickRadius: number
-  handHourRadius: number
-  handMinRadius: number
-  dotStrokeW: number
-}
+import { ClockFaceView } from './mathTeach/ClockFaceView'
 
 @ComponentV2
 export struct MathQuizCard {
@@ -388,85 +348,6 @@ export struct MathQuizCard {
 
   private getCardBackgroundColor(): string {
     return this.isDarkMode ? withColorAlpha(this.themePrimary, '18') : withColorAlpha(this.themePrimary, '12')
-  }
-
-  // ---- 钟面几何 (默认 200vp 钟面, 圆心 100,100; 可缩放) ----
-  // 用 named-interface push 避免 arr.map(p => ({...})) 触发的 10605038
-  // helper 方法返回所有缩放后的尺寸/坐标, @Builder 体内不能写 const (10905209)
-  private getClockFaceMetrics(size: number): ClockFaceMetrics {
-    const s: number = size / 200
-    const cx: number = size / 2
-    const m: ClockFaceMetrics = {
-      size: size,
-      cx: cx,
-      tickX: cx - 1 * s,
-      tickY: 8 * s,
-      tickLen: 8 * s,
-      tickW: Math.max(1, 2 * s),
-      handHourW: Math.max(2, 6 * s),
-      handHourH: 55 * s,
-      handHourX: cx - Math.max(2, 6 * s) / 2,
-      handHourY: cx - 55 * s,
-      handMinW: Math.max(1, 4 * s),
-      handMinH: 80 * s,
-      handMinX: cx - Math.max(1, 4 * s) / 2,
-      handMinY: cx - 80 * s,
-      dotSize: 10 * s,
-      numFontSize: 18 * s,
-      numW: 24 * s,
-      numH: 24 * s,
-      shadowR: 12 * s,
-      handShadowR: 3 * s,
-      tickRadius: Math.max(0.5, 1 * s),
-      handHourRadius: Math.max(1, 3 * s),
-      handMinRadius: Math.max(0.5, 2 * s),
-      dotStrokeW: 1.5 * s
-    }
-    return m
-  }
-
-  private getClockNumberPositions(size: number = 200): ClockNumberPos[] {
-    const positions: ClockNumberPos[] = []
-    // 半径 78vp (size=200 时); 按比例缩放. i → (i*30 - 90)° (12 点朝上)
-    const s: number = size / 200
-    const r: number = 78 * s
-    const cx: number = size / 2
-    const cy: number = size / 2
-    const textOffsetX: number = 10 * s
-    const textOffsetY: number = 12 * s
-    for (let i: number = 1; i <= 12; i++) {
-      const angleRad: number = (i * 30 - 90) * Math.PI / 180
-      const pos: ClockNumberPos = {
-        label: i,
-        x: cx + r * Math.cos(angleRad) - textOffsetX,
-        y: cy + r * Math.sin(angleRad) - textOffsetY
-      }
-      positions.push(pos)
-    }
-    return positions
-  }
-
-  // 12 个分钟刻度小竖线的旋转角度 (0°, 30°, 60°, ..., 330°)
-  private getMinuteTickPositions(): ClockTickPos[] {
-    const ticks: ClockTickPos[] = []
-    for (let i: number = 0; i < 12; i++) {
-      const tick: ClockTickPos = { index: i, angle: i * 30 }
-      ticks.push(tick)
-    }
-    return ticks
-  }
-
-  // 时针角度: ArkUI 中 height>width 的 Column 初始垂直朝上, 绕 (100,100) 旋转 angle=0 即指向 12 点;
-  // angle=90 顺时针到 3 点; h12 = hour % 12, 12 → 0
-  // 直接 h12 * 30 + minute * 0.5 (不要加 -90 偏置, 会让整点指针偏离正确位置)
-  private getHourAngle(hour: number, minute: number): number {
-    const h12: number = (hour % 12 + 12) % 12
-    return h12 * 30 + minute * 0.5
-  }
-
-  // 分针角度: minute * 6 (60 分钟走一圈 360°)
-  private getMinuteAngle(minute: number): number {
-    return minute * 6
   }
 
   build() {
@@ -804,78 +685,10 @@ export struct MathQuizCard {
   }
 
   @Builder
-  ClockFace(hour: number, minute: number, size: number = 200) {
-    // size=200 (默认) 维持原 time 题型外观; size=100 给 elapsed_time 两钟面
-    // @Builder 体内不能写 const 声明 (10905209), 把 metrics 计算结果直接传入子 Builder
-    this.ClockFaceContent(hour, minute, this.getClockFaceMetrics(size))
-  }
-
-  @Builder
-  ClockFaceContent(hour: number, minute: number, m: ClockFaceMetrics) {
-    Stack({ alignContent: Alignment.Center }) {
-      // 1) 钟面背景圆
-      Circle()
-        .width(m.size).height(m.size)
-        .fill(this.isDarkMode ? '#1C1C1E' : Color.White)
-        .stroke(this.isDarkMode ? withColorAlpha(this.themePrimary, '40') : '#E5E7EB')
-        .strokeWidth(1.5)
-        .shadow({ radius: m.shadowR, color: '#1F000000', offsetY: 4 })
-
-      // 2) 12 个分钟刻度小竖线 (在数字之下层, 先画)
-      ForEach(this.getMinuteTickPositions(), (t: ClockTickPos) => {
-        Column()
-          .width(m.tickW).height(m.tickLen)
-          .borderRadius(m.tickRadius)
-          .backgroundColor(this.isDarkMode ? withColorAlpha(this.themePrimary, '50') : '#9CA3AF')
-          .position({ x: m.tickX, y: m.tickY })
-          .rotate({ angle: t.angle, centerX: m.cx, centerY: m.cx })
-      }, (t: ClockTickPos) => `tick_${t.index}`)
-
-      // 3) 12 个数字 (1..12), 绝对定位, 不旋转保持正立可读
-      ForEach(this.getClockNumberPositions(m.size), (p: ClockNumberPos) => {
-        Text(`${p.label}`)
-          .fontSize(m.numFontSize)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.isDarkMode ? $r('app.color.text_primary') : '#374151')
-          .width(m.numW).height(m.numH)
-          .textAlign(TextAlign.Center)
-          .position({ x: p.x, y: p.y })
-      }, (p: ClockNumberPos) => `num_${p.label}`)
-
-      // 4) 时针 (短粗): 旋转支点用 '50%' / '100%' (相对 Column 自身尺寸)
-      Column()
-        .width(m.handHourW).height(m.handHourH)
-        .borderRadius(m.handHourRadius)
-        .backgroundColor(this.isDarkMode ? withColorAlpha(this.themePrimary, '90') : '#1F2937')
-        .position({ x: m.handHourX, y: m.handHourY })
-        .rotate({
-          angle: this.getHourAngle(hour, minute),
-          centerX: '50%',
-          centerY: '100%'
-        })
-        .shadow({ radius: m.handShadowR, color: '#1F000000', offsetY: 1 })
-
-      // 5) 分针 (长细): 主题色, 加阴影增强浮起感
-      Column()
-        .width(m.handMinW).height(m.handMinH)
-        .borderRadius(m.handMinRadius)
-        .backgroundColor(this.themePrimary)
-        .position({ x: m.handMinX, y: m.handMinY })
-        .rotate({
-          angle: this.getMinuteAngle(minute),
-          centerX: '50%',
-          centerY: '100%'
-        })
-        .shadow({ radius: m.handShadowR, color: '#1F000000', offsetY: 1 })
-
-      // 6) 中心圆点
-      Circle()
-        .width(m.dotSize).height(m.dotSize)
-        .fill(this.themePrimary)
-        .stroke(Color.White)
-        .strokeWidth(m.dotStrokeW)
-    }
-    .width(m.size).height(m.size)
+  ClockFace(hour: number, minute: number, size: number = 216) {
+    // size=216 (默认) time 题型钟面; size=120 给 elapsed_time 两钟面
+    // 视觉复用 math_teach ClockBoard 的盘面（纯展示版 ClockFaceView，kids 品牌色）
+    ClockFaceView({ hour: hour, minute: minute, box: size })
   }
 
   @Builder
@@ -919,8 +732,8 @@ export struct MathQuizCard {
   }
 
   // ---- 计时经过 (math_time, elapsed_time 子类型) ----
-  // 复用 ClockFace (size=100) + TimeOptionButton: 两个钟面上下排列 + 中间箭头, 4 个时长按钮选项
-  // 上下排列: 适配窄 bubble 宽度 (水平并排放不下 2 个 100vp+ 钟面)
+  // 复用 ClockFace (size=120) + TimeOptionButton: 两个钟面上下排列 + 中间箭头, 4 个时长按钮选项
+  // 上下排列: 适配窄 bubble 宽度 (水平并排放不下 2 个 120vp+ 钟面)
 
   @Builder
   ElapsedTimeContent() {
@@ -937,7 +750,7 @@ export struct MathQuizCard {
           Text('开始')
             .fontSize(11)
             .fontColor($r('app.color.text_tertiary'))
-          this.ClockFace(this.quiz.startHour, this.quiz.startMinute, 100)
+          this.ClockFace(this.quiz.startHour, this.quiz.startMinute, 120)
         }
         .width('100%')
         .alignItems(HorizontalAlign.Center)
@@ -955,7 +768,7 @@ export struct MathQuizCard {
           Text('结束')
             .fontSize(11)
             .fontColor($r('app.color.text_tertiary'))
-          this.ClockFace(this.quiz.endHour, this.quiz.endMinute, 100)
+          this.ClockFace(this.quiz.endHour, this.quiz.endMinute, 120)
         }
         .width('100%')
         .alignItems(HorizontalAlign.Center)

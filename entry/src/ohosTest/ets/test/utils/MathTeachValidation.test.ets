@@ -32,6 +32,12 @@ export default function mathTeachValidationTest() {
       expect(validateMathTeachArgs(asJson(baseArgs('shape')), null).ok).assertFalse()
       expect(validateMathTeachArgs(asJson(baseArgs('bar_model')), null).ok).assertFalse()
     })
+    it('number_bond_total收窄2到10', 0, () => {
+      const ok: Record<string, Object> = baseArgs('number_bond'); ok['total'] = 10
+      expect(validateMathTeachArgs(asJson(ok), null).ok).assertTrue()
+      const bad: Record<string, Object> = baseArgs('number_bond'); bad['total'] = 11
+      expect(validateMathTeachArgs(asJson(bad), null).ok).assertFalse()
+    })
     it('mode越界或缺失拒绝', 0, () => {
       expect(validateMathTeachArgs(asJson(baseArgs('huarongdao')), null).ok).assertFalse()
       expect(validateMathTeachArgs('{}', null).ok).assertFalse()
@@ -75,11 +81,23 @@ export default function mathTeachValidationTest() {
       const c: Record<string, Object> = baseArgs('number_bond'); c['total'] = 9; c['concept'] = ''
       expect(validateMathTeachArgs(asJson(c), null).ok).assertFalse()
     })
-    it('clock_minute只收0和30', 0, () => {
-      const c1: Record<string, Object> = baseArgs('clock'); c1['hour'] = 9; c1['minute'] = 15
-      expect(validateMathTeachArgs(asJson(c1), null).ok).assertFalse()
-      const c2: Record<string, Object> = baseArgs('clock'); c2['hour'] = 9; c2['minute'] = 0
-      expect(validateMathTeachArgs(asJson(c2), null).ok).assertTrue()
+    it('clock_minute只收5分钟步长', 0, () => {
+      const ok1: Record<string, Object> = baseArgs('clock'); ok1['hour'] = 9; ok1['minute'] = 0
+      const ok2: Record<string, Object> = baseArgs('clock'); ok2['hour'] = 9; ok2['minute'] = 30
+      const ok3: Record<string, Object> = baseArgs('clock'); ok3['hour'] = 9; ok3['minute'] = 55
+      const ok4: Record<string, Object> = baseArgs('clock'); ok4['hour'] = 12; ok4['minute'] = 5
+      expect(validateMathTeachArgs(asJson(ok1), null).ok).assertTrue()
+      expect(validateMathTeachArgs(asJson(ok2), null).ok).assertTrue()
+      expect(validateMathTeachArgs(asJson(ok3), null).ok).assertTrue()
+      expect(validateMathTeachArgs(asJson(ok4), null).ok).assertTrue()
+      const bad1: Record<string, Object> = baseArgs('clock'); bad1['hour'] = 9; bad1['minute'] = 3
+      const bad2: Record<string, Object> = baseArgs('clock'); bad2['hour'] = 9; bad2['minute'] = 57
+      const bad3: Record<string, Object> = baseArgs('clock'); bad3['hour'] = 9; bad3['minute'] = 60
+      const bad4: Record<string, Object> = baseArgs('clock'); bad4['hour'] = 13; bad4['minute'] = 0
+      expect(validateMathTeachArgs(asJson(bad1), null).ok).assertFalse()
+      expect(validateMathTeachArgs(asJson(bad2), null).ok).assertFalse()
+      expect(validateMathTeachArgs(asJson(bad3), null).ok).assertFalse()
+      expect(validateMathTeachArgs(asJson(bad4), null).ok).assertFalse()
     })
   })
 }

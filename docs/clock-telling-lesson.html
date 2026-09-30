@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>时钟拨一拨 · 认识时间 — 小星数学老师</title>
+<style>
+  /* tokens — 绑定 docs/brand-spec.md 儿童端锁定令牌 */
+  :root {
+    --bg:        #FAF8F3;
+    --surface:   #FFFDF8;
+    --fg:        #24211C;
+    --muted:     #6F6A60;
+    --subtle:    #746E64;
+    --border:    #DED8CC;
+    --accent:    #FF9F43;
+    --on-accent: #3A2506;
+
+    --math:      #4E8FE0;
+    --math-ink:  #1D64BE;
+    --star:      #F5B301;
+    --ok:        #22735D;
+    --bad:       #B53917;
+
+    --accent-soft: color-mix(in oklch, var(--accent) 16%, var(--surface));
+    --math-soft:   color-mix(in oklch, var(--math) 13%, var(--surface));
+    --ok-soft:     color-mix(in oklch, var(--ok) 11%, var(--surface));
+    --bad-soft:    color-mix(in oklch, var(--bad) 10%, var(--surface));
+    --fg-soft:     color-mix(in oklch, var(--fg) 6%, transparent);
+
+    --font-display: 'Yuanti SC', 'Hiragino Maru Gothic ProN', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
+    --font-body:    'PingFang SC', 'Hiragino Sans GB', system-ui, -apple-system, sans-serif;
+    --font-mono:    ui-monospace, 'SF Mono', Menlo, monospace;
+
+    --radius: 14px;
+    --radius-lg: 24px;
+    --shadow: 0 1px 2px color-mix(in oklch, var(--fg) 6%, transparent), 0 16px 36px color-mix(in oklch, var(--accent) 17%, transparent);
+
+    --ease-standard: cubic-bezier(.22, .61, .36, 1);
+    --dur-fast: .15s;
+    --dur-base: .3s;
+    --dur-hand: .3s;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: var(--font-body); font-size: 16px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  img, svg { display: block; max-width: 100%; }
+  button { font: inherit; cursor: pointer; color: inherit; }
+  h1, h2, h3, p { margin: 0; }
+  h2, h3 { text-wrap: balance; }
+  p { text-wrap: pretty; }
+  :focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; border-radius: 10px; }
+  .vh {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+
+  .row { display: flex; align-items: center; gap: 12px; }
+  .stack { display: flex; flex-direction: column; }
+  .eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .meta { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+  .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+  /* ── chrome ─────────────────────────────────────────────── */
+  .topnav {
+    position: sticky; top: 0; z-index: 30;
+    background: color-mix(in oklch, var(--bg) 90%, transparent);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--border);
+  }
+  .topnav-inner { max-width: 1140px; margin-inline: auto; padding: 12px 28px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+  .brand-mark { width: 40px; height: 40px; border-radius: 13px; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; flex: none; }
+  .brand-mark svg { width: 22px; height: 22px; }
+  .brand-name { font-family: var(--font-display); font-weight: 700; font-size: 17px; line-height: 1.15; }
+  .brand-sub { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  .star-count { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 15px; font-weight: 600; color: color-mix(in oklch, var(--accent) 38%, var(--fg)); }
+  .star-count svg { width: 17px; height: 17px; color: var(--star); }
+
+  .wrap { max-width: 1140px; margin-inline: auto; padding: 30px 28px 72px; }
+  .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 24px; }
+  .head h2 { font-family: var(--font-display); font-size: clamp(26px, 3vw, 34px); font-weight: 700; margin-top: 8px; }
+  .lead { color: var(--muted); font-size: 15.5px; max-width: 58ch; margin-top: 10px; line-height: 1.7; }
+  .lead b { color: var(--math-ink); font-weight: 700; }
+
+  /* ── segmented mode bar ─────────────────────────────────── */
+  .modebar { display: inline-flex; gap: 6px; padding: 5px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); box-shadow: var(--shadow); }
+  .modebar button {
+    display: inline-flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 20px; border: 0; border-radius: 999px;
+    background: transparent; font-family: var(--font-display); font-weight: 700; font-size: 16px; color: var(--muted);
+    transition: background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard);
+  }
+  .modebar button svg { width: 18px; height: 18px; }
+  .modebar button:hover { color: var(--fg); }
+  .modebar button[aria-pressed="true"] { background: var(--math-soft); color: var(--math-ink); }
+
+  /* ── board ──────────────────────────────────────────────── */
+  .board { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); gap: 22px; align-items: start; margin-top: 22px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 22px; box-shadow: var(--shadow); }
+
+  .clock-area { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+  .clock-box {
+    width: 100%; max-width: 384px; aspect-ratio: 1 / 1; touch-action: none; border-radius: 50%;
+    background: var(--surface);
+    box-shadow: 0 0 0 12px var(--accent-soft), 0 18px 38px color-mix(in oklch, var(--accent) 22%, transparent);
+  }
+  .clock-svg { width: 100%; height: 100%; overflow: visible; }
+  .clock-svg .clk-face { fill: var(--surface); stroke: color-mix(in oklch, var(--accent) 34%, var(--border)); stroke-width: 3; }
+  .clk-tick { stroke-linecap: round; }
+  .clk-tick.minor { stroke: color-mix(in oklch, var(--accent) 24%, var(--border)); stroke-width: 1.9; }
+  .clk-tick.major { stroke: color-mix(in oklch, var(--fg) 56%, var(--surface)); stroke-width: 3.4; }
+  .clk-num { font-family: var(--font-display); font-size: 27px; font-weight: 700; fill: var(--fg); user-select: none; }
+
+  .hand { transform-box: view-box; transform-origin: 160px 160px; transition: transform var(--dur-hand) var(--ease-standard); }
+  .clock-svg.dragging .hand { transition: none; }
+  .clock-box { cursor: grab; }
+  .clock-box:active { cursor: grabbing; }
+  .hand-hour .bar { stroke: var(--fg); stroke-width: 14; stroke-linecap: round; }
+  .hand-minute .bar { stroke: var(--math-ink); stroke-width: 8; stroke-linecap: round; }
+  .hand-minute .bar-tip { stroke: var(--math); stroke-width: 8; stroke-linecap: round; }
+  .clk-cap { fill: var(--fg); }
+  .clk-cap-in { fill: var(--surface); }
+
+  .clock-svg.focus-hour .hand-minute, .clock-svg.focus-hour .clk-nums, .clock-svg.focus-hour .clk-ticks { opacity: .26; }
+  .clock-svg.focus-minute .hand-hour, .clock-svg.focus-minute .clk-nums, .clock-svg.focus-minute .clk-ticks { opacity: .26; }
+  .clock-svg.focus-numbers .hand-hour, .clock-svg.focus-numbers .hand-minute, .clock-svg.focus-numbers .clk-ticks { opacity: .26; }
+  .clock-svg.focus-ticks .hand-hour, .clock-svg.focus-ticks .hand-minute, .clock-svg.focus-ticks .clk-nums { opacity: .26; }
+  .clock-svg.emph-hour .hand-minute { opacity: .25; }
+  .clock-svg.emph-minute .hand-hour { opacity: .25; }
+  .hand-hour, .hand-minute, .clk-nums, .clk-ticks { transition: opacity var(--dur-base) var(--ease-standard); }
+
+  .readout { text-align: center; }
+  .digital { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 44px; font-weight: 700; letter-spacing: .02em; color: var(--fg); line-height: 1; }
+  .spoken { display: block; margin-top: 7px; font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--math-ink); }
+
+  .toolbar { width: 100%; display: flex; flex-direction: column; gap: 12px; align-items: center; margin-top: 4px; }
+  .precision { display: inline-flex; gap: 4px; padding: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 999px; }
+  .precision button { min-height: 44px; padding: 0 15px; border: 0; border-radius: 999px; background: transparent; font-weight: 600; font-size: 14px; color: var(--muted); transition: background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard); }
+  .precision button:hover { color: var(--fg); }
+  .precision button[aria-pressed="true"] { background: var(--surface); color: var(--math-ink); box-shadow: 0 1px 2px color-mix(in oklch, var(--fg) 10%, transparent); }
+  .steppers { display: flex; align-items: center; gap: 12px; }
+  .stepper-btn { min-width: 48px; min-height: 48px; width: 48px; height: 48px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface); font-size: 22px; font-weight: 700; color: var(--math-ink); display: grid; place-items: center; transition: border-color var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard); }
+  .stepper-btn:hover { border-color: var(--math); }
+  .modebar button:active, .precision button:active, .stepper-btn:active,
+  .legend button:active, .quiz-tabs button:active, .opt:active:not(:disabled) { transform: translateY(1px); }
+
+  /* ── right panel ────────────────────────────────────────── */
+  .panel-title { font-family: var(--font-display); font-size: 19px; font-weight: 700; }
+  .panel-sub { color: var(--muted); font-size: 13.5px; margin-top: 6px; line-height: 1.6; }
+
+  .legend { display: flex; flex-direction: column; gap: 9px; margin-top: 16px; }
+  .legend button {
+    display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+    padding: 12px 14px; min-height: 56px; border: 1px solid var(--border); border-radius: 15px; background: var(--surface);
+    transition: border-color var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard);
+  }
+  .legend button:hover { border-color: color-mix(in oklch, var(--fg) 24%, var(--border)); }
+  .legend button[aria-pressed="true"] { border-color: var(--math); background: var(--math-soft); }
+  .lg-ico { width: 34px; height: 34px; border-radius: 10px; background: var(--bg); display: grid; place-items: center; flex: none; border: 1px solid var(--border); }
+  .lg-ico svg { width: 18px; height: 18px; }
+  .lg-name { font-weight: 700; font-size: 15px; }
+  .lg-desc { font-size: 12.5px; color: var(--muted); }
+  .learn-note { margin-top: 14px; padding: 14px 16px; border-radius: 15px; background: var(--math-soft); font-size: 14px; line-height: 1.65; color: color-mix(in oklch, var(--math-ink) 70%, var(--fg)); }
+  .learn-note b { color: var(--math-ink); }
+
+  .step-card {
+    border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px; margin-top: 12px;
+    background: var(--surface); transition: border-color var(--dur-base) var(--ease-standard), background var(--dur-base) var(--ease-standard), box-shadow var(--dur-base) var(--ease-standard);
+  }
+  .step-card .step-h { display: flex; align-items: center; gap: 9px; font-family: var(--font-display); font-weight: 700; font-size: 15px; }
+  .step-no { width: 24px; height: 24px; border-radius: 50%; background: var(--math-soft); color: var(--math-ink); display: grid; place-items: center; font-family: var(--font-mono); font-size: 12px; flex: none; }
+  .step-card p { margin-top: 8px; font-size: 14px; color: var(--muted); line-height: 1.65; }
+  .step-card p b { color: var(--fg); }
+  .step-card.on { border-color: var(--math); background: var(--math-soft); box-shadow: 0 0 0 3px color-mix(in oklch, var(--math) 20%, transparent); }
+  .step-card.on .step-no { background: var(--math); color: var(--surface); }
+  .step-card.on p { color: color-mix(in oklch, var(--math-ink) 74%, var(--fg)); }
+  .step-card.on p b { color: var(--math-ink); }
+  .step-card.result { background: var(--bg); text-align: center; }
+  .step-card.result .big { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 34px; font-weight: 700; display: block; margin: 4px 0 2px; }
+  .step-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 20px; border-radius: var(--radius); border: 1px solid transparent; font-weight: 700; font-size: 15px; transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard), transform .06s var(--ease-standard); }
+  .btn:active { transform: translateY(1px); }
+  .btn svg { width: 17px; height: 17px; }
+  .btn-primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+  .btn-primary:hover { background: color-mix(in oklch, var(--accent) 72%, var(--surface)); }
+  .btn-secondary { background: var(--surface); color: var(--fg); border-color: var(--border); }
+  .btn-secondary:hover { border-color: var(--fg); }
+  .btn-math { background: var(--math-soft); color: var(--math-ink); border-color: color-mix(in oklch, var(--math) 34%, var(--border)); }
+  .btn-math:hover { background: color-mix(in oklch, var(--math) 20%, var(--surface)); }
+
+  .quiz-tabs { display: inline-flex; gap: 6px; margin-top: 16px; }
+  .quiz-tabs button { min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); font-weight: 700; font-size: 14px; color: var(--muted); }
+  .quiz-tabs button[aria-pressed="true"] { background: var(--math-soft); color: var(--math-ink); border-color: var(--math); }
+
+  .q-prompt { margin-top: 16px; font-family: var(--font-display); font-size: 18px; font-weight: 700; line-height: 1.5; }
+  .q-prompt b { color: var(--math-ink); }
+  .opts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 14px; }
+  .opt { min-height: 56px; border: 1.5px solid var(--border); border-radius: 15px; background: var(--surface); font-family: var(--font-display); font-weight: 700; font-size: 17px; color: var(--fg); transition: border-color var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard); }
+  .opt:hover:not(:disabled) { border-color: var(--math); }
+  .opt.correct { border-color: var(--ok); background: var(--ok-soft); color: var(--ok); }
+  .opt.wrong { border-color: var(--bad); background: var(--bad-soft); color: var(--bad); }
+  .opt:disabled { cursor: default; }
+
+  .feedback { display: none; align-items: flex-start; gap: 10px; margin-top: 16px; padding: 14px 16px; border-radius: 15px; font-size: 14.5px; line-height: 1.6; }
+  .feedback.show { display: flex; }
+  .feedback .fb-ico { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; flex: none; margin-top: 1px; }
+  .feedback .fb-ico svg { width: 13px; height: 13px; }
+  .feedback.good { background: var(--ok-soft); color: var(--ok); }
+  .feedback.good .fb-ico { background: var(--ok); color: var(--surface); }
+  .feedback.bad { background: var(--bad-soft); color: var(--bad); }
+  .feedback.bad .fb-ico { background: var(--bad); color: var(--surface); }
+  .feedback b { font-weight: 700; }
+  .quiz-meta { margin-top: 16px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+  /* ── teacher tip ────────────────────────────────────────── */
+  .tip { display: flex; gap: 11px; align-items: flex-start; margin-top: 16px; padding: 13px 15px; border-radius: 16px; background: var(--accent-soft); }
+  .tip-av { width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; flex: none; }
+  .tip-av svg { width: 16px; height: 16px; }
+  .tip-name { font-family: var(--font-display); font-weight: 700; font-size: 13.5px; color: color-mix(in oklch, var(--accent) 38%, var(--fg)); }
+  .tip-text { font-size: 13.5px; line-height: 1.6; color: color-mix(in oklch, var(--accent) 26%, var(--fg)); margin-top: 2px; }
+
+  /* ── motion confirmations ───────────────────────────────── */
+  .feedback.show { animation: fb-in var(--dur-base) var(--ease-standard) both; }
+  @keyframes fb-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .opt.correct, .opt.wrong { animation: opt-pop .22s var(--ease-standard) both; }
+  @keyframes opt-pop { from { transform: scale(.96); } to { transform: none; } }
+  .star-count.bump { animation: star-bump .32s var(--ease-standard); }
+  @keyframes star-bump { 0% { transform: scale(1); } 45% { transform: scale(1.22); } 100% { transform: scale(1); } }
+
+  @media (max-width: 920px) {
+    .topnav-inner, .wrap { padding-inline: 18px; }
+    .board { grid-template-columns: 1fr; }
+    .digital { font-size: 38px; }
+    .modebar { width: 100%; justify-content: center; flex-wrap: wrap; }
+  }
+  @media (max-width: 460px) {
+    .modebar button { padding: 0 13px; font-size: 15px; }
+    .opts { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-star" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.6l2.7 5.9 6.3.7-4.7 4.3 1.3 6.2L12 16.5 6.4 19.7l1.3-6.2L3 9.2l6.3-.7z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></symbol>
+  <symbol id="i-hand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 12V7.2M12 12l4 2.4"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.8l12 7.2-12 7.2z"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.4"/></symbol>
+  <symbol id="i-ruler" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.5L14.5 4l5.5 5.5L9.5 20z"/><path d="M8 10.5l2 2M11 7.5l2 2"/></symbol>
+</svg>
+
+<header class="topnav" data-od-id="topnav">
+  <div class="topnav-inner">
+    <div class="brand">
+      <span class="brand-mark"><svg><use href="#i-star"/></svg></span>
+      <span>
+        <span class="brand-name">小星数学老师</span>
+        <span class="brand-sub">时间认知 · 讲解演示板</span>
+      </span>
+    </div>
+    <span class="row" style="gap:16px;">
+      <span class="tag" style="display:inline-flex;align-items:center;padding:4px 11px;border:1px solid var(--border);border-radius:999px;font-size:12.5px;color:var(--muted);">认识时间 · 钟表</span>
+      <span class="star-count" id="starCount" data-od-id="star-count" title="今日星星"><svg><use href="#i-star"/></svg><span id="starNum">0</span> 星</span>
+    </span>
+  </div>
+</header>
+
+<main class="wrap" id="content">
+  <section data-od-id="lesson-head">
+    <div class="head">
+      <div>
+        <p class="eyebrow">MATH · TIME · 认读钟表</p>
+        <h2>时钟拨一拨</h2>
+        <p class="lead">和小星老师一起转一转指针：<b>分针走一圈，时针就走一格</b>。先看短针走到哪，再看长针指着哪，就能读出几时几分。</p>
+      </div>
+      <div class="modebar" data-od-id="mode-bar" role="group" aria-label="选择活动">
+        <button data-mode="learn" aria-pressed="false"><svg><use href="#i-clock"/></svg> 认一认</button>
+        <button data-mode="dial" aria-pressed="true"><svg><use href="#i-hand"/></svg> 拨一拨</button>
+        <button data-mode="quiz" aria-pressed="false"><svg><use href="#i-target"/></svg> 考一考</button>
+      </div>
+    </div>
+
+    <div class="board">
+      <div class="card" data-od-id="clock-card">
+        <div class="clock-area">
+          <div class="clock-box" id="clockBox" role="group" aria-label="钟面，可拖动指针">
+            <svg class="clock-svg" id="clockSvg" viewBox="0 0 320 320" aria-hidden="true"></svg>
+          </div>
+
+          <div class="readout" id="readout">
+            <span class="digital num" id="digital">3:30</span>
+            <span class="spoken" id="spoken">3 时 30 分</span>
+          </div>
+
+          <div class="toolbar" id="toolbar">
+            <div class="precision" id="precision" role="group" aria-label="拨动步长"></div>
+            <div class="steppers" id="steppers">
+              <span class="meta">时针</span>
+              <button class="stepper-btn" data-step="h-" aria-label="时针往回拨一小时">−</button>
+              <button class="stepper-btn" data-step="h+" aria-label="时针往前拨一小时">+</button>
+              <span class="meta">分针</span>
+              <button class="stepper-btn" data-step="m-" aria-label="分针往回拨">−</button>
+              <button class="stepper-btn" data-step="m+" aria-label="分针往前拨">+</button>
+            </div>
+          </div>
+        </div>
+        <p class="vh" id="liveTime" aria-live="polite"></p>
+      </div>
+
+      <div class="card" id="panelCard" data-od-id="panel-card"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+
+  var state = {
+    mode: 'dial',
+    precision: 'half',
+    totalMin: 3 * 60 + 30,
+    guided: 0,
+    learnFocus: null,
+    quiz: null
+  };
+  var STEP = { hour: 60, half: 30, min5: 5, min1: 1 };
+  var PRECISION = [
+    { id: 'hour', label: '整点' },
+    { id: 'half', label: '半点' },
+    { id: 'min5', label: '5 分' },
+    { id: 'min1', label: '1 分' }
+  ];
+
+  /* ── storage ─────────────────────────────────────────────── */
+  var mem = {};
+  function save(k, v) { try { localStorage.setItem(k, v); } catch (e) { mem[k] = v; } }
+  function load(k, d) { try { var v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return mem[k] == null ? d : mem[k]; } }
+  var stars = Number(load('od_clock_stars', '0')) || 0;
+  state.mode = load('od_clock_mode', 'dial') || 'dial';
+  if (['learn', 'dial', 'quiz'].indexOf(state.mode) < 0) state.mode = 'dial';
+
+  /* ── time helpers ────────────────────────────────────────── */
+  function mod(n, m) { return ((n % m) + m) % m; }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function parts(tm) {
+    var t = mod(tm, 720);
+    var h0 = Math.floor(t / 60);
+    var m = t % 60;
+    return { h0: h0, h: h0 === 0 ? 12 : h0, m: m };
+  }
+  function fmt(h, m) { return h + ' 时 ' + (m === 0 ? '整' : m + ' 分'); }
+  function fmtD(h, m) { return h + ':' + pad(m); }
+  function snap(tm, p) { return Math.round(tm / STEP[p]) * STEP[p]; }
+  function clockInteractive() {
+    if (state.mode === 'quiz') return state.quiz && state.quiz.kind === 'set' && !state.quiz.answered;
+    return true;
+  }
+
+  /* ── clock rendering ─────────────────────────────────────── */
+  function buildClock() {
+    var svg = $('#clockSvg');
+    var frag = '';
+    for (var i = 0; i < 60; i++) {
+      var a = i * 6 * Math.PI / 180, major = i % 5 === 0;
+      var r1 = major ? 128 : 133, r2 = 142;
+      frag += '<line class="clk-tick ' + (major ? 'major' : 'minor') + '" x1="' + (160 + r1 * Math.sin(a)).toFixed(1) +
+        '" y1="' + (160 - r1 * Math.cos(a)).toFixed(1) + '" x2="' + (160 + r2 * Math.sin(a)).toFixed(1) +
+        '" y2="' + (160 - r2 * Math.cos(a)).toFixed(1) + '"/>';
+    }
+    var ticks = '<g class="clk-ticks">' + frag + '</g>';
+    var nums = '';
+    for (var h = 1; h <= 12; h++) {
+      var ang = h * 30 * Math.PI / 180;
+      nums += '<text class="clk-num" x="' + (160 + 110 * Math.sin(ang)).toFixed(1) + '" y="' +
+        (160 - 110 * Math.cos(ang)).toFixed(1) + '" text-anchor="middle" dominant-baseline="central">' + h + '</text>';
+    }
+    nums = '<g class="clk-nums">' + nums + '</g>';
+    svg.innerHTML =
+      '<circle class="clk-face" cx="160" cy="160" r="152"/>' + ticks + nums +
+      '<g class="hand hand-hour"><line class="bar" x1="160" y1="160" x2="160" y2="78"/></g>' +
+      '<g class="hand hand-minute"><line class="bar" x1="160" y1="160" x2="160" y2="72"/>' +
+        '<line class="bar-tip" x1="160" y1="72" x2="160" y2="34"/></g>' +
+      '<circle class="clk-cap" cx="160" cy="160" r="9"/><circle class="clk-cap-in" cx="160" cy="160" r="3.6"/>';
+  }
+
+  function paintClock() {
+    var p = parts(state.totalMin);
+    var hourDeg = mod(state.totalMin % 720, 720) * 0.5;
+    var minDeg = p.m * 6;
+    var hourG = $('.hand-hour'), minG = $('.hand-minute');
+    if (hourG) hourG.style.transform = 'rotate(' + hourDeg + 'deg)';
+    if (minG) minG.style.transform = 'rotate(' + minDeg + 'deg)';
+  }
+
+  function paintFocus() {
+    var svg = $('#clockSvg');
+    svg.className = 'clock-svg' + (state.mode === 'learn' && state.learnFocus ? ' focus-' + state.learnFocus : '');
+    if (state.mode === 'dial' && state.guided === 1) svg.classList.add('emph-hour');
+    if (state.mode === 'dial' && state.guided === 2) svg.classList.add('emph-minute');
+  }
+
+  /* ── readout ─────────────────────────────────────────────── */
+  function paintReadout() {
+    var p = parts(state.totalMin);
+    var hideRead = state.mode === 'quiz' && state.quiz && state.quiz.kind === 'read';
+    $('#readout').style.visibility = hideRead ? 'hidden' : 'visible';
+    $('#digital').textContent = fmtD(p.h, p.m);
+    $('#spoken').textContent = fmt(p.h, p.m);
+    $('#liveTime').textContent = hideRead ? '' : ('现在是 ' + p.h + ' 时 ' + p.m + ' 分');
+  }
+
+  /* ── toolbar ─────────────────────────────────────────────── */
+  function paintToolbar() {
+    var showPrecision = state.mode === 'dial' || (state.mode === 'quiz' && state.quiz && state.quiz.kind === 'set');
+    var host = $('#precision');
+    host.innerHTML = '';
+    if (showPrecision) {
+      PRECISION.forEach(function (p) {
+        var b = document.createElement('button');
+        b.type = 'button'; b.textContent = p.label;
+        b.setAttribute('aria-pressed', String(p.id === state.precision));
+        b.addEventListener('click', function () { state.precision = p.id; state.totalMin = snap(state.totalMin, p.id); state.guided = 0; render(); });
+        host.appendChild(b);
+      });
+    }
+    $('#toolbar').style.display = showPrecision ? '' : 'none';
+    $('#precision').style.display = showPrecision ? '' : 'none';
+    $('#steppers').style.display = showPrecision ? '' : 'none';
+  }
+
+  /* ── panels ──────────────────────────────────────────────── */
+  var LEARN = [
+    { id: 'hour', icon: 'i-hand', name: '短针 · 时针', desc: '又短又粗，指到几就是几时', note: '<b>短针（时针）</b>负责报「时」。它走得慢，1 小时才走 1 大格。先看它走过了哪个数字。' },
+    { id: 'minute', icon: 'i-hand', name: '长针 · 分针', desc: '又长又细，指到几就数几分', note: '<b>长针（分针）</b>负责报「分」。它走得快，1 分钟走 1 小格，走 1 大格就是 5 分钟。' },
+    { id: 'numbers', icon: 'i-clock', name: '12 个数字', desc: '每两个数字之间是 5 分钟', note: '钟面上有 <b>12 个数字</b>。分针指到数字 <b>n</b>，就是 <b>n × 5</b> 分。比如指到 6 就是 30 分。' },
+    { id: 'ticks', icon: 'i-ruler', name: '大格与小格', desc: '1 大格 5 分，1 小格 1 分', note: '每一大格里有 <b>5 个小格</b>，合起来正好是 <b>5 分钟</b>；数一数小格，就能精确到 1 分。' }
+  ];
+
+  function tipHTML(text) {
+    return '<div class="tip"><span class="tip-av"><svg><use href="#i-star"/></svg></span>' +
+      '<span><span class="tip-name">小星老师说</span><span class="tip-text">' + text + '</span></span></div>';
+  }
+
+  function renderLearn() {
+    var items = LEARN.map(function (l) {
+      return '<button type="button" data-focus="' + l.id + '" aria-pressed="' + (state.learnFocus === l.id) + '">' +
+        '<span class="lg-ico"><svg><use href="#' + l.icon + '"/></svg></span>' +
+        '<span><span class="lg-name">' + l.name + '</span><span class="lg-desc">' + l.desc + '</span></span></button>';
+    }).join('');
+    var note = state.learnFocus
+      ? (LEARN.filter(function (l) { return l.id === state.learnFocus; })[0].note)
+      : '点一点上面的名称，看看它在钟面上是哪一个。也可以直接拖动指针，让钟走起来。';
+    return '<p class="panel-title">认识钟面</p>' +
+      '<p class="panel-sub">钟面上有三样东西：两根指针、12 个数字、一格一格的刻度。</p>' +
+      '<div class="legend" id="legend">' + items + '</div>' +
+      '<div class="learn-note" id="learnNote">' + note + '</div>' +
+      tipHTML('钟面像一张小脸：两根指针是它的手，数字是它的刻度。点一点，一个个认一认吧。');
+  }
+
+  function hourReadText(p) {
+    if (p.m === 0) return '短针（时针）正好指着 <b>' + p.h + '</b>，说明是 <b>' + p.h + ' 时</b>。';
+    var next = p.h === 12 ? 1 : p.h + 1;
+    return '短针（时针）在 <b>' + p.h + '</b> 和 <b>' + next + '</b> 之间 → 已经过了 <b>' + p.h + ' 时</b>。';
+  }
+  function minuteReadText(m) {
+    if (m === 0) return '长针（分针）正好指着 <b>12</b>，是整点，<b>0 分</b>。';
+    if (m === 30) return '长针（分针）指着 <b>6</b>：6 × 5 = <b>30 分</b>，正好是半点。';
+    if (m % 5 === 0) { var k = m / 5; return '长针（分针）指着数字 <b>' + k + '</b>：' + k + ' × 5 = <b>' + m + ' 分</b>。'; }
+    var base = Math.floor(m / 5), rem = m - base * 5, bv = base * 5;
+    return '长针指在 <b>' + base + '</b> 和 <b>' + (base + 1) + '</b> 之间：' + base + ' × 5 = ' + bv + ' 分，再走 <b>' + rem + ' 小格</b> → ' + bv + ' + ' + rem + ' = <b>' + m + ' 分</b>。';
+  }
+
+  function renderDial() {
+    var p = parts(state.totalMin);
+    var on1 = state.guided === 1 ? ' on' : '';
+    var on2 = state.guided === 2 ? ' on' : '';
+    var onR = state.guided >= 3 ? ' on' : '';
+    return '<p class="panel-title">跟着读一读</p>' +
+      '<p class="panel-sub">读钟面分两步：先短针定时，再长针定分。点「一步一步读」，跟着高亮看。</p>' +
+      '<div class="step-card' + on1 + '" id="step1"><div class="step-h"><span class="step-no">1</span>先看短针（时针）</div>' +
+        '<p>' + hourReadText(p) + '</p></div>' +
+      '<div class="step-card' + on2 + '" id="step2"><div class="step-h"><span class="step-no">2</span>再看长针（分针）</div>' +
+        '<p>' + minuteReadText(p.m) + '</p></div>' +
+      '<div class="step-card result' + onR + '" id="stepR"><div class="step-h" style="justify-content:center;"><span class="step-no">3</span>合起来读</div>' +
+        '<span class="big num">' + fmt(p.h, p.m) + '</span>' +
+        '<span class="meta">写作 ' + fmtD(p.h, p.m) + '</span></div>' +
+      '<div class="step-actions">' +
+        '<button class="btn btn-primary" id="btnGuide"><svg><use href="#i-play"/></svg> 一步一步读</button>' +
+        '<button class="btn btn-secondary" id="btnGuideReset">从头读</button></div>' +
+      tipHTML('记住顺序：先看短针走到哪，再看长针指着哪。慢慢转一圈，看看指针是怎么一起走的。');
+  }
+
+  function makeQuiz(kind) {
+    var pool = kind === 'read' ? [[3, 0], [7, 0], [9, 30], [2, 30], [5, 30], [4, 15], [10, 5], [6, 40], [8, 25], [11, 50]] : [[3, 0], [7, 30], [9, 30], [4, 15], [6, 45], [10, 10], [2, 30], [8, 5]];
+    var pick = pool[Math.floor(Math.random() * pool.length)];
+    state.quiz = { kind: kind, h: pick[0], m: pick[1], options: [], answered: false, chosen: null, streak: state.quiz ? state.quiz.streak : 0 };
+    if (kind === 'read') {
+      state.quiz.options = buildOptions(pick[0], pick[1]);
+      state.totalMin = pick[0] * 60 + pick[1];
+    }
+  }
+  function buildOptions(h, m) {
+    var correct = fmt(h, m), set = { };
+    set[correct] = true;
+    var cands = [fmt(h, mod(m + 30, 60)), fmt(h === 12 ? 1 : h + 1, m), fmt(h, mod(m + 5, 60)), fmt(h, mod(m - 30, 60)), fmt(h === 1 ? 12 : h - 1, m), fmt(h, mod(m + 15, 60))];
+    var out = [correct];
+    for (var i = 0; i < cands.length && out.length < 4; i++) { if (!set[cands[i]]) { set[cands[i]] = true; out.push(cands[i]); } }
+    for (var j = out.length - 1; j > 0; j--) { var k = Math.floor(Math.random() * (j + 1)); var t = out[j]; out[j] = out[k]; out[k] = t; }
+    return out;
+  }
+
+  function renderQuiz() {
+    if (!state.quiz) makeQuiz('read');
+    var q = state.quiz;
+    var tabs = '<div class="quiz-tabs" role="group" aria-label="练习方式">' +
+      '<button type="button" data-qkind="read" aria-pressed="' + (q.kind === 'read') + '">读一读</button>' +
+      '<button type="button" data-qkind="set" aria-pressed="' + (q.kind === 'set') + '">拨一拨</button></div>';
+    var body;
+    if (q.kind === 'read') {
+      var opts = q.options.map(function (o) {
+        var cls = 'opt';
+        if (q.answered) { if (o === fmt(q.h, q.m)) cls += ' correct'; else if (o === q.chosen) cls += ' wrong'; }
+        return '<button class="' + cls + '" type="button" data-opt="' + o + '"' + (q.answered ? ' disabled' : '') + '>' + o + '</button>';
+      }).join('');
+      body = '<p class="q-prompt">钟面上是几时几分？</p>' +
+        '<p class="panel-sub">先看短针走过几，再看长针指着几。</p>' +
+        '<div class="opts">' + opts + '</div>';
+    } else {
+      var p = parts(state.totalMin);
+      body = '<p class="q-prompt">请把钟拨到 <b>' + fmt(q.h, q.m) + '</b></p>' +
+        '<p class="panel-sub">现在是 ' + fmt(p.h, p.m) + '，还差一点点。拖住指针转到对的位置。</p>' +
+        '<div class="step-actions"><button class="btn btn-math" id="btnCheck"' + (q.answered ? ' disabled' : '') + '><svg><use href="#i-check"/></svg> 对一对</button></div>';
+    }
+    var fb = '<div class="feedback" id="feedback" role="status" aria-live="polite"></div>';
+    var meta = '<div class="quiz-meta"><span class="meta">连续答对 <b class="num">' + q.streak + '</b> 题</span>' +
+      '<button class="btn btn-secondary" id="btnNext" style="min-height:44px;padding:0 16px;font-size:14px;">换一题</button></div>';
+    return '<p class="panel-title">考一考</p>' + tabs + body + fb + meta +
+      tipHTML('读对了，小星老师给你一颗星；读错了也没关系，我们再看一遍，然后重来一次。');
+  }
+
+  function showFeedback(good, text) {
+    var el = $('#feedback'); if (!el) return;
+    el.className = 'feedback show ' + (good ? 'good' : 'bad');
+    el.innerHTML = '<span class="fb-ico"><svg><use href="#' + (good ? 'i-check' : 'i-x') + '"/></svg></span><span>' + text + '</span>';
+  }
+
+  function bumpStar() {
+    var el = $('#starCount'); if (!el) return;
+    el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+  }
+
+  /* ── render dispatch ─────────────────────────────────────── */
+  function render() {
+    paintClock(); paintFocus(); paintReadout(); paintToolbar();
+    $$('.modebar button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.mode === state.mode)); });
+    var panel = $('#panelCard');
+    if (state.mode === 'learn') panel.innerHTML = renderLearn();
+    else if (state.mode === 'dial') panel.innerHTML = renderDial();
+    else panel.innerHTML = renderQuiz();
+    $('#starNum').textContent = String(stars);
+  }
+
+  /* ── events ──────────────────────────────────────────────── */
+  $$('.modebar button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.mode = b.dataset.mode; state.guided = 0; state.learnFocus = null;
+      if (state.mode === 'quiz' && !state.quiz) makeQuiz('read');
+      if (state.mode === 'learn' && state.precision === 'min1') state.precision = 'min5';
+      save('od_clock_mode', state.mode);
+      render();
+    });
+  });
+
+  $('#panelCard').addEventListener('click', function (e) {
+    var t = e.target.closest('button'); if (!t) return;
+    if (t.dataset.focus !== undefined) { state.learnFocus = (state.learnFocus === t.dataset.focus) ? null : t.dataset.focus; render(); return; }
+    if (t.id === 'btnGuide') { state.guided = state.guided >= 3 ? 1 : state.guided + 1; render(); return; }
+    if (t.id === 'btnGuideReset') { state.guided = 0; render(); return; }
+    if (t.dataset.qkind) { makeQuiz(t.dataset.qkind); if (t.dataset.qkind === 'set') state.precision = 'min5'; render(); return; }
+    if (t.id === 'btnNext') { makeQuiz(state.quiz.kind); render(); return; }
+    if (t.dataset.opt && state.quiz && !state.quiz.answered) {
+      state.quiz.answered = true; state.quiz.chosen = t.dataset.opt;
+      var ok = t.dataset.opt === fmt(state.quiz.h, state.quiz.m);
+      var tipMin = state.quiz.m === 0 ? '12' : (state.quiz.m % 5 === 0 ? state.quiz.m / 5 : '对应的小格');
+      if (ok) { state.quiz.streak++; stars++; save('od_clock_stars', String(stars)); }
+      else { state.quiz.streak = 0; }
+      render();
+      if (ok) bumpStar();
+      showFeedback(ok, ok
+        ? '<b>读对啦！</b>短针走过 ' + state.quiz.h + '，长针指到 ' + tipMin + '，所以是 ' + fmt(state.quiz.h, state.quiz.m) + '。'
+        : '再想想：短针已经走过 <b>' + state.quiz.h + '</b> 了，长针指着的那一格才定「分」。正确答案是 <b>' + fmt(state.quiz.h, state.quiz.m) + '</b>。');
+      return;
+    }
+    if (t.id === 'btnCheck' && state.quiz && !state.quiz.answered) {
+      var p = parts(state.totalMin);
+      var ok2 = p.h === state.quiz.h && p.m === state.quiz.m;
+      var need = state.quiz.m === 0 ? '12' : state.quiz.m / 5;
+      if (ok2) { state.quiz.streak++; stars++; save('od_clock_stars', String(stars)); }
+      else { state.quiz.streak = 0; }
+      state.quiz.answered = ok2;
+      render();
+      if (ok2) bumpStar();
+      showFeedback(ok2, ok2
+        ? '<b>拨得真准！</b>' + fmt(state.quiz.h, state.quiz.m) + ' 就是短针走过 ' + state.quiz.h + '、长针指到 ' + need + '。'
+        : '现在是 <b>' + fmt(p.h, p.m) + '</b>，还要调整一下：分针要指到数字 <b>' + need + '</b>。');
+      return;
+    }
+  });
+
+  $('#steppers').addEventListener('click', function (e) {
+    var t = e.target.closest('button'); if (!t) return;
+    var s = STEP[state.precision];
+    var d = t.dataset.step;
+    if (d === 'h+') state.totalMin += 60;
+    else if (d === 'h-') state.totalMin -= 60;
+    else if (d === 'm+') state.totalMin += s;
+    else if (d === 'm-') state.totalMin -= s;
+    state.guided = 0;
+    render();
+  });
+
+  /* ── drag ────────────────────────────────────────────────── */
+  var drag = { hand: null, lastRaw: 0 };
+  function pointerAngle(e) {
+    var svg = $('#clockSvg'), r = svg.getBoundingClientRect();
+    var x = (e.clientX - r.left) / r.width * 320;
+    var y = (e.clientY - r.top) / r.height * 320;
+    return mod(Math.atan2(x - 160, -(y - 160)) * 180 / Math.PI, 360);
+  }
+  function angleGap(a, b) { var d = mod(a - b, 360); return d > 180 ? 360 - d : d; }
+  var box = $('#clockBox');
+  box.addEventListener('pointerdown', function (e) {
+    if (!clockInteractive()) return;
+    var ang = pointerAngle(e);
+    if (state.precision === 'hour') {
+      drag.hand = 'hour';
+    } else {
+      var p = parts(state.totalMin);
+      var hourDeg = mod(state.totalMin % 720, 720) * 0.5;
+      drag.hand = angleGap(ang, hourDeg) < angleGap(ang, p.m * 6) ? 'hour' : 'minute';
+    }
+    drag.lastRaw = state.precision === 'hour' ? 0 : ang / 6;
+    $('#clockSvg').classList.add('dragging');
+    state.guided = 0;
+    try { box.setPointerCapture(e.pointerId); } catch (err) {}
+    e.preventDefault();
+  });
+  box.addEventListener('pointermove', function (e) {
+    if (!drag.hand) return;
+    var ang = pointerAngle(e);
+    if (drag.hand === 'minute') {
+      var raw = ang / 6;
+      var d = raw - drag.lastRaw;
+      if (d > 30) d -= 60; if (d < -30) d += 60;
+      state.totalMin = snap(state.totalMin + d, state.precision);
+      drag.lastRaw = raw;
+    } else {
+      var h = mod(Math.round(ang / 30), 12);
+      var keep = state.precision === 'hour' ? 0 : parts(state.totalMin).m;
+      state.totalMin = h * 60 + keep;
+    }
+    paintClock(); paintReadout();
+  });
+  function endDrag(e) {
+    if (!drag.hand) return;
+    drag.hand = null;
+    $('#clockSvg').classList.remove('dragging');
+    render();
+  }
+  box.addEventListener('pointerup', endDrag);
+  box.addEventListener('pointercancel', endDrag);
+  box.addEventListener('lostpointercapture', endDrag);
+  box.addEventListener('keydown', function (e) {
+    if (!clockInteractive()) return;
+    var p = parts(state.totalMin), s = STEP[state.precision];
+    if (e.key === 'ArrowRight') { state.totalMin += s; }
+    else if (e.key === 'ArrowLeft') { state.totalMin -= s; }
+    else if (e.key === 'ArrowUp') { state.totalMin += 60; }
+    else if (e.key === 'ArrowDown') { state.totalMin -= 60; }
+    else return;
+    state.guided = 0; e.preventDefault(); render();
+  });
+  box.setAttribute('tabindex', '0');
+
+  /* ── build once ──────────────────────────────────────────── */
+  buildClock();
+  state.totalMin = snap(state.totalMin, state.precision);
+  render();
+})();
+</script>
+</body>
+</html>
