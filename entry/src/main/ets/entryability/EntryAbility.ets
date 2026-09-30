@@ -135,6 +135,10 @@ export default class EntryAbility extends UIAbility {
       await ServiceRegistry.database().initialize(this.context);
       hilog.info(DOMAIN, 'testTag', 'DatabaseService initialized successfully');
 
+      // 初始化词汇台账服务 (清理过期事件流水)
+      await ServiceRegistry.learningLedger().initialize();
+      hilog.info(DOMAIN, 'testTag', 'LearningLedgerService initialized successfully');
+
       // 初始化附件存储服务
       await ServiceRegistry.attachmentStorage().initialize(this.context);
       hilog.info(DOMAIN, 'testTag', 'AttachmentStorageService initialized successfully');
