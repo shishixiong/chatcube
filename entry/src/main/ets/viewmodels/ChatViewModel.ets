@@ -23,10 +23,12 @@ import { getProviderViewModel, ProviderViewModel } from './ProviderViewModel'
 import { getAssistantService, AssistantService, AssistantRuntimeConfig } from '../services/AssistantService'
 import { DEFAULT_ASSISTANT_ID } from '../models/AssistantModels'
 import { getLessonPlanningService } from '../services/LessonPlanningService'
+import { getLearningLedgerService } from '../services/LearningLedgerService'
 import { getTeachingStyleAdjustmentService } from '../services/TeachingStyleAdjustmentService'
 import {
   renderDailyPlanSection,
-  renderYesterdaySummarySection
+  renderYesterdaySummarySection,
+  renderVocabLedgerSection
 } from '../utils/LessonPlanPromptUtils'
 import { ChatMessage, ChatSession, MessageRole, ProviderType, ApiStyle, MessageAttachment, AttachmentType, ReasoningLevel, ToolDefinition, ToolCall, ToolResult, SearchReference, OpenAITransport, ToolSourceType, ToolPermissionLevel } from '../models/ChatModels'
 import { AIGeneratedImageFileResult, AIGeneratedImageFileSink } from '../models/AIGeneratedImageFileModels'
@@ -334,6 +336,8 @@ export class ChatViewModel {
    *   1. 昨日小结 (renderYesterdaySummarySection)
    *   2. 教学风格调整 (TeachingStyleAdjustmentService.renderForPrompt)
    *   3. 今日教学目标 (renderDailyPlanSection)
+   *   3.5 词汇台账 (renderVocabLedgerSection)
+   *   4. greetingHint (主动招呼元指令, 末尾最高优先级)
    *
    * - 任一段缺失时静默降级,不报错
    * - tsa 缺失时跳过 style 段（不会让 prompt 出现"无调整"）
@@ -372,6 +376,19 @@ export class ChatViewModel {
         if (section !== '') {
           composed = this.assistantService.combineSystemPrompts(composed, section)
         }
+      }
+
+      // 3.5 词汇台账 (三名单, spec §8.1): 独立 try/catch——台账失败不拖垮整段教学注入
+      try {
+        const nowMs = Date.now()
+        const ledgerEn = await getLearningLedgerService().buildSummary('en', nowMs)
+        const ledgerZh = await getLearningLedgerService().buildSummary('zh', nowMs)
+        const ledgerSection = renderVocabLedgerSection(ledgerEn, ledgerZh)
+        if (ledgerSection !== '') {
+          composed = this.assistantService.combineSystemPrompts(composed, ledgerSection)
+        }
+      } catch (ledgerError) {
+        console.warn('ChatViewModel', `vocab ledger section skipped: ${String(ledgerError)}`)
       }
 
       // 4. 主动招呼元指令 (greetingHint, 仅主动招呼时非空)

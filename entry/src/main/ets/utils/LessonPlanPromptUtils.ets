@@ -17,6 +17,7 @@ import {
   LessonPlanWritingItem,
   LessonPlanGeneralItem
 } from '../models/LessonPlanModels'
+import { LedgerSummary, DueReviewHint } from '../models/LearningLedgerModels'
 import { SHARED_OVERRIDE_HEADER } from './SharedPromptFragments'
 
 /**
@@ -37,6 +38,11 @@ JSON 对象,包含:
   - recentWritingChars: 近 7 天教过的所有写字字/词 (去重)
   - recentThemeTitles: 近 7 天的所有 themeTitle 文本 (去重)
   - recentMathDescriptions: 近 7 天的所有 math.description 文本 (去重)
+- ledger: 词级台账状态 (可能为 null), 包含:
+  - newCandidates: 台账中的新词候选 (mastery<=1)
+  - dueReview: 到期该复习的词
+  - mastered: 已掌握 (mastery=5, 勿当新词)
+  - cooling: 冷却中 (30 分钟内刚出过)
 - currentStyleAdjustment: **今日教学风格调整** (评估老师今晨产出),包含 4 维度:
   - difficultyTendency: easier | current | harder (出题难度倾向)
   - feedbackTone: gentle | neutral | playful (反馈语气)
@@ -51,12 +57,13 @@ JSON 对象,包含:
 1. **聚焦 4-6 个核心点**。今天学太多会让孩子反感。覆盖 vocab / math / writing / generalKnowledge 中至少 3 个模块。
 2. **贴合薄弱点**。从 childProfile.weakAreas 中选 1-2 个做重点,其他点为巩固/兴趣。
 3. **承接昨日但主题轮换**。可选地引用昨日一个教学点作开场（例: "昨天我们认识了苹果,今天..."）,但 themeTitle 主题类别必须与近 7 天 recentTopics.recentThemeTitles 中的不同。严禁"同一主题深化或扩展"式延续——那会让 frog 之类的词连续出现多天。
-3.5 **避免重复近 7 天内容**。输入 JSON 的 recentTopics 字段列出近 7 天已教内容,硬约束:
-    - vocab[].word 严禁出现在 recentTopics.recentVocabWords 中 (大小写不敏感)
-    - writing[].characterOrWord 严禁出现在 recentTopics.recentWritingChars 中
-    - themeTitle 主题类别严禁与 recentTopics.recentThemeTitles 中的任一条重复 (例: 若近期有"和动物做朋友", 不得再出"动物"主题; 若近期有"果园里的水果", 不得再出"水果"主题)
-    - math.description 不得与 recentTopics.recentMathDescriptions 中的任一条完全相同
-    - 若 recentTopics 各数组均为空 (首次备课或历史清空),本约束自动失效
+3.5 **避免重复 (词级台账驱动)**。输入 JSON 的 ledger 字段给出词级状态, 硬约束:
+    - vocab[].word 严禁出现在 ledger.mastered 或 ledger.cooling 中
+    - 已掌握词最多 1 个仅作"复习轮"出现, 且必须换一种题型
+    - 优先从 ledger.newCandidates / ledger.dueReview 中选词
+    - 若 ledger 为 null 或各数组均为空 (首次使用/台账不可用), 本条硬约束自动失效
+    - recentTopics 仍保留作主题类别轮换之用: themeTitle 严禁与 recentTopics.recentThemeTitles 重复;
+      writing[].characterOrWord 仍避免与 recentTopics.recentWritingChars 完全相同 (台账为空的兜底)
 3.6 **主题类别轮换**。从以下类别中选近 7 天未用过的 (查 recentTopics.recentThemeTitles 推断已用类别):
     动物 / 水果 / 食物 / 交通工具 / 日常物品 / 身体部位 / 家人 / 颜色 /
     自然(天气/植物) / 衣物 / 职业 / 地点(家/学校/公园) / 节日 / 情绪 / 数字 / 形状
@@ -447,4 +454,59 @@ function pushUnique(arr: string[], value: string): void {
   if (arr.indexOf(value) < 0) {
     arr.push(value)
   }
+}
+
+function ledgerSectionHasContent(summary: LedgerSummary): boolean {
+  return summary.newPool.length > 0 || summary.dueReview.length > 0
+    || summary.mastered.length > 0 || summary.cooling.length > 0
+}
+
+function appendLedgerSubjectLines(lines: string[], label: string, summary: LedgerSummary): void {
+  if (summary.mastered.length > 0) {
+    lines.push(`- ${label}已掌握(勿当新词考, 只在复习轮抽检): ${summary.mastered.join(', ')}`)
+  }
+  if (summary.newPool.length > 0) {
+    lines.push(`- ${label}今日新词: ${summary.newPool.join(', ')}`)
+  }
+  if (summary.dueReview.length > 0) {
+    const parts: string[] = []
+    for (let i = 0; i < summary.dueReview.length; i++) {
+      const hint = summary.dueReview[i]
+      if (hint.lastMode !== '') {
+        parts.push(`${hint.display}(上次 ${hint.lastMode})`)
+      } else {
+        parts.push(hint.display)
+      }
+    }
+    lines.push(`- ${label}待复习(请换题型巩固): ${parts.join(' / ')}`)
+  }
+  if (summary.cooling.length > 0) {
+    lines.push(`- ${label}冷却中(本轮勿出): ${summary.cooling.join(', ')}`)
+  }
+}
+
+/**
+ * 小星老师 prompt 的【词汇台账】段 (spec §8.1)。
+ * 两科摘要都为 null 或四名单全空时返回 '' (调用方整段省略, 避免 prompt 出现空节)。
+ */
+export function renderVocabLedgerSection(en: LedgerSummary | null, zh: LedgerSummary | null): string {
+  if (en === null && zh === null) {
+    return ''
+  }
+  const hasEn = en !== null && ledgerSectionHasContent(en)
+  const hasZh = zh !== null && ledgerSectionHasContent(zh)
+  if (!hasEn && !hasZh) {
+    return ''
+  }
+  const lines: string[] = []
+  lines.push('【词汇台账】')
+  if (en !== null && ledgerSectionHasContent(en)) {
+    appendLedgerSubjectLines(lines, '英语', en)
+  }
+  if (zh !== null && ledgerSectionHasContent(zh)) {
+    appendLedgerSubjectLines(lines, '语文', zh)
+  }
+  lines.push('出题规则: 新词优先; 复习词必须换一种题型复现, 不要同一题型连出同一词; ' +
+    '同一词一节课最多出现 2 次(不同题型), 不要连续 5 题内重复。')
+  return lines.join('\n')
 }
