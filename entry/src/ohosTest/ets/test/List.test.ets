@@ -2,6 +2,7 @@ import abilityTest from './Ability.test';
 import kidsSubjectUtilsTest from './utils/KidsSubjectUtils.test';
 import learningLedgerModelsTest from './utils/LearningLedgerModels.test';
 import ledgerExtractUtilsTest from './utils/LedgerExtractUtils.test';
+import lessonPlanModelsTest from './utils/LessonPlanModels.test';
 import vocabRepeatValidationTest from './utils/VocabRepeatValidation.test';
 import vocabLedgerSectionTest from './utils/VocabLedgerSection.test';
 
@@ -10,6 +11,7 @@ export default function testsuite() {
   kidsSubjectUtilsTest();
   learningLedgerModelsTest();
   ledgerExtractUtilsTest();
+  lessonPlanModelsTest();
   vocabRepeatValidationTest();
   vocabLedgerSectionTest();
 }

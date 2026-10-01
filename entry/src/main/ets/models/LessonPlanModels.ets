@@ -4,7 +4,7 @@
  * 由"备课老师"后台服务每日生成，供小星老师 system prompt 注入使用。
  * - 持久化: SQLite 表 daily_lesson_plans.plan_json（整列 JSON blob）
  * - 读取: 注入 ChatViewModel.buildRequestSystemPrompt
- * - 扩展性: 4 个强类型核心模块（vocab/math/writing/generalKnowledge）+ freeform Record 容纳未来新课程点
+ * - 扩展性: 5 个强类型核心模块（vocab/math/writing/generalKnowledge/chinese）+ freeform Record 容纳未来新课程点
  */
 
 // =================== Item 基础结构 ===================
@@ -35,6 +35,7 @@ export class LessonPlanMathItem extends LessonPlanItemBase {
 /** 写字项 */
 export class LessonPlanWritingItem extends LessonPlanItemBase {
   characterOrWord: string = '' // 写字/组词
+  subject: string = ''         // 学科标签: '' | 'english' | 'chinese' | 'math' (2026-10-01 学科拆分)
   description: string = ''
   imagePrompt: string = ''     // 写字插图
 }
@@ -44,6 +45,14 @@ export class LessonPlanGeneralItem extends LessonPlanItemBase {
   dimension: string = ''       // 关联 skill_key
   description: string = ''
   imagePrompt: string = ''
+}
+
+/** 语文项 (2026-10-01 学科拆分)。imagePrompt 约定留空: 语文卡片自带笔画数据 / picture_talk 运行时生图 */
+export class LessonPlanChineseItem extends LessonPlanItemBase {
+  dimension: string = ''        // 白名单: 'pinyin' | 'chinese_vocab' | 'chinese_reading'
+  character: string = ''        // 汉字 / 词 / 拼音音节（带调，如 'shān'）/ 短句
+  description: string = ''      // 教学描述（中文）
+  targetSkillLevel: number = 0  // 目标 level 1-5，对齐 math 项
 }
 
 // =================== ChildProfile 快照 ===================
@@ -63,11 +72,11 @@ export class ChildSnapshot {
 /**
  * 每日教学计划根结构。
  *
- * 4 个强类型模块：vocab / math / writing / generalKnowledge（小星老师 prompt 显式引用）
+ * 5 个强类型模块：vocab / math / writing / generalKnowledge / chinese（小星老师 prompt 显式引用）
  * 1 个 freeform Record：未来扩展 reading / music / science 等模块直接加 key，解析时容错
  */
 export class LessonPlan {
-  schemaVersion: number = 1
+  schemaVersion: number = 2     // v2: 新增 chinese 模块 + writing.subject（2026-10-01 学科拆分）
   planDate: string = ''        // 'YYYY-MM-DD'
   themeTitle: string = ''      // 例："今天和苹果做朋友"
   themeDescription: string = ''// 给小星老师的简短说明
@@ -77,6 +86,7 @@ export class LessonPlan {
   math: LessonPlanMathItem[] = []
   writing: LessonPlanWritingItem[] = []
   generalKnowledge: LessonPlanGeneralItem[] = []
+  chinese: LessonPlanChineseItem[] = []
 
   // 自由扩展：未来加 'reading' / 'music' / 'science' 直接放这里
   freeform: Record<string, Object> = {}
@@ -125,7 +135,7 @@ function hydrateLessonPlan(raw: Object): LessonPlan {
   if (typeof r['teacherNotes'] === 'string') {
     plan.teacherNotes = r['teacherNotes'] as string
   }
-  // 4 个核心模块: 优先读规范 key, 兼容 LLM 常见的同义命名
+  // 5 个核心模块: 优先读规范 key, 兼容 LLM 常见的同义命名
   plan.vocab = extractArray(r, ['vocab', 'vocabulary', 'words', 'englishWords', 'english'], hydrateVocabItem)
   plan.math = extractArray(r, ['math', 'mathItems', 'mathematics'], hydrateMathItem)
   plan.writing = extractArray(r, ['writing', 'characters', 'characterWriting', 'handwriting', 'chineseWriting'],
@@ -133,6 +143,7 @@ function hydrateLessonPlan(raw: Object): LessonPlan {
   plan.generalKnowledge = extractArray(r,
     ['generalKnowledge', 'general', 'generalItems', 'knowledge', 'commonSense', 'science'],
     hydrateGeneralItem)
+  plan.chinese = extractArray(r, ['chinese', 'chineseItems', 'hanzi'], hydrateChineseItem)
   if (r['freeform'] !== undefined && typeof r['freeform'] === 'object' && r['freeform'] !== null) {
     plan.freeform = r['freeform'] as Record<string, Object>
   }
@@ -193,6 +204,7 @@ function hydrateWritingItem(raw: Object): LessonPlanWritingItem {
   const item = new LessonPlanWritingItem()
   item.topicKey = stringField(r, 'topicKey')
   item.characterOrWord = stringField(r, 'characterOrWord')
+  item.subject = stringField(r, 'subject')
   item.description = stringField(r, 'description')
   item.imagePrompt = stringField(r, 'imagePrompt')
   return item
@@ -204,6 +216,20 @@ function hydrateGeneralItem(raw: Object): LessonPlanGeneralItem {
   item.topicKey = stringField(r, 'topicKey')
   item.dimension = stringField(r, 'dimension')
   item.description = stringField(r, 'description')
+  item.imagePrompt = stringField(r, 'imagePrompt')
+  return item
+}
+
+function hydrateChineseItem(raw: Object): LessonPlanChineseItem {
+  const r = raw as Record<string, Object>
+  const item = new LessonPlanChineseItem()
+  item.topicKey = stringField(r, 'topicKey')
+  item.dimension = stringField(r, 'dimension')
+  item.character = stringField(r, 'character')
+  item.description = stringField(r, 'description')
+  if (typeof r['targetSkillLevel'] === 'number') {
+    item.targetSkillLevel = r['targetSkillLevel'] as number
+  }
   item.imagePrompt = stringField(r, 'imagePrompt')
   return item
 }
