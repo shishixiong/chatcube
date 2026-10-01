@@ -12,6 +12,7 @@
 
 import {
   LessonPlan,
+  LessonPlanChineseItem,
   LessonPlanVocabItem,
   LessonPlanMathItem,
   LessonPlanWritingItem,
@@ -19,6 +20,7 @@ import {
 } from '../models/LessonPlanModels'
 import { LedgerSummary, DueReviewHint } from '../models/LearningLedgerModels'
 import { SHARED_OVERRIDE_HEADER } from './SharedPromptFragments'
+import { collectPlanItemsForSubject, PlanSubject } from './LessonPlanSubjectUtils'
 
 /**
  * 备课老师 system prompt。
@@ -192,6 +194,7 @@ export function renderDailyPlanSection(plan: LessonPlan, planDate: string, weekd
   const hasAnyItem =
     plan.vocab.length > 0 ||
     plan.math.length > 0 ||
+    plan.chinese.length > 0 ||
     plan.writing.length > 0 ||
     plan.generalKnowledge.length > 0 ||
     Object.keys(plan.freeform).length > 0
@@ -212,18 +215,11 @@ export function renderDailyPlanSection(plan: LessonPlan, planDate: string, weekd
   lines.push('')
   lines.push('### 推荐教学点')
   lines.push('')
-  for (const item of plan.vocab) {
-    lines.push(formatVocabLine(item))
-  }
-  for (const item of plan.math) {
-    lines.push(formatMathLine(item))
-  }
-  for (const item of plan.writing) {
-    lines.push(formatWritingLine(item))
-  }
-  for (const item of plan.generalKnowledge) {
-    lines.push(formatGeneralLine(item))
-  }
+  // 四学科分组 (2026-10-01 学科拆分): 未打标签 writing 归常识组 (防御性, 校验器使其实际不出现)
+  appendSubjectGroup(lines, '语文', collectGroupLines(plan, 'chinese'))
+  appendSubjectGroup(lines, '数学', collectGroupLines(plan, 'math'))
+  appendSubjectGroup(lines, '英语', collectGroupLines(plan, 'english'))
+  appendSubjectGroup(lines, '常识', collectGeneralGroupLines(plan))
   // freeform 扩展模块
   const freeformKeys = Object.keys(plan.freeform)
   for (let i = 0; i < freeformKeys.length; i++) {
@@ -249,6 +245,97 @@ export function renderDailyPlanSection(plan: LessonPlan, planDate: string, weekd
   lines.push('  提示词: 直接使用本计划中给出的 imagePrompt, 并在末尾追加 `<topic_key><该条目的topicKey></topic_key>`')
   lines.push('  (例: image_generation prompt="a cute apple, <topic_key>vocab.apple</topic_key>")')
   lines.push('  系统会优先返回备课老师昨晚预生成的图,大幅降低等待时间')
+  lines.push('- 已教过的点不要重复出题;可围绕主题变体出题巩固')
+  return lines.join('\n')
+}
+
+/** 单学科分组行 (chinese: chinese 模块 + writing[chinese]; math/english 同理) */
+function collectGroupLines(plan: LessonPlan, subject: PlanSubject): string[] {
+  const items = collectPlanItemsForSubject(plan, subject)
+  const out: string[] = []
+  for (let i = 0; i < items.chinese.length; i++) {
+    out.push(formatChineseLine(items.chinese[i]))
+  }
+  for (let i = 0; i < items.vocab.length; i++) {
+    out.push(formatVocabLine(items.vocab[i]))
+  }
+  for (let i = 0; i < items.math.length; i++) {
+    out.push(formatMathLine(items.math[i]))
+  }
+  for (let i = 0; i < items.writing.length; i++) {
+    out.push(formatWritingLine(items.writing[i]))
+  }
+  return out
+}
+
+/** 常识组行: generalKnowledge 模块 + 未打标签 writing (防御性兜底) */
+function collectGeneralGroupLines(plan: LessonPlan): string[] {
+  const out: string[] = []
+  for (let i = 0; i < plan.generalKnowledge.length; i++) {
+    out.push(formatGeneralLine(plan.generalKnowledge[i]))
+  }
+  for (let i = 0; i < plan.writing.length; i++) {
+    const w = plan.writing[i]
+    if (w.subject === '') {
+      out.push(formatWritingLine(w))
+    }
+  }
+  return out
+}
+
+/** 非空组才输出标题 (避免空节) */
+function appendSubjectGroup(lines: string[], title: string, groupLines: string[]): void {
+  if (groupLines.length === 0) {
+    return
+  }
+  lines.push(`### ${title}`)
+  lines.push('')
+  for (let i = 0; i < groupLines.length; i++) {
+    lines.push(groupLines[i])
+  }
+  lines.push('')
+}
+
+/**
+ * 渲染"本学科教学目标"section 注入学科老师 system prompt (spec §6.2)。
+ * - 本学科 0 条 → 返回 '' (调用方整段省略; v1 旧计划自然静默)
+ * - 给主题句, 不给 teacherNotes; 不含 image_generation 指引 (学科助手锁定工具无此工具)
+ */
+export function renderDailyPlanSectionForSubject(plan: LessonPlan, planDate: string, weekday: string,
+  subject: PlanSubject): string {
+  const items = collectPlanItemsForSubject(plan, subject)
+  const hasItems = items.chinese.length > 0 || items.vocab.length > 0 ||
+    items.math.length > 0 || items.writing.length > 0
+  if (!hasItems) {
+    return ''
+  }
+  const title = subject === 'math' ? '数学' : (subject === 'english' ? '英语' : '语文')
+  const lines: string[] = []
+  lines.push(`## ${title}教学目标 (${planDate}, 星期${weekday})`)
+  lines.push('')
+  lines.push(SHARED_OVERRIDE_HEADER)
+  if (plan.themeTitle !== '') {
+    lines.push(`主题: ${plan.themeTitle}`)
+    lines.push('')
+  }
+  lines.push('### 推荐教学点')
+  lines.push('')
+  for (let i = 0; i < items.chinese.length; i++) {
+    lines.push(formatChineseLine(items.chinese[i]))
+  }
+  for (let i = 0; i < items.vocab.length; i++) {
+    lines.push(formatVocabLine(items.vocab[i]))
+  }
+  for (let i = 0; i < items.math.length; i++) {
+    lines.push(formatMathLine(items.math[i]))
+  }
+  for (let i = 0; i < items.writing.length; i++) {
+    lines.push(formatWritingLine(items.writing[i]))
+  }
+  lines.push('')
+  lines.push('### 使用建议')
+  lines.push('- 不要一次教完所有点,每次聚焦 1-2 个,先聊后教')
+  lines.push('- 教新点前调用 child_profile(action:"read") 确认小朋友当前水平')
   lines.push('- 已教过的点不要重复出题;可围绕主题变体出题巩固')
   return lines.join('\n')
 }
@@ -338,6 +425,18 @@ function formatGeneralLine(item: LessonPlanGeneralItem): string {
   parts.push(`- 常识 (generalKnowledge): ${item.description}`)
   if (item.dimension !== '') {
     parts.push(`[${item.dimension}]`)
+  }
+  return parts.join(' ')
+}
+
+function formatChineseLine(item: LessonPlanChineseItem): string {
+  const parts: string[] = []
+  parts.push(`- [${item.dimension}] ${item.character}`)
+  if (item.description !== '') {
+    parts.push(`— ${item.description}`)
+  }
+  if (item.targetSkillLevel > 0) {
+    parts.push(`(目标 level ${item.targetSkillLevel})`)
   }
   return parts.join(' ')
 }
