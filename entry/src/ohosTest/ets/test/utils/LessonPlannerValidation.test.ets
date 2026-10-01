@@ -2,14 +2,16 @@ import { describe, it, expect } from '@ohos/hypium'
 import {
   validatePlannerOutput,
   MIN_PLANNER_COUNTS,
-  VALID_MATH_DIMENSIONS
+  VALID_MATH_DIMENSIONS,
+  VALID_CHINESE_DIMENSIONS
 } from '../../../../main/ets/utils/LessonPlannerValidation'
 import {
   LessonPlan,
   LessonPlanVocabItem,
   LessonPlanMathItem,
   LessonPlanWritingItem,
-  LessonPlanGeneralItem
+  LessonPlanGeneralItem,
+  LessonPlanChineseItem
 } from '../../../../main/ets/models/LessonPlanModels'
 
 /**
@@ -44,7 +46,16 @@ function filledPlan(): LessonPlan {
     const w = new LessonPlanWritingItem()
     w.topicKey = `writing.char${i}`
     w.characterOrWord = `字${i}`
+    w.subject = 'chinese'
     p.writing.push(w)
+  }
+  for (let i = 0; i < 2; i++) {
+    const c = new LessonPlanChineseItem()
+    c.topicKey = `chinese.chinese_vocab.zi${i}`
+    c.dimension = 'chinese_vocab'
+    c.character = `字${i}`
+    c.targetSkillLevel = 2
+    p.chinese.push(c)
   }
   for (let i = 0; i < 2; i++) {
     const g = new LessonPlanGeneralItem()
@@ -57,11 +68,22 @@ function filledPlan(): LessonPlan {
 
 export default function lessonPlannerValidationTest() {
   describe('MIN_PLANNER_COUNTS 常量', () => {
-    it('下限为 vocab=4 / math=4 / writing=2 / generalKnowledge=2', 0, () => {
+    it('下限为 vocab=4 / math=4 / writing=2 / general=2 / chinese=2', 0, () => {
       expect(MIN_PLANNER_COUNTS.vocab).assertEqual(4)
       expect(MIN_PLANNER_COUNTS.math).assertEqual(4)
       expect(MIN_PLANNER_COUNTS.writing).assertEqual(2)
       expect(MIN_PLANNER_COUNTS.general).assertEqual(2)
+      expect(MIN_PLANNER_COUNTS.chinese).assertEqual(2)
+    })
+  })
+
+  describe('VALID_CHINESE_DIMENSIONS 常量', () => {
+    it('白名单 3 个语文维度, 与语文 3 维画像一致', 0, () => {
+      expect(VALID_CHINESE_DIMENSIONS.length).assertEqual(3)
+      const expected = ['pinyin', 'chinese_vocab', 'chinese_reading']
+      for (let i = 0; i < expected.length; i++) {
+        expect(VALID_CHINESE_DIMENSIONS.indexOf(expected[i]) >= 0).assertTrue()
+      }
     })
   })
 
@@ -85,11 +107,18 @@ export default function lessonPlannerValidationTest() {
       expect(r.issues.length).assertEqual(0)
     })
 
-    it('所有字段填齐 (vocab=5/math=5/writing=3/general=3) → ok=true', 0, () => {
+    it('所有字段填齐 (vocab=5/math=5/chinese=3/writing=3/general=3) → ok=true', 0, () => {
       const p = filledPlan()
       p.vocab.push(new LessonPlanVocabItem())
       p.math.push(new LessonPlanMathItem())
-      p.writing.push(new LessonPlanWritingItem())
+      const wNew = new LessonPlanWritingItem()
+      wNew.subject = 'english'
+      p.writing.push(wNew)
+      const cNew = new LessonPlanChineseItem()
+      cNew.dimension = 'pinyin'
+      cNew.character = 'mā'
+      cNew.targetSkillLevel = 1
+      p.chinese.push(cNew)
       p.generalKnowledge.push(new LessonPlanGeneralItem())
       const r = validatePlannerOutput(p)
       expect(r.ok).assertTrue()
@@ -131,10 +160,18 @@ export default function lessonPlannerValidationTest() {
       expect(r.issues[0]).assertContain('generalKnowledge=1')
     })
 
-    it('空 plan → ok=false, 4 个 issues', 0, () => {
+    it('chinese=1 → ok=false', 0, () => {
+      const p = filledPlan()
+      p.chinese.pop()
+      const r = validatePlannerOutput(p)
+      expect(r.ok).assertFalse()
+      expect(r.issues[0]).assertContain('chinese=1')
+    })
+
+    it('空 plan → ok=false, 5 个 issues', 0, () => {
       const r = validatePlannerOutput(emptyPlan())
       expect(r.ok).assertFalse()
-      expect(r.issues.length).assertEqual(4)
+      expect(r.issues.length).assertEqual(5)
     })
   })
 
@@ -203,6 +240,56 @@ export default function lessonPlannerValidationTest() {
       const r = validatePlannerOutput(p)
       expect(r.ok).assertFalse()
       expect(r.issues.length).assertEqual(2)
+    })
+  })
+
+  describe('validatePlannerOutput - chinese 必填字段', () => {
+    it('chinese 项 dimension="" → ok=false', 0, () => {
+      const p = filledPlan()
+      p.chinese[0].dimension = ''
+      const r = validatePlannerOutput(p)
+      expect(r.ok).assertFalse()
+      expect(r.issues[0]).assertContain('invalid dimension')
+    })
+    it('chinese 项 dimension="math_addition" (串科) → ok=false', 0, () => {
+      const p = filledPlan()
+      p.chinese[0].dimension = 'math_addition'
+      const r = validatePlannerOutput(p)
+      expect(r.issues[0]).assertContain('math_addition')
+    })
+    it('chinese 项 targetSkillLevel=0 → ok=false, 含 out of [1,5]', 0, () => {
+      const p = filledPlan()
+      p.chinese[0].targetSkillLevel = 0
+      const r = validatePlannerOutput(p)
+      expect(r.issues[0]).assertContain('targetSkillLevel=0')
+    })
+    it('chinese 项 targetSkillLevel=6 → ok=false', 0, () => {
+      const p = filledPlan()
+      p.chinese[0].targetSkillLevel = 6
+      const r = validatePlannerOutput(p)
+      expect(r.issues[0]).assertContain('targetSkillLevel=6')
+    })
+  })
+
+  describe('validatePlannerOutput - writing subject 白名单', () => {
+    it('writing 项 subject="" → ok=false', 0, () => {
+      const p = filledPlan()
+      p.writing[0].subject = ''
+      const r = validatePlannerOutput(p)
+      expect(r.ok).assertFalse()
+      expect(r.issues[0]).assertContain('invalid subject')
+    })
+    it('writing 项 subject="french" (白名单外) → ok=false', 0, () => {
+      const p = filledPlan()
+      p.writing[0].subject = 'french'
+      const r = validatePlannerOutput(p)
+      expect(r.issues[0]).assertContain('french')
+    })
+    it('writing 项 subject="math" (白名单内) → ok=true', 0, () => {
+      const p = filledPlan()
+      p.writing[0].subject = 'math'
+      const r = validatePlannerOutput(p)
+      expect(r.ok).assertTrue()
     })
   })
 }
