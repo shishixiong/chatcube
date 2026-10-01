@@ -287,28 +287,37 @@ export struct KidsHomeView {
       .layoutWeight(1)
       .scrollBar(BarState.Off)
       .align(Alignment.Top)
+
+      // bindSheet 宿主：每个 bindSheet 必须挂在独立组件上，避免多 bindSheet 冲突
+      // （同节点链两个 sheet 时，后注册的会在重渲染时顶掉先挂载的——家长门弹窗即开即关）
+      Column()
+        .width(0)
+        .height(0)
+        .bindSheet($$this.showGateSheet, this.GateSheetBuilder(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          preferType: SheetType.BOTTOM,
+          onDisappear: (): void => {
+            this.showGateSheet = false
+          }
+        })
+      Column()
+        .width(0)
+        .height(0)
+        .bindSheet($$this.showStarDetailSheet, this.StarDetailSheetBuilder(), {
+          height: SheetSize.LARGE,
+          dragBar: true,
+          showClose: false,
+          preferType: SheetType.BOTTOM,
+          onDisappear: (): void => {
+            this.showStarDetailSheet = false
+          }
+        })
     }
     .width('100%')
     .height('100%')
     .backgroundColor(KIDS_BG)
-    .bindSheet($$this.showGateSheet, this.GateSheetBuilder(), {
-      height: SheetSize.FIT_CONTENT,
-      dragBar: true,
-      showClose: false,
-      preferType: SheetType.BOTTOM,
-      onDisappear: (): void => {
-        this.showGateSheet = false
-      }
-    })
-    .bindSheet($$this.showStarDetailSheet, this.StarDetailSheetBuilder(), {
-      height: SheetSize.LARGE,
-      dragBar: true,
-      showClose: false,
-      preferType: SheetType.BOTTOM,
-      onDisappear: (): void => {
-        this.showStarDetailSheet = false
-      }
-    })
   }
 
   @Builder
