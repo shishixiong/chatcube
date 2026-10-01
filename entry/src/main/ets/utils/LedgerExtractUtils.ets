@@ -325,7 +325,8 @@ export function extractLedgerAnswerItems(toolId: string, argsJson: string,
 
 /**
  * 备课计划 → 台账种子 (spec §6.1): plan.vocab[].word → en:vocab;
- * plan.writing[].characterOrWord 按 CJK 判定 zh:char|zh:phrase|en:vocab。按 key 去重。只建行不改掌握度。
+ * plan.writing[].characterOrWord 按 CJK 判定 zh:char|zh:phrase|en:vocab;
+ * plan.chinese[].character 按 dimension 映射 zh:pinyin / zh:char|phrase / zh:sentence。按 key 去重。只建行不改掌握度。
  */
 export function extractLedgerSeeds(plan: LessonPlan): LedgerItemSeed[] {
   const seeds: LedgerItemSeed[] = []
@@ -352,6 +353,27 @@ export function extractLedgerSeeds(plan: LessonPlan): LedgerItemSeed[] {
     } else {
       pushSeed(seeds, seen, 'en', 'vocab', text, 'english_vocab')
     }
+  }
+  const chineseItems = plan.chinese
+  for (let i = 0; i < chineseItems.length; i++) {
+    const item = chineseItems[i]
+    const text = item.character.trim()
+    if (text === '') {
+      continue
+    }
+    if (item.dimension === 'pinyin') {
+      pushSeed(seeds, seen, 'zh', 'pinyin', text, 'pinyin')
+    } else if (item.dimension === 'chinese_reading') {
+      pushSeed(seeds, seen, 'zh', 'sentence', text, 'chinese_reading')
+    } else if (isCJKText(text)) {
+      // chinese_vocab 与未知 dimension 的 CJK 内容按字/词归类 (防御性默认)
+      if (text.length === 1) {
+        pushSeed(seeds, seen, 'zh', 'char', text, 'chinese_vocab')
+      } else {
+        pushSeed(seeds, seen, 'zh', 'phrase', text, 'chinese_vocab')
+      }
+    }
+    // 非 pinyin/reading 且非 CJK (脏数据) → 跳过
   }
   return seeds
 }

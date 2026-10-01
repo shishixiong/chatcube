@@ -7,7 +7,7 @@ import {
   extractLedgerAnswerItems,
   extractLedgerSeeds
 } from '../../../../main/ets/utils/LedgerExtractUtils'
-import { LessonPlan, LessonPlanVocabItem, LessonPlanWritingItem } from '../../../../main/ets/models/LessonPlanModels'
+import { LessonPlan, LessonPlanChineseItem, LessonPlanVocabItem, LessonPlanWritingItem } from '../../../../main/ets/models/LessonPlanModels'
 
 export default function ledgerExtractUtilsTest(): void {
   describe('ledgerExtractUtilsTest', () => {
@@ -197,6 +197,59 @@ export default function ledgerExtractUtilsTest(): void {
       expect(seeds[0].display).assertEqual('Apple')
       expect(normalizeItemKey(seeds[0].subject, seeds[0].itemType, seeds[0].display)).assertEqual('en:vocab:apple')
       expect(normalizeItemKey(seeds[1].subject, seeds[1].itemType, seeds[1].display)).assertEqual('zh:char:山')
+    })
+
+    it('chinese 三维度 → zh:pinyin / zh:char|phrase / zh:sentence 种子', 0, () => {
+      const plan = new LessonPlan()
+      const p1 = new LessonPlanChineseItem()
+      p1.topicKey = 'chinese.pinyin.shan'
+      p1.dimension = 'pinyin'
+      p1.character = 'shān'
+      plan.chinese.push(p1)
+      const c1 = new LessonPlanChineseItem()
+      c1.topicKey = 'chinese.chinese_vocab.shan'
+      c1.dimension = 'chinese_vocab'
+      c1.character = '山'
+      plan.chinese.push(c1)
+      const c2 = new LessonPlanChineseItem()
+      c2.topicKey = 'chinese.chinese_vocab.gao_shan'
+      c2.dimension = 'chinese_vocab'
+      c2.character = '高山'
+      plan.chinese.push(c2)
+      const r1 = new LessonPlanChineseItem()
+      r1.topicKey = 'chinese.chinese_reading.hello'
+      r1.dimension = 'chinese_reading'
+      r1.character = '你好呀'
+      plan.chinese.push(r1)
+      const seeds = extractLedgerSeeds(plan)
+      const keys: string[] = []
+      for (let i = 0; i < seeds.length; i++) {
+        keys.push(normalizeItemKey(seeds[i].subject, seeds[i].itemType, seeds[i].display))
+      }
+      expect(keys.indexOf('zh:pinyin:shan1') >= 0).assertTrue()
+      expect(keys.indexOf('zh:char:山') >= 0).assertTrue()
+      expect(keys.indexOf('zh:phrase:高山') >= 0).assertTrue()
+      expect(keys.indexOf('zh:sentence:你好呀') >= 0).assertTrue()
+    })
+    it('chinese 脏数据: dimension 未知但 CJK → 按 chinese_vocab 归类; 非中文且非 pinyin → 跳过 (Review Focus #3)', 0, () => {
+      const plan = new LessonPlan()
+      const bad1 = new LessonPlanChineseItem()
+      bad1.topicKey = 'chinese.unknown.x'
+      bad1.dimension = ''
+      bad1.character = '水'
+      plan.chinese.push(bad1)
+      const bad2 = new LessonPlanChineseItem()
+      bad2.topicKey = 'chinese.unknown.y'
+      bad2.dimension = ''
+      bad2.character = 'abc'
+      plan.chinese.push(bad2)
+      const seeds = extractLedgerSeeds(plan)
+      const keys: string[] = []
+      for (let i = 0; i < seeds.length; i++) {
+        keys.push(normalizeItemKey(seeds[i].subject, seeds[i].itemType, seeds[i].display))
+      }
+      expect(keys.indexOf('zh:char:水') >= 0).assertTrue()
+      expect(keys.length).assertEqual(1)
     })
   })
 }
