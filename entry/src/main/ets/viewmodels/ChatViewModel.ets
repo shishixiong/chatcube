@@ -354,7 +354,7 @@ export class ChatViewModel {
       }
       return this.assistantService.combineSystemPrompts(basePrompt, section)
     } catch (error) {
-      console.error('ChatViewModel', `injectSubjectPlanSection failed: ${JSON.stringify(error)}`)
+      console.error('ChatViewModel', `injectSubjectPlanSection failed: ${(error as Error)?.message ?? String(error)}`)
       return basePrompt
     }
   }
