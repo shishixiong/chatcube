@@ -5,7 +5,7 @@
  * 生成一份"代码侧 baseline 计划", 保证用户在"今日计划"页面至少看到内容。
  *
  * 策略:
- * - vocab / writing / generalKnowledge: 优先复用 yesterdayPlan 中的对应模块,
+ * - vocab / writing / chinese / generalKnowledge: 优先复用 yesterdayPlan 中的对应模块,
  *   不足时用通用 6-7 岁默认主题补齐
  * - math: 完全用代码生成, 从 childSnapshot.weakSkills (math_* 子集) 选维度,
  *   否则用 4 个核心默认维度 (math_counting / shapes / comparison / addition),
@@ -27,6 +27,7 @@ import {
   LessonPlanMathItem,
   LessonPlanWritingItem,
   LessonPlanGeneralItem,
+  LessonPlanChineseItem,
   ChildSnapshot
 } from '../models/LessonPlanModels'
 import { VALID_MATH_DIMENSIONS } from './LessonPlannerValidation'
@@ -40,6 +41,7 @@ const MIN_VOCAB_COUNT = 4
 const MIN_MATH_COUNT = 4
 const MIN_WRITING_COUNT = 2
 const MIN_GENERAL_COUNT = 2
+const MIN_CHINESE_COUNT = 2
 
 // ============================================================
 // 默认主题库 (6-7 岁幼儿适用, 浅显易懂)
@@ -66,6 +68,7 @@ interface WritingTemplate {
   characterOrWord: string
   description: string
   imagePrompt: string
+  subject: string
 }
 
 interface GeneralTemplate {
@@ -73,6 +76,14 @@ interface GeneralTemplate {
   dimension: string
   description: string
   imagePrompt: string
+}
+
+interface ChineseTemplate {
+  topicKey: string
+  dimension: string
+  character: string
+  description: string
+  targetSkillLevel: number
 }
 
 /** 通用 topicKey 容器约束 (供 pickUnique/padWithTemplates 泛型使用) */
@@ -115,13 +126,13 @@ const DEFAULT_MATH: MathTemplate[] = [
 
 const DEFAULT_WRITING: WritingTemplate[] = [
   { topicKey: 'writing.cn.yi', characterOrWord: '一', description: '横',
-    imagePrompt: 'Chinese character 一 stroke order' },
+    imagePrompt: 'Chinese character 一 stroke order', subject: 'chinese' },
   { topicKey: 'writing.cn.er', characterOrWord: '二', description: '两横',
-    imagePrompt: 'Chinese character 二 stroke order' },
+    imagePrompt: 'Chinese character 二 stroke order', subject: 'chinese' },
   { topicKey: 'writing.en.A', characterOrWord: 'A', description: '大写字母 A',
-    imagePrompt: 'uppercase letter A stroke order' },
+    imagePrompt: 'uppercase letter A stroke order', subject: 'english' },
   { topicKey: 'writing.en.B', characterOrWord: 'B', description: '大写字母 B',
-    imagePrompt: 'uppercase letter B stroke order' }
+    imagePrompt: 'uppercase letter B stroke order', subject: 'english' }
 ]
 
 const DEFAULT_GENERAL: GeneralTemplate[] = [
@@ -134,6 +145,18 @@ const DEFAULT_GENERAL: GeneralTemplate[] = [
   { topicKey: 'general.social.greetings', dimension: 'general_social',
     description: '学会打招呼说你好',
     imagePrompt: 'children greeting each other' }
+]
+
+// 覆盖语文 3 维度 (pinyin / chinese_vocab / chinese_reading) 各 1 条 + 1 条备用, 确定性无随机
+const DEFAULT_CHINESE: ChineseTemplate[] = [
+  { topicKey: 'chinese.chinese_vocab.shan', dimension: 'chinese_vocab', character: '山',
+    description: '认读"山"并组词（高山、山水）', targetSkillLevel: 1 },
+  { topicKey: 'chinese.pinyin.shan', dimension: 'pinyin', character: 'shān',
+    description: '拼读 sh—ān→shān，认读第一声', targetSkillLevel: 1 },
+  { topicKey: 'chinese.chinese_reading.hello', dimension: 'chinese_reading', character: '你好呀',
+    description: '看图说一句完整的打招呼话', targetSkillLevel: 1 },
+  { topicKey: 'chinese.chinese_vocab.shui', dimension: 'chinese_vocab', character: '水',
+    description: '认读"水"并组词（喝水、水杯）', targetSkillLevel: 1 }
 ]
 
 // ============================================================
@@ -203,7 +226,18 @@ function makeWritingItem(t: WritingTemplate): LessonPlanWritingItem {
   w.characterOrWord = t.characterOrWord
   w.description = t.description
   w.imagePrompt = t.imagePrompt
+  w.subject = t.subject
   return w
+}
+
+function makeChineseItem(t: ChineseTemplate): LessonPlanChineseItem {
+  const c = new LessonPlanChineseItem()
+  c.topicKey = t.topicKey
+  c.dimension = t.dimension
+  c.character = t.character
+  c.description = t.description
+  c.targetSkillLevel = clampSkillLevel(t.targetSkillLevel)
+  return c
 }
 
 function makeGeneralItem(t: GeneralTemplate): LessonPlanGeneralItem {
@@ -365,7 +399,8 @@ export function generateBaselinePlan(planDate: string,
         topicKey: `writing.placeholder${i}`,
         characterOrWord: base.characterOrWord,
         description: base.description,
-        imagePrompt: base.imagePrompt
+        imagePrompt: base.imagePrompt,
+        subject: base.subject
       }
     })
   for (let i = 0; i < reusedWriting.length; i++) {
@@ -398,6 +433,32 @@ export function generateBaselinePlan(planDate: string,
   }
   for (let i = 0; i < paddedGeneralTemplates.length; i++) {
     plan.generalKnowledge.push(makeGeneralItem(paddedGeneralTemplates[i]))
+  }
+
+  // ---- chinese: 复用 yesterday + 默认 (2026-10-01 学科拆分) ----
+  const yesterdayChinese: LessonPlanChineseItem[] =
+    yesterdayPlan !== null ? yesterdayPlan.chinese : []
+  const reusedChinese = pickUnique(yesterdayChinese, usedKeys, MIN_CHINESE_COUNT)
+  for (let i = 0; i < reusedChinese.length; i++) {
+    usedKeys.push(reusedChinese[i].topicKey)
+  }
+  const chineseTemplates: ChineseTemplate[] = DEFAULT_CHINESE.slice()
+  const paddedChineseTemplates = padWithTemplates(chineseTemplates, usedKeys, MIN_CHINESE_COUNT,
+    (i): ChineseTemplate => {
+      const base = DEFAULT_CHINESE[i % DEFAULT_CHINESE.length]
+      return {
+        topicKey: `chinese.placeholder${i}`,
+        dimension: base.dimension,
+        character: base.character,
+        description: base.description,
+        targetSkillLevel: base.targetSkillLevel
+      }
+    })
+  for (let i = 0; i < reusedChinese.length; i++) {
+    plan.chinese.push(reusedChinese[i])
+  }
+  for (let i = 0; i < paddedChineseTemplates.length; i++) {
+    plan.chinese.push(makeChineseItem(paddedChineseTemplates[i]))
   }
 
   return plan

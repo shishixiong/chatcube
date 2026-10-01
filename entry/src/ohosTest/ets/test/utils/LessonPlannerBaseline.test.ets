@@ -8,6 +8,7 @@ import {
   LessonPlanMathItem,
   LessonPlanWritingItem,
   LessonPlanGeneralItem,
+  LessonPlanChineseItem,
   ChildSnapshot
 } from '../../../../main/ets/models/LessonPlanModels'
 import {
@@ -102,6 +103,39 @@ export default function lessonPlannerBaselineTest() {
       expect(plan.themeTitle !== '').assertTrue()
       expect(plan.themeDescription !== '').assertTrue()
       expect(plan.teacherNotes !== '').assertTrue()
+    })
+
+    it('空 childSnapshot → chinese >= 2 且维度在白名单内', 0, () => {
+      const plan = generateBaselinePlan('2026-06-24', new ChildSnapshot(), null)
+      // 用字面量 2 而非 MIN_PLANNER_COUNTS.chinese — 该常量 Task 4 才创建
+      expect(plan.chinese.length >= 2).assertTrue()
+      const dims: string[] = ['pinyin', 'chinese_vocab', 'chinese_reading']
+      for (let i = 0; i < plan.chinese.length; i++) {
+        expect(dims.indexOf(plan.chinese[i].dimension) >= 0).assertTrue()
+        expect(plan.chinese[i].character !== '').assertTrue()
+      }
+    })
+    it('writing 项全部带 subject 标签', 0, () => {
+      const plan = generateBaselinePlan('2026-06-24', new ChildSnapshot(), null)
+      for (let i = 0; i < plan.writing.length; i++) {
+        expect(['english', 'chinese', 'math'].indexOf(plan.writing[i].subject) >= 0).assertTrue()
+      }
+    })
+    it('yesterday plan 提供 chinese → baseline 复用其 chinese 项', 0, () => {
+      const yesterday = new LessonPlan()
+      const c = new LessonPlanChineseItem()
+      c.topicKey = 'chinese.chinese_vocab.huo'
+      c.dimension = 'chinese_vocab'
+      c.character = '火'
+      yesterday.chinese.push(c)
+      const plan = generateBaselinePlan('2026-06-24', new ChildSnapshot(), yesterday)
+      let found = false
+      for (let i = 0; i < plan.chinese.length; i++) {
+        if (plan.chinese[i].topicKey === 'chinese.chinese_vocab.huo') {
+          found = true
+        }
+      }
+      expect(found).assertTrue()
     })
   })
 
