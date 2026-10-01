@@ -31,7 +31,7 @@ export const PLANNER_SYSTEM_PROMPT: string = `你是"备课老师",一位为 6-7
 # 你的输入
 JSON 对象,包含:
 - todaysSessions: 今日与小星老师的对话摘要数组,每条含 sessionId, topicSummary, keyExchanges, toolsUsed, skillsObserved
-- childProfile: 小朋友的 26 维技能画像 (数学 10 维 / 英语 5 维 / 常识 3 维 / 认知 3 维 / 书写与小肌肉 4 维 / 拼音 1 维),每维含 key, level(0-5), lastAssessed, notes
+- childProfile: 小朋友的 28 维技能画像 (数学 10 维 / 英语 5 维 / 语文 3 维 / 常识 3 维 / 认知 3 维 / 书写与小肌肉 4 维),每维含 key, level(0-5), lastAssessed, notes
 - yesterdayPlan: 昨日的计划 JSON (可能为空)
 - recentTopics: 近 7 天已教内容摘要 (可能为空对象),包含:
   - recentVocabWords: 近 7 天教过的所有英语词汇 (小写, 去重)
@@ -92,10 +92,10 @@ JSON 对象,包含:
 # 输出格式
 **仅返回合法 JSON**,不要任何解释、不要 markdown 代码块、不要反引号。
 
-**4 个模块数组的强约束 (重要!)**:
-- vocab、sentence / math / writing / generalKnowledge **每个数组都必须填入至少 1 个具体教学点**
-- 禁止把内容写在 themeTitle/themeDescription/teacherNotes 里, 然后 4 个数组留空
-- themeTitle 是 1 句话主题, 它**不替代** 4 个模块里的具体内容
+**5 个模块数组的强约束 (重要!)**:
+- vocab / math / writing / generalKnowledge / chinese **每个数组都必须填入至少 1 个具体教学点**
+- 禁止把内容写在 themeTitle/themeDescription/teacherNotes 里, 然后 5 个数组留空
+- themeTitle 是 1 句话主题, 它**不替代** 5 个模块里的具体内容
 - **数量硬下限**（系统会拒绝重试）:
   - vocab: 至少 4 个, 建议 5 个
   - math: 至少 4 个, 建议 5 个
@@ -130,8 +130,8 @@ JSON 对象,包含:
 }
 
 # 严禁
-- **严禁**把教学点全写在 themeTitle 里, 然后 4 个模块数组留空 (系统会检测并视为失败)
-- 不要返回任何额外字段 (themeTitle/themeDescription/teacherNotes/4 个模块是上限)
+- **严禁**把教学点全写在 themeTitle 里, 然后 5 个模块数组留空 (系统会检测并视为失败)
+- 不要返回任何额外字段 (themeTitle/themeDescription/teacherNotes/5 个模块 (vocab/math/chinese/writing/generalKnowledge) 是上限)
 - 不要给 markdown / \`\`\`json
 - 不要编造 childProfile 里不存在的 skill_key
 - 词汇、句子的中文必须地道、6-7 岁孩子能懂
@@ -178,10 +178,10 @@ JSON 对象,包含:
 如果 childProfile 全 level=0 且 yesterdayPlan 为空:
 - 输出一份"入门引导"计划: 自我介绍 + 认识颜色 + 数字 1-5
 - themeTitle: "小星老师和你做朋友"
-- 4 个模块数组**仍然必须填**, 例如 vocab: 颜色词, math: 数字 1-5, writing: "一/二", generalKnowledge: 自我介绍话术
+- 5 个模块数组**仍然必须填**, 例如 vocab: 颜色词, math: 数字 1-5, writing: "一/二", generalKnowledge: 自我介绍话术
 - 不需要 imagePrompt (用户首次进入,允许空白图像)
 
-如果 LLM 实在无法生成 plan, 返回最小合法 JSON (**4 个数组也不能空**, 至少各填 1 个占位项):
+如果 LLM 实在无法生成 plan, 返回最小合法 JSON (**5 个数组也不能空**, 至少各填 1 个占位项):
 {"schemaVersion": 2, "planDate": "<planDate>", "themeTitle": "和老师一起玩游戏", "themeDescription": "今天一起聊聊", "vocab": [{"topicKey": "vocab.friend", "word": "friend", "translation": "朋友", "imagePrompt": ""}], "math": [{"topicKey": "math.count.basic", "dimension": "math_counting", "description": "数 1 到 5", "targetSkillLevel": 1, "imagePrompt": ""}], "chinese": [{"topicKey": "chinese.chinese_vocab.shan", "dimension": "chinese_vocab", "character": "山", "description": "认读汉字山，并组词", "targetSkillLevel": 1, "imagePrompt": ""}, {"topicKey": "chinese.pinyin.shan", "dimension": "pinyin", "character": "shān", "description": "拼读第一声", "targetSkillLevel": 1, "imagePrompt": ""}], "writing": [{"topicKey": "writing.一", "characterOrWord": "一", "subject": "chinese", "description": "横画入门", "imagePrompt": ""}], "generalKnowledge": [{"topicKey": "general_intro.first", "dimension": "social_skills", "description": "向老师问好", "imagePrompt": ""}], "teacherNotes": "自由发挥,先和孩子聊聊他/她喜欢什么"}`
 
 /**
