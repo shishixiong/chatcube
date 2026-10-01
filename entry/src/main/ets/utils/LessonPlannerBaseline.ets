@@ -30,7 +30,11 @@ import {
   LessonPlanChineseItem,
   ChildSnapshot
 } from '../models/LessonPlanModels'
-import { VALID_MATH_DIMENSIONS } from './LessonPlannerValidation'
+import {
+  VALID_MATH_DIMENSIONS,
+  VALID_WRITING_SUBJECTS,
+  VALID_CHINESE_DIMENSIONS
+} from './LessonPlannerValidation'
 
 // ============================================================
 // 常量 (与 LessonPlannerValidation.MIN_PLANNER_COUNTS 镜像,
@@ -177,6 +181,34 @@ function clampSkillLevel(level: number): number {
 /** 判断 skill_key 是否是 math 维度 (用于过滤 childSnapshot.weakSkills) */
 function isMathDimension(skillKey: string): boolean {
   return VALID_MATH_DIMENSIONS.indexOf(skillKey) >= 0
+}
+
+/**
+ * 过滤 subject 不在白名单内的 writing 项。
+ * 升级窗口防护: v1 旧计划的 writing 项反序列化后 subject='' (类默认值),
+ * 直接复用会让 baseline 通不过 validatePlannerOutput → 整天计划被 markFailed。
+ */
+function filterValidWritingItems(source: LessonPlanWritingItem[]): LessonPlanWritingItem[] {
+  const out: LessonPlanWritingItem[] = []
+  for (let i = 0; i < source.length; i++) {
+    if (VALID_WRITING_SUBJECTS.indexOf(source[i].subject) >= 0) {
+      out.push(source[i])
+    }
+  }
+  return out
+}
+
+/**
+ * 过滤 dimension 不在白名单内的 chinese 项 (前瞻防护, 对齐语文 3 维画像)。
+ */
+function filterValidChineseItems(source: LessonPlanChineseItem[]): LessonPlanChineseItem[] {
+  const out: LessonPlanChineseItem[] = []
+  for (let i = 0; i < source.length; i++) {
+    if (VALID_CHINESE_DIMENSIONS.indexOf(source[i].dimension) >= 0) {
+      out.push(source[i])
+    }
+  }
+  return out
 }
 
 /** 从 childSnapshot.weakSkills 中抽出所有 math_* 维度, 去重保序 */
@@ -384,9 +416,10 @@ export function generateBaselinePlan(planDate: string,
     }
   }
 
-  // ---- writing: 复用 yesterday + 默认 ----
-  const yesterdayWriting: LessonPlanWritingItem[] =
+  // ---- writing: 复用 yesterday + 默认 (白名单过滤无标签旧项, 缺口由模板补齐) ----
+  const yesterdayWritingRaw: LessonPlanWritingItem[] =
     yesterdayPlan !== null ? yesterdayPlan.writing : []
+  const yesterdayWriting: LessonPlanWritingItem[] = filterValidWritingItems(yesterdayWritingRaw)
   const reusedWriting = pickUnique(yesterdayWriting, usedKeys, MIN_WRITING_COUNT)
   for (let i = 0; i < reusedWriting.length; i++) {
     usedKeys.push(reusedWriting[i].topicKey)
@@ -435,9 +468,10 @@ export function generateBaselinePlan(planDate: string,
     plan.generalKnowledge.push(makeGeneralItem(paddedGeneralTemplates[i]))
   }
 
-  // ---- chinese: 复用 yesterday + 默认 (2026-10-01 学科拆分) ----
-  const yesterdayChinese: LessonPlanChineseItem[] =
+  // ---- chinese: 复用 yesterday + 默认 (2026-10-01 学科拆分; 白名单过滤非法维度旧项) ----
+  const yesterdayChineseRaw: LessonPlanChineseItem[] =
     yesterdayPlan !== null ? yesterdayPlan.chinese : []
+  const yesterdayChinese: LessonPlanChineseItem[] = filterValidChineseItems(yesterdayChineseRaw)
   const reusedChinese = pickUnique(yesterdayChinese, usedKeys, MIN_CHINESE_COUNT)
   for (let i = 0; i < reusedChinese.length; i++) {
     usedKeys.push(reusedChinese[i].topicKey)

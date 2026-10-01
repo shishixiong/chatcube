@@ -1271,6 +1271,11 @@ struct LearningTomorrowPlanPage {
       this.SectionTitle($r('app.string.learning_section_writing'))
       this.WritingBlock(plan)
 
+      // 语文分区 (与主 build 一致: Writing 与 General 之间; 复用 ChineseBlock 传入历史计划参数,
+      // 不能用 ChineseSection —— 它绑定 this.plan 主计划而非此处展开的历史计划)
+      this.SectionTitle($r('app.string.learning_section_chinese'))
+      this.ChineseBlock(plan)
+
       this.SectionTitle($r('app.string.learning_section_general'))
       this.GeneralBlock(plan)
     }

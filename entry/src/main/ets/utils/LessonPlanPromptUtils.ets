@@ -4,6 +4,8 @@
  * 包含:
  * - PLANNER_SYSTEM_PROMPT: 备课老师 AI 的 system prompt
  * - renderDailyPlanSection: 渲染"今日教学目标"section 注入小星老师 prompt
+ * - renderDailyPlanSectionForSubject: 渲染"本学科教学目标"section (按 PlanSubject 过滤模块,
+ *   注入 kids_math / kids_english / kids_chinese 学科助手 prompt; 本学科 0 条返回 '')
  * - renderYesterdaySummarySection: 渲染"昨日小结"section（承接昨日）
  * - cleanPlannerJsonOutput: 清理 LLM 输出,提取合法 JSON
  *
@@ -26,7 +28,7 @@ import { collectPlanItemsForSubject, PlanSubject } from './LessonPlanSubjectUtil
  * 备课老师 system prompt。
  *
  * 输出契约: 严格 JSON,无 markdown 包裹,无额外字段。
- * 4 个强类型模块 (vocab/math/writing/generalKnowledge) + freeform 自由扩展槽。
+ * 5 个强类型模块 (vocab/math/writing/generalKnowledge/chinese) + freeform 自由扩展槽。
  */
 export const PLANNER_SYSTEM_PROMPT: string = `你是"备课老师",一位为 6-7 岁幼儿教师("小星老师")准备明日课程的教育专家。
 

@@ -58,6 +58,7 @@ function filledYesterdayPlan(): LessonPlan {
     const w = new LessonPlanWritingItem()
     w.topicKey = `writing.char${i}`
     w.characterOrWord = `字${i}`
+    w.subject = 'english'
     p.writing.push(w)
   }
   for (let i = 0; i < 2; i++) {
@@ -233,6 +234,49 @@ export default function lessonPlannerBaselineTest() {
       // math 仍满足下限
       expect(plan.math.length >= MIN_PLANNER_COUNTS.math).assertTrue()
       // overall 仍 ok
+      const r = validatePlannerOutput(plan)
+      expect(r.ok).assertTrue()
+    })
+
+    it('yesterday v1 writing (subject=空) → 不复用, 全部替换为带标签模板项', 0, () => {
+      // 模拟升级窗口: v1 旧计划反序列化后 writing 项 subject 保持类默认 ''
+      const v1Yesterday = new LessonPlan()
+      for (let i = 0; i < 2; i++) {
+        const w = new LessonPlanWritingItem()
+        w.topicKey = `writing.legacy${i}`
+        w.characterOrWord = `旧字${i}`
+        v1Yesterday.writing.push(w)
+      }
+      const plan = generateBaselinePlan('2026-06-24', emptySnapshot(), v1Yesterday)
+      // 结果中每个 writing 项 subject 都必须在白名单内
+      const validSubjects: string[] = ['english', 'chinese', 'math']
+      for (let i = 0; i < plan.writing.length; i++) {
+        expect(validSubjects.indexOf(plan.writing[i].subject) >= 0).assertTrue()
+      }
+      // 旧的无标签项不得混入结果
+      for (let i = 0; i < plan.writing.length; i++) {
+        expect(plan.writing[i].topicKey.indexOf('writing.legacy') !== 0).assertTrue()
+      }
+      // 过滤后缺口由模板补齐, 密度下限仍满足
+      expect(plan.writing.length >= MIN_PLANNER_COUNTS.writing).assertTrue()
+      const r = validatePlannerOutput(plan)
+      expect(r.ok).assertTrue()
+    })
+
+    it('yesterday chinese (dimension 非法) → 不复用, 缺口由模板补齐', 0, () => {
+      // 前瞻防护: dimension 不在白名单的 chinese 项同样不得复用
+      const staleYesterday = new LessonPlan()
+      const c = new LessonPlanChineseItem()
+      c.topicKey = 'chinese.legacy.bad'
+      c.dimension = ''
+      c.character = 'x'
+      staleYesterday.chinese.push(c)
+      const plan = generateBaselinePlan('2026-06-24', emptySnapshot(), staleYesterday)
+      const validDims: string[] = ['pinyin', 'chinese_vocab', 'chinese_reading']
+      for (let i = 0; i < plan.chinese.length; i++) {
+        expect(validDims.indexOf(plan.chinese[i].dimension) >= 0).assertTrue()
+      }
+      expect(plan.chinese.length >= MIN_PLANNER_COUNTS.chinese).assertTrue()
       const r = validatePlannerOutput(plan)
       expect(r.ok).assertTrue()
     })

@@ -56,8 +56,8 @@ export const VALID_CHINESE_DIMENSIONS: ReadonlyArray<string> = [
   'chinese_reading'
 ]
 
-/** writing 项 subject 白名单 */
-const VALID_WRITING_SUBJECTS: ReadonlyArray<string> = ['english', 'chinese', 'math']
+/** writing 项 subject 白名单 (3 个, 2026-10-01 学科拆分; baseline 复用过滤也用) */
+export const VALID_WRITING_SUBJECTS: ReadonlyArray<string> = ['english', 'chinese', 'math']
 
 export interface PlannerValidationResult {
   ok: boolean

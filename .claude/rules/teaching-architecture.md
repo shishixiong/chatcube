@@ -174,7 +174,7 @@
 
 ### 5.2 教学计划（`LessonPlanModels.ets`）
 
-`LessonPlan`（行 69-85）含 **5 个强类型模块数组** + 1 个扩展位：
+`LessonPlan`（行 78-95）含 **5 个强类型模块数组** + 1 个扩展位：
 
 | 字段 | 类型 | 用途 |
 |------|------|------|
@@ -374,7 +374,7 @@ ChatViewModel（会话结束路径）调 getLessonPlanningService().notifySessio
    → 5 分钟防抖合并
    → runPlanningPipeline(planDate=明天)
    → 调 LLM 备课
-   → 4 模块非空校验
+   → 5 模块（含 chinese）非空校验
    → 写 daily_lesson_plans (status='done')
    → 3 并发预生成图 → 写 image_index (source=LESSON_PLAN)
    → 增 LESSON_PLAN_REFRESH_TICK
@@ -412,7 +412,7 @@ ChatViewModel（会话结束路径）调 getLessonPlanningService().notifySessio
 
 3. **统一图片索引（`image_index` 单表 + `ImageSource` 枚举）**反映了两种使用模式：备课老师"主题驱动"（一个 apple 多次用，按 `topicKey` 复用，7 天过期，`source=LESSON_PLAN`）vs 英语题"题驱动"（一个 apple 只问一次，按字面 `word` 缓存，无过期，`source=ENGLISH_QUIZ`）。**两种模式共存于同一张表**，靠 `source` 字段和 TTL 区分——混淆会让 `expires_at=0` 的英语题图被误清理或反过来撑爆 `image_index`。
 
-4. **4 模块非空校验**是抵御 LLM 自由发挥的关键防线——若不校验，模型倾向把内容堆到 `themeDescription`/`teacherNotes` 而 4 个模块全空，导致小星老师拿着空计划上课。
+4. **5 模块非空校验**是抵御 LLM 自由发挥的关键防线——若不校验，模型倾向把内容堆到 `themeDescription`/`teacherNotes` 而 5 个模块全空，导致小星老师拿着空计划上课。
 
 5. **28 维技能 = 28 个枚举值**散落在多份 schema 定义中（`ChildProfileService.SKILL_DEFINITIONS`、`BuiltinTools.ets` 的 child_profile schema、`AssistantModels.ets` 的 5 份系统提示词——default + 4 学科各自引用维度子集）。**修改维度时必须多处同步**——不像 10 处漂移点有专门技能提醒，这个目前是 naked 风险（v2 起提示词从 1 份变 5 份，漂移面扩大）。
 
