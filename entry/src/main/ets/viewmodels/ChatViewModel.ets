@@ -27,9 +27,11 @@ import { getLearningLedgerService } from '../services/LearningLedgerService'
 import { getTeachingStyleAdjustmentService } from '../services/TeachingStyleAdjustmentService'
 import {
   renderDailyPlanSection,
+  renderDailyPlanSectionForSubject,
   renderYesterdaySummarySection,
   renderVocabLedgerSection
 } from '../utils/LessonPlanPromptUtils'
+import { planSubjectForAssistant, PlanSubject } from '../utils/LessonPlanSubjectUtils'
 import { ChatMessage, ChatSession, MessageRole, ProviderType, ApiStyle, MessageAttachment, AttachmentType, ReasoningLevel, ToolDefinition, ToolCall, ToolResult, SearchReference, OpenAITransport, ToolSourceType, ToolPermissionLevel } from '../models/ChatModels'
 import { AIGeneratedImageFileResult, AIGeneratedImageFileSink } from '../models/AIGeneratedImageFileModels'
 import { WebSearchResult, SearchResult } from '../services/WebSearchService'
@@ -318,16 +320,44 @@ export class ChatViewModel {
       }
 	    const basePrompt = this.assistantService.combineSystemPrompts(globalPrompt, assistantConfig.systemPrompt)
 	    const withExtra = this.assistantService.combineSystemPrompts(basePrompt, extraPrompt)
-	    // 动态教学计划注入：仅当助手是小星老师时生效（其他助手保持原 prompt 纯净）
+	    // 动态教学计划注入：小星老师拿全量教学段; 学科老师只拿本学科计划段 (2026-10-01 学科拆分)
 	    if (assistantConfig.assistantId !== DEFAULT_ASSISTANT_ID) {
-	      // 非小星老师助手不注入教学段, 但保留主动招呼元指令（学科老师开场, 2026-09-25）
-	      if (greetingHint.trim() !== '') {
-	        return this.assistantService.combineSystemPrompts(withExtra, greetingHint)
+	      let composed = withExtra
+	      const subject = planSubjectForAssistant(assistantConfig.assistantId)
+	      if (subject !== null) {
+	        composed = await this.injectSubjectPlanSection(composed, subject)
 	      }
-	      return withExtra
+	      // 保留主动招呼元指令（学科老师开场, 2026-09-25）, 末尾最高优先级
+	      if (greetingHint.trim() !== '') {
+	        return this.assistantService.combineSystemPrompts(composed, greetingHint)
+	      }
+	      return composed
 	    }
 	    return await this.injectTeachingSections(withExtra, greetingHint)
 	  }
+
+  /**
+   * 把"本学科今日计划"段拼到学科老师 system prompt (spec 2026-10-01 §7)。
+   * 计划拉取/渲染失败时静默降级返回原 prompt, 不阻塞对话 (与 injectTeachingSections 同款容错)。
+   */
+  private async injectSubjectPlanSection(basePrompt: string, subject: PlanSubject): Promise<string> {
+    try {
+      const today = await getLessonPlanningService().getTodayPlan()
+      if (today === null) {
+        return basePrompt
+      }
+      const planDate = today.plan.planDate
+      const weekday = this.weekdayLabel(planDate)
+      const section = renderDailyPlanSectionForSubject(today.plan, planDate, weekday, subject)
+      if (section === '') {
+        return basePrompt
+      }
+      return this.assistantService.combineSystemPrompts(basePrompt, section)
+    } catch (error) {
+      console.error('ChatViewModel', `injectSubjectPlanSection failed: ${JSON.stringify(error)}`)
+      return basePrompt
+    }
+  }
 
 	    /**
    * 把"昨日小结" + "教学风格调整" + "今日教学目标"三段拼到小星老师 system prompt 末尾。
