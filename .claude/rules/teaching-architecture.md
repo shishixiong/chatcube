@@ -88,6 +88,8 @@
 
 **注入条件**：仅当 `assistantId === DEFAULT_ASSISTANT_ID`（即小星老师）时追加教学上下文；其他助手（**含 4 个学科助手**）拿到的是干净的 `combineSystemPrompts(...)` 合并结果并提前 return。
 
+> **2026-10-01 学科拆分**：`kids_math` / `kids_english` / `kids_chinese` 会注入**本学科专属**的"今日教学目标"段（`renderDailyPlanSectionForSubject`：主题句 + 本学科条目，无 teacherNotes / 无 image 指引）；`kids_games` 与自定义助手维持纯净。计划拉取失败静默降级。
+
 **注入内容**（按顺序）：
 
 1. **全局 prompt**（AppStorageV2 连接的基础；仅非 default 助手叠加全局 prompt，小星老师跳过）
@@ -95,7 +97,7 @@
 3. **`extraPrompt`**（外部传入的临时上下文）
 4. **昨日小结** —— `LessonPlanPromptUtils` 的 `renderYesterdaySummarySection(plan, planDate)`
 5. **教学风格调整** —— `TeachingStyleAdjustmentService.renderForPrompt(styleAdj)`（v1 文档未覆盖此段）
-6. **今日教学目标** —— 渲染器 `utils/LessonPlanPromptUtils.ets` 的 `renderDailyPlanSection(plan, planDate, weekday)`，主题 + 4 模块条目 + 教学提示 + 使用建议（含 `<topic_key>` 标签语法）
+6. **今日教学目标** —— 渲染器 `utils/LessonPlanPromptUtils.ets` 的 `renderDailyPlanSection(plan, planDate, weekday)`，主题 + 5 模块条目（四学科分组）+ 教学提示 + 使用建议（含 `<topic_key>` 标签语法）
 7. **主动招呼元指令**（`greetingHint`，仅主动招呼时非空，置于末尾最高优先级）
 
 **数据源**：
@@ -172,19 +174,20 @@
 
 ### 5.2 教学计划（`LessonPlanModels.ets`）
 
-`LessonPlan`（行 69-85）含 **4 个强类型模块数组** + 1 个扩展位：
+`LessonPlan`（行 69-85）含 **5 个强类型模块数组** + 1 个扩展位：
 
 | 字段 | 类型 | 用途 |
 |------|------|------|
 | `vocab` | `LessonPlanVocabItem[]` | 英语词汇（默认模块） |
 | `math` | `LessonPlanMathItem[]` | 数学点 |
-| `writing` | `LessonPlanWritingItem[]` | 写字（字母/数字/中文） |
+| `writing` | `LessonPlanWritingItem[]` | 写字（字母/数字/中文），项含 `subject` 学科标签（english/chinese/math，'' 未打标签） |
 | `generalKnowledge` | `LessonPlanGeneralItem[]` | 常识（自然/社会/生活） |
+| `chinese` | `LessonPlanChineseItem[]` | 语文点（pinyin/chinese_vocab/chinese_reading 三维白名单，无预生成图） |
 | `freeform` | `Record<string, Object>` | 未来扩展位（阅读/音乐/科学） |
 
 每个 item 继承 `LessonPlanItemBase`（行 13-16）：`topicKey`（如 `vocab.apple`）+ `imagePrompt`（英文图像描述）。
 
-**严格校验**：`LessonPlanningService.ets:612-627` 强制 **4 个模块数组至少一个有内容**——若 LLM 把所有内容塞到 `themeDescription`/`teacherNotes` 而模块全空，视为输出不符合 schema 拒绝写入。
+**严格校验**：`utils/LessonPlannerValidation.ets` 的 `validatePlannerOutput`（由 `LessonPlanningService` 写回前调用）强制 **5 个模块数组至少一个有内容（含 chinese≥2）+ writing 项 subject 白名单（english/chinese/math）+ chinese 维度白名单（pinyin/chinese_vocab/chinese_reading）**——若 LLM 把所有内容塞到 `themeDescription`/`teacherNotes` 而模块全空，或 subject/dimension 越界，视为输出不符合 schema 拒绝写入。
 
 DB 行 `DailyLessonPlanRow`（行 248-263）→ 表 `daily_lesson_plans`，状态机：`pending` → `running` → `done` / `failed`。
 
@@ -429,6 +432,7 @@ ChatViewModel（会话结束路径）调 getLessonPlanningService().notifySessio
 | `viewmodels/ChatViewModel.ets:311-383, 2743` | 提示词注入（`injectTeachingSections`）+ 会话结束通知 |
 | `services/LessonPlanningService.ets` | 备课老师完整管线 |
 | `utils/LessonPlanPromptUtils.ets` | 备课系统提示词 + 渲染 |
+| `utils/LessonPlanSubjectUtils.ets` | 计划学科拆分纯函数（PlanSubject / planSubjectForAssistant / collectPlanItemsForSubject） |
 | `services/ChildProfileService.ets` | 28 维技能定义 |
 | `services/StarRewardService.ets` | 星星计算 + 副作用 |
 | `models/StarEventModels.ets` | 10 处联合漂移点 |
