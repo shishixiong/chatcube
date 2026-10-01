@@ -3401,6 +3401,10 @@
       "value": "写字"
     },
     {
+      "name": "learning_section_chinese",
+      "value": "语文"
+    },
+    {
       "name": "learning_section_general",
       "value": "常识"
     },

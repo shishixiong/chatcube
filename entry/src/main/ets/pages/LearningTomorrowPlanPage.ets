@@ -16,6 +16,7 @@ import {
   DailyLessonPlan,
   DailyLessonPlanRow,
   LessonPlan,
+  LessonPlanChineseItem,
   LessonPlanGeneralItem,
   LessonPlanMathItem,
   LessonPlanStatus,
@@ -339,12 +340,13 @@ struct LearningTomorrowPlanPage {
       p.vocab.length === 0 &&
       p.math.length === 0 &&
       p.writing.length === 0 &&
+      p.chinese.length === 0 &&
       p.generalKnowledge.length === 0
   }
 
   /**
-   * 是否为"半残"plan: status=done 但 4 个模块数组全空
-   * (LLM 把内容写成 theme 叙述而没填入 4 个数组, 通过 runPlanningPipeline 校验会失败重试,
+   * 是否为"半残"plan: status=done 但 5 个模块数组全空
+   * (LLM 把内容写成 theme 叙述而没填入 5 个数组, 通过 runPlanningPipeline 校验会失败重试,
    * 但老数据可能存在). 这种情况仍允许用户手动重新生成.
    */
   private isPlanBroken(): boolean {
@@ -353,14 +355,14 @@ struct LearningTomorrowPlanPage {
     }
     const p = this.plan
     return p.vocab.length === 0 && p.math.length === 0 &&
-      p.writing.length === 0 && p.generalKnowledge.length === 0
+      p.writing.length === 0 && p.chinese.length === 0 && p.generalKnowledge.length === 0
   }
 
   /**
    * 是否允许手动重新生成今日计划.
    * - 无 row / 失败 / pending / running: 允许
    * - done + 内容完整: 不允许 (避免误覆盖)
-   * - done + 4 段全空 (半残): 允许 (给用户修复入口)
+   * - done + 5 段全空 (半残): 允许 (给用户修复入口)
    */
   private canRegenerate(): boolean {
     if (this.isGenerating) {
@@ -717,6 +719,14 @@ struct LearningTomorrowPlanPage {
         .fontSize(20)
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.text_primary'))
+      if (item.subject !== '') {
+        Text(item.subject === 'chinese' ? '中' : (item.subject === 'english' ? '英' : '数'))
+          .fontSize(10)
+          .fontColor($r('app.color.text_tertiary'))
+          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+          .borderRadius(8)
+          .border({ width: 1, color: $r('app.color.divider') })
+      }
       Text(item.description !== '' ? item.description : '')
         .fontSize(12)
         .fontColor($r('app.color.text_secondary'))
@@ -785,6 +795,74 @@ struct LearningTomorrowPlanPage {
       this.GeneralBlock(this.plan)
     }
     .width('100%')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  private ChineseSection() {
+    Column({ space: 6 }) {
+      this.SectionTitle($r('app.string.learning_section_chinese'))
+      this.ChineseBlock(this.plan)
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  private ChineseBlock(plan: LessonPlan) {
+    if (plan.chinese.length === 0) {
+      Column() {
+        Text('—')
+          .fontSize(13)
+          .fontColor($r('app.color.text_tertiary'))
+          .padding(14)
+      }
+      .width('100%')
+      .backgroundColor(this.themeSurface)
+      .borderRadius(16)
+      .clip(true)
+      .border({ width: 1, color: $r('app.color.divider') })
+      .visualEffect(buildPointLightBorderEffect())
+    } else {
+      Column() {
+        ForEach(plan.chinese, (item: LessonPlanChineseItem, index: number) => {
+          Column() {
+            this.ChineseRow(item)
+            if (index < plan.chinese.length - 1) {
+              Divider()
+                .color($r('app.color.divider'))
+                .margin({ left: 14, right: 14 })
+            }
+          }
+        }, (item: LessonPlanChineseItem, index: number) => `c_${index}_${item.topicKey}`)
+      }
+      .width('100%')
+    }
+  }
+
+  @Builder
+  private ChineseRow(item: LessonPlanChineseItem) {
+    Column({ space: 4 }) {
+      Text(item.character !== '' ? item.character : '—')
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.text_primary'))
+      if (item.description !== '') {
+        Text(item.description)
+          .fontSize(13)
+          .fontColor($r('app.color.text_primary'))
+          .lineHeight(20)
+          .width('100%')
+      }
+      if (item.dimension !== '') {
+        Text(getSkillLabel(item.dimension, item.dimension) +
+          (item.targetSkillLevel > 0 ? ` · 目标 ${item.targetSkillLevel}` : ''))
+          .fontSize(11)
+          .fontColor($r('app.color.text_tertiary'))
+      }
+    }
+    .width('100%')
+    .padding({ top: 10, bottom: 10, left: 14, right: 14 })
     .alignItems(HorizontalAlign.Start)
   }
 
@@ -1263,7 +1341,7 @@ struct LearningTomorrowPlanPage {
           if (this.isEmpty() && !this.isLoading) {
             this.EmptyState()
           } else {
-            // 顶部刷新按钮: 完整 plan 隐藏 (避免误覆盖), 半残 plan (done+4 段全空) 仍可重新生成
+            // 顶部刷新按钮: 完整 plan 隐藏 (避免误覆盖), 半残 plan (done+5 段全空) 仍可重新生成
             if (!this.isLoading && this.canRegenerate()) {
               Row() {
                 Blank()
@@ -1325,6 +1403,13 @@ struct LearningTomorrowPlanPage {
 
             Column() {
               this.WritingSection()
+            }
+            .width('100%')
+            .margin({ top: 14 })
+            .alignItems(HorizontalAlign.Start)
+
+            Column() {
+              this.ChineseSection()
             }
             .width('100%')
             .margin({ top: 14 })
