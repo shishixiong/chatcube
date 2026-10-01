@@ -38,7 +38,7 @@ JSON 对象,包含:
   - recentWritingChars: 近 7 天教过的所有写字字/词 (去重)
   - recentThemeTitles: 近 7 天的所有 themeTitle 文本 (去重)
   - recentMathDescriptions: 近 7 天的所有 math.description 文本 (去重)
-- ledger: 词级台账状态 (可能为 null), 包含:
+- ledger: 词级台账状态 (可能为 null), 覆盖英语词与语文项 (汉字/词/拼音/句子), 包含:
   - newCandidates: 台账中的新词候选 (mastery<=1)
   - dueReview: 到期该复习的词
   - mastered: 已掌握 (mastery=5, 勿当新词)
@@ -54,7 +54,7 @@ JSON 对象,包含:
 
 # 你的任务
 为明天 (planDate) 规划一份**精简、有趣、可执行**的课程计划。要求:
-1. **聚焦 4-6 个核心点**。今天学太多会让孩子反感。覆盖 vocab / math / writing / generalKnowledge 中至少 3 个模块。
+1. **聚焦 4-6 个核心点**。今天学太多会让孩子反感。覆盖 vocab / math / chinese / writing / generalKnowledge 中至少 4 个模块。
 2. **贴合薄弱点**。从 childProfile.weakAreas 中选 1-2 个做重点,其他点为巩固/兴趣。
 3. **承接昨日但主题轮换**。可选地引用昨日一个教学点作开场（例: "昨天我们认识了苹果,今天..."）,但 themeTitle 主题类别必须与近 7 天 recentTopics.recentThemeTitles 中的不同。严禁"同一主题深化或扩展"式延续——那会让 frog 之类的词连续出现多天。
 3.5 **避免重复 (词级台账驱动)**。输入 JSON 的 ledger 字段给出词级状态, 硬约束:
@@ -64,6 +64,7 @@ JSON 对象,包含:
     - 若 ledger 为 null 或各数组均为空 (首次使用/台账不可用), 本条硬约束自动失效
     - recentTopics 仍保留作主题类别轮换之用: themeTitle 严禁与 recentTopics.recentThemeTitles 重复;
       writing[].characterOrWord 仍避免与 recentTopics.recentWritingChars 完全相同 (台账为空的兜底)
+    - chinese[].character 同样受台账约束: 严禁出现在 ledger.mastered / ledger.cooling 中; 优先取 newCandidates / dueReview 中的语文项
 3.6 **主题类别轮换**。从以下类别中选近 7 天未用过的 (查 recentTopics.recentThemeTitles 推断已用类别):
     动物 / 水果 / 食物 / 交通工具 / 日常物品 / 身体部位 / 家人 / 颜色 /
     自然(天气/植物) / 衣物 / 职业 / 地点(家/学校/公园) / 节日 / 情绪 / 数字 / 形状
@@ -98,14 +99,15 @@ JSON 对象,包含:
 - **数量硬下限**（系统会拒绝重试）:
   - vocab: 至少 4 个, 建议 5 个
   - math: 至少 4 个, 建议 5 个
+  - chinese: 至少 2 个, 建议 3 个
   - writing: 至少 2 个, 建议 3 个
   - generalKnowledge: 至少 2 个, 建议 3 个
-  - 合计 12-16 个项目。低于下限视为不符合 schema, 调度会重试
+  - 合计 14-19 个项目。低于下限视为不符合 schema, 调度会重试
 
 结构必须严格遵守:
 
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "planDate": "YYYY-MM-DD",
   "themeTitle": "...",
   "themeDescription": "...",
@@ -115,8 +117,11 @@ JSON 对象,包含:
   "math": [
     {"topicKey": "math.<dim>.<topic>", "dimension": "<skill_key>", "description": "...", "targetSkillLevel": N, "imagePrompt": "..."}
   ],
+  "chinese": [
+    {"topicKey": "chinese.pinyin.shan", "dimension": "pinyin", "character": "shān", "description": "拼读 sh—ān→shān", "targetSkillLevel": 2, "imagePrompt": ""}
+  ],
   "writing": [
-    {"topicKey": "writing.<char>", "characterOrWord": "...", "description": "...", "imagePrompt": "..."}
+    {"topicKey": "writing.<char>", "characterOrWord": "...", "subject": "chinese", "description": "...", "imagePrompt": "..."}
   ],
   "generalKnowledge": [
     {"topicKey": "general_<dim>.<topic>", "dimension": "<skill_key>", "description": "...", "imagePrompt": "..."}
@@ -133,7 +138,20 @@ JSON 对象,包含:
 - imagePrompt 不要出现 "photo, real, realistic, 真人, 写实" 等可能让 API 误生成的词
 - topicKey 必须全局唯一,推荐格式: "vocab.<word>" / "math.<dim>.<topic>" / "writing.<char>" / "general_<dim>.<topic>"
 - 严禁 math 项的 dimension 留空字符串; 严禁 targetSkillLevel 填 0 (系统会拒绝重试)
-- 严禁 4 个模块任一少于下限 (vocab<4 / math<4 / writing<2 / generalKnowledge<2)
+- 严禁 chinese 项的 dimension 留空或填白名单外的值; 严禁 targetSkillLevel 填 0 (系统会拒绝重试)
+- 严禁 writing 项的 subject 留空或填 english/chinese/math 之外的值 (系统会拒绝重试)
+- 严禁 5 个模块任一少于下限 (vocab<4 / math<4 / chinese<2 / writing<2 / generalKnowledge<2)
+
+# 语文模块要求 (chinese[])
+
+- dimension 必填, 只能是以下之一: pinyin / chinese_vocab / chinese_reading
+  - pinyin: 拼音认读 (character 填带调音节, 如 "shān"), 可配合 pinyin_quiz / pinyin_card 出题
+  - chinese_vocab: 识字组词 (character 填单字或词, 如 "山" / "高山"), 可配合 hanzi_card / chinese_quiz 出题
+  - chinese_reading: 阅读表达 (character 填短句), 可配合 picture_talk / chinese_quiz sentence_order 出题
+- targetSkillLevel 必填 1-5, 参考 childProfile 中对应 skill (pinyin / chinese_vocab / chinese_reading) 的 level
+- imagePrompt 一律留空 (语文卡片自带笔画数据 / 运行时生图, 无需预生成图)
+- topicKey 推荐格式: "chinese.<dimension>.<topic>", 全局唯一
+- 中文内容必须地道、6-7 岁孩子能懂; 拼音音节必须带声调符号
 
 # math 题目难度 rubric (必须按 child skill level 查表出题)
 
@@ -164,7 +182,7 @@ JSON 对象,包含:
 - 不需要 imagePrompt (用户首次进入,允许空白图像)
 
 如果 LLM 实在无法生成 plan, 返回最小合法 JSON (**4 个数组也不能空**, 至少各填 1 个占位项):
-{"schemaVersion": 1, "planDate": "<planDate>", "themeTitle": "和老师一起玩游戏", "themeDescription": "今天一起聊聊", "vocab": [{"topicKey": "vocab.friend", "word": "friend", "translation": "朋友", "imagePrompt": ""}], "math": [{"topicKey": "math.count.basic", "dimension": "math_counting", "description": "数 1 到 5", "targetSkillLevel": 1, "imagePrompt": ""}], "writing": [{"topicKey": "writing.一", "characterOrWord": "一", "description": "横画入门", "imagePrompt": ""}], "generalKnowledge": [{"topicKey": "general_intro.first", "dimension": "social_skills", "description": "向老师问好", "imagePrompt": ""}], "teacherNotes": "自由发挥,先和孩子聊聊他/她喜欢什么"}`
+{"schemaVersion": 2, "planDate": "<planDate>", "themeTitle": "和老师一起玩游戏", "themeDescription": "今天一起聊聊", "vocab": [{"topicKey": "vocab.friend", "word": "friend", "translation": "朋友", "imagePrompt": ""}], "math": [{"topicKey": "math.count.basic", "dimension": "math_counting", "description": "数 1 到 5", "targetSkillLevel": 1, "imagePrompt": ""}], "chinese": [{"topicKey": "chinese.chinese_vocab.shan", "dimension": "chinese_vocab", "character": "山", "description": "认读汉字山，并组词", "targetSkillLevel": 1, "imagePrompt": ""}, {"topicKey": "chinese.pinyin.shan", "dimension": "pinyin", "character": "shān", "description": "拼读第一声", "targetSkillLevel": 1, "imagePrompt": ""}], "writing": [{"topicKey": "writing.一", "characterOrWord": "一", "subject": "chinese", "description": "横画入门", "imagePrompt": ""}], "generalKnowledge": [{"topicKey": "general_intro.first", "dimension": "social_skills", "description": "向老师问好", "imagePrompt": ""}], "teacherNotes": "自由发挥,先和孩子聊聊他/她喜欢什么"}`
 
 /**
  * 渲染"今日教学目标"section 注入小星老师 system prompt。
