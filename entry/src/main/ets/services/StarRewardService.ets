@@ -108,10 +108,9 @@ export class StarRewardService {
       if (completed !== true) {
         return 0
       }
-      // 走迷宫: 完成 1 颗基础星 + 每个胡萝卜 1 颗奖励星
-      // 例: 收集 2 根胡萝卜并完成迷宫 → 1 + 2 = 3 颗星
-      const starsCollected = (payload['stars_collected'] as number) ?? 0
-      return 1 + Math.max(0, starsCollected)
+      // 走迷宫 v3: 按表现评级 1-3 星(星级由 MazeCard 胜利时按 par 步数+胡萝卜计算)
+      const rating = (payload['stars'] as number) ?? 1
+      return Math.min(3, Math.max(1, rating))
     }
     if (activityType === 'sudoku') {
       const completed = payload['completed']

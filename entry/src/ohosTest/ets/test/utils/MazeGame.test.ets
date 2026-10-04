@@ -17,6 +17,13 @@ import {
   solveMaze,
   getNeighborPosition,
   findDeadEnds
+  MazeDifficulty,
+  MazeDimensions,
+  MazeExtras,
+  getGridDimensions,
+  computePar,
+  evaluateStars,
+  getPortalTarget
 } from '../../../../main/ets/utils/MazeGame'
 
 // 固定 2×2 迷宫: (0,0)→(0,1)→(1,1) 唯一路径, (1,0) 四面墙不可达
@@ -238,5 +245,102 @@ export default function MazeGameTest() {
       expect(hasIsolated).assertTrue()
       expect(hasStart).assertTrue()
     })
+
+    // ===== v3: 更大迷宫 / 道具 / 传送门 / 星级评定 =====
+
+    it('getGridDimensions_maps_difficulty_to_grid_sizes', 0, () => {
+      const d1: MazeDimensions = getGridDimensions(1 as MazeDifficulty)
+      const d2: MazeDimensions = getGridDimensions(2 as MazeDifficulty)
+      const d3: MazeDimensions = getGridDimensions(3 as MazeDifficulty)
+      expect(d1.rows).assertEqual(9)
+      expect(d1.cols).assertEqual(9)
+      expect(d2.rows).assertEqual(11)
+      expect(d2.cols).assertEqual(11)
+      expect(d3.rows).assertEqual(13)
+      expect(d3.cols).assertEqual(13)
+    })
+
+    it('generateMaze_13x13_has_valid_solution', 0, () => {
+      const maze: MazeData = generateMaze(13, 13, 5)
+      expect(maze.rows).assertEqual(13)
+      expect(maze.cols).assertEqual(13)
+      const goal: MazePosition = { row: 12, col: 12 }
+      const path: MazePosition[] | null = solveMaze(maze.cells, { row: 0, col: 0 }, goal)
+      expect(path !== null).assertTrue()
+      expect(path !== null ? path.length : 0).assertLarger(13)
+    })
+
+    it('generateMaze_extras_places_exact_powerup_treasure_portal_counts', 0, () => {
+      const extras: MazeExtras = { powerupCount: 2, treasureCount: 1, portalPair: true }
+      const maze: MazeData = generateMaze(11, 11, 4, 20260930, extras)
+      let powerups: number = 0
+      let treasures: number = 0
+      let portals: number = 0
+      for (let r = 0; r < maze.rows; r++) {
+        for (let c = 0; c < maze.cols; c++) {
+          const cell: MazeCell = maze.cells[r][c]
+          if (cell.powerup !== undefined && cell.powerup !== '') {
+            powerups += 1
+            if (cell.powerup === 'treasure') {
+              treasures += 1
+            }
+          }
+          if (cell.portalTo !== undefined && cell.portalTo !== null) {
+            portals += 1
+          }
+        }
+      }
+      expect(powerups).assertEqual(3)
+      expect(treasures).assertEqual(1)
+      expect(portals).assertEqual(2)
+    })
+
+    it('generateMaze_portal_pair_points_to_each_other', 0, () => {
+      const extras: MazeExtras = { powerupCount: 2, treasureCount: 1, portalPair: true }
+      const maze: MazeData = generateMaze(11, 11, 4, 7, extras)
+      let firstPortal: MazePosition | null = null
+      let mutual: boolean = false
+      for (let r = 0; r < maze.rows; r++) {
+        for (let c = 0; c < maze.cols; c++) {
+          const cell: MazeCell = maze.cells[r][c]
+          if (cell.portalTo !== undefined && cell.portalTo !== null) {
+            if (firstPortal === null) {
+              firstPortal = { row: r, col: c }
+            } else {
+              const back: MazeCell = maze.cells[cell.portalTo.row][cell.portalTo.col]
+              mutual = back.portalTo !== undefined && back.portalTo !== null &&
+                back.portalTo.row === r && back.portalTo.col === c
+            }
+          }
+        }
+      }
+      expect(firstPortal !== null).assertTrue()
+      expect(mutual).assertTrue()
+    })
+
+    it('computePar_adds_shortest_path_and_carrot_bonus', 0, () => {
+      const maze: MazeData = buildFixedMaze()
+      maze.starsTotal = 3
+      // 固定 2×2: 最短路径 2 步 + 3 胡萝卜 ×2 = 8
+      expect(computePar(maze)).assertEqual(8)
+    })
+
+    it('evaluateStars_three_tiers_boundaries', 0, () => {
+      // 3 星: 收满且超额 ≤ 2
+      expect(evaluateStars(8, 8, 3, 3)).assertEqual(3)
+      expect(evaluateStars(10, 8, 3, 3)).assertEqual(3)
+      expect(evaluateStars(11, 8, 3, 3)).assertEqual(2)
+      // 2 星: 收满但超额 > 2, 或未收满但超额 ≤ 6
+      expect(evaluateStars(20, 8, 3, 3)).assertEqual(2)
+      expect(evaluateStars(14, 8, 2, 3)).assertEqual(2)
+      // 1 星: 未收满且超额 > 6
+      expect(evaluateStars(15, 8, 2, 3)).assertEqual(1)
+    })
+
+    it('getPortalTarget_returns_null_for_plain_cell', 0, () => {
+      const maze: MazeData = buildFixedMaze()
+      expect(getPortalTarget(maze.cells[0][0])).assertNull()
+    })
+
   })
 }

@@ -2162,23 +2162,53 @@ export struct MessageBubble {
                   }
                 }, (toolCall: ToolCall, index: number) => 'handwriting_' + toolCall.id + '_' + index.toString())
               }
-              // maze 待答时显示独立互动卡片;提交后收缩到 timeline step 内。
+              // maze 待答时显示紧凑横幅, 点击打开全屏 sheet (棋盘在气泡内太小, 参考 handwriting 模式)
               if (this.message.hasToolCalls()) {
                 ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
                   if (this.shouldRenderMazeInteractionCard(toolCall, index)) {
-                    MazeCard({
-                      toolCall: toolCall,
-                      isAnswered: false,
-                      answeredPayload: '',
-                      largeSize: false,
-                      onAnswer: (toolCallId: string, answerJson: string): void => {
-                        this.onAskUserAnswer(toolCallId, answerJson)
+                    Row() {
+                      Column() {
+                        SymbolGlyph($r('sys.symbol.map'))
+                          .fontSize(15)
+                          .fontColor([this.themePrimary])
                       }
+                      .width(32)
+                      .height(32)
+                      .borderRadius(16)
+                      .backgroundColor(withColorAlpha(this.themePrimary, '18'))
+                      .alignItems(HorizontalAlign.Center)
+                      .justifyContent(FlexAlign.Center)
+
+                      Column({ space: 2 }) {
+                        Text(`走迷宫 · ${this.getMazeDifficultyText(toolCall)}`)
+                          .fontSize(13)
+                          .fontWeight(FontWeight.Medium)
+                          .fontColor($r('app.color.text_primary'))
+                        Text('点击开始走迷宫')
+                          .fontSize(11)
+                          .fontColor($r('app.color.text_tertiary'))
+                      }
+                      .alignItems(HorizontalAlign.Start)
+                      .margin({ left: 8 })
+                      .layoutWeight(1)
+
+                      Text('>')
+                        .fontSize(14)
+                        .fontColor($r('app.color.text_tertiary'))
+                    }
+                    .width('100%')
+                    .padding(12)
+                    .backgroundColor(this.themeAiBubble)
+                    .borderRadius(12)
+                    .border({ width: 1, color: $r('app.color.divider') })
+                    .margin({ bottom: 6 })
+                    .onClick(() => {
+                      this.onOpenMazeSheet(toolCall)
                     })
-                      .margin({ bottom: 6 })
                   }
                 }, (toolCall: ToolCall, index: number) => 'maze_' + toolCall.id + '_' + index.toString())
               }
+
               // sudoku 待答时显示独立互动卡片;提交后收缩到 timeline step 内。
               if (this.message.hasToolCalls()) {
                 ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
@@ -2978,6 +3008,23 @@ export struct MessageBubble {
       return '字'
     }
   }
+
+  private getMazeDifficultyText(toolCall: ToolCall): string {
+    try {
+      const args = JSON.parse(toolCall.arguments) as Record<string, Object>
+      const d = (args['difficulty'] as number) ?? 1
+      if (d >= 3) {
+        return '挑战 · 13×13'
+      }
+      if (d >= 2) {
+        return '进阶 · 11×11'
+      }
+      return '简单 · 9×9'
+    } catch (_e) {
+      return '简单 · 9×9'
+    }
+  }
+
 
   private shouldRenderCategorizationInteractionCard(toolCall: ToolCall, index: number): boolean {
     if (!isCategorizationFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {

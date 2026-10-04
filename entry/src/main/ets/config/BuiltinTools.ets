@@ -1924,7 +1924,7 @@ class MazeExecutor implements ToolExecutor {
       // 简单预校验:返回提示让 AI 引导用户使用前端卡片
       return JSON.stringify({
         difficulty: difficulty,
-        grid_size: difficulty === 1 ? '4×4' : (difficulty === 2 ? '6×6' : '8×8'),
+        grid_size: difficulty === 1 ? '9×9' : (difficulty === 2 ? '11×11' : '13×13'),
         answered: false,
         hint: '迷宫已生成,请小朋友在卡片里点击相邻格子走出。'
       })
@@ -1940,7 +1940,7 @@ function createMazeToolDefinition(): ToolDefinition {
     "properties": {
       "difficulty": {
         "type": "integer",
-        "description": "难度级别:1 = 简单 4×4(适合 5 岁,16 格,1-2 死胡同),2 = 进阶 6×6(适合 6-7 岁,36 格,3-4 死胡同),3 = 挑战 8×8(适合 7-8 岁,64 格,5-6 死胡同)。建议初次使用从 1 开始,根据 child_profile 中 spatial_reasoning 的 level 选择。",
+        "description": "难度级别:1 = 简单 9×9(适合 5 岁,81 格,3 根胡萝卜),2 = 进阶 11×11(适合 6-7 岁,121 格,4 根胡萝卜),3 = 挑战 13×13(适合 7-8 岁,169 格,5 根胡萝卜,含一对传送门)。每局均含 2 个道具与 1 个宝箱。建议初次使用从 1 开始,根据 child_profile 中 spatial_reasoning 的 level 选择。",
         "enum": [1, 2, 3]
       }
     },
@@ -1952,7 +1952,7 @@ function createMazeToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     MAZE_TOOL_ID,
-    'Present a maze (走迷宫) to the child as an interactive game. A grid maze is generated with paths and walls; the child taps adjacent cells to move a golden star from the start (top-left) to a purple-roofed house (bottom-right). Difficulty directly maps to grid size: 1=4×4 (easy, 16 cells), 2=6×6 (intermediate, 36 cells), 3=8×8 (challenging, 64 cells). Hidden stars in dead-ends can be collected for fun (not required for completion). Prefer difficulty 1-3 based on the child\'s spatial_reasoning level from child_profile. After completion or giving up, you receive result (moves, time, stars collected, completed). Then call child_profile update to record spatial_reasoning based on performance.',
+    'Present a maze (走迷宫) to the child as an interactive game. A grid maze is generated with paths and walls; the child taps adjacent cells or swipes to move a rabbit from the start (top-left) to a house (bottom-right). Difficulty maps to grid size: 1=9×9 (easy, 81 cells), 2=11×11 (intermediate, 121 cells), 3=13×13 (challenging, 169 cells). Each maze contains 2 power-ups (❄ freeze timer / 🧭 show correct path) and 1 treasure chest opening a random power-up, plus hidden stars in dead-ends; difficulty 3 also has a pair of portals that teleport the player. Prefer difficulty 1-3 based on the child\'s spatial_reasoning level from child_profile. After completion or giving up, you receive result (moves, time, stars collected, rating 1-3, completed). Then call child_profile update to record spatial_reasoning based on performance.',
     parameters
   )
 

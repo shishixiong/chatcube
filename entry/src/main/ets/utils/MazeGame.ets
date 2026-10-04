@@ -20,11 +20,27 @@ export interface MazeCellWalls {
   left: boolean
 }
 
+export type MazePowerup = '' | 'freeze' | 'compass' | 'treasure'
+
 export interface MazeCell {
   walls: MazeCellWalls
   hasStar: boolean
   isStart: boolean
   isGoal: boolean
+  // 走迷宫 v3: 道具/宝箱(空字符串 = 无); 传送门目标格(null = 非传送门)
+  // 可选字段保证旧字面量与历史会话反序列化兼容
+  powerup?: MazePowerup
+  portalTo?: MazePosition | null
+}
+
+// 道具/宝箱/传送门摆放配置(全部可选,默认关闭)
+export interface MazeExtras {
+  // 'freeze'/'compass' 道具数量(默认 0)
+  powerupCount?: number
+  // 宝箱数量(默认 0; 开出随机道具)
+  treasureCount?: number
+  // 是否放一对传送门(挑战档)
+  portalPair?: boolean
 }
 
 export interface MazePosition {
@@ -159,17 +175,31 @@ function countWalls(walls: MazeCellWalls): number {
  * @param starCount 收藏星数量(0-3,会在死胡同里随机放置)
  * @param seed 可选种子(同种子产生同迷宫,便于测试)
  */
+/**
+ * 递归回溯 DFS 生成完美迷宫
+ * - 每格初始化 4 面墙
+ * - 从 (0,0) 起随机挑未访问邻居打通墙、压栈,直到栈空
+ * - 结果:无环、任意两格唯一路径
+ * - 随后在死胡同放胡萝卜星,再按 extras 摆放道具/宝箱/传送门
+ *
+ * @param rows 行数(2-13)
+ * @param cols 列数(2-13)
+ * @param starCount 收藏星数量(0-5,会在死胡同里随机放置)
+ * @param seed 可选种子(同种子产生同迷宫,便于测试)
+ * @param extras 道具/宝箱/传送门摆放配置(可选,默认全关)
+ */
 export function generateMaze(
   rows: number,
   cols: number,
   starCount: number = 2,
-  seed: number = Math.floor(Math.random() * 4294967296) || 1
+  seed: number = Math.floor(Math.random() * 4294967296) || 1,
+  extras: MazeExtras = {}
 ): MazeData {
   if (rows < 2 || cols < 2) {
     throw new Error(`Maze size must be at least 2x2, got ${rows}x${cols}`)
   }
-  if (rows > 10 || cols > 10) {
-    throw new Error(`Maze size must be at most 10x10, got ${rows}x${cols}`)
+  if (rows > 13 || cols > 13) {
+    throw new Error(`Maze size must be at most 13x13, got ${rows}x${cols}`)
   }
   if (starCount < 0) {
     starCount = 0
@@ -261,6 +291,55 @@ export function generateMaze(
       const p: MazePosition = eligible[i]
       cells[p.row][p.col].hasStar = true
       actualStarCount += 1
+    }
+  }
+
+  // ===== 走迷宫 v3: 摆放道具/宝箱/传送门(extras 控制; 避开起点/终点/胡萝卜格) =====
+  const occupied: Set<string> = new Set<string>()
+  occupied.add('0,0')
+  occupied.add((rows - 1).toString() + ',' + (cols - 1).toString())
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (cells[r][c].hasStar) {
+        occupied.add(r.toString() + ',' + c.toString())
+      }
+    }
+  }
+  const freeCells: MazePosition[] = []
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (!occupied.has(r.toString() + ',' + c.toString())) {
+        freeCells.push({ row: r, col: c })
+      }
+    }
+  }
+  // 空位洗牌(沿用同一 rng, 保持种子可复现)
+  for (let i = freeCells.length - 1; i > 0; i--) {
+    const j: number = Math.floor(rng() * (i + 1))
+    const tmpPos: MazePosition = freeCells[i]
+    freeCells[i] = freeCells[j]
+    freeCells[j] = tmpPos
+  }
+
+  let freeIndex: number = 0
+  const treasureCount: number = extras.treasureCount ?? 0
+  for (let i = 0; i < treasureCount && freeIndex < freeCells.length; i++) {
+    const p: MazePosition = freeCells[freeIndex]
+    freeIndex += 1
+    cells[p.row][p.col].powerup = 'treasure'
+  }
+  const powerupCount: number = extras.powerupCount ?? 0
+  const powerupKinds: MazePowerup[] = ['freeze', 'compass']
+  for (let i = 0; i < powerupCount && freeIndex < freeCells.length; i++) {
+    const p: MazePosition = freeCells[freeIndex]
+    freeIndex += 1
+    cells[p.row][p.col].powerup = powerupKinds[i % 2]
+  }
+  if (extras.portalPair === true) {
+    const pair: MazePosition[] | null = pickPortalPair(cells, rows, cols, freeCells, freeIndex)
+    if (pair !== null) {
+      cells[pair[0].row][pair[0].col].portalTo = { row: pair[1].row, col: pair[1].col }
+      cells[pair[1].row][pair[1].col].portalTo = { row: pair[0].row, col: pair[0].col }
     }
   }
 
@@ -462,12 +541,12 @@ export function getDifficultyLabel(difficulty: MazeDifficulty): string {
  */
 export function getGridSizeLabel(difficulty: MazeDifficulty): string {
   if (difficulty === 1) {
-    return '4×4'
+    return '9×9'
   }
   if (difficulty === 2) {
-    return '6×6'
+    return '11×11'
   }
-  return '8×8'
+  return '13×13'
 }
 
 /**
@@ -475,12 +554,12 @@ export function getGridSizeLabel(difficulty: MazeDifficulty): string {
  */
 export function getGridDimensions(difficulty: MazeDifficulty): MazeDimensions {
   if (difficulty === 1) {
-    return { rows: 4, cols: 4 }
+    return { rows: 9, cols: 9 }
   }
   if (difficulty === 2) {
-    return { rows: 6, cols: 6 }
+    return { rows: 11, cols: 11 }
   }
-  return { rows: 8, cols: 8 }
+  return { rows: 13, cols: 13 }
 }
 
 /**
@@ -513,4 +592,136 @@ export function isMazeLayoutEqual(a: MazeData, b: MazeData): boolean {
     }
   }
   return true
+}
+
+/**
+ * BFS 距离场: 从 from 沿通路(无墙)到各格的最短步数
+ * - 返回 rows*cols 数组, 不可达/越界格为 -1
+ * - 仅供传送门配对使用
+ */
+function computeDistanceField(cells: MazeCell[][], from: MazePosition): number[] {
+  const total: number = cells.length * (cells.length > 0 ? cells[0].length : 0)
+  const dist: number[] = new Array<number>(total).fill(-1)
+  const rows: number = cells.length
+  const cols: number = rows > 0 ? cells[0].length : 0
+  if (rows === 0 || cols === 0) {
+    return dist
+  }
+  if (from.row < 0 || from.col < 0 || from.row >= rows || from.col >= cols) {
+    return dist
+  }
+  const fromIndex: number = from.row * cols + from.col
+  dist[fromIndex] = 0
+  const queue: number[] = [fromIndex]
+  let head: number = 0
+  while (head < queue.length) {
+    const current: number = queue[head]
+    head += 1
+    const r: number = Math.floor(current / cols)
+    const c: number = current % cols
+    const cell: MazeCell = cells[r][c]
+    if (!cell.walls.top && r > 0 && dist[current - cols] === -1) {
+      dist[current - cols] = dist[current] + 1
+      queue.push(current - cols)
+    }
+    if (!cell.walls.right && c < cols - 1 && dist[current + 1] === -1) {
+      dist[current + 1] = dist[current] + 1
+      queue.push(current + 1)
+    }
+    if (!cell.walls.bottom && r < rows - 1 && dist[current + cols] === -1) {
+      dist[current + cols] = dist[current] + 1
+      queue.push(current + cols)
+    }
+    if (!cell.walls.left && c > 0 && dist[current - 1] === -1) {
+      dist[current - 1] = dist[current] + 1
+      queue.push(current - 1)
+    }
+  }
+  return dist
+}
+
+/**
+ * 挑一对互相远离的传送门格
+ * - 候选 = candidates 中 startIndex 起的空位(已洗牌)
+ * - 第一端优先取距起点 ≥ floor(min(rows,cols)×1.1) 的格
+ * - 第二端取与第一端 BFS 距离最远的格(至少 ≥ 2, 否则放弃)
+ */
+function pickPortalPair(
+  cells: MazeCell[][],
+  rows: number,
+  cols: number,
+  candidates: MazePosition[],
+  startIndex: number
+): MazePosition[] | null {
+  if (startIndex >= candidates.length) {
+    return null
+  }
+  const pool: MazePosition[] = candidates.slice(startIndex)
+  if (pool.length < 2) {
+    return null
+  }
+  const minDist: number = Math.floor(Math.min(rows, cols) * 1.1)
+  const distFromStart: number[] = computeDistanceField(cells, { row: 0, col: 0 })
+  let first: MazePosition = pool[0]
+  for (let i = 0; i < pool.length; i++) {
+    const d: number = distFromStart[pool[i].row * cols + pool[i].col]
+    if (d >= minDist) {
+      first = pool[i]
+      break
+    }
+  }
+  const distFromFirst: number[] = computeDistanceField(cells, first)
+  let second: MazePosition | null = null
+  let bestDist: number = -1
+  for (let i = 0; i < pool.length; i++) {
+    const p: MazePosition = pool[i]
+    if (p.row === first.row && p.col === first.col) {
+      continue
+    }
+    const d: number = distFromFirst[p.row * cols + p.col]
+    if (d > bestDist) {
+      bestDist = d
+      second = p
+    }
+  }
+  if (second === null || bestDist < 2) {
+    return null
+  }
+  const pair: MazePosition[] = [first, second]
+  return pair
+}
+
+/**
+ * 星级评定的基准步数 = 起点→终点最短路步数 + 胡萝卜数×2
+ */
+export function computePar(maze: MazeData): number {
+  const goal: MazePosition = { row: maze.rows - 1, col: maze.cols - 1 }
+  const path: MazePosition[] | null = solveMaze(maze.cells, { row: 0, col: 0 }, goal)
+  const shortest: number = path === null ? 1 : Math.max(1, path.length - 1)
+  return shortest + maze.starsTotal * 2
+}
+
+/**
+ * 按表现评定 1-3 星(与 docs/zoumigong.html 原型一致)
+ * - 3 星: 收齐全部胡萝卜 且 超出基准不多于 2 步
+ * - 2 星: 收齐胡萝卜 或 超出基准不多于 6 步
+ * - 1 星: 其余完成情况
+ */
+export function evaluateStars(moves: number, par: number, starsCollected: number, starsTotal: number): number {
+  const full: boolean = starsCollected >= starsTotal
+  const extra: number = moves - par
+  if (full && extra <= 2) {
+    return 3
+  }
+  if (full || extra <= 6) {
+    return 2
+  }
+  return 1
+}
+
+/**
+ * 读某格传送门目标格(非传送门格返回 null)
+ */
+export function getPortalTarget(cell: MazeCell): MazePosition | null {
+  return cell.portalTo ?? null
 }

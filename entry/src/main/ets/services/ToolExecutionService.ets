@@ -58,7 +58,8 @@ import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
 import { getImageIndexService, ImageIndexService } from './ImageIndexService'
 import { ImageSource } from '../models/ImageIndexModels'
-import { generateMaze } from '../utils/MazeGame'
+import { generateMaze, getGridDimensions, getGridSizeLabel } from '../utils/MazeGame'
+import type { MazeDimensions, MazeExtras, MazeDifficulty } from '../utils/MazeGame'
 import { generateSudoku, getDifficultyConfig } from '../utils/SudokuGenerator'
 import { validateAndNormalizeCategorization } from '../utils/CategorizationValidation'
 import { validateMathQuizArgs } from '../utils/MathQuizValidation'
@@ -1895,11 +1896,15 @@ export class ToolExecutionService {
       console.info('ToolExecutionService',
         `maze generation start: difficulty=${clampedDifficulty}`)
 
-      const maze = generateMaze(
-        clampedDifficulty === 1 ? 4 : (clampedDifficulty === 2 ? 6 : 8),
-        clampedDifficulty === 1 ? 4 : (clampedDifficulty === 2 ? 6 : 8),
-        2
-      )
+      // 走迷宫 v3: 尺寸按难度 9/11/13; 道具 2 + 宝箱 1; 挑战档加一对传送门; 胡萝卜 3/4/5
+      const dims: MazeDimensions = getGridDimensions(clampedDifficulty as MazeDifficulty)
+      const extras: MazeExtras = {
+        powerupCount: 2,
+        treasureCount: 1,
+        portalPair: clampedDifficulty === 3
+      }
+      const carrotCount: number = clampedDifficulty === 1 ? 3 : (clampedDifficulty === 2 ? 4 : 5)
+      const maze = generateMaze(dims.rows, dims.cols, carrotCount, undefined, extras)
 
       // 序列化 cells(供 MazeCard 在 aboutToAppear 还原)
       parsed['cells'] = maze.cells as Object
@@ -1907,7 +1912,7 @@ export class ToolExecutionService {
       parsed['cols'] = maze.cols as Object
       parsed['stars_total'] = maze.starsTotal as Object
       parsed['difficulty'] = clampedDifficulty as Object
-      parsed['grid_size'] = (clampedDifficulty === 1 ? '4×4' : (clampedDifficulty === 2 ? '6×6' : '8×8')) as Object
+      parsed['grid_size'] = getGridSizeLabel(clampedDifficulty as MazeDifficulty) as Object
       toolCall.arguments = JSON.stringify(parsed)
 
       console.info('ToolExecutionService',

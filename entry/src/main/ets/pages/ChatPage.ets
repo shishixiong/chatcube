@@ -2914,6 +2914,7 @@ export struct ChatPage {
                   move_count: 0,
                   stars_collected: 0,
                   stars_total: 0,
+                  stars: 0,
                   completed: false
                 }
                 try {
@@ -3423,6 +3424,10 @@ export struct ChatPage {
       onAnswer: (toolCallId: string, answerJson: string): void => {
         this.mazeAnswered = true
         this.handleAskUserAnswer(toolCallId, answerJson)
+        // 不自动关闭: 胜利弹窗/路线复盘仍需停留, 由 WinOverlay 的「完成」
+        // 经 onRequestClose 或拖拽/关闭按钮收起
+      },
+      onRequestClose: (): void => {
         this.showMazeSheet = false
       }
     })

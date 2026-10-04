@@ -1,14 +1,21 @@
 /**
- * MazeCard - 走迷宫互动卡片 (Paper Map v2)
+ * MazeCard - 走迷宫互动卡片 (v3 · Paper Map)
  *
  * 设计语言: 儿童绘本纸面地图
  * - 纸面背景 (#F5EFE3 暖米黄), 深墨蓝墙线 (#1F3A52)
  * - 兔子玩家 (🐰 玩家位置), 小屋锚点 (🏠 终点)
  * - 死胡同藏胡萝卜 (🥕 收集时放大上浮淡出)
+ * - 道具: ⚡时间冻结(计时暂停 6 秒) / 🧭指路(绿色高亮正确路线 4 秒) / 🎁宝箱(开出随机道具)
+ * - 传送门 (🌀 挑战档): 一对互相远离的格子, 踩上即传送到另一端
  * - 移动: 点按相邻格 或 在棋盘上滑动(与数字华容道手势一致)
  * - 足迹: 走过的格子留墨蓝小圆点, 帮孩子认路
  * - 放弃后: 绿色高亮从当前位置到终点的正确路线 (solveMaze BFS)
  * - 撞墙抖动 + 玩家移动弹簧动画
+ *
+ * 双形态 (v3, 参考 docs/zoumigong.html):
+ * - largeSize=false: 紧凑结果摘要卡 (isAnswered=true 时, 供时间线步骤详情复用)
+ * - largeSize=true: 全屏 sheet 游戏 (由 ChatPage MazeSheetBuilder 承载, 气泡侧
+ *   MessageBubble 渲染 handwriting 式横幅, 点击后经 onOpenMazeSheet 打开)
  *
  * 公共 API 保持家族一致: toolCall / isAnswered / answeredPayload / largeSize / onAnswer
  */
@@ -22,6 +29,8 @@ import {
   MazeCell,
   MazePosition,
   MazeDifficulty,
+  MazeDimensions,
+  MazeExtras,
   Direction,
   generateMaze,
   movePlayer as mazeMovePlayer,
@@ -31,7 +40,10 @@ import {
   collectStar as mazeCollectStar,
   getDifficultyLabel,
   getGridSizeLabel,
-  getGridDimensions
+  getGridDimensions,
+  computePar,
+  evaluateStars,
+  getPortalTarget
 } from '../utils/MazeGame'
 import { CardShell } from './cardshell/CardShell'
 import { CardShellConfig, CardShellCopy } from './cardshell/CardShellTypes'
@@ -48,6 +60,8 @@ export interface MazeResult {
   stars_collected: number
   stars_total: number
   completed: boolean
+  // 走迷宫 v3: 表现评级 1-3 星 (放弃时 0; 历史会话 payload 无此字段)
+  stars: number
 }
 
 @ComponentV2
@@ -65,7 +79,11 @@ export struct MazeCard {
 
   // 计时与步数
   @Local moveCount: number = 0
-  @Local startTime: number = 0
+  // 计时器私有状态 (v3: 累加式, 支持暂停/冻结; 非响应式)
+  private timerAccumMs: number = 0
+  private lastTickAt: number = 0
+  private effectToastTimerId: number = -1
+  private winOverlayTimerId: number = -1
   @Local elapsedSeconds: number = 0
   @Local starsCollected: number = 0
 
@@ -77,6 +95,9 @@ export struct MazeCard {
   @Local bestTimeSeconds: number = -1
   @Local bestMoves: number = -1
   @Local bestStars: number = -1
+  @Local bestRating: number = -1          // 最佳评级 1-3 星 (-1 = 无)
+  // 已答完的历史结果 (AnsweredSummaryCard 数据源; null = 无有效 payload)
+  @Local restoredResult: MazeResult | null = null
   @Local isNewBest: boolean = false
   @Local bestScoresLoaded: boolean = false
 
@@ -95,6 +116,20 @@ export struct MazeCard {
   // 足迹与提示路线 (key 格式 "r,c"; Set 需整体重赋值才能触发 @Local 响应)
   @Local visitedKeys: Set<string> = new Set<string>()
   @Local hintKeys: Set<string> = new Set<string>()
+
+  // ===== 走迷宫 v3: 道具/暂停/胜利弹窗 =====
+  @Local frozenUntilMs: number = 0            // ⚡ 时间冻结截止时间戳 (0 = 未冻结)
+  @Local isPaused: boolean = false            // 暂停中 (计时与移动都停)
+  @Local activeEffectText: string = ''        // 效果横幅文案 ('' = 隐藏)
+  // 已使用的道具/宝箱格 (Set 需整体重赋值才能触发 @Local 响应)
+  @Local usedPowerupKeys: Set<string> = new Set<string>()
+  @Local par: number = 0                      // 星级评定基准步数 (computePar)
+  @Local winStars: number = 0                 // 胜利评级星 (1-3)
+  @Local showWinOverlay: boolean = false      // 胜利弹窗
+  @Local portalFlash: boolean = false         // 传送门传送闪烁
+  @Local boardAreaWidth: number = 0           // 全屏棋盘实测宽度 (onAreaChange)
+  // 胜利弹窗「完成」→ 请求 ChatPage 关闭 sheet
+  @Event onRequestClose: () => void = () => {}
 
   @Local shellConfig: CardShellConfig = {
     title: '走迷宫',
@@ -135,16 +170,19 @@ export struct MazeCard {
   }
 
   // 单元格尺寸: 根据网格大小动态调整,8×8 自动缩小以适应聊天气泡宽度
+  // 单元格尺寸: sheet 全屏下按实测宽度自适应 (9/11/13 列)
   private get cellSize(): number {
-    const rows: number = this.maze?.rows ?? this.difficultyToRows(this.difficulty)
-    if (this.largeSize) {
-      if (rows >= 8) return 52
-      if (rows >= 6) return 60
-      return 70
-    }
-    if (rows >= 8) return 40
-    if (rows >= 6) return 42
-    return 48
+    const cols: number = this.maze !== null
+      ? this.maze.cols
+      : this.difficultyToRows(this.difficulty)
+    // boardAreaWidth 为 MazePanel 容器实测宽; 首帧前用估算兜底
+    const inner: number = this.boardAreaWidth > 0
+      ? this.boardAreaWidth
+      : (this.largeSize ? 320 : 300)
+    const gap: number = this.largeSize ? 2 : 1
+    const gapTotal: number = gap * 2 * (cols + 2)
+    const per: number = Math.floor((inner - gapTotal) / cols)
+    return Math.max(20, Math.min(44, per))
   }
 
   private get cellGap(): number {
@@ -157,49 +195,27 @@ export struct MazeCard {
     return this.largeSize ? 4 : 3
   }
 
+  // 玩家/图标尺寸跟随 cellSize 缩放
   private get playerSize(): number {
-    // 玩家尺寸相对单元格缩放,8×8 自动适配更小的格子
-    const rows: number = this.maze?.rows ?? this.difficultyToRows(this.difficulty)
-    if (this.largeSize) {
-      if (rows >= 8) return 26
-      return 32
-    }
-    if (rows >= 8) return 20
-    if (rows >= 6) return 22
-    return 24
+    return Math.max(14, Math.round(this.cellSize * 0.62))
   }
 
   private get starSize(): number {
-    const rows: number = this.maze?.rows ?? this.difficultyToRows(this.difficulty)
-    if (this.largeSize) {
-      if (rows >= 8) return 18
-      return 22
-    }
-    if (rows >= 8) return 14
-    if (rows >= 6) return 15
-    return 16
+    return Math.max(10, Math.round(this.cellSize * 0.46))
   }
 
   private get goalSize(): number {
-    const rows: number = this.maze?.rows ?? this.difficultyToRows(this.difficulty)
-    if (this.largeSize) {
-      if (rows >= 8) return 26
-      return 32
-    }
-    if (rows >= 8) return 20
-    if (rows >= 6) return 22
-    return 24
+    return Math.max(14, Math.round(this.cellSize * 0.6))
   }
 
-  // 足迹圆点尺寸: 随单元格缩放, 保持"纸上小圆点"的轻盈感
   private get trailDotSize(): number {
     return Math.max(4, Math.round(this.cellSize * 0.14))
   }
 
   private difficultyToRows(d: number): number {
-    if (d >= 3) return 8
-    if (d >= 2) return 6
-    return 4
+    if (d >= 3) return 13
+    if (d >= 2) return 11
+    return 9
   }
 
   // 派生标签
@@ -216,13 +232,13 @@ export struct MazeCard {
       subtitle: this.difficultyLabel,
       icon: $r('sys.symbol.map'),
       stem: '',
+      giveUpLabel: '走不出去了？看正确路线 →',
       hasAudio: false,
       usesConfirm: false,
       feedbackTitleCorrect: '走出迷宫！',
       correctAnswerLabel: '',
       feedbackAboveSlot: true,
-      usesGiveUp: true,
-      giveUpLabel: '走不出去了？换一局 →'
+      usesGiveUp: true
     }
   }
 
@@ -266,11 +282,24 @@ export struct MazeCard {
       if (this.isAnswered && this.answeredPayload !== '') {
         // 还原历史结果
         try {
-          const result = JSON.parse(this.answeredPayload) as MazeResult
-          this.elapsedSeconds = result.time_seconds ?? 0
-          this.moveCount = result.move_count ?? 0
-          this.starsCollected = result.stars_collected ?? 0
-          this.hasWon = result.completed === true
+          const parsed = JSON.parse(this.answeredPayload) as Record<string, Object>
+          const result: MazeResult = {
+            difficulty: (parsed['difficulty'] as number) ?? 1,
+            grid_size: (parsed['grid_size'] as string) ?? '',
+            time_seconds: (parsed['time_seconds'] as number) ?? 0,
+            move_count: (parsed['move_count'] as number) ?? 0,
+            stars_collected: (parsed['stars_collected'] as number) ?? 0,
+            stars_total: (parsed['stars_total'] as number) ?? 0,
+            completed: parsed['completed'] === true,
+            // v3 字段: 历史会话 payload 可能缺失, 缺省 0
+            stars: (parsed['stars'] as number) ?? 0
+          }
+          this.restoredResult = result
+          this.elapsedSeconds = result.time_seconds
+          this.moveCount = result.move_count
+          this.starsCollected = result.stars_collected
+          this.hasWon = result.completed
+          this.winStars = result.stars
           this.isCompleted = true
           // 尝试从 args 还原迷宫布局
           const cellsRaw = args['cells']
@@ -292,8 +321,10 @@ export struct MazeCard {
         if (cellsRaw !== undefined && cellsRaw !== null) {
           this.maze = this.deserializeMaze(args)
         } else {
-          const dims = getGridDimensions(clamped)
-          this.maze = generateMaze(dims.rows, dims.cols, 2)
+          this.maze = this.generateFreshMaze(clamped)
+        }
+        if (this.maze !== null) {
+          this.par = computePar(this.maze)
         }
         this.startTimer()
         // 起点计入足迹
@@ -307,9 +338,24 @@ export struct MazeCard {
     } catch (error) {
       console.error('MazeCard', `Failed to parse toolCall.arguments: ${String(error)}`)
       // 降级: 生成一个最小可玩迷宫
-      this.maze = generateMaze(4, 4, 1)
+      const fallbackMaze: MazeData = this.generateFreshMaze(1)
+      this.maze = fallbackMaze
+      this.par = computePar(fallbackMaze)
     }
   }
+
+  // 新局生成: 9/11/13 档, 道具 2 + 宝箱 1, 挑战档加传送门; 胡萝卜 3/4/5
+  private generateFreshMaze(diff: MazeDifficulty): MazeData {
+    const dims: MazeDimensions = getGridDimensions(diff)
+    const extras: MazeExtras = {
+      powerupCount: 2,
+      treasureCount: 1,
+      portalPair: diff === 3
+    }
+    const carrotCount: number = diff === 1 ? 3 : (diff === 2 ? 4 : 5)
+    return generateMaze(dims.rows, dims.cols, carrotCount, undefined, extras)
+  }
+
 
   private deserializeMaze(args: Record<string, Object>): MazeData | null {
     try {
@@ -341,6 +387,25 @@ export struct MazeCard {
             isStart: (srcCell['isStart'] as boolean) === true,
             isGoal: (srcCell['isGoal'] as boolean) === true
           }
+          // v3: 道具与传送门 (可选字段, 历史数据无)
+          const powerupRaw = srcCell['powerup']
+          if (powerupRaw === 'freeze') {
+            cell.powerup = 'freeze'
+          } else if (powerupRaw === 'compass') {
+            cell.powerup = 'compass'
+          } else if (powerupRaw === 'treasure') {
+            cell.powerup = 'treasure'
+          }
+          const portalRaw = srcCell['portalTo']
+          if (portalRaw !== undefined && portalRaw !== null) {
+            const portalObj = portalRaw as Record<string, Object>
+            const portalPos: MazePosition = {
+              row: (portalObj['row'] as number) ?? 0,
+              col: (portalObj['col'] as number) ?? 0
+            }
+            cell.portalTo = portalPos
+          }
+
           rowCells.push(cell)
         }
         cells.push(rowCells)
@@ -360,16 +425,20 @@ export struct MazeCard {
         PreferenceKeys.MAZE_BEST_MOVES_PREFIX + difficulty.toString(), -1)
       this.bestStars = await prefs.getNumber(
         PreferenceKeys.MAZE_BEST_STARS_PREFIX + difficulty.toString(), -1)
+      this.bestRating = await prefs.getNumber(
+        PreferenceKeys.MAZE_BEST_RATING_PREFIX + difficulty.toString(), -1)
     } catch (_e) {
       this.bestTimeSeconds = -1
       this.bestMoves = -1
       this.bestStars = -1
+      this.bestRating = -1
     } finally {
       this.bestScoresLoaded = true
     }
   }
 
-  private async saveBestScoresIfImproved(timeSec: number, moves: number, stars: number): Promise<void> {
+
+  private async saveBestScoresIfImproved(timeSec: number, moves: number, carrots: number, rating: number): Promise<void> {
     if (!this.bestScoresLoaded) {
       // 异步竞态守卫: 最佳成绩未加载完则放弃本次保存(避免 stale -1 覆盖真实最佳)
       return
@@ -379,6 +448,7 @@ export struct MazeCard {
     const timeKey = PreferenceKeys.MAZE_BEST_TIME_PREFIX + key
     const movesKey = PreferenceKeys.MAZE_BEST_MOVES_PREFIX + key
     const starsKey = PreferenceKeys.MAZE_BEST_STARS_PREFIX + key
+    const ratingKey = PreferenceKeys.MAZE_BEST_RATING_PREFIX + key
 
     let isNew = false
     if (this.bestTimeSeconds < 0 || timeSec < this.bestTimeSeconds) {
@@ -389,25 +459,39 @@ export struct MazeCard {
       await prefs.setNumber(movesKey, moves)
       isNew = true
     }
-    if (this.bestStars < 0 || stars > this.bestStars) {
-      await prefs.setNumber(starsKey, stars)
+    if (this.bestStars < 0 || carrots > this.bestStars) {
+      await prefs.setNumber(starsKey, carrots)
+      isNew = true
+    }
+    if (this.bestRating < 0 || rating > this.bestRating) {
+      await prefs.setNumber(ratingKey, rating)
       isNew = true
     }
     if (isNew) {
       this.isNewBest = true
       this.bestTimeSeconds = Math.min(this.bestTimeSeconds < 0 ? timeSec : this.bestTimeSeconds, timeSec)
       this.bestMoves = Math.min(this.bestMoves < 0 ? moves : this.bestMoves, moves)
-      this.bestStars = Math.max(this.bestStars < 0 ? stars : this.bestStars, stars)
+      this.bestStars = Math.max(this.bestStars < 0 ? carrots : this.bestStars, carrots)
+      this.bestRating = Math.max(this.bestRating < 0 ? rating : this.bestRating, rating)
       this.shellState.feedbackBadge = '新纪录'
     }
   }
 
   private startTimer(): void {
     this.stopTimer()
-    this.startTime = Date.now()
+    this.timerAccumMs = this.elapsedSeconds * 1000
+    this.lastTickAt = Date.now()
     this.timerId = setInterval((): void => {
-      if (!this.isCompleted && this.startTime > 0) {
-        this.elapsedSeconds = Math.floor((Date.now() - this.startTime) / 1000)
+      const now = Date.now()
+      const delta: number = now - this.lastTickAt
+      this.lastTickAt = now
+      // 暂停/冻结/已结束: 只推进基准点, 不累计 (delta 过大视为后台挂起, 丢弃)
+      if (this.isCompleted || this.isPaused || now < this.frozenUntilMs) {
+        return
+      }
+      if (delta > 0 && delta < 5000) {
+        this.timerAccumMs += delta
+        this.elapsedSeconds = Math.floor(this.timerAccumMs / 1000)
       }
     }, 500)
   }
@@ -417,7 +501,16 @@ export struct MazeCard {
       clearInterval(this.timerId)
       this.timerId = -1
     }
+    if (this.effectToastTimerId !== -1) {
+      clearTimeout(this.effectToastTimerId)
+      this.effectToastTimerId = -1
+    }
+    if (this.winOverlayTimerId !== -1) {
+      clearTimeout(this.winOverlayTimerId)
+      this.winOverlayTimerId = -1
+    }
   }
+
 
   private handleCellPress(row: number, col: number): void {
     if (this.isCompleted || this.maze === null) {
@@ -449,7 +542,7 @@ export struct MazeCard {
 
   // 统一移动入口: 点按相邻格与滑动手势共用
   private movePlayer(direction: Direction): void {
-    if (this.isCompleted || this.maze === null) {
+    if (this.isCompleted || this.isPaused || this.maze === null) {
       return
     }
     const newPos: MazePosition | null = mazeMovePlayer(this.maze.cells, this.playerPos, direction)
@@ -473,20 +566,28 @@ export struct MazeCard {
     this.moveCount += 1
     this.markVisited(newPos)
     this.movePlayerVisually(newPos)
-    // 检查收集胡萝卜
-    const landedCell: MazeCell = this.maze.cells[newPos.row][newPos.col]
+    this.processCellContents(newPos, false)
+  }
+
+  // 落格结算: 胡萝卜 → 道具/宝箱 → 传送门(每步至多一次, 防循环) → 终点
+  private processCellContents(pos: MazePosition, viaPortal: boolean): void {
+    if (this.maze === null) {
+      return
+    }
+    const landedCell: MazeCell = this.maze.cells[pos.row][pos.col]
+    const posKey: string = pos.row + ',' + pos.col
+    // 胡萝卜收集
     if (landedCell.hasStar && mazeCollectStar(landedCell)) {
       this.starsCollected += 1
       // 记入已收集集合 (响应式): cell.hasStar 的原地修改不触发 @Builder 重渲染,
       // 必须通过 collectedKeys Set 才能让该格的胡萝卜在视觉上消失
-      const collectedPosKey = newPos.row + ',' + newPos.col
       const nextCollected: Set<string> = new Set<string>()
       this.collectedKeys.forEach((k: string) => {
         nextCollected.add(k)
       })
-      nextCollected.add(collectedPosKey)
+      nextCollected.add(posKey)
       this.collectedKeys = nextCollected
-      this.collectedKey = collectedPosKey
+      this.collectedKey = posKey
       this.collectFly = false
       // 先定格渲染一帧, 再切换到飞出态触发动画
       setTimeout((): void => {
@@ -497,11 +598,77 @@ export struct MazeCard {
         this.collectFly = false
       }, 400)
     }
-    // 检查终点
+    // 道具/宝箱 (每格一次性)
+    if (landedCell.powerup !== undefined && landedCell.powerup !== '' &&
+      !this.usedPowerupKeys.has(posKey)) {
+      const nextUsed: Set<string> = new Set<string>()
+      this.usedPowerupKeys.forEach((k: string) => {
+        nextUsed.add(k)
+      })
+      nextUsed.add(posKey)
+      this.usedPowerupKeys = nextUsed
+      if (landedCell.powerup === 'freeze') {
+        this.applyFreezePowerup()
+      } else if (landedCell.powerup === 'compass') {
+        this.applyCompassPowerup()
+      } else if (landedCell.powerup === 'treasure') {
+        // 宝箱: 随机开出一种道具
+        if (Math.random() < 0.5) {
+          this.applyFreezePowerup()
+        } else {
+          this.applyCompassPowerup()
+        }
+      }
+    }
+    // 传送门: 落格即传送到另一端 (viaPortal 防止 A→B→A 循环)
+    if (!viaPortal) {
+      const portalTarget: MazePosition | null = getPortalTarget(landedCell)
+      if (portalTarget !== null) {
+        this.portalFlash = true
+        setTimeout((): void => {
+          this.portalFlash = false
+        }, 350)
+        this.markVisited(portalTarget)
+        this.movePlayerVisually(portalTarget)
+        this.processCellContents(portalTarget, true)
+        return
+      }
+    }
+    // 终点
     if (isAtGoal(landedCell)) {
       this.handleWin()
     }
   }
+
+  // ❄ 冻结: 6 秒内计时暂停 (计时器 tick 时检查 frozenUntilMs)
+  private applyFreezePowerup(): void {
+    this.frozenUntilMs = Date.now() + 6000
+    this.showEffectToast('❄️ 时间冻结 6 秒')
+  }
+
+  // 🧭 指路: 高亮当前位置到终点的路线, 4 秒后收回
+  private applyCompassPowerup(): void {
+    this.revealHint()
+    setTimeout((): void => {
+      if (!this.isCompleted && !this.hasWon) {
+        this.hintKeys = new Set<string>()
+      }
+    }, 4000)
+    this.showEffectToast('🧭 已标出正确路线')
+  }
+
+  // 效果横幅: 2.5 秒后自动消失
+  private showEffectToast(text: string): void {
+    this.activeEffectText = text
+    if (this.effectToastTimerId !== -1) {
+      clearTimeout(this.effectToastTimerId)
+    }
+    this.effectToastTimerId = setTimeout((): void => {
+      this.activeEffectText = ''
+      this.effectToastTimerId = -1
+    }, 2500)
+  }
+
 
   // 足迹: Set 需整体重赋值才能触发 @Local 响应
   private markVisited(pos: MazePosition): void {
@@ -606,21 +773,31 @@ export struct MazeCard {
     this.hasWon = true
     this.isCompleted = true
     this.stopTimer()
+    const starsTotal: number = this.maze !== null ? this.maze.starsTotal : 0
+    const rating: number = evaluateStars(this.moveCount, this.par, this.starsCollected, starsTotal)
+    this.winStars = rating
     const result: MazeResult = {
       difficulty: this.difficulty,
       grid_size: getGridSizeLabel(this.difficulty),
       time_seconds: this.elapsedSeconds,
       move_count: this.moveCount,
       stars_collected: this.starsCollected,
-      stars_total: this.maze?.starsTotal ?? 0,
-      completed: true
+      stars_total: starsTotal,
+      completed: true,
+      stars: rating
     }
     void this.saveBestScoresIfImproved(
-      this.elapsedSeconds, this.moveCount, this.starsCollected
+      this.elapsedSeconds, this.moveCount, this.starsCollected, rating
     )
     this.onAnswer(this.toolCall.id, JSON.stringify(result))
     this.syncShellState()
+    // 先让孩子看清终点, 再弹庆祝窗
+    this.winOverlayTimerId = setTimeout((): void => {
+      this.showWinOverlay = true
+      this.winOverlayTimerId = -1
+    }, 650)
   }
+
 
   private handleGiveUp(): void {
     if (this.isCompleted) {
@@ -629,7 +806,7 @@ export struct MazeCard {
     this.isCompleted = true
     this.hasWon = false
     this.stopTimer()
-    // 揭示正确路线: 让"换一局"同时成为一次看答案的学习机会
+    // 揭示正确路线: 让"放弃"同时成为一次看答案的学习机会
     this.revealHint()
     const result: MazeResult = {
       difficulty: this.difficulty,
@@ -637,12 +814,14 @@ export struct MazeCard {
       time_seconds: this.elapsedSeconds,
       move_count: this.moveCount,
       stars_collected: this.starsCollected,
-      stars_total: this.maze?.starsTotal ?? 0,
-      completed: false
+      stars_total: this.maze !== null ? this.maze.starsTotal : 0,
+      completed: false,
+      stars: 0
     }
     this.onAnswer(this.toolCall.id, JSON.stringify(result))
     this.syncShellState()
   }
+
 
   private formatTime(seconds: number): string {
     const m: number = Math.floor(seconds / 60)
@@ -654,20 +833,38 @@ export struct MazeCard {
   }
 
   build() {
-    CardShell({
-      config: this.shellConfig,
-      state: this.shellState,
-      isAnswered: this.isAnswered,
-      largeSize: this.largeSize,
-      onGiveUp: () => {
-        this.handleGiveUp()
+    if (this.isAnswered) {
+      // 已结束: 时间线步骤详情使用的紧凑摘要卡
+      this.AnsweredSummaryCard()
+    } else {
+      Stack() {
+        CardShell({
+          config: this.shellConfig,
+          state: this.shellState,
+          isAnswered: this.isAnswered,
+          largeSize: this.largeSize,
+          onGiveUp: () => {
+            this.handleGiveUp()
+          }
+        }) {
+          this.MazePanel()
+          this.StatsGrid()
+          this.GameControlsRow()
+          this.HintCaption()
+        }
+        // 效果横幅: 覆盖在卡片顶部, 不拦截点击
+        if (this.activeEffectText !== '') {
+          this.EffectToast()
+        }
+        // 胜利庆祝弹窗: 最后渲染, 覆盖一切
+        if (this.showWinOverlay) {
+          this.WinOverlay()
+        }
       }
-    }) {
-      this.MazePanel()
-      this.StatsGrid()
-      this.HintCaption()
+      .width('100%')
     }
   }
+
 
   // 放弃后的路线提示行 — 原操作区的 else 分支, 留 slot(Shell actions 区只渲染放弃链)
   @Builder
@@ -684,7 +881,220 @@ export struct MazeCard {
     }
   }
 
+  // 重开一局: 同难度重新生成迷宫并重置全部状态
+  private restartRound(): void {
+    const freshMaze: MazeData = this.generateFreshMaze(this.difficulty)
+    this.maze = freshMaze
+    this.par = computePar(freshMaze)
+    const startPos: MazePosition = { row: 0, col: 0 }
+    this.playerPos = startPos
+    this.moveCount = 0
+    this.starsCollected = 0
+    this.elapsedSeconds = 0
+    this.hasWon = false
+    this.isCompleted = false
+    this.isPaused = false
+    this.frozenUntilMs = 0
+    this.activeEffectText = ''
+    this.winStars = 0
+    this.showWinOverlay = false
+    this.isNewBest = false
+    this.portalFlash = false
+    this.collectedKeys = new Set<string>()
+    this.visitedKeys = new Set<string>()
+    this.hintKeys = new Set<string>()
+    this.usedPowerupKeys = new Set<string>()
+    this.collectedKey = ''
+    this.collectFly = false
+    this.markVisited(this.playerPos)
+    this.startTimer()
+    this.syncShellState()
+  }
+
+  private togglePause(): void {
+    if (this.isCompleted) {
+      return
+    }
+    this.isPaused = !this.isPaused
+  }
+
+  // 控制行: 暂停 (计时与移动都停) / 重新开始 (换一局)
   @Builder
+  GameControlsRow() {
+    Row({ space: 10 }) {
+      Button(this.isPaused ? '▶ 继续' : '⏸ 暂停', { type: ButtonType.Capsule })
+        .fontSize(13)
+        .fontColor($r('app.color.text_primary'))
+        .backgroundColor(withColorAlpha(this.wallColor, this.isDarkMode ? '18' : '10'))
+        .padding({ left: 16, right: 16, top: 6, bottom: 6 })
+        .onClick(() => {
+          this.togglePause()
+        })
+      Button('↻ 重新开始', { type: ButtonType.Capsule })
+        .fontSize(13)
+        .fontColor($r('app.color.text_primary'))
+        .backgroundColor(withColorAlpha(this.wallColor, this.isDarkMode ? '18' : '10'))
+        .padding({ left: 16, right: 16, top: 6, bottom: 6 })
+        .onClick(() => {
+          this.restartRound()
+        })
+      Blank()
+    }
+    .width('100%')
+  }
+
+  // 效果横幅: 覆盖在卡片顶部, 不拦截点击
+  @Builder
+  EffectToast() {
+    Column() {
+      Row() {
+        Text(this.activeEffectText)
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+      }
+      .padding({ left: 14, right: 14, top: 8, bottom: 8 })
+      .borderRadius(999)
+      .backgroundColor(this.isDarkMode ? '#3A342C' : '#FFF9EC')
+      .border({
+        width: 1,
+        color: withColorAlpha(this.wallColor, this.isDarkMode ? '40' : '30'),
+        style: BorderStyle.Solid
+      })
+      .shadow({ radius: 12, color: '#22000000', offsetY: 3 })
+    }
+    .width('100%')
+    .height('100%')
+    .alignItems(HorizontalAlign.Center)
+    .justifyContent(FlexAlign.Start)
+    .padding({ top: 10 })
+    .hitTestBehavior(HitTestMode.None)
+  }
+
+  // 胜利庆祝弹窗: ★ 评级 + 用时/步数/胡萝卜 + 新纪录徽章
+  @Builder
+  WinOverlay() {
+    Column() {
+      Column({ space: 10 }) {
+        Text('🎉')
+          .fontSize(44)
+        Text('走出迷宫啦！')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+        Row({ space: 6 }) {
+          ForEach([0, 1, 2], (idx: number) => {
+            Text('★')
+              .fontSize(26)
+              .fontColor(idx < this.winStars
+                ? '#F59E0B'
+                : withColorAlpha(this.wallColor, this.isDarkMode ? '26' : '20'))
+          }, (idx: number) => `maze_win_star_${idx}`)
+        }
+        .justifyContent(FlexAlign.Center)
+        Text(`⏱ ${this.formatTime(this.elapsedSeconds)} · 👆 ${this.moveCount} 步 · 🥕 ${this.starsCollected}/${this.maze !== null ? this.maze.starsTotal : 0}`)
+          .fontSize(12)
+          .fontColor($r('app.color.text_secondary'))
+        if (this.isNewBest) {
+          Text('🏆 新纪录')
+            .fontSize(11)
+            .fontColor('#FFFFFF')
+            .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+            .borderRadius(999)
+            .backgroundColor('#F59E0B')
+        }
+        Button('完成', { type: ButtonType.Capsule })
+          .fontSize(14)
+          .fontColor('#FFFFFF')
+          .backgroundColor(withColorAlpha(this.wallColor, 'E6'))
+          .padding({ left: 28, right: 28, top: 8, bottom: 8 })
+          .margin({ top: 6 })
+          .onClick(() => {
+            this.showWinOverlay = false
+            this.onRequestClose()
+          })
+      }
+      .padding({ left: 24, right: 24, top: 22, bottom: 20 })
+      .borderRadius(20)
+      .backgroundColor(this.isDarkMode ? '#2A2520' : '#FDF8EC')
+      .border({
+        width: 1,
+        color: withColorAlpha(this.wallColor, this.isDarkMode ? '38' : '2A'),
+        style: BorderStyle.Solid
+      })
+      .shadow({ radius: 24, color: '#33000000', offsetY: 6 })
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('#66000000')
+    .alignItems(HorizontalAlign.Center)
+    .justifyContent(FlexAlign.Center)
+  }
+
+  // 已答完: 紧凑摘要卡 (时间线步骤详情复用; 新游戏入口走 sheet, 不再内联渲染棋盘)
+  @Builder
+  AnsweredSummaryCard() {
+    Column({ space: 10 }) {
+      Row({ space: 10 }) {
+        Text('🌀')
+          .fontSize(22)
+        Column({ space: 2 }) {
+          Text('走迷宫')
+            .fontSize(15)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.text_primary'))
+          Text(this.difficultyLabel)
+            .fontSize(11)
+            .fontColor($r('app.color.text_tertiary'))
+        }
+        .alignItems(HorizontalAlign.Start)
+        Blank()
+        Text(this.restoredResult !== null && this.restoredResult.completed ? '已完成' : '已放弃')
+          .fontSize(10)
+          .fontColor('#FFFFFF')
+          .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+          .borderRadius(999)
+          .backgroundColor(this.restoredResult !== null && this.restoredResult.completed ? '#4CAF50' : '#FF9F43')
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+      Row({ space: 4 }) {
+        ForEach([0, 1, 2], (idx: number) => {
+          Text('★')
+            .fontSize(18)
+            .fontColor(this.restoredResult !== null && idx < this.restoredResult.stars
+              ? '#F59E0B'
+              : withColorAlpha(this.wallColor, this.isDarkMode ? '26' : '1E'))
+        }, (idx: number) => `maze_sum_star_${idx}`)
+      }
+      .width('100%')
+      Row({ space: 14 }) {
+        Text(`⏱ ${this.formatTime(this.elapsedSeconds)}`)
+          .fontSize(12)
+          .fontColor($r('app.color.text_secondary'))
+        Text(`👆 ${this.moveCount} 步`)
+          .fontSize(12)
+          .fontColor($r('app.color.text_secondary'))
+        Text(`🥕 ${this.starsCollected}/${this.maze !== null ? this.maze.starsTotal : 0}`)
+          .fontSize(12)
+          .fontColor($r('app.color.text_secondary'))
+      }
+      .width('100%')
+    }
+    .padding(14)
+    .borderRadius(14)
+    .backgroundColor(this.boardBackground)
+    .border({
+      width: 1,
+      color: withColorAlpha(this.wallColor, this.isDarkMode ? '30' : '22'),
+      style: BorderStyle.Solid
+    })
+    .alignItems(HorizontalAlign.Start)
+    .width('100%')
+  }
+
+  @Builder
+
   MazePanel() {
     Column() {
       if (this.maze !== null) {
@@ -731,6 +1141,9 @@ export struct MazeCard {
       }
     }
     .width('100%')
+    .onAreaChange((oldArea: Area, newArea: Area) => {
+      this.boardAreaWidth = newArea.width as number
+    })
     .onTouch((e: TouchEvent) => {
       // 阻止事件冒泡到外层 List(scroll)
       e.stopPropagation()
@@ -837,6 +1250,27 @@ export struct MazeCard {
         Column() {
           Text('🏠')
             .fontSize(this.goalSize)
+        }
+        .width(this.cellSize)
+        .height(this.cellSize)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+      } else if (cell.portalTo !== undefined && cell.portalTo !== null) {
+        // 传送门 (挑战档): 成对出现的 🌀
+        Column() {
+          Text('🌀')
+            .fontSize(this.starSize + 2)
+        }
+        .width(this.cellSize)
+        .height(this.cellSize)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+      } else if (cell.powerup !== undefined && cell.powerup !== '' &&
+        !this.usedPowerupKeys.has(row + ',' + col)) {
+        // 道具/宝箱: 未使用前显示图标
+        Column() {
+          Text(cell.powerup === 'treasure' ? '🎁' : (cell.powerup === 'freeze' ? '❄️' : '🧭'))
+            .fontSize(this.starSize + 2)
         }
         .width(this.cellSize)
         .height(this.cellSize)
@@ -995,6 +1429,37 @@ export struct MazeCard {
         style: BorderStyle.Solid
       })
     }
+      // 评级卡片 (v3: 胜利按 par 步数+胡萝卜评定 1-3 星)
+      Column({ space: 4 }) {
+        Row({ space: 6 }) {
+          Text('⭐')
+            .fontSize(11)
+          Text('评级')
+            .fontSize(11)
+            .fontColor($r('app.color.text_tertiary'))
+        }
+        Text(this.winStars > 0 ? `${this.winStars}★` : '-')
+          .fontSize(22)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+        if (this.bestRating >= 0) {
+          Text(`最佳 ${this.bestRating}★`)
+            .fontSize(10)
+            .fontColor(this.isNewBest ? $r('app.color.status_success') : $r('app.color.text_tertiary'))
+        }
+      }
+      .layoutWeight(1)
+      .padding(10)
+      .borderRadius(10)
+      .backgroundColor(withColorAlpha('#F59E0B', this.isDarkMode ? '10' : '08'))
+      .border({
+        width: 1,
+        color: this.isNewBest
+          ? withColorAlpha('#22C55E', '60')
+          : withColorAlpha('#F59E0B', this.isDarkMode ? '22' : '18'),
+        style: BorderStyle.Solid
+      })
+
     .width('100%')
   }
 }

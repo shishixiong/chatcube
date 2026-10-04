@@ -127,7 +127,7 @@
 | `number_puzzle` | `NumberPuzzleCard.ets` | ✓ | 2026-09 由 `huarongdao` 规范化而来；历史会话旧名仍可渲染 |
 | `handwriting_practice` | `HandwritingCard.ets` | ✓ | 学写字 |
 | `categorization` | `CategorizationCard.ets` | ✓ | 分类小管家 |
-| `maze` | `MazeCard.ets` | ✓ | 走迷宫 |
+| `maze` | `MazeCard.ets` | ✓ | 走迷宫 v3（9/11/13 格 + 道具⚡🧭/宝箱🎁/传送门🌀 + 1-3★ 评级；气泡横幅 → ChatPage 全屏 sheet） |
 | `sudoku` | `SudokuCard.ets` | ✓ | 数独 5 难度 |
 | `picture_vocab` | `PictureVocabCard.ets` | ✓ | 看图识词 (en/zh)，预校验 |
 | `listening_quiz` | `ListeningQuizCard.ets` | ✓ | 听力辨音，TTS + 预校验 |

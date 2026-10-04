@@ -66,6 +66,7 @@ export class PreferenceKeys {
   static readonly MAZE_BEST_TIME_PREFIX: string = 'maze_best_time_'
   static readonly MAZE_BEST_MOVES_PREFIX: string = 'maze_best_moves_'
   static readonly MAZE_BEST_STARS_PREFIX: string = 'maze_best_stars_'
+  static readonly MAZE_BEST_RATING_PREFIX: string = 'maze_best_rating_'
 
   // 数独最佳成绩 (按难度区分: sudoku_best_time_1..5, sudoku_best_mistakes_1..5)
   static readonly SUDOKU_BEST_TIME_PREFIX: string = 'sudoku_best_time_'
