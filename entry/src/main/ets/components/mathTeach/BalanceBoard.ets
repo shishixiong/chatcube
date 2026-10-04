@@ -46,7 +46,7 @@ export struct BalanceBoard {
         Polygon({ width: 28, height: 20 })
           .points([[14, 0], [28, 20], [0, 20]])
           .fill(KIDS_MUTED)
-          .position({ x: 106, y: 78 })
+          .position({ x: 116, y: 78 })
 
         Row() {
           this.Pan(KIDS_MATH_INK, true)
@@ -57,7 +57,8 @@ export struct BalanceBoard {
         .rotate({ angle: this.tilt(), centerX: '50%', centerY: '50%' })
         .animation({ curve: curves.springMotion(0.35, 0.85) })
       }
-      .width(240).height(110)
+      // 260vp：容纳万位数托盘标签（'99999 个' ≈ 58vp/盘 + 130vp 横梁）
+      .width(260).height(110)
 
       Text(this.curLeft + ' ' + this.symbol() + ' ' + this.curRight)
         .fontSize(20).fontWeight(FontWeight.Bold).fontColor(KIDS_MATH_INK)
@@ -65,13 +66,13 @@ export struct BalanceBoard {
       if (!this.readonly) {
         Column({ space: 8 }) {
           TeachStepper({
-            label: '左盘', value: this.curLeft, minValue: 1, maxValue: 20,
+            label: '左盘', value: this.curLeft, minValue: 1, maxValue: 99999,
             onChange: (v: number): void => {
               if (v !== this.curLeft) { this.curLeft = v; this.onInteract() }
             }
           })
           TeachStepper({
-            label: '右盘', value: this.curRight, minValue: 1, maxValue: 20,
+            label: '右盘', value: this.curRight, minValue: 1, maxValue: 99999,
             onChange: (v: number): void => {
               if (v !== this.curRight) { this.curRight = v; this.onInteract() }
             }

@@ -64,21 +64,21 @@ export class VerticalMathValidationError extends Error {}
  * Validate the inputs of a vertical-math problem before the solver runs.
  *
  * Spec §2.2 / §8:
- * - A and B must be non-negative integers within 0–999 (0–999 inclusive).
+ * - A and B must be non-negative integers within 0–99999 (0–99999 inclusive).
  * - Subtraction requires A ≥ B (no negative results for 6–7 year-olds).
  * - Multiplication restricts B (multiplier) to 0–9 (1-digit multiplier only).
- * - Division: divisor B must be 1–9, non-zero. Dividend A may be up to 999.
+ * - Division: divisor B must be 1–9, non-zero. Dividend A may be up to 99999.
  */
 export function validateVerticalMathInputs(
   operation: VerticalMathOperation,
   operandA: number,
   operandB: number
 ): VerticalMathValidationError | null {
-  if (!Number.isInteger(operandA) || operandA < 0 || operandA > 999) {
-    return new VerticalMathValidationError('请输入 0 到 999 的数字')
+  if (!Number.isInteger(operandA) || operandA < 0 || operandA > 99999) {
+    return new VerticalMathValidationError('请输入 0 到 99999 的数字')
   }
-  if (!Number.isInteger(operandB) || operandB < 0 || operandB > 999) {
-    return new VerticalMathValidationError('请输入 0 到 999 的数字')
+  if (!Number.isInteger(operandB) || operandB < 0 || operandB > 99999) {
+    return new VerticalMathValidationError('请输入 0 到 99999 的数字')
   }
   if (operation === VerticalMathOperation.SUBTRACT && operandA < operandB) {
     return new VerticalMathValidationError('不够减，建议换一道题哦')

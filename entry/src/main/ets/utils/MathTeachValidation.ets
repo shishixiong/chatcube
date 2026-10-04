@@ -95,8 +95,8 @@ export function validateMathTeachArgs(rawArgs: string,
 function validateModeArgs(mode: string, args: Record<string, Object>): MathTeachValidationResult {
   if (mode === 'number_bond') {
     const total: number = getNumber(args, 'total')
-    if (!inRange(total, 2, 10)) {
-      return fail('number_bond 的 total 必须是 2-10 的整数（分与合引导课要逐个数点、枚举全部分法，太大讲不动）')
+    if (!inRange(total, 2, 99)) {
+      return fail('number_bond 的 total 必须是 2-99 的整数（两步演示课按整十+剩余或 5 锚定推荐分法，百以内最合适）')
     }
   } else if (mode === 'ten_frame') {
     const a: number = getNumber(args, 'a')
@@ -112,8 +112,8 @@ function validateModeArgs(mode: string, args: Record<string, Object>): MathTeach
   } else if (mode === 'balance') {
     const left: number = getNumber(args, 'left')
     const right: number = getNumber(args, 'right')
-    if (!inRange(left, 1, 20)) { return fail('balance 的 left 必须是 1-20 的整数') }
-    if (!inRange(right, 1, 20)) { return fail('balance 的 right 必须是 1-20 的整数') }
+    if (!inRange(left, 1, 99999)) { return fail('balance 的 left 必须是 1-99999 的整数（万位以内）') }
+    if (!inRange(right, 1, 99999)) { return fail('balance 的 right 必须是 1-99999 的整数（万位以内）') }
   } else if (mode === 'clock') {
     const hour: number = getNumber(args, 'hour')
     const minute: number = getNumber(args, 'minute')

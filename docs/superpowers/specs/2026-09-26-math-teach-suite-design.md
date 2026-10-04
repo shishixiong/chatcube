@@ -335,3 +335,19 @@ export const KIDS_MATH_LOCKED_TOOL_IDS: string[] = [
 | `entry/src/main/ets/utils/MathQuizValidation.ets` / `MathQuizGame.ets:93` | 预校验范式 + 复算引擎复用源 |
 | `entry/src/main/ets/components/verticalMath/` | 组件组织先例（Board + 纯函数 Layout + hypium） |
 | `docs/math-teaching-suite.html` | 交互原型（8 板动效、composer、契约页） |
+
+---
+
+## 12. v2 变更：number_bond 两步演示课（2026-10-03）
+
+用户反馈驱动（28 分与合被 2-10 上限拒绝回落到 10；数一数/找全部两步价值低）：
+
+| 变更点 | v1 | v2 |
+|--------|----|----|
+| 步数 | 4 步（数一数→分一分→合一合→找全部） | **2 步（分一分→合起来）** |
+| total 范围 | 2-10 | **2-99** |
+| 分法来源 | 孩子拖拽任意分 + 全枚举 total+1 种 | 板面**推荐最佳分法**：11-99 整十+剩余（28→20+8）、6-10 按 5 锚定（9→5+4）、2-5 对半 |
+| 交互 | 拖球/逐个点数/逐个播放 | 演示式：每步点一次动画按钮（分一分 / 合起来），合步从大数往后数数序条逐个揭出 |
+| 完成门槛 | 4 | **2** |
+
+同步触点：`utils/MathTeachNumberBond.ets`（重写：`numberBondBestSplit` 替代 `numberBondSplits`/`numberBondSplitReady`，脚手架 4 行→3 行删「有序」）、`components/mathTeach/NumberBondBoard.ets`（重写）、`utils/MathTeachValidation.ets`（total 2-99）、`components/MathTeachCard.ets`（门槛 2）、`config/BuiltinTools.ets`（total 描述）、`models/AssistantModels.ets`（kids_math 提示词行）；hypium：`MathTeachNumberBond.test.ets`（重写）+ `MathTeachValidation.test.ets`（范围用例）。

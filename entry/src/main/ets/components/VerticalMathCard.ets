@@ -48,7 +48,7 @@ const OPERATION_BUTTONS: OperationButtonDescriptor[] = [
 
 // File-private helper: validate that an AI-supplied toolCall.arguments payload
 // has all three required fields (operation + two operands) and that the operands
-// fit the solver's accepted range (0..999 integers). Used by aboutToAppear to
+// fit the solver's accepted range (0..99999 integers). Used by aboutToAppear to
 // decide whether to auto-solve or fall back to the input form.
 //
 // Operands arrive as raw strings (the component holds them in @Local string
@@ -70,10 +70,10 @@ function isCompleteVerticalMathArgs(
   }
   const operandA: number = Number(operandAStr)
   const operandB: number = Number(operandBStr)
-  if (!Number.isInteger(operandA) || operandA < 0 || operandA > 999) {
+  if (!Number.isInteger(operandA) || operandA < 0 || operandA > 99999) {
     return false
   }
-  if (!Number.isInteger(operandB) || operandB < 0 || operandB > 999) {
+  if (!Number.isInteger(operandB) || operandB < 0 || operandB > 99999) {
     return false
   }
   return true

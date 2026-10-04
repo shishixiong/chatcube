@@ -83,7 +83,17 @@ export struct VerticalMathBoard {
   }
 
   private getCellSize(): number {
-    return this.compact ? 36 : 44
+    // 万位 (0–99999) 后最宽可达 6 列（如 99999+99999=199998）。
+    // 44vp × 7 列 ≈ 348vp 会溢出聊天气泡，列数多时按档降格缩放。
+    const columns: number = this.solution.columnCount
+    if (this.compact) {
+      if (columns >= 6) return 28
+      if (columns === 5) return 32
+      return 36
+    }
+    if (columns >= 6) return 32
+    if (columns === 5) return 38
+    return 44
   }
 
   private getBoardWidth(): number {

@@ -1619,11 +1619,11 @@ function createMathTeachToolDefinition(): ToolDefinition {
       "difficulty": {"type": "number", "description": "难度 1-5 整数，须与画像等级偏差不超过 1；画像该维度 level 为 0（未评估）时可自选"},
       "concept": {"type": "string", "description": "给孩子看的一句话知识点标题，如「凑十法：先凑成 10 再加」"},
       "skill_key": {"type": "string", "description": "对应画像维度，与 mode 的映射见 mode 描述。用于难度校验与画像更新提示"},
-      "total": {"type": "number", "description": "number_bond 专用：分成两部分的合数，2-10 整数（分与合引导课会带孩子逐个数点并枚举全部分法，10 以内最合适）"},
+      "total": {"type": "number", "description": "number_bond 专用：分成两部分的合数，2-99 整数。两步演示课自动推荐最佳分法：11-99 按整十+剩余拆（28→20 和 8），6-10 按 5 锚定（9→5 和 4）"},
       "a": {"type": "number", "description": "ten_frame 专用：十格阵里已有的个数，5-9 整数"},
       "b": {"type": "number", "description": "ten_frame 专用：框外散点个数，1-10 整数。a+b 必须大于 10 且不超过 20（⚠️ 严禁 a+b 不超过 10 时使用 ten_frame）"},
-      "left": {"type": "number", "description": "balance 专用：天平左盘数，1-20 整数"},
-      "right": {"type": "number", "description": "balance 专用：天平右盘数，1-20 整数"},
+      "left": {"type": "number", "description": "balance 专用：天平左盘数，1-99999 整数（万位以内，可教万以内数的大小比较）"},
+      "right": {"type": "number", "description": "balance 专用：天平右盘数，1-99999 整数（万位以内，可教万以内数的大小比较）"},
       "hour": {"type": "number", "description": "clock 专用：时针位置，1-12 整数"},
       "minute": {"type": "number", "description": "clock 专用：分针位置，0-55 且为 5 的倍数（0=整点，30=半点，其余指 5 分钟刻度）"}
     },
@@ -2298,14 +2298,14 @@ function createVerticalMathToolDefinition(): ToolDefinition {
       "operand_a": {
         "type": "integer",
         "minimum": 0,
-        "maximum": 999,
-        "description": "第一个数（被加数/被减数/被乘数/被除数），0–999。允许省略让孩子自行填入。"
+        "maximum": 99999,
+        "description": "第一个数（被加数/被减数/被乘数/被除数），0–99999（万位以内）。允许省略让孩子自行填入。"
       },
       "operand_b": {
         "type": "integer",
         "minimum": 0,
-        "maximum": 999,
-        "description": "第二个数（加数/减数/乘数/除数），0–999。乘法限制 0–9、除法限制 1–9。允许省略。"
+        "maximum": 99999,
+        "description": "第二个数（加数/减数/乘数/除数），0–99999（万位以内）。乘法限制 0–9、除法限制 1–9。允许省略。"
       }
     },
     "required": [],
@@ -2317,7 +2317,7 @@ function createVerticalMathToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     VERTICAL_MATH_TOOL_ID,
-    '「小学竖式闯关」：输入两个 0–999 之间的整数和孩子选择的加减乘除，AI 引导孩子按位算出标准小学竖式。Use this tool INSTEAD of writing math problems in plain text whenever the child is practicing vertical arithmetic.',
+    '「小学竖式闯关」：输入两个 0–99999（万位以内）之间的整数和孩子选择的加减乘除，AI 引导孩子按位算出标准小学竖式。Use this tool INSTEAD of writing math problems in plain text whenever the child is practicing vertical arithmetic.',
     parameters
   )
 

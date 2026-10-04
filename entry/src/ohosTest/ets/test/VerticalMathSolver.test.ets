@@ -44,8 +44,8 @@ export default function verticalMathSolverTest() {
       expect(err === null).assertEqual(true)
     })
 
-    it('rejects A > 999', 0, () => {
-      const err = validateVerticalMathInputs(VerticalMathOperation.ADD, 1000, 1)
+    it('rejects A > 99999', 0, () => {
+      const err = validateVerticalMathInputs(VerticalMathOperation.ADD, 100000, 1)
       expect(err instanceof VerticalMathValidationError).assertEqual(true)
     })
 
@@ -80,8 +80,8 @@ export default function verticalMathSolverTest() {
     })
 
     it('uses child-friendly range copy', 0, () => {
-      const err = validateVerticalMathInputs(VerticalMathOperation.ADD, 1000, 1)
-      expect(err?.message ?? '').assertEqual('请输入 0 到 999 的数字')
+      const err = validateVerticalMathInputs(VerticalMathOperation.ADD, 100000, 1)
+      expect(err?.message ?? '').assertEqual('请输入 0 到 99999 的数字')
     })
 
     it('accepts boundary A = 0', 0, () => {
@@ -95,6 +95,19 @@ export default function verticalMathSolverTest() {
       )
       expect(err === null).assertEqual(true)
       err = validateVerticalMathInputs(VerticalMathOperation.MULTIPLY, 999, 9)
+      expect(err === null).assertEqual(true)
+    })
+
+    it('accepts boundary A = 99999 (万位)', 0, () => {
+      let err: VerticalMathValidationError | null = validateVerticalMathInputs(
+        VerticalMathOperation.ADD, 99999, 99999
+      )
+      expect(err === null).assertEqual(true)
+      err = validateVerticalMathInputs(VerticalMathOperation.SUBTRACT, 99999, 1)
+      expect(err === null).assertEqual(true)
+      err = validateVerticalMathInputs(VerticalMathOperation.MULTIPLY, 99999, 9)
+      expect(err === null).assertEqual(true)
+      err = validateVerticalMathInputs(VerticalMathOperation.DIVIDE, 99999, 9)
       expect(err === null).assertEqual(true)
     })
   })
@@ -155,6 +168,22 @@ export default function verticalMathSolverTest() {
       // carries cascade: 3 distinct carry columns accumulated by the final snapshot
       const finalCarryColumns: number[] = s.steps[s.steps.length - 1].rows[0].carryColumns ?? []
       expect(finalCarryColumns.length >= 3).assertEqual(true)
+    })
+
+    it('99999 + 1 = 100000 (万位 carry cascades)', 0, () => {
+      const s = solveVerticalAdd(99999, 1)
+      expect(s.result).assertEqual(100000)
+      expect(s.columnCount).assertEqual(6)
+      // carries cascade: 4 distinct carry columns accumulated by the final snapshot
+      const finalCarryColumns: number[] = s.steps[s.steps.length - 1].rows[0].carryColumns ?? []
+      expect(finalCarryColumns.length >= 4).assertEqual(true)
+    })
+
+    it('12345 + 67890 = 80235 (万位 mixed digits)', 0, () => {
+      const s = solveVerticalAdd(12345, 67890)
+      expect(s.result).assertEqual(80235)
+      expect(s.columnCount).assertEqual(5)
+      expect(s.finalRow?.cells.join('')).assertEqual('80235')
     })
 
     it('0 + 0 = 0', 0, () => {
@@ -228,6 +257,22 @@ export default function verticalMathSolverTest() {
       const s = solveVerticalSubtract(999, 999)
       expect(s.result).assertEqual(0)
       expect(s.columnCount).assertEqual(3)
+    })
+
+    it('10000 - 1 = 9999 (万位 borrow cascade)', 0, () => {
+      const s = solveVerticalSubtract(10000, 1)
+      expect(s.result).assertEqual(9999)
+      expect(s.columnCount).assertEqual(5)
+      const borrowSteps = s.steps.filter((step: VerticalMathStep) =>
+        step.rows[0].borrowColumns !== undefined && step.rows[0].borrowColumns.length > 0)
+      expect(borrowSteps.length >= 1).assertEqual(true)
+    })
+
+    it('98765 - 43210 = 55555 (万位 plain columns)', 0, () => {
+      const s = solveVerticalSubtract(98765, 43210)
+      expect(s.result).assertEqual(55555)
+      expect(s.columnCount).assertEqual(5)
+      expect(s.finalRow?.cells.join('')).assertEqual('55555')
     })
 
     it('narrates a lent column from the original digit without another borrow', 0, () => {
@@ -399,6 +444,14 @@ export default function verticalMathSolverTest() {
       expect(s.columnCount).assertEqual(2)
     })
 
+    it('12345 × 9 = 111105 (万位 multiplicand)', 0, () => {
+      const s = solveVerticalMultiply(12345, 9)
+      expect(s.result).assertEqual(111105)
+      expect(s.columnCount).assertEqual(6)
+      // highest multiplicand digit sits on the 万位 label
+      expect(s.steps[4].placeLabel).assertEqual('万位')
+    })
+
     it('123 × 0 = 0', 0, () => {
       const s = solveVerticalMultiply(123, 0)
       expect(s.result).assertEqual(0)
@@ -492,6 +545,19 @@ export default function verticalMathSolverTest() {
       const s = solveVerticalDivide(999, 9)
       expect(s.result).assertEqual(111)
       expect(s.remainder).assertEqual(0)
+    })
+
+    it('99999 ÷ 9 = 11111 remainder 0 (万位 dividend)', 0, () => {
+      const s = solveVerticalDivide(99999, 9)
+      expect(s.result).assertEqual(11111)
+      expect(s.remainder).assertEqual(0)
+      expect(s.columnCount).assertEqual(5)
+    })
+
+    it('98765 ÷ 8 = 12345 remainder 5 (万位 dividend with remainder)', 0, () => {
+      const s = solveVerticalDivide(98765, 8)
+      expect(s.result).assertEqual(12345)
+      expect(s.remainder).assertEqual(5)
     })
 
     it('marks each written quotient digit with the active quotient semantic', 0, () => {

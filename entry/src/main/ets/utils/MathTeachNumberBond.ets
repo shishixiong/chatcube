@@ -1,10 +1,13 @@
 /**
- * number_bond 数的分与合引导课纯函数（ArkUI-free，hypium 全覆盖）。
- * 参考 docs/number-bond-lesson.html（数的分与合 4 步深度课原型），按
- * number_bond 工具参数 total 泛化。四步：数一数 → 分一分 → 合一合 → 找全部。
+ * number_bond 数的分与合两步演示课纯函数（ArkUI-free，hypium 全覆盖）。
+ * v2（2026-10-03）：原 4 步引导课（数一数→分一分→合一合→找全部）精简为
+ * 两步演示课（分一分→合起来）——删全枚举（total+1 种对两位数不可行），
+ * 改为「推荐最佳分法」演示 + 从大数往后数的合并过程。校验层保证 2-99。
  *
- * 记号：total = 整体数（校验层保证 2-10）。分法共 total+1 种，按
- * 「左边每次多 1、右边每次少 1」有序枚举，不重不漏。
+ * 记号：total = 整体数。推荐分法规则：
+ * - 11-99 → 整十 + 剩余（28→20+8、45→40+5）；整十数 → (total-10)+10（20→10+10）
+ * - 6-10  → 5 锚定（9→5+4、10→5+5）
+ * - 2-5   → 对半（4→2+2、3→1+2、5→2+3）
  * 所有返回值强制类型注解（ArkTS 10605038）；防御性输入取界，不抛异常。
  */
 
@@ -18,33 +21,45 @@ export interface NumberBondScaffoldLine {
   label: string
 }
 
-/** 分好了吗：堆里空了，且两个盘子都不空（两边都要有才算分好）。 */
-export function numberBondSplitReady(pileCount: number, leftCount: number, rightCount: number): boolean {
-  return pileCount <= 0 && leftCount >= 1 && rightCount >= 1
-}
-
-/** 有序分法全表：left 从 0 到 total，right = total - left，共 total+1 种。 */
-export function numberBondSplits(total: number): NumberBondSplit[] {
+/** 推荐最佳分法（两边都非空；left 按上述规则取大边）。 */
+export function numberBondBestSplit(total: number): NumberBondSplit {
   let t: number = Math.floor(total)
-  if (t < 1) {
-    t = 1
+  if (t < 2) {
+    t = 2
   }
-  if (t > 10) {
-    t = 10
+  if (t > 99) {
+    t = 99
   }
-  const arr: NumberBondSplit[] = []
-  for (let i = 0; i <= t; i++) {
-    const s: NumberBondSplit = { left: i, right: t - i }
-    arr.push(s)
+  const s: NumberBondSplit = { left: 0, right: 0 }
+  if (t >= 11) {
+    const ones: number = t % 10
+    if (ones === 0) {
+      s.left = t - 10
+      s.right = 10
+    } else {
+      s.left = t - ones
+      s.right = ones
+    }
+    return s
   }
-  return arr
+  if (t >= 6) {
+    s.left = 5
+    s.right = t - 5
+    return s
+  }
+  s.left = Math.floor(t / 2)
+  s.right = t - s.left
+  return s
 }
 
-/** 「分合记录」脚手架 4 行：整体 → 分 → 合 → 有序（跟着步骤点亮）。 */
+/** 「分合记录」脚手架 3 行：整体 → 分 → 合（跟着步骤点亮）。 */
 export function numberBondScaffold(total: number, left: number, right: number): NumberBondScaffoldLine[] {
   let t: number = Math.floor(total)
-  if (t < 1) {
-    t = 1
+  if (t < 2) {
+    t = 2
+  }
+  if (t > 99) {
+    t = 99
   }
   let l: number = Math.floor(left)
   if (l < 0) {
@@ -56,50 +71,40 @@ export function numberBondScaffold(total: number, left: number, right: number): 
   const lines: NumberBondScaffoldLine[] = [
     { eq: `${t}`, label: '整体' },
     { eq: `${t} = ${l} + ${t - l}`, label: '分' },
-    { eq: `${l} + ${t - l} = ${t}`, label: '合' },
-    { eq: `${t} 的 ${t + 1} 种分法`, label: '有序' }
+    { eq: `${l} + ${t - l} = ${t}`, label: '合' }
   ]
   return lines
 }
 
-/** 四步标题（卡片头部主句）。 */
+/** 两步标题（卡片头部主句）。 */
 export function numberBondStepTitles(total: number): string[] {
-  let t: number = Math.floor(total)
-  if (t < 1) {
-    t = 1
-  }
+  const s: NumberBondSplit = numberBondBestSplit(total)
   return [
-    '一共有几个？先数一数',
-    `把 ${t} 分成两堆`,
-    '合起来看看',
-    `${t} 一共有几种分法？`
+    `把 ${s.left + s.right} 分一分`,
+    `把 ${s.left} 和 ${s.right} 合起来`
   ]
 }
 
-/** 四步「小星老师说」提示（每步正文顶部的教学要点）。 */
+/** 两步「小星老师说」提示（每步正文顶部的教学要点）。 */
 export function numberBondStepTips(total: number): string[] {
-  let t: number = Math.floor(total)
-  if (t < 1) {
-    t = 1
-  }
+  const s: NumberBondSplit = numberBondBestSplit(total)
+  const t: number = s.left + s.right
+  const big: number = s.left >= s.right ? s.left : s.right
+  const small: number = t - big
   return [
-    '先看清整体。一个一个数，最后数到的数就是一共有几个。',
-    `把 ${t} 个小球分到两个盘子里，每个盘子都要有。分完就有分合式。`,
-    `把分开的两部分合起来，看看还是不是 ${t}。分与合是一对好朋友。`,
-    '有序地想：左边每次多 1，右边就每次少 1，这样不重不漏。'
+    `老师推荐一种分法：把 ${t} 分成 ${s.left} 和 ${s.right}。点一点，看点子分成两组。`,
+    `从大的数 ${big} 往后数 ${small} 个，一直数到 ${t}。分与合是一对好朋友。`
   ]
 }
 
-/** 四步口播稿（语音模式逐步朗读，符号已按中文读法转写后再交给 TTS）。 */
+/** 两步口播稿（语音模式逐步朗读，符号已按中文读法转写后再交给 TTS）。 */
 export function numberBondStepNarrations(total: number): string[] {
-  let t: number = Math.floor(total)
-  if (t < 1) {
-    t = 1
-  }
+  const s: NumberBondSplit = numberBondBestSplit(total)
+  const t: number = s.left + s.right
+  const big: number = s.left >= s.right ? s.left : s.right
+  const small: number = t - big
   return [
-    '盘子里一共有几个？一个一个点出来，最后数到的数就是一共有几个。',
-    `把 ${t} 个小球拖进两个盘子里，每个盘子都要有。`,
-    `把分开的两部分合起来，数一数还是不是 ${t}。`,
-    `从左边 0 个开始，左边每次多 1，右边就每次少 1，把 ${t} 的分法全部找出来。`
+    `我们把 ${t} 分一分。推荐的分法是：${t} 分成 ${s.left} 和 ${s.right}。`,
+    `把 ${s.left} 和 ${s.right} 合起来。从 ${big} 往后数 ${small} 个，合起来就是 ${t}。`
   ]
 }
