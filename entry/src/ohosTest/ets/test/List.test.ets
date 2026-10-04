@@ -9,6 +9,7 @@ import lessonPlannerValidationTest from './utils/LessonPlannerValidation.test';
 import lessonPlanSubjectUtilsTest from './utils/LessonPlanSubjectUtils.test';
 import vocabRepeatValidationTest from './utils/VocabRepeatValidation.test';
 import vocabLedgerSectionTest from './utils/VocabLedgerSection.test';
+import stepAnswerPayloadTest from './utils/StepAnswerPayload.test';
 
 export default function testsuite() {
   abilityTest();
@@ -22,4 +23,5 @@ export default function testsuite() {
   lessonPlanSubjectUtilsTest();
   vocabRepeatValidationTest();
   vocabLedgerSectionTest();
+  stepAnswerPayloadTest();
 }

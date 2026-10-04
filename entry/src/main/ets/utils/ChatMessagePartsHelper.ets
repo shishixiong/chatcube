@@ -41,6 +41,24 @@ export function createToolPart(toolCall: ToolCall, result: ToolResult | null): M
   return part
 }
 
+/**
+ * 互动卡 timeline step 展开恢复时选择答题 payload 的来源。
+ *
+ * 背景 bug: ChatViewModel 在本回合出题达上限时会给最后一个 toolResult.content
+ * 尾部追加「[系统提示] ...」带内收尾指令 (面向 LLM, 需随历史保留), toolResult
+ * 因此不再是纯 JSON——卡片 JSON.parse 失败 → 恢复静默跳过 → isCorrect 保持
+ * 默认 false → 横幅误渲染成「再试一次」(孩子答对也判错)。
+ * 干净 payload 一直随 part.toolApprovalReason 持久化 (toolCall.approvalReason
+ * = answerJson 同步而来, 不被追加污染), 故优先采用; 非对象 JSON (审批态文本等)
+ * 时回退 toolResult。
+ */
+export function resolveStepAnswerPayload(toolResult: string, toolApprovalReason: string): string {
+  if (toolApprovalReason.trim().startsWith('{')) {
+    return toolApprovalReason
+  }
+  return toolResult
+}
+
 export function hasLegacyMessagePartSource(message: ChatMessage): boolean {
   return message.content.trim() !== '' ||
     message.reasoningContent.trim() !== '' ||

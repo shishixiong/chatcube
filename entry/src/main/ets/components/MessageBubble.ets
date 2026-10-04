@@ -55,7 +55,8 @@ import {
   ensureMessageParts,
   groupMessageParts,
   MessagePartBlock,
-  MessagePartBlockKind
+  MessagePartBlockKind,
+  resolveStepAnswerPayload
 } from '../utils/ChatMessagePartsHelper'
 import { resolveToolSymbol } from '../utils/ToolIconMapping'
 import { buildToolTitle } from '../utils/ToolTitleBuilder'
@@ -4218,7 +4219,7 @@ export struct MessageBubble {
         MathQuizCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
-          answeredPayload: step.toolResult,
+          answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
           onAnswer: (_toolCallId: string, _answerJson: string): void => {}
         })
         .margin({ top: 8 })
@@ -4274,7 +4275,7 @@ export struct MessageBubble {
         MathTeachCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
-          answeredPayload: step.toolResult,
+          answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
           onAnswer: (_toolCallId: string, _answerJson: string): void => {}
         })
         .margin({ top: 8 })
@@ -4329,7 +4330,7 @@ export struct MessageBubble {
         HanziCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
-          answeredPayload: step.toolResult,
+          answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
           onAnswer: (_toolCallId: string, _answerJson: string): void => {}
         })
         .margin({ top: 8 })
@@ -4384,7 +4385,7 @@ export struct MessageBubble {
         PinyinCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
-          answeredPayload: step.toolResult,
+          answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
           onAnswer: (_toolCallId: string, _answerJson: string): void => {}
         })
         .margin({ top: 8 })
@@ -4439,7 +4440,7 @@ export struct MessageBubble {
         PictureTalkCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
-          answeredPayload: step.toolResult,
+          answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
           onAnswer: (_toolCallId: string, _answerJson: string): void => {}
         })
         .margin({ top: 8 })
@@ -4494,7 +4495,7 @@ export struct MessageBubble {
         ChineseQuizCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
-          answeredPayload: step.toolResult,
+          answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
           onAnswer: (_toolCallId: string, _answerJson: string): void => {}
         })
         .margin({ top: 8 })
@@ -4550,7 +4551,7 @@ export struct MessageBubble {
         EnglishQuizCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
-          answeredPayload: step.toolResult,
+          answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
           onAnswer: (_toolCallId: string, _answerJson: string): void => {}
         })
         .margin({ top: 8 })
@@ -4606,7 +4607,7 @@ export struct MessageBubble {
         NumberPuzzleCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
-          answeredPayload: step.toolResult,
+          answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
           onAnswer: (_toolCallId: string, _answerJson: string): void => {}
         })
         .margin({ top: 8 })
@@ -4661,7 +4662,7 @@ export struct MessageBubble {
         HandwritingCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
-          answeredPayload: step.toolResult,
+          answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
           onAnswer: (_toolCallId: string, _answerJson: string): void => {}
         })
         .margin({ top: 8 })
@@ -4716,7 +4717,7 @@ export struct MessageBubble {
         CategorizationCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
-          answeredPayload: step.toolResult,
+          answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
           largeSize: false,
           onAnswer: (_toolCallId: string, _answerJson: string): void => {}
         })
@@ -4772,7 +4773,7 @@ export struct MessageBubble {
         MazeCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
-          answeredPayload: step.toolResult,
+          answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
           largeSize: false,
           onAnswer: (_toolCallId: string, _answerJson: string): void => {}
         })
@@ -4828,7 +4829,7 @@ export struct MessageBubble {
         SudokuCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
-          answeredPayload: step.toolResult,
+          answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
           largeSize: false,
           onAnswer: (_toolCallId: string, _answerJson: string): void => {}
         })
@@ -4884,7 +4885,7 @@ export struct MessageBubble {
         PictureVocabCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
-          answeredPayload: step.toolResult,
+          answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
           onAnswer: (_toolCallId: string, _answerJson: string): void => {}
         })
           .margin({ top: 8 })
@@ -4939,7 +4940,7 @@ export struct MessageBubble {
         ListeningQuizCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
-          answeredPayload: step.toolResult,
+          answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
           onAnswer: (_toolCallId: string, _answerJson: string): void => {}
         })
           .margin({ top: 8 })
@@ -4994,7 +4995,7 @@ export struct MessageBubble {
         PinyinQuizCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
-          answeredPayload: step.toolResult,
+          answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
           onAnswer: (_toolCallId: string, _answerJson: string): void => {}
         })
           .margin({ top: 8 })
@@ -5049,7 +5050,7 @@ export struct MessageBubble {
         MatchingPairsCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
-          answeredPayload: step.toolResult,
+          answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
           onAnswer: (_toolCallId: string, _answerJson: string): void => {}
         })
           .margin({ top: 8 })
@@ -5104,7 +5105,7 @@ export struct MessageBubble {
         VerticalMathCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
-          answeredPayload: step.toolResult,
+          answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
           largeSize: false,
           onAnswer: (_toolCallId: string, _answerJson: string): void => {}
         })
