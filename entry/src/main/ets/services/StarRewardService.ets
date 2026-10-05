@@ -182,6 +182,11 @@ export class StarRewardService {
       const correct = payload['correct']
       return correct === true ? 1 : 0
     }
+    if (activityType === 'vertical_math') {
+      // 竖式练习 (练习型): 按答对题数授星, 1 题对 1 星, 封顶 5 (一卡最多 10 题, 防刷星)
+      const correctCount = (payload['correct_count'] as number) ?? 0
+      return Math.min(5, Math.max(0, Math.floor(correctCount)))
+    }
     return 0
   }
 

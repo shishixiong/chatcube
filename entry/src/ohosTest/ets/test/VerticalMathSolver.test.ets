@@ -4,35 +4,42 @@ import {
   VerticalMathValidationError,
   VerticalMathStep,
   VerticalMathHighlight,
-  VerticalMathOverlay,
+  VerticalMathBoardRow,
   validateVerticalMathInputs,
   solveVerticalAdd,
   solveVerticalSubtract,
   solveVerticalMultiply,
   solveVerticalDivide,
-  solveVerticalMath
+  solveVerticalMath,
+  multiplicationTablePhrase
 } from '../../../main/ets/utils/VerticalMathSolver'
 import {
   VerticalMathPalette,
   resolveVerticalMathPalette
 } from '../../../main/ets/utils/VerticalMathColors'
 
+/** 拼接棋盘行格子（finalRow 为可选字段，统一在此解包）。 */
+function joinedCells(row: VerticalMathBoardRow | undefined): string {
+  if (row === undefined) {
+    return ''
+  }
+  let out: string = ''
+  for (let i = 0; i < row.cells.length; i++) {
+    out += row.cells[i]
+  }
+  return out
+}
+
 export default function verticalMathSolverTest() {
   describe('VerticalMath presentation models', () => {
     it('creates empty step presentation metadata', 0, () => {
       const step: VerticalMathStep = new VerticalMathStep()
+      expect(step.title).assertEqual('')
+      expect(step.narration).assertEqual('')
       expect(step.placeLabel).assertEqual('')
       expect(step.actionLabel).assertEqual('')
-      expect(step.overlays.length).assertEqual(0)
-    })
-
-    it('creates a typed overlay with defaults', 0, () => {
-      const overlay: VerticalMathOverlay = new VerticalMathOverlay()
-      expect(overlay.kind).assertEqual('partial_band')
-      expect(overlay.rowIndex).assertEqual(-1)
-      expect(overlay.startColumn).assertEqual(-1)
-      expect(overlay.endColumn).assertEqual(-1)
-      expect(overlay.value).assertEqual('')
+      expect(step.rows.length).assertEqual(0)
+      expect(step.highlights.length).assertEqual(0)
     })
   })
 
@@ -484,123 +491,231 @@ export default function verticalMathSolverTest() {
       }
     })
 
-    it('matches each partial band to its non-empty product range', 0, () => {
-      const s = solveVerticalMultiply(988, 6)
-      for (let index = 0; index < 3; index++) {
-        const step: VerticalMathStep = s.steps[index]
-        const partialRowIndex: number = step.rows.length - 1
-        const cells: string[] = step.rows[partialRowIndex].cells
-        let expectedStart: number = -1
-        let expectedEnd: number = -1
-        for (let column = 0; column < cells.length; column++) {
-          if (cells[column] !== '') {
-            if (expectedStart < 0) expectedStart = column
-            expectedEnd = column
-          }
-        }
-        const bands: VerticalMathOverlay[] = step.overlays.filter(
-          (overlay: VerticalMathOverlay): boolean => overlay.kind === 'partial_band'
-        )
-        expect(bands.length).assertEqual(1)
-        expect(bands[0].rowIndex).assertEqual(partialRowIndex)
-        expect(bands[0].startColumn).assertEqual(expectedStart)
-        expect(bands[0].endColumn).assertEqual(expectedEnd)
-        expect(step.placeLabel.length > 0).assertEqual(true)
-        expect(step.actionLabel.length > 0).assertEqual(true)
-      }
+    // (2026-10-05) 「matches each partial band to its non-empty product range」
+    // 已随 v2 黑板重构删除——被测的 VerticalMathOverlay / partial_band API
+    // 不再存在；乘积行的范围语义由 highlight kind='product' 覆盖。
+  })
+
+  describe('multiplicationTablePhrase', () => {
+    it('二四得八 (product < 10 uses 得, order-insensitive)', 0, () => {
+      expect(multiplicationTablePhrase(4, 2)).assertEqual('二四得八')
+      expect(multiplicationTablePhrase(2, 4)).assertEqual('二四得八')
+    })
+
+    it('三五十五 (teens)', 0, () => {
+      expect(multiplicationTablePhrase(5, 3)).assertEqual('三五十五')
+    })
+
+    it('二五一十 (product exactly 10)', 0, () => {
+      expect(multiplicationTablePhrase(5, 2)).assertEqual('二五一十')
+    })
+
+    it('一三得三 (factor 1)', 0, () => {
+      expect(multiplicationTablePhrase(1, 3)).assertEqual('一三得三')
+    })
+
+    it('四五二十 (whole tens)', 0, () => {
+      expect(multiplicationTablePhrase(5, 4)).assertEqual('四五二十')
+    })
+
+    it('六七四十二 (two-digit with units)', 0, () => {
+      expect(multiplicationTablePhrase(7, 6)).assertEqual('六七四十二')
+    })
+
+    it('九九八十一 (squares)', 0, () => {
+      expect(multiplicationTablePhrase(9, 9)).assertEqual('九九八十一')
+    })
+
+    it('二二得四 (doubles)', 0, () => {
+      expect(multiplicationTablePhrase(2, 2)).assertEqual('二二得四')
     })
   })
 
   describe('solveVerticalDivide', () => {
-    it('84 ÷ 4 = 21 remainder 0', 0, () => {
+    it('84 ÷ 4 = 21 remainder 0 via 7 sub-steps', 0, () => {
       const s = solveVerticalDivide(84, 4)
       expect(s.result).assertEqual(21)
       expect(s.remainder).assertEqual(0)
+      // (试商 + 相乘 + 相减) × 2 组 + 得到答案
+      expect(s.steps.length).assertEqual(7)
     })
 
-    it('85 ÷ 4 = 21 remainder 1', 0, () => {
+    it('84 ÷ 4: 试商 step teaches the 口诀', 0, () => {
+      const s = solveVerticalDivide(84, 4)
+      const t: string = s.steps[0].narration
+      expect(t.includes('口诀')).assertEqual(true)
+      expect(t.includes('二四得八')).assertEqual(true)
+      expect(t.includes('商 2')).assertEqual(true)
+    })
+
+    it('84 ÷ 4: 相乘 step reveals the product row', 0, () => {
+      const s = solveVerticalDivide(84, 4)
+      const mul: VerticalMathStep = s.steps[1]
+      expect(mul.narration.includes('4 × 2 ＝ 8')).assertEqual(true)
+      // 商行 + 被除数行 + 乘积行（尚无差行）
+      expect(mul.rows.length).assertEqual(3)
+      expect(mul.rows[2].ruleUnder === true).assertEqual(true)
+      let hasProductHighlight: boolean = false
+      for (let h = 0; h < mul.highlights.length; h++) {
+        if (mul.highlights[h].kind === 'product' && mul.highlights[h].rowIndex === 2) {
+          hasProductHighlight = true
+        }
+      }
+      expect(hasProductHighlight).assertEqual(true)
+    })
+
+    it('84 ÷ 4: 相减 step reveals the diff row and 落下下一位', 0, () => {
+      const s = solveVerticalDivide(84, 4)
+      const sub: VerticalMathStep = s.steps[2]
+      expect(sub.narration.includes('8 − 8 ＝ 0')).assertEqual(true)
+      expect(sub.narration.includes('落下来')).assertEqual(true)
+      // 商行 + 被除数行 + 乘积行 + 差行
+      expect(sub.rows.length).assertEqual(4)
+      // 差行按课本习惯显示"落下一位"后的数
+      expect(joinedCells(sub.rows[3])).assertEqual('4')
+    })
+
+    it('84 ÷ 4: group 2 试商 uses 一四得四', 0, () => {
+      const s = solveVerticalDivide(84, 4)
+      expect(s.steps[3].narration.includes('一四得四')).assertEqual(true)
+    })
+
+    it('84 ÷ 4: final step verifies with 验算', 0, () => {
+      const s = solveVerticalDivide(84, 4)
+      const fin: VerticalMathStep = s.steps[6]
+      expect(fin.title).assertEqual('得到答案')
+      expect(fin.narration.includes('84 ÷ 4 ＝ 21')).assertEqual(true)
+      expect(fin.narration.includes('验算')).assertEqual(true)
+      expect(fin.narration.includes('21 × 4 ＝ 84')).assertEqual(true)
+    })
+
+    it('84 ÷ 4: quotient cells stay column-aligned', 0, () => {
+      const s = solveVerticalDivide(84, 4)
+      expect(joinedCells(s.finalRow)).assertEqual('21')
+    })
+
+    it('85 ÷ 4: remainder 1 and 验算 with ＋ 余数', 0, () => {
       const s = solveVerticalDivide(85, 4)
       expect(s.result).assertEqual(21)
       expect(s.remainder).assertEqual(1)
+      const fin: VerticalMathStep = s.steps[s.steps.length - 1]
+      expect(fin.narration.includes('余数 1')).assertEqual(true)
+      expect(fin.narration.includes('21 × 4 ＋ 1 ＝ 85')).assertEqual(true)
     })
 
-    it('3 ÷ 7 first digit < divisor (no leading zero)', 0, () => {
+    it('515 ÷ 5 = 103 (商中间写 0), not 13', 0, () => {
+      const s = solveVerticalDivide(515, 5)
+      expect(s.result).assertEqual(103)
+      expect(s.remainder).assertEqual(0)
+      expect(joinedCells(s.finalRow)).assertEqual('103')
+    })
+
+    it('515 ÷ 5: has an explicit 商写 0 step', 0, () => {
+      const s = solveVerticalDivide(515, 5)
+      const zeroSteps: VerticalMathStep[] = s.steps.filter(
+        (step: VerticalMathStep): boolean =>
+          step.narration.includes('写 0') && step.narration.includes('不够除')
+      )
+      expect(zeroSteps.length > 0).assertEqual(true)
+      const zeroStep: VerticalMathStep = zeroSteps[0]
+      // 该步快照的商行已写出 0
+      expect(zeroStep.rows[0].cells[1]).assertEqual('0')
+      let hasQuotientHighlight: boolean = false
+      for (let h = 0; h < zeroStep.highlights.length; h++) {
+        if (zeroStep.highlights[h].kind === 'quotient' && zeroStep.highlights[h].columnIndex === 1) {
+          hasQuotientHighlight = true
+        }
+      }
+      expect(hasQuotientHighlight).assertEqual(true)
+    })
+
+    it('515 ÷ 5: group 3 试商 says 拼成 15 and uses 三五十五', 0, () => {
+      const s = solveVerticalDivide(515, 5)
+      const matches: VerticalMathStep[] = s.steps.filter(
+        (step: VerticalMathStep): boolean => step.narration.includes('三五十五')
+      )
+      expect(matches.length > 0).assertEqual(true)
+      expect(matches[0].narration.includes('15')).assertEqual(true)
+    })
+
+    it('515 ÷ 5: total steps = 3 + 1 (写0) + 3 + 1 (final) = 8', 0, () => {
+      const s = solveVerticalDivide(515, 5)
+      expect(s.steps.length).assertEqual(8)
+    })
+
+    it('624 ÷ 6 = 104 (商中间写 0)', 0, () => {
+      const s = solveVerticalDivide(624, 6)
+      expect(s.result).assertEqual(104)
+      expect(joinedCells(s.finalRow)).assertEqual('104')
+    })
+
+    it('5005 ÷ 5 = 1001 (连续商中间 0)', 0, () => {
+      const s = solveVerticalDivide(5005, 5)
+      expect(s.result).assertEqual(1001)
+      expect(joinedCells(s.finalRow)).assertEqual('1001')
+    })
+
+    it('3 ÷ 7 first digit < divisor (首位不够除 narration-only)', 0, () => {
       const s = solveVerticalDivide(3, 7)
       expect(s.result).assertEqual(0)
       expect(s.remainder).assertEqual(3)
-      // The narration should mention "首位不够除" at least once.
-      expect(s.steps.some((step: VerticalMathStep) => step.narration.includes('首位不够除'))).assertEqual(true)
+      // 不够除 + 得到答案，仅两步
+      expect(s.steps.length).assertEqual(2)
+      expect(s.steps[0].narration.includes('首位')).assertEqual(true)
+      expect(s.steps[0].narration.includes('不够除')).assertEqual(true)
     })
 
-    it('0 ÷ 5 = 0 remainder 0', 0, () => {
-      const s = solveVerticalDivide(0, 5)
-      expect(s.result).assertEqual(0)
-      expect(s.remainder).assertEqual(0)
-      // No alignment step: only the final answer step remains.
-      expect(s.steps.length).assertEqual(1)
-      expect(s.steps[0].title).assertEqual('得到答案')
+    it('3 ÷ 7: 不够除 step writes no quotient highlight', 0, () => {
+      const s = solveVerticalDivide(3, 7)
+      expect(s.steps[0].highlights.some(
+        (highlight: VerticalMathHighlight): boolean => highlight.kind === 'quotient'
+      )).assertEqual(false)
     })
 
-    it('999 ÷ 9 = 111 remainder 0', 0, () => {
-      const s = solveVerticalDivide(999, 9)
-      expect(s.result).assertEqual(111)
-      expect(s.remainder).assertEqual(0)
-    })
-
-    it('99999 ÷ 9 = 11111 remainder 0 (万位 dividend)', 0, () => {
-      const s = solveVerticalDivide(99999, 9)
-      expect(s.result).assertEqual(11111)
-      expect(s.remainder).assertEqual(0)
-      expect(s.columnCount).assertEqual(5)
-    })
-
-    it('98765 ÷ 8 = 12345 remainder 5 (万位 dividend with remainder)', 0, () => {
-      const s = solveVerticalDivide(98765, 8)
-      expect(s.result).assertEqual(12345)
-      expect(s.remainder).assertEqual(5)
-    })
-
-    it('marks each written quotient digit with the active quotient semantic', 0, () => {
+    it('each 试商 step marks its quotient cell (row 0, own column)', 0, () => {
       const s = solveVerticalDivide(84, 4)
-      const quotientSteps: VerticalMathStep[] = s.steps.filter(
+      const trySteps: VerticalMathStep[] = s.steps.filter(
         (step: VerticalMathStep): boolean =>
           step.highlights.some((highlight: VerticalMathHighlight): boolean => highlight.kind === 'quotient')
       )
-      expect(quotientSteps.length).assertEqual(2)
-      for (let index = 0; index < quotientSteps.length; index++) {
-        expect(quotientSteps[index].highlights.some(
+      expect(trySteps.length).assertEqual(2)
+      for (let index = 0; index < trySteps.length; index++) {
+        expect(trySteps[index].highlights.some(
           (highlight: VerticalMathHighlight): boolean =>
-            highlight.rowIndex === 3 && highlight.columnIndex === index && highlight.kind === 'quotient'
+            highlight.rowIndex === 0 && highlight.columnIndex === index && highlight.kind === 'quotient'
         )).assertEqual(true)
       }
     })
 
-    it('connects each dividend window to its quotient position', 0, () => {
-      const s = solveVerticalDivide(84, 4)
-      const quotientSteps: VerticalMathStep[] = s.steps.filter(
-        (step: VerticalMathStep): boolean => step.overlays.some(
-          (overlay: VerticalMathOverlay): boolean => overlay.kind === 'division_lane'
-        )
-      )
-      expect(quotientSteps.length).assertEqual(2)
-      for (let index = 0; index < quotientSteps.length; index++) {
-        const lanes: VerticalMathOverlay[] = quotientSteps[index].overlays.filter(
-          (overlay: VerticalMathOverlay): boolean => overlay.kind === 'division_lane'
-        )
-        expect(lanes.length).assertEqual(1)
-        expect(lanes[0].endColumn).assertEqual(index)
-        expect(lanes[0].startColumn <= lanes[0].endColumn).assertEqual(true)
-      }
+    it('0 ÷ 5 = 0: single final step teaches the zero rule', 0, () => {
+      const s = solveVerticalDivide(0, 5)
+      expect(s.result).assertEqual(0)
+      expect(s.remainder).assertEqual(0)
+      expect(s.steps.length).assertEqual(1)
+      expect(s.steps[0].title).assertEqual('得到答案')
+      expect(s.steps[0].narration.includes('0 除以任何数都得 0')).assertEqual(true)
     })
 
-    it('does not invent a quotient target when the window is too small', 0, () => {
-      const s = solveVerticalDivide(3, 7)
-      expect(s.steps[0].overlays.some(
-        (overlay: VerticalMathOverlay): boolean => overlay.kind === 'division_lane'
-      )).assertEqual(false)
-      expect(s.steps[0].highlights.some(
-        (highlight: VerticalMathHighlight): boolean => highlight.kind === 'quotient'
-      )).assertEqual(false)
+    it('999 ÷ 9 = 111 via 10 sub-steps', 0, () => {
+      const s = solveVerticalDivide(999, 9)
+      expect(s.result).assertEqual(111)
+      expect(s.remainder).assertEqual(0)
+      expect(s.steps.length).assertEqual(10)
+    })
+
+    it('98765 ÷ 8 = 12345 remainder 5 (万位 dividend)', 0, () => {
+      const s = solveVerticalDivide(98765, 8)
+      expect(s.result).assertEqual(12345)
+      expect(s.remainder).assertEqual(5)
+      expect(s.columnCount).assertEqual(5)
+    })
+
+    it('99999 ÷ 9 = 11111 remainder 0 (万位 dividend, 16 sub-steps)', 0, () => {
+      const s = solveVerticalDivide(99999, 9)
+      expect(s.result).assertEqual(11111)
+      expect(s.remainder).assertEqual(0)
+      expect(s.columnCount).assertEqual(5)
+      expect(s.steps.length).assertEqual(16)
     })
   })
 

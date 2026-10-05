@@ -1,4 +1,6 @@
 // components/verticalMath/VerticalMathBoard.ets
+// 黑板棋盘容器（v2 黑板重设计）：深海军蓝底、行渲染、庆祝行定位。
+// 行快照与高亮全部由 VerticalMathSolver 生成；规则线（横线/竖线）由行模型自带。
 import {
   VerticalMathPalette,
   resolveVerticalMathPalette
@@ -8,10 +10,11 @@ import {
   VerticalMathSolution,
   VerticalMathBoardRow,
   VerticalMathHighlight,
-  VerticalMathOverlay,
   VerticalMathStep
 } from '../../utils/VerticalMathSolver'
 import { VerticalMathBoardRowView } from './VerticalMathBoardRow'
+
+const DIVIDER_WIDTH: number = 2.5
 
 @ComponentV2
 export struct VerticalMathBoard {
@@ -31,10 +34,6 @@ export struct VerticalMathBoard {
     return this.solution.steps[index]
   }
 
-  private getCurrentOverlays(): VerticalMathOverlay[] {
-    return this.getCurrentStep()?.overlays ?? []
-  }
-
   private getCurrentRows(): VerticalMathBoardRow[] {
     if (this.solution.steps.length === 0 || this.visibleStepCount === 0) {
       return this.solution.initialRows
@@ -51,208 +50,110 @@ export struct VerticalMathBoard {
     return this.solution.steps[index].highlights
   }
 
-  private getActiveColumn(): number {
-    const highlights: VerticalMathHighlight[] = this.getCurrentHighlights()
-    for (let index = 0; index < highlights.length; index++) {
-      if (highlights[index].rowIndex === 0 && highlights[index].kind === 'active') {
-        return highlights[index].columnIndex
-      }
-    }
-    return -1
-  }
-
   private getRowHighlights(rowIndex: number): VerticalMathHighlight[] {
     return this.getCurrentHighlights().filter((highlight: VerticalMathHighlight): boolean =>
       highlight.rowIndex === rowIndex)
   }
 
-  private getShowFinalLine(): boolean {
-    if (this.solution.steps.length === 0 || this.visibleStepCount === 0) {
-      return false
-    }
-    const index: number = Math.min(this.visibleStepCount - 1, this.solution.steps.length - 1)
-    return this.solution.steps[index].showFinalLine === true
-  }
-
-  // The answer row that celebrates on the final step: ADD/SUB/MUL keep the
-  // result/total on the last row; DIV puts the quotient on row 3 (product and
-  // remainder rows follow below it).
+  // The answer row that celebrates on the final step: DIV keeps the quotient on
+  // row 0 (above the 厂 top bar); ADD/SUB/MUL keep the result on the last row.
   private getAnswerRowIndex(): number {
-    if (this.solution.operation === VerticalMathOperation.DIVIDE) return 3
+    if (this.solution.operation === VerticalMathOperation.DIVIDE) return 0
     return this.getCurrentRows().length - 1
   }
 
+  private isFinalStepVisible(): boolean {
+    return this.solution.steps.length > 0 && this.visibleStepCount >= this.solution.steps.length
+  }
+
   private getCellSize(): number {
-    // 万位 (0–99999) 后最宽可达 6 列（如 99999+99999=199998）。
-    // 44vp × 7 列 ≈ 348vp 会溢出聊天气泡，列数多时按档降格缩放。
-    const columns: number = this.solution.columnCount
+    // 宽度档位按"等效列数"缩放：主区列数 + 运算符列（或除法左区折算列），
+    // 防止万位竖式 / 多位乘数部分积溢出聊天气泡。
+    const widthUnits: number = this.getWidthUnits()
     if (this.compact) {
-      if (columns >= 6) return 28
-      if (columns === 5) return 32
+      if (widthUnits >= 7.5) return 26
+      if (widthUnits >= 6.5) return 28
+      if (widthUnits >= 5.5) return 32
       return 36
     }
-    if (columns >= 6) return 32
-    if (columns === 5) return 38
+    if (widthUnits >= 7.5) return 30
+    if (widthUnits >= 6.5) return 32
+    if (widthUnits >= 5.5) return 38
     return 44
+  }
+
+  private getWidthUnits(): number {
+    const columns: number = this.solution.columnCount
+    if (this.solution.operation === VerticalMathOperation.DIVIDE) {
+      const leftCount: number = String(this.solution.operandB).length
+      return columns + leftCount * 0.72 + 0.1
+    }
+    return columns + 1
   }
 
   private getBoardWidth(): number {
     const padding: number = this.compact ? 14 : 20
+    if (this.solution.operation === VerticalMathOperation.DIVIDE) {
+      const leftCount: number = String(this.solution.operandB).length
+      const cellSize: number = this.getCellSize()
+      return leftCount * cellSize * 0.72 + DIVIDER_WIDTH + cellSize * this.solution.columnCount + 2 * padding
+    }
     return this.getCellSize() * (this.solution.columnCount + 1) + 2 * padding
   }
 
-  private getCellX(column: number): number {
-    return this.getCellSize() * (column + 1)
-  }
-
-  private getTopMarkOffset(column: number): number {
-    return this.getCellSize() + column * this.getCellSize()
-  }
-
-  private getTopMarkColor(mark: string): string {
-    return mark === '-1' ? this.palette.borrow : this.palette.carry
-  }
-
-  private getCarryColumns(row: VerticalMathBoardRow): number[] {
-    return row.carryColumns ?? []
-  }
-
-  private getBorrowColumns(row: VerticalMathBoardRow): number[] {
-    return row.borrowColumns ?? []
-  }
-
-  private hasPersistentTopMarks(row: VerticalMathBoardRow): boolean {
-    return this.getCarryColumns(row).length > 0 || this.getBorrowColumns(row).length > 0
-  }
-
-  // The previous step's rowA — used to tell freshly-added carry/borrow marks from
-  // historical ones so only new chips pop in (历史标记保持静止).
-  private getPreviousRowA(): VerticalMathBoardRow | null {
-    if (this.visibleStepCount <= 1 || this.solution.steps.length === 0) return null
-    const index: number = Math.min(this.visibleStepCount - 1, this.solution.steps.length - 1)
-    if (index <= 0) return null
-    return this.solution.steps[index - 1].rows[0] ?? null
-  }
-
-  private isFreshMark(column: number, isCarry: boolean): boolean {
-    const previous: VerticalMathBoardRow | null = this.getPreviousRowA()
-    if (previous === null) return true
-    const previousColumns: number[] = isCarry
-      ? this.getCarryColumns(previous)
-      : this.getBorrowColumns(previous)
-    return !previousColumns.includes(column)
-  }
-
-  private resolveMarkTransition(isFresh: boolean): TransitionEffect {
-    if (!isFresh || this.reduceMotion) return TransitionEffect.IDENTITY
-    return TransitionEffect.OPACITY
-      .combine(TransitionEffect.scale({ x: 0.3, y: 0.3 }))
-      .animation({ duration: 260, curve: Curve.EaseOut })
-  }
-
-  private shouldShowLine(rowIndex: number): boolean {
-    const rows: VerticalMathBoardRow[] = this.getCurrentRows()
-    return rowIndex === 2 || (this.getShowFinalLine() && rowIndex === rows.length - 2)
-  }
-
-  @Builder
-  private TopMarkAt(mark: string, column: number, isActive: boolean = false, isFresh: boolean = false) {
-    Row() {
-      Text(mark)
-        .fontSize(this.compact ? 15 : 18)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(this.getTopMarkColor(mark))
-        .width(this.getCellSize())
-        .height(this.getCellSize())
-        .borderRadius(this.getCellSize() / 2)
-        .backgroundColor(isActive ? this.palette.focus : Color.Transparent)
-        .textAlign(TextAlign.Center)
+  // 行 key = 行号 + 行内容。内容不变的行（操作数行）保持挂载，@Param 更新驱动高亮/划线流动；
+  // 内容变化的行（标记行/结果行/除法逐步行）整行重挂，渲染成为步骤数据的纯函数——
+  // 真机验证过 cell 级"key 含内容重挂"在重复步骤后不可靠（新数字/进位标记不显示），
+  // 整行重挂是稳定路径。
+  private boardRowContentKey(row: VerticalMathBoardRow): string {
+    let key: string = row.cells.join('')
+    if (row.operator !== undefined) {
+      key += `|op:${row.operator}`
     }
-    .width(this.getCellSize() * (this.solution.columnCount + 1))
-    .padding({ left: this.getTopMarkOffset(column) })
-    .justifyContent(FlexAlign.Start)
-    .transition(this.resolveMarkTransition(isFresh))
-  }
-
-  @Builder
-  private PersistentMarkerRow(sourceRow: VerticalMathBoardRow) {
-    if (this.hasPersistentTopMarks(sourceRow)) {
-      Stack() {
-        ForEach(this.getCarryColumns(sourceRow), (column: number) => {
-          this.TopMarkAt('+1', column, column === this.getActiveColumn(), this.isFreshMark(column, true))
-        }, (column: number) => `carry_${column}`)
-        ForEach(this.getBorrowColumns(sourceRow), (column: number) => {
-          this.TopMarkAt('-1', column, column === this.getActiveColumn(), this.isFreshMark(column, false))
-        }, (column: number) => `borrow_${column}`)
-      }
+    if (row.markRow === true) {
+      key += '|m'
     }
+    if (row.ruleUnder === true) {
+      key += '|u'
+    }
+    if (row.barRight === true) {
+      key += '|b'
+    }
+    if (row.leftCells !== undefined) {
+      key += `|l:${row.leftCells.join('')}`
+    }
+    if (row.crossedColumns !== undefined) {
+      key += `|x:${row.crossedColumns.join(',')}`
+    }
+    return key
   }
 
   @Builder
   private BoardRows() {
     Column() {
       ForEach(this.getCurrentRows(), (row: VerticalMathBoardRow, rowIndex: number) => {
-        Column() {
-          VerticalMathBoardRowView({
-            row: row,
-            rowIndex: rowIndex,
-            highlights: this.getRowHighlights(rowIndex),
-            overlays: this.getCurrentOverlays(),
-            cellSize: this.getCellSize(),
-            columnCount: this.solution.columnCount,
-            isDarkMode: this.isDarkMode,
-            reduceMotion: this.reduceMotion,
-            celebrate: this.getShowFinalLine() && rowIndex === this.getAnswerRowIndex()
-          })
-          if (rowIndex === 1) {
-            this.PersistentMarkerRow(this.getCurrentRows()[0])
-          }
-          if (this.shouldShowLine(rowIndex)) {
-            Row()
-              .width(this.getCellSize() * this.solution.columnCount)
-              .height(3)
-              .margin({ left: this.getCellSize(), top: 4, bottom: 4 })
-              .backgroundColor(this.palette.ink)
-              .opacity(0.55)
-              .borderRadius(2)
-          }
-        }
-        .alignItems(HorizontalAlign.Start)
-      }, (_row: VerticalMathBoardRow, rowIndex: number) => `${this.visibleStepCount}_${rowIndex}`)
+        VerticalMathBoardRowView({
+          row: row,
+          rowIndex: rowIndex,
+          highlights: this.getRowHighlights(rowIndex),
+          cellSize: this.getCellSize(),
+          columnCount: this.solution.columnCount,
+          isDarkMode: this.isDarkMode,
+          reduceMotion: this.reduceMotion,
+          celebrate: this.isFinalStepVisible() && rowIndex === this.getAnswerRowIndex()
+        })
+      }, (row: VerticalMathBoardRow, rowIndex: number) => `board_row_${rowIndex}_${this.boardRowContentKey(row)}`)
     }
     .alignItems(HorizontalAlign.Start)
   }
 
-  @Builder
-  private RelationOverlay(overlay: VerticalMathOverlay) {
-    if (overlay.kind === 'division_lane') {
-      Row()
-        .width((overlay.endColumn - overlay.startColumn + 1) * this.getCellSize())
-        .height(4)
-        .position({ x: this.getCellX(overlay.startColumn), y: 12 })
-        .backgroundColor(this.palette.focus)
-        .borderRadius(2)
-        .animation({ duration: this.reduceMotion ? 0 : 220, curve: Curve.EaseOut })
-    }
-  }
-
-  @Builder
-  private StepRelationOverlays() {
-    ForEach(this.getCurrentOverlays(), (overlay: VerticalMathOverlay, index: number) => {
-      this.RelationOverlay(overlay)
-    }, (overlay: VerticalMathOverlay, index: number) =>
-      `${overlay.kind}_${overlay.startColumn}_${overlay.endColumn}_${index}`)
-  }
-
   build() {
-    Stack() {
+    Column() {
       this.BoardRows()
-      this.StepRelationOverlays()
     }
     .width(this.getBoardWidth())
     .padding(this.compact ? 14 : 20)
-    .backgroundColor(this.palette.paper)
-    .border({ width: 1, color: this.palette.divider })
+    .backgroundColor(this.palette.boardBg)
     .borderRadius(14)
   }
 }

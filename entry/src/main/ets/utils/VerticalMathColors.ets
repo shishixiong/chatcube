@@ -18,6 +18,15 @@ export interface VerticalMathPalette {
   disabledText: string
   errorBackground: string
   errorText: string
+  // ===== 黑板棋盘 v2（docs/vertical_math_refine.html 设计稿令牌）=====
+  boardBg: string          // 深海军蓝黑板底
+  boardInk: string         // 板书亮字
+  boardLine: string        // 横竖格线
+  boardCarry: string       // 进位/借位调整数（黄）
+  boardProduct: string     // 部分积 / 除法逐步乘积（蓝）
+  boardFinal: string       // 最终答案 / 余数（绿）
+  boardActiveBg: string    // 当前步高亮格底色
+  boardDoneBg: string      // 已完成格底色
 }
 
 const LIGHT_VERTICAL_MATH_PALETTE: VerticalMathPalette = {
@@ -37,7 +46,15 @@ const LIGHT_VERTICAL_MATH_PALETTE: VerticalMathPalette = {
   disabledBackground: '#C8C2B5',
   disabledText: '#5E574A',
   errorBackground: '#FFE3DC',
-  errorText: '#89564B'
+  errorText: '#89564B',
+  boardBg: '#0F1B2A',
+  boardInk: '#EAF2FF',
+  boardLine: '#8296B3',
+  boardCarry: '#FBBF24',
+  boardProduct: '#7DD3FC',
+  boardFinal: '#34D399',
+  boardActiveBg: '#24354D',
+  boardDoneBg: '#173229'
 }
 
 const DARK_VERTICAL_MATH_PALETTE: VerticalMathPalette = {
@@ -57,7 +74,15 @@ const DARK_VERTICAL_MATH_PALETTE: VerticalMathPalette = {
   disabledBackground: '#4A443C',
   disabledText: '#8C8474',
   errorBackground: '#5A2D2D',
-  errorText: '#F2B8A8'
+  errorText: '#F2B8A8',
+  boardBg: '#0C1626',
+  boardInk: '#E4EDFC',
+  boardLine: '#6E82A0',
+  boardCarry: '#FBBF24',
+  boardProduct: '#7DD3FC',
+  boardFinal: '#34D399',
+  boardActiveBg: '#1E2E44',
+  boardDoneBg: '#14352B'
 }
 
 export function resolveVerticalMathPalette(isDarkMode: boolean): VerticalMathPalette {

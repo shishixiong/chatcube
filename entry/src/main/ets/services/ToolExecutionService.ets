@@ -2354,8 +2354,9 @@ export class ToolExecutionService {
   }
 
   // vertical_math 特殊路径: 与 categorization 类似, 挂起等待 VerticalMathCard 回答。
-  // 孩子走完所有步骤后由卡片 onAnswer 回传 {completed, operation, operand_a, operand_b, result, remainder, step_count} JSON。
-  // 注意: 本期不接入星星奖励系统 (spec §2.1), 不调用 recordStarEvent, 避免 StarEventModels.ets 联合类型扩散。
+  // 回传 JSON 按 mode 区分: demo = {completed, operation, operand_a, operand_b, result, remainder, step_count};
+  // practice = {mode:'practice', operation, difficulty, total, correct_count, attempt_count, best_streak, details}。
+  // 仅 practice 模式授星 (走完演示不计分), 由 StarRewardService.computeStars 按 correct_count 计算。
   private async handleVerticalMath(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
     toolCall.toolId = VERTICAL_MATH_TOOL_ID
     if (toolCall.displayName.trim() === '') {
@@ -2415,7 +2416,7 @@ export class ToolExecutionService {
     toolCall.approvalState = 'answered'
     toolCall.approvalReason = answerJson
     console.info('ToolExecutionService', `vertical_math answered: ${toolCall.id}`)
-    // 注: 不调用 recordStarEvent — 本期不接入星星奖励系统。
+    this.recordVerticalMathStars(answerJson, toolCall, context)
     return new ToolResult(
       toolCall.id,
       answerJson,
@@ -2423,6 +2424,23 @@ export class ToolExecutionService {
       toolCall.displayName,
       toolCall.sourceLabel
     )
+  }
+
+  // 竖式练习授星 (fire-and-forget): 仅 practice 模式回执计分; demo 演示走完不授星不写事件。
+  private recordVerticalMathStars(
+    answerJson: string,
+    toolCall: ToolCall,
+    context: ToolExecutionContext
+  ): void {
+    try {
+      const payload = JSON.parse(answerJson) as Record<string, Object>
+      if (payload['mode'] !== 'practice') {
+        return
+      }
+      this.recordStarEvent('vertical_math', toolCall, context, answerJson)
+    } catch (_e) {
+      // 回执非 JSON (历史会话/异常) — 静默跳过授星
+    }
   }
 
   // 调用 AI vision 模型评价书写

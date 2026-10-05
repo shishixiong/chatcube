@@ -1,0 +1,1010 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>小星老师 · 竖式计算</title>
+<style>
+@layer od-layout {
+  :where(.od-stack,.od-row,.od-row-top,.od-cluster,.od-grid,.od-field,.od-stat,.od-cell,.od-tile) > :where(*) { min-width: 0; }
+
+  /* containers */
+  .od-stack   { display: flex; flex-direction: column; gap: var(--od-gap, 8px); }
+  .od-row     { display: flex; align-items: center; gap: var(--od-gap, 8px); }
+  .od-row-top { display: flex; align-items: flex-start; gap: var(--od-gap, 8px); }
+  .od-cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--od-gap, 8px); }
+  .od-fill    { flex: 1 1 0; min-width: 0; }
+  .od-fixed   { flex: none; }
+  .od-grid    { display: grid; gap: var(--od-gap, 12px); grid-template-columns: repeat(var(--od-cols, 3), minmax(0, 1fr)); }
+
+  /* stacked information: each piece is its own line — never sibling inline spans */
+  .od-stat, .od-field, .od-cell { display: grid; gap: var(--od-gap, 2px); }
+  :where(.od-stat,.od-field,.od-cell) > :where(*) { display: block; }
+  .od-tile { display: grid; grid-template-rows: auto 1fr; }
+  :where(.od-tile) > :where(*) { display: block; }
+
+  .od-media { display: block; width: 100%; height: auto; aspect-ratio: var(--od-ratio, auto); }
+  .od-media-cover { object-fit: cover; }
+
+  .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .od-clamp-2, .od-clamp-3 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .od-clamp-2 { -webkit-line-clamp: 2; }
+  .od-clamp-3 { -webkit-line-clamp: 3; }
+  .od-lines-2 { min-height: calc(2 * 1.4em); }
+  .od-nowrap  { white-space: nowrap; }
+  .od-keep    { word-break: keep-all; overflow-wrap: anywhere; }
+
+  .od-screen { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; }
+  .od-scroll { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
+
+  .od-rail { display: flex; gap: var(--od-gap, 8px); overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
+             padding-inline: var(--od-rail-pad, 16px); scroll-padding-inline: var(--od-rail-pad, 16px); }
+  .od-rail::-webkit-scrollbar { display: none; }
+  :where(.od-rail) > :where(*) { flex: none; scroll-snap-align: start; }
+  :where(.od-rail) > :where(:last-child) { margin-inline-end: var(--od-rail-pad, 16px); }
+
+  .od-spacer { flex: none; visibility: hidden; pointer-events: none; }
+  .od-touch  { min-width: 44px; min-height: 44px; }
+}
+/* /OD-LAYOUT-PRIMITIVES v1 */
+
+/* ===== Handheld shell (platform-neutral) ===== */
+:root {
+  --phone-screen-width: 390px;
+  --phone-screen-height: 844px;
+  --phone-bezel: 10px;
+  --phone-outer-radius: 52px;
+  --phone-screen-radius: 42px;
+  --phone-safe-top: 50px;
+  --phone-safe-bottom: 29px;
+  --phone-system-fg: #17181a;
+  --phone-screen-bg: #f8f8f9;
+  --phone-stage-bg: #eaebee;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background:
+    radial-gradient(circle at 50% 15%, rgba(255,255,255,.94), transparent 35%),
+    var(--phone-stage-bg);
+  color: #191a1d;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+.phone-frame {
+  position: relative;
+  width: calc(var(--phone-screen-width) + var(--phone-bezel) * 2);
+  height: calc(var(--phone-screen-height) + var(--phone-bezel) * 2);
+  padding: var(--phone-bezel);
+  border-radius: var(--phone-outer-radius);
+  background:
+    linear-gradient(145deg, rgba(255,255,255,.2), transparent 17%),
+    linear-gradient(160deg, #3f4146 0%, #202227 48%, #0b0c0f 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.13),
+    inset 0 0 0 2px rgba(0,0,0,.85),
+    0 32px 68px -20px rgba(10,12,16,.52),
+    0 10px 24px -10px rgba(10,12,16,.32);
+  isolation: isolate;
+}
+.phone-frame::before,
+.phone-frame::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 96px;
+  bottom: 96px;
+  width: 2px;
+  background: linear-gradient(to bottom, transparent, rgba(255,255,255,.13) 16%, transparent 30%, transparent 72%, rgba(255,255,255,.07) 88%, transparent);
+}
+.phone-frame::before { left: 0; }
+.phone-frame::after { right: 0; }
+.hardware-button {
+  position: absolute;
+  width: 4px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #08090b, #2a2d33 60%, #08090b);
+  box-shadow: inset 0 1px rgba(255,255,255,.08);
+}
+.hardware-button.volume { left: -3px; top: 222px; height: 86px; }
+.hardware-button.power { right: -3px; top: 270px; height: 82px; }
+.phone-screen {
+  position: relative;
+  width: var(--phone-screen-width);
+  height: var(--phone-screen-height);
+  overflow: hidden;
+  border-radius: var(--phone-screen-radius);
+  background: var(--phone-screen-bg);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
+}
+.phone-content {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: var(--phone-screen-bg);
+}
+.camera-dot {
+  position: absolute;
+  z-index: 20;
+  top: 13px;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, #344154 0 12%, #0a0c10 34%, #000 76%);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.06);
+  pointer-events: none;
+}
+.status-bar {
+  position: absolute;
+  z-index: 15;
+  inset: 0 0 auto;
+  height: var(--phone-safe-top);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 56px minmax(0, 1fr);
+  align-items: start;
+  padding: 14px 20px 0;
+  color: var(--phone-system-fg);
+  opacity: .8;
+  pointer-events: none;
+}
+.status-time {
+  justify-self: start;
+  display: flex;
+  align-items: center;
+  height: 15px;
+  font-size: 14px;
+  font-weight: 560;
+  line-height: 1;
+  letter-spacing: .01em;
+}
+.status-cutout-zone { width: 56px; }
+.status-icons { justify-self: end; display: inline-flex; align-items: center; height: 15px; gap: 6px; }
+.status-icons svg { display: block; flex: none; fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: round; stroke-linejoin: round; }
+.status-icons .connectivity { width: 15px; height: 12px; }
+.status-icons .wifi { width: 15px; height: 12px; }
+.status-icons .battery { width: 19px; height: 11px; }
+.gesture-indicator {
+  position: absolute;
+  z-index: 20;
+  left: 50%;
+  bottom: 8px;
+  width: 96px;
+  height: 4px;
+  transform: translateX(-50%);
+  border-radius: 99px;
+  background: var(--phone-system-fg);
+  opacity: .86;
+  pointer-events: none;
+}
+@media (max-height: 927px) { .phone-frame { zoom: 0.9; } }
+@media (max-height: 840px) { .phone-frame { zoom: 0.82; } }
+@media (max-height: 771px) { .phone-frame { zoom: 0.74; } }
+@media (max-height: 702px) { .phone-frame { zoom: 0.66; } }
+@media (max-width: 480px) {
+  body { padding: 0; display: block; }
+  .phone-frame { width: 100%; height: 100dvh; padding: 0; border-radius: 0; background: none; box-shadow: none; zoom: 1; }
+  .phone-frame::before, .phone-frame::after, .hardware-button { display: none; }
+  .phone-screen { width: 100%; height: 100%; border-radius: 0; }
+}
+/* ===== /Handheld shell ===== */
+
+/* ===== 小星老师 product design tokens ===== */
+:root {
+  --bg: #EEF2F9;
+  --surface: #FFFFFF;
+  --ink: #0F172A;
+  --muted: #475569;
+  --line: #DCE3EE;
+  --primary: #0F766E;
+  --primary-ink: #0B5A54;
+  --primary-soft: #DCF2EF;
+  --accent: #B45309;
+  --accent-soft: #FEF3C7;
+  --success: #15803D;
+  --success-soft: #DCFCE7;
+  --danger: #DC2626;
+  --danger-soft: #FEE2E2;
+  --board-bg: #0F1B2A;
+  --board-ink: #EAF2FF;
+  --board-line: #8296B3;
+  --board-carry: #FBBF24;
+  --board-product: #7DD3FC;
+  --board-final: #34D399;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --cell: 1.5ch;
+  --board-fs: clamp(20px, 6.4vw, 30px);
+  --sans: system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --display: ui-rounded, "SF Pro Rounded", "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --shadow-card: 0 1px 2px rgba(15,23,42,.04), 0 10px 24px -14px rgba(15,23,42,.18);
+  --dur-fast: 160ms;
+  --dur-base: 220ms;
+  --ease: cubic-bezier(.2,.7,.3,1);
+}
+
+.phone-content { padding: 0; }
+body { background: var(--phone-stage-bg); }
+
+.app {
+  position: relative;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+}
+.app, .app * { -webkit-tap-highlight-color: transparent; }
+
+.app-bar {
+  padding: calc(var(--phone-safe-top) + 2px) 18px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brand-mark {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 6px 14px -8px rgba(15,118,110,.9);
+}
+.brand-mark svg { width: 22px; height: 22px; }
+.brand-copy { display: grid; gap: 2px; min-width: 0; }
+.brand-name { font-family: var(--display); font-size: 20px; font-weight: 700; letter-spacing: -.01em; line-height: 1.1; }
+.brand-sub { font-size: 12px; color: var(--muted); line-height: 1.2; }
+
+.app-main { overflow-y: auto; overscroll-behavior: contain; min-height: 0; padding: 4px 18px 28px; }
+.screen { display: grid; gap: 14px; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: var(--shadow-card);
+}
+
+.seg {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 5px;
+  background: #E2E8F2;
+  border-radius: 14px;
+}
+.seg-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  min-height: 44px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background var(--dur-fast, .16s) ease, color .16s ease, box-shadow .16s ease;
+}
+.seg-btn[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(15,23,42,.14); }
+
+.config { display: grid; gap: 14px; }
+.stepper { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.stepper-label { display: grid; gap: 2px; font-weight: 600; }
+.stepper-label small { font-weight: 500; font-size: 12px; color: var(--muted); }
+.stepper-ctrl { display: flex; align-items: center; gap: 4px; background: #EEF2F9; border-radius: 12px; padding: 4px; }
+.icon-btn {
+  appearance: none;
+  border: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15,23,42,.1);
+}
+.stepper-val { min-width: 2ch; text-align: center; font-variant-numeric: tabular-nums; font-weight: 700; font-size: 17px; }
+
+.btn {
+  appearance: none;
+  border: 0;
+  font: inherit;
+  font-weight: 600;
+  min-height: 46px;
+  padding: 0 18px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background .16s ease, color .16s ease, transform .16s ease;
+}
+.btn:active { transform: translateY(1px); }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-ink); }
+.btn-soft { background: var(--primary-soft); color: var(--primary-ink); }
+.btn-soft:hover { background: #CDE9E4; }
+.btn-ghost { background: #EEF2F9; color: var(--ink); }
+.btn-ghost:hover { background: #E2E8F2; }
+.btn-block { width: 100%; }
+.btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+.board-card { display: grid; gap: 12px; }
+.board-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.expr { font-family: var(--mono); font-size: 20px; font-weight: 700; letter-spacing: .02em; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.expr .eq { color: var(--muted); }
+.expr .ans { color: var(--primary); }
+.op-badge { flex: none; font-size: 12px; font-weight: 700; color: var(--primary-ink); background: var(--primary-soft); padding: 5px 10px; border-radius: 999px; }
+
+.board-wrap {
+  background: var(--board-bg);
+  border-radius: var(--radius-md);
+  padding: 20px 12px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  text-align: center;
+}
+.vboard { font-family: var(--mono); font-size: var(--board-fs); color: var(--board-ink); display: inline-block; text-align: left; }
+.vrow { display: flex; align-items: baseline; white-space: nowrap; }
+.vrow.hidden { visibility: hidden; }
+.vcell { width: var(--cell); flex: 0 0 var(--cell); text-align: center; line-height: 1.34; }
+.vcell.op { width: 1.6em; flex: 0 0 1.6em; text-align: center; color: var(--board-ink); }
+.vcell.divisor { width: var(--div-w, 1.6em); flex: 0 0 var(--div-w, 1.6em); text-align: right; padding-right: .18em; }
+.vcell.bar { width: .5em; flex: 0 0 .5em; }
+.vcell.bar.right { border-right: 2px solid var(--board-line); }
+.vcell.bottom { border-bottom: 2px solid var(--board-line); }
+.vcell.line { border-bottom: 2px solid var(--board-line); }
+.vcell.mark { color: var(--board-carry); }
+.vcell .mk { display: inline-block; font-size: .62em; line-height: 1.1; font-weight: 700; color: var(--board-carry); }
+.vcell.cut { text-decoration: line-through; text-decoration-thickness: 2px; opacity: .5; }
+.vcell.product { color: var(--board-product); }
+.vcell.final { color: var(--board-final); font-weight: 700; }
+.vcell.result { font-weight: 700; }
+
+.board-legend { display: flex; flex-wrap: wrap; gap: 10px 16px; font-size: 12px; color: var(--muted); }
+.lg { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.dot-carry { background: var(--board-carry); }
+.dot-product { background: var(--board-product); }
+.dot-final { background: var(--board-final); }
+
+.step-bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
+.step-bar .btn { min-height: 44px; padding: 0 12px; }
+.step-bar > .btn:last-child { justify-self: end; }
+.step-bar + .step-bar { grid-template-columns: 1fr 1fr; }
+.step-ind { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: center; }
+
+/* practice */
+.practice-card { display: grid; gap: 16px; }
+.p-expr { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; font-family: var(--mono); font-size: 26px; font-weight: 700; }
+.p-num, .p-sym { color: var(--ink); }
+.p-input {
+  width: 6ch;
+  min-height: 52px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 24px;
+  font-weight: 700;
+  font-family: var(--mono);
+  text-align: center;
+  color: var(--ink);
+  background: #F4F7FC;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+}
+.p-input:focus-visible { border-color: var(--primary); }
+.p-input:disabled { opacity: .8; }
+.feedback { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 12px; font-size: 14px; line-height: 1.5; }
+.feedback.ok { background: var(--success-soft); color: #14532D; }
+.feedback.bad { background: var(--danger-soft); color: #7F1D1D; }
+.feedback .fb-icon { flex: none; width: 20px; height: 20px; margin-top: 1px; }
+.p-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.score-card { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; }
+.score-card .s-num { font-family: var(--display); font-size: 24px; font-weight: 700; color: var(--primary); }
+.score-card .s-cap { font-size: 12px; color: var(--muted); }
+
+/* guide */
+.h2 { margin: 0; font-family: var(--display); font-size: 18px; }
+.muted { margin: 6px 0 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
+.guide-item { display: grid; gap: 10px; }
+.guide-item h3 { margin: 0; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.guide-sym { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-family: var(--mono); font-weight: 700; }
+.guide-tip { font-size: 13px; color: var(--muted); line-height: 1.6; }
+.mini-wrap { background: var(--board-bg); border-radius: var(--radius-md); padding: 14px 10px; overflow-x: auto; text-align: center; }
+.mini-wrap .vboard { font-size: 18px; }
+.legend-list { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); }
+.legend-list b { color: var(--ink); }
+
+/* bottom nav */
+.tabbar {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 6px 12px calc(var(--phone-safe-bottom) + 4px);
+  background: rgba(255,255,255,.92);
+  border-top: 1px solid var(--line);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tabbar { backdrop-filter: blur(10px); }
+}
+.tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: var(--muted);
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  padding: 6px 0;
+  min-height: 48px;
+  cursor: pointer;
+  border-radius: 12px;
+}
+.tab svg { width: 22px; height: 22px; }
+.tab span { font-size: 11px; font-weight: 600; }
+.tab[aria-current="page"] { color: var(--primary); }
+
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.board-wrap:focus-visible { outline-offset: -3px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: .001ms !important; animation-duration: .001ms !important; }
+}
+</style>
+</head>
+<body>
+<div class="phone-frame" data-phone-shell data-platform="neutral">
+  <span class="hardware-button volume" aria-hidden="true"></span>
+  <span class="hardware-button power" aria-hidden="true"></span>
+
+  <section class="phone-screen" data-phone-screen>
+    <main class="phone-content" data-phone-content>
+      <!-- APP CONTENT START -->
+      <div class="app">
+        <header class="app-bar">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.5 6 .8-4.4 4.2 1.1 6L12 16.8 6.7 19.5l1.1-6L3.4 9.3l6-.8L12 3z"/></svg>
+          </span>
+          <span class="brand-copy">
+            <span class="brand-name">小星老师</span>
+            <span class="brand-sub" id="brandSub">竖式小助手</span>
+          </span>
+        </header>
+
+        <div class="app-main" id="appMain"></div>
+
+        <nav class="tabbar" aria-label="主导航">
+          <button class="tab" data-route="calc" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 7h8M8 11h3M8 15h3M15 11v6M13 15h5"/></svg>
+            <span>竖式</span>
+          </button>
+          <button class="tab" data-route="practice" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H5.5A1.5 1.5 0 0 0 4 6.5v12A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V6.5A1.5 1.5 0 0 0 18.5 5H15"/><path d="M9 3h6v4H9z"/><path d="M8.5 13l1.8 1.8L15 10"/></svg>
+            <span>练习</span>
+          </button>
+          <button class="tab" data-route="guide" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6.5C10.5 5 8.5 4.5 5.5 4.5c-.8 0-1.5.6-1.5 1.4v11.2c0 .8.7 1.3 1.5 1.3 3 0 5 .5 6.5 2 1.5-1.5 3.5-2 6.5-2 .8 0 1.5-.5 1.5-1.3V5.9c0-.8-.7-1.4-1.5-1.4-3 0-5 .5-6.5 2z"/><path d="M12 6.5v14"/></svg>
+            <span>说明</span>
+          </button>
+        </nav>
+      </div>
+      <!-- APP CONTENT END -->
+    </main>
+
+    <div class="status-bar" aria-hidden="true">
+      <span class="status-time">9:41</span>
+      <span class="status-cutout-zone"></span>
+      <span class="status-icons">
+        <svg class="connectivity" viewBox="0 0 15 12"><path d="M1.5 10.5v-2m4 2v-4.5m4 4.5v-7m4 7v-9"/></svg>
+        <svg class="wifi" viewBox="0 0 16 12"><path d="M1.5 4.7a9.2 9.2 0 0 1 13 0M4.2 7.3a5.4 5.4 0 0 1 7.6 0M6.9 10a1.55 1.55 0 0 1 2.2 0"/></svg>
+        <svg class="battery" viewBox="0 0 20 11"><rect x=".75" y="1.25" width="16.5" height="8.5" rx="2"/><path d="M18.5 4v3M3.2 3.4h10.4v4.2H3.2z" fill="currentColor" stroke="none"/></svg>
+      </span>
+    </div>
+    <div class="camera-dot" aria-hidden="true"></div>
+    <div class="gesture-indicator" aria-hidden="true"></div>
+  </section>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var main = document.getElementById("appMain");
+  var brandSub = document.getElementById("brandSub");
+
+  /* ---------- shared helpers ---------- */
+  function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+  function nDigits(d) { if (d <= 1) return randInt(1, 9); var min = Math.pow(10, d - 1), max = Math.pow(10, d) - 1; return randInt(min, max); }
+  function c(ch, cls) { return { ch: ch == null ? "" : String(ch), cls: cls || "" }; }
+  function align(s, cols) {
+    var arr = new Array(cols).fill("");
+    var ds = String(s).split("");
+    var start = cols - ds.length;
+    for (var i = 0; i < ds.length; i++) { var idx = start + i; if (idx >= 0 && idx < cols) arr[idx] = ds[i]; }
+    return arr;
+  }
+  function cellsOf(arr, cls) { return arr.map(function (ch) { return c(ch, ch ? (cls || "") : ""); }); }
+  function alignCells(s, cols, cls) { var a = align(s, cols); return a.map(function (ch) { return c(ch, ch ? (cls || "") : ""); }); }
+  function placeEndingAt(s, endCol, cols, cls) {
+    var arr = new Array(cols).fill("");
+    var ds = String(s).split("");
+    var start = endCol - ds.length + 1;
+    for (var k = 0; k < ds.length; k++) { var idx = start + k; if (idx >= 0 && idx < cols) arr[idx] = ds[k]; }
+    return arr.map(function (ch) { return c(ch, ch ? (cls || "") : ""); });
+  }
+  function ruleRow(step, cols, from, to) {
+    from = from == null ? 0 : from;
+    to = to == null ? cols - 1 : to;
+    var cells = [c("", "op line")];
+    for (var i = 0; i < cols; i++) cells.push(c("", (i >= from && i <= to) ? "line" : ""));
+    return { step: step, cells: cells };
+  }
+  function opLead(sym, cls) { return c(sym, ("op " + (cls || "")).trim()); }
+
+  var OP = {
+    add: { sym: "+", name: "加法", aL: "第一个数", bL: "第二个数" },
+    sub: { sym: "−", name: "减法", aL: "第一个数", bL: "第二个数" },
+    mul: { sym: "×", name: "乘法", aL: "被乘数", bL: "乘数" },
+    div: { sym: "÷", name: "除法", aL: "被除数", bL: "除数" }
+  };
+
+  /* ---------- vertical engine ---------- */
+  function buildAdd(a, b) {
+    var aS = String(a), bS = String(b);
+    var cols = Math.max(aS.length, bS.length) + 1;
+    var carryArr = new Array(cols).fill("");
+    var carry = 0;
+    for (var j = 0; j < cols; j++) {
+      var av = +(aS[aS.length - 1 - j] || 0), bv = +(bS[bS.length - 1 - j] || 0);
+      var s = av + bv + carry; carry = Math.floor(s / 10);
+      var idx = cols - 2 - j;
+      if (carry > 0 && idx >= 0) carryArr[idx] = "1";
+    }
+    var rows = [
+      { step: 1, cells: [opLead("")].concat(cellsOf(carryArr, "mark")) },
+      { step: 0, cells: [opLead("")].concat(alignCells(aS, cols, "")) },
+      { step: 0, cells: [opLead("+")].concat(alignCells(bS, cols, "")) },
+      ruleRow(2, cols),
+      { step: 2, cells: [opLead("")].concat(alignCells(String(a + b), cols, "result")) }
+    ];
+    return { rows: rows, maxStep: 2, expression: a + " + " + b, answer: String(a + b) };
+  }
+
+  function buildSub(a, b) {
+    if (a < b) { var t = a; a = b; b = t; }
+    var aS = String(a), bS = String(b);
+    var cols = Math.max(aS.length, bS.length);
+    var aD = align(aS, cols).map(function (ch) { return ch === "" ? 0 : Number(ch); });
+    var bD = align(bS, cols).map(function (ch) { return ch === "" ? 0 : Number(ch); });
+    var adj = aD.slice();
+    var changed = new Array(cols).fill(false);
+    for (var j = 0; j < cols; j++) {
+      if (adj[j] < bD[j]) {
+        adj[j] += 10; changed[j] = true;
+        var k = j + 1;
+        while (k < cols && adj[k] === 0) { adj[k] = 9; changed[k] = true; k++; }
+        if (k < cols) { adj[k] -= 1; changed[k] = true; }
+      }
+    }
+    var markArr = adj.map(function (v, i) { return changed[i] ? String(v) : ""; });
+    var aCells = align(aS, cols).map(function (ch, i) { return c(ch, changed[i] ? "cut" : ""); });
+    var rows = [
+      { step: 1, cells: [opLead("")].concat(cellsOf(markArr, "mark")) },
+      { step: 0, cells: [opLead("")].concat(aCells) },
+      { step: 0, cells: [opLead("−")].concat(alignCells(bS, cols, "")) },
+      ruleRow(2, cols),
+      { step: 2, cells: [opLead("")].concat(alignCells(String(a - b), cols, "result")) }
+    ];
+    return { rows: rows, maxStep: 2, expression: a + " − " + b, answer: String(a - b) };
+  }
+
+  function buildMul(a, b) {
+    var aS = String(a), bS = String(b);
+    var m = bS.length;
+    var cols = aS.length + m;
+    var rows = [];
+    rows.push({ step: 0, cells: [opLead("")].concat(alignCells(aS, cols, "")) });
+    rows.push({ step: 0, cells: [opLead("×")].concat(alignCells(bS, cols, "")) });
+    var partials = [];
+    for (var j = 0; j < m; j++) {
+      var bd = Number(bS[m - 1 - j]);
+      partials.push({ prod: a * bd, endCol: cols - 1 - j });
+    }
+    if (m === 1) {
+      rows.push(ruleRow(1, cols));
+      rows.push({ step: 1, cells: [opLead("")].concat(placeEndingAt(String(partials[0].prod), partials[0].endCol, cols, "result")) });
+      return { rows: rows, maxStep: 1, expression: a + " × " + b, answer: String(a * b) };
+    }
+    rows.push(ruleRow(1, cols));
+    partials.forEach(function (p, idx) {
+      rows.push({ step: 2 + idx, cells: [opLead("")].concat(placeEndingAt(String(p.prod), p.endCol, cols, "product")) });
+    });
+    rows.push(ruleRow(2 + m, cols));
+    rows.push({ step: 3 + m, cells: [opLead("")].concat(alignCells(String(a * b), cols, "result")) });
+    return { rows: rows, maxStep: 3 + m, expression: a + " × " + b, answer: String(a * b) };
+  }
+
+  function buildDiv(dividend, divisor) {
+    var dS = String(dividend).split("");
+    var n = dS.length;
+    var divS = String(divisor);
+    var cols = n;
+    var current = 0, started = false;
+    var qDigits = new Array(n).fill("");
+    var groups = [];
+    for (var i = 0; i < n; i++) {
+      current = current * 10 + Number(dS[i]);
+      var q = Math.floor(current / divisor);
+      var product = q * divisor;
+      var remainder = current - product;
+      if (q > 0 || started) {
+        started = true;
+        qDigits[i] = String(q);
+        var diffStr, diffEnd, final = false;
+        if (i < n - 1) { diffStr = String(remainder * 10 + Number(dS[i + 1])); diffEnd = i + 1; }
+        else { diffStr = String(remainder); diffEnd = i; final = true; }
+        groups.push({ prodStr: String(product), prodEnd: i, diffStr: diffStr, diffEnd: diffEnd, final: final });
+      }
+      current = remainder;
+    }
+    var boardStyle = ' style="--div-w:calc(' + divS.length + ' * var(--cell) + .35em)"';
+    var rows = [];
+    function leadDiv(txt) { return c(txt, "op divisor"); }
+    function leadBar(cls) { return c("", ("bar " + (cls || "")).trim()); }
+    var qCells = [leadDiv("")].concat([leadBar("bottom")]);
+    qDigits.forEach(function (d) { qCells.push(c(d, "bottom")); });
+    rows.push({ step: 1, cells: qCells });
+    rows.push({ step: 0, cells: [leadDiv(divS), leadBar("right")].concat(dS.map(function (ch) { return c(ch, ""); })) });
+    groups.forEach(function (g, idx) {
+      var prodCells = placeEndingAt(g.prodStr, g.prodEnd, cols, "product");
+      prodCells.forEach(function (x) { if (x.ch) x.cls = (x.cls + " bottom").trim(); });
+      rows.push({ step: 2 + idx, cells: [leadDiv(""), leadBar("right")].concat(prodCells) });
+      rows.push({ step: 2 + idx, cells: [leadDiv(""), leadBar("right")].concat(placeEndingAt(g.diffStr, g.diffEnd, cols, g.final ? "final" : "")) });
+    });
+    var quotient = Math.floor(dividend / divisor);
+    var rem = dividend - quotient * divisor;
+    return {
+      rows: rows,
+      maxStep: 1 + groups.length,
+      expression: dividend + " ÷ " + divisor,
+      answer: String(quotient) + (rem ? "……" + rem : ""),
+      boardStyle: boardStyle
+    };
+  }
+
+  function buildModel(op, a, b) {
+    if (op === "add") return buildAdd(a, b);
+    if (op === "sub") return buildSub(a, b);
+    if (op === "mul") return buildMul(a, b);
+    return buildDiv(a, b);
+  }
+
+  function renderBoard(model, step) {
+    var html = model.rows.map(function (r) {
+      var hidden = (step != null && r.step > step) ? " hidden" : "";
+      var cells = r.cells.map(function (x) {
+        var inner = (x.cls.indexOf("mark") !== -1 && x.ch) ? '<span class="mk">' + x.ch + "</span>" : x.ch;
+        return '<span class="vcell ' + x.cls + '">' + inner + "</span>";
+      }).join("");
+      return '<div class="vrow' + hidden + '">' + cells + "</div>";
+    }).join("");
+    return '<div class="vboard"' + (model.boardStyle || "") + ">" + html + "</div>";
+  }
+
+  /* ---------- state ---------- */
+  var RANGES = {
+    add: { a: [1, 4], b: [1, 4] },
+    sub: { a: [1, 4], b: [1, 4] },
+    mul: { a: [1, 3], b: [1, 3] },
+    div: { a: [2, 4], b: [1, 3] }
+  };
+  var state = {
+    route: "calc",
+    op: "add",
+    aDigits: 2,
+    bDigits: 1,
+    problem: null,
+    step: 0,
+    practice: null,
+    lastResult: null
+  };
+  var practice = { op: "mul", level: 1, a: 0, b: 0, answer: 0, value: "", answered: false, correct: false, showBoard: false, board: null, correctCount: 0, attempts: 0, streak: 0 };
+  state.practice = practice;
+
+  function clampDigits() {
+    var r = RANGES[state.op];
+    if (state.aDigits < r.a[0]) state.aDigits = r.a[0];
+    if (state.aDigits > r.a[1]) state.aDigits = r.a[1];
+    if (state.bDigits < r.b[0]) state.bDigits = r.b[0];
+    if (state.bDigits > r.b[1]) state.bDigits = r.b[1];
+  }
+
+  function genProblem() {
+    clampDigits();
+    var op = state.op;
+    var a, b;
+    if (op === "div") {
+      a = nDigits(state.aDigits); b = nDigits(state.bDigits);
+      var guard = 0;
+      while (a < b && guard++ < 30) { a = nDigits(state.aDigits); b = nDigits(state.bDigits); }
+      if (a < b) { var t = a; a = b; b = t; }
+    } else if (op === "sub") {
+      a = nDigits(state.aDigits); b = nDigits(state.bDigits);
+      if (a < b) { var t2 = a; a = b; b = t2; }
+    } else {
+      a = nDigits(state.aDigits); b = nDigits(state.bDigits);
+    }
+    var model = buildModel(op, a, b);
+    state.problem = { a: a, b: b, model: model, expression: model.expression, answer: model.answer };
+    state.step = 0;
+  }
+
+  /* ---------- practice ---------- */
+  function genPractice() {
+    var op = practice.op, lv = practice.level, a, b, ans;
+    if (op === "add" || op === "sub") {
+      var ad = lv === 1 ? randInt(1, 2) : lv === 2 ? 2 : randInt(2, 3);
+      var bd = lv === 1 ? randInt(1, 2) : lv === 2 ? 2 : randInt(2, 3);
+      a = nDigits(ad); b = nDigits(bd);
+      if (op === "sub" && a < b) { var t = a; a = b; b = t; }
+      ans = op === "add" ? a + b : a - b;
+    } else if (op === "mul") {
+      var am = lv === 1 ? randInt(1, 2) : lv === 2 ? 2 : randInt(2, 3);
+      var bm = lv === 1 ? 1 : lv === 2 ? randInt(1, 2) : 2;
+      a = nDigits(am); b = nDigits(bm);
+      ans = a * b;
+    } else {
+      var divisor = lv === 1 ? randInt(2, 9) : randInt(10, 99);
+      var qd = lv === 1 ? randInt(2, 9) : lv === 2 ? randInt(11, 99) : randInt(101, 999);
+      var quotient = lv === 1 ? randInt(2, 9) : qd;
+      a = divisor * quotient; b = divisor; ans = quotient;
+    }
+    practice.a = a; practice.b = b; practice.answer = ans;
+    practice.value = ""; practice.answered = false; practice.correct = false;
+    practice.showBoard = false; practice.board = null;
+  }
+
+  function checkAnswer() {
+    var raw = (practice.value || "").trim();
+    if (raw === "") { practice.error = "请先输入答案"; return; }
+    if (!/^\d+$/.test(raw)) { practice.error = "只能填写数字，请重新输入"; return; }
+    practice.error = "";
+    practice.answered = true;
+    practice.attempts += 1;
+    practice.correct = Number(raw) === practice.answer;
+    if (practice.correct) { practice.correctCount += 1; practice.streak += 1; }
+    else { practice.streak = 0; }
+    practice.board = buildModel(practice.op, practice.a, practice.b);
+  }
+
+  /* ---------- renderers ---------- */
+  function segOpHtml(selected) {
+    return Object.keys(OP).map(function (k) {
+      return '<button class="seg-btn" type="button" role="tab" aria-selected="' + (selected === k) + '" data-action="op" data-op="' + k + '">' + OP[k].name + "</button>";
+    }).join("");
+  }
+
+  function calcHTML() {
+    var m = OP[state.op];
+    var p = state.problem;
+    var complete = state.step >= p.model.maxStep;
+    var ansHtml = complete ? '<span class="eq">=</span><span class="ans">' + p.answer + "</span>" : '<span class="eq">= ?</span>';
+    return '<section class="screen">' +
+      '<div class="seg" role="tablist" aria-label="选择运算类型">' + segOpHtml(state.op) + "</div>" +
+      '<div class="card config">' +
+        '<div class="stepper">' +
+          '<span class="stepper-label">' + m.aL + '<small>位数</small></span>' +
+          '<span class="stepper-ctrl">' +
+            '<button class="icon-btn" type="button" data-action="dig" data-target="a" data-delta="-1" aria-label="减少' + m.aL + '位数">−</button>' +
+            '<span class="stepper-val" aria-live="polite">' + state.aDigits + "</span>" +
+            '<button class="icon-btn" type="button" data-action="dig" data-target="a" data-delta="1" aria-label="增加' + m.aL + '位数">+</button>' +
+          "</span>" +
+        "</div>" +
+        '<div class="stepper">' +
+          '<span class="stepper-label">' + m.bL + '<small>位数</small></span>' +
+          '<span class="stepper-ctrl">' +
+            '<button class="icon-btn" type="button" data-action="dig" data-target="b" data-delta="-1" aria-label="减少' + m.bL + '位数">−</button>' +
+            '<span class="stepper-val" aria-live="polite">' + state.bDigits + "</span>" +
+            '<button class="icon-btn" type="button" data-action="dig" data-target="b" data-delta="1" aria-label="增加' + m.bL + '位数">+</button>' +
+          "</span>" +
+        "</div>" +
+        '<button class="btn btn-primary btn-block" type="button" data-action="generate">生成竖式</button>' +
+      "</div>" +
+      '<div class="card board-card">' +
+        '<div class="board-head">' +
+          '<span class="expr">' + p.expression + " " + ansHtml + "</span>" +
+          '<span class="op-badge">' + m.name + "</span>" +
+        "</div>" +
+        '<div class="board-wrap" tabindex="0" role="img" aria-label="' + p.expression + ' 的竖式计算过程">' + renderBoard(p.model, state.step) + "</div>" +
+        '<div class="board-legend">' +
+          '<span class="lg"><i class="dot dot-carry"></i>进位 / 借位</span>' +
+          '<span class="lg"><i class="dot dot-product"></i>逐步相减 / 部分积</span>' +
+          '<span class="lg"><i class="dot dot-final"></i>余数</span>' +
+        "</div>" +
+        '<div class="step-bar">' +
+          '<button class="btn btn-ghost" type="button" data-action="step-prev"' + (state.step <= 0 ? " disabled" : "") + ">上一步</button>" +
+          '<span class="step-ind">步骤 ' + (state.step + 1) + " / " + (p.model.maxStep + 1) + "</span>" +
+          '<button class="btn btn-ghost" type="button" data-action="step-next"' + (state.step >= p.model.maxStep ? " disabled" : "") + ">下一步</button>" +
+        "</div>" +
+        '<div class="step-bar">' +
+          '<button class="btn btn-soft" type="button" data-action="expand"' + (state.step >= p.model.maxStep ? " disabled" : "") + ">全部展开</button>" +
+          '<button class="btn btn-soft" type="button" data-action="reset"' + (state.step <= 0 ? " disabled" : "") + ">重置</button>" +
+        "</div>" +
+      "</div>" +
+    "</section>";
+  }
+
+  function practiceHTML() {
+    var p = practice;
+    var m = OP[p.op];
+    var fb = "";
+    if (p.error) fb = '<div class="feedback bad" role="alert"><svg class="fb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg><span>' + p.error + "</span></div>";
+    else if (p.answered && p.correct) fb = '<div class="feedback ok" role="status"><svg class="fb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9"/></svg><span>答对啦！' + p.a + " " + m.sym + " " + p.b + " = " + p.answer + "</span></div>";
+    else if (p.answered) fb = '<div class="feedback bad" role="alert"><svg class="fb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg><span>再想想～ 正确答案是 ' + p.answer + "。可以看下面的竖式讲解。</span></div>";
+
+    var boardHtml = "";
+    if (p.answered && p.showBoard && p.board) {
+      boardHtml = '<div class="card board-card"><div class="board-head"><span class="expr">' + p.board.expression + ' <span class="eq">=</span> <span class="ans">' + p.board.answer + '</span></span><span class="op-badge">竖式</span></div><div class="board-wrap" tabindex="0" role="img" aria-label="' + p.board.expression + ' 的竖式讲解">' + renderBoard(p.board, null) + "</div></div>";
+    }
+    var revealBtn = (p.answered && !p.showBoard) ? '<button class="btn btn-soft btn-block" type="button" data-action="p-reveal">查看竖式讲解</button>' : "";
+
+    return '<section class="screen">' +
+      '<div class="seg" role="tablist" aria-label="选择练习类型">' + segOpHtml(p.op) + "</div>" +
+      '<div class="seg" role="tablist" aria-label="选择难度" style="grid-template-columns:repeat(3,1fr)">' +
+        ['入门', '进阶', '挑战'].map(function (label, i) {
+          var lv = i + 1;
+          return '<button class="seg-btn" type="button" role="tab" aria-selected="' + (p.level === lv) + '" data-action="level" data-level="' + lv + '">' + label + "</button>";
+        }).join("") +
+      "</div>" +
+      '<div class="card practice-card">' +
+        '<div class="p-expr"><span class="p-num">' + p.a + '</span><span class="p-sym">' + m.sym + '</span><span class="p-num">' + p.b + '</span><span class="p-sym">=</span>' +
+          '<input id="pAnswer" class="p-input" type="text" inputmode="numeric" autocomplete="off" aria-label="输入答案" value="' + (p.answered ? p.answer : (p.value || "")) + '"' + (p.answered ? " disabled" : "") + " /></div>" +
+        fb +
+        '<div class="p-actions">' +
+          (p.answered
+            ? '<button class="btn btn-ghost" type="button" data-action="p-skip">换一题</button><button class="btn btn-primary" type="button" data-action="p-next">下一题</button>'
+            : '<button class="btn btn-ghost" type="button" data-action="p-skip">换一题</button><button class="btn btn-primary" type="button" data-action="p-check">提交答案</button>') +
+        "</div>" +
+      "</div>" +
+      '<div class="card score-card">' +
+        '<div class="od-stat"><span class="s-num">' + p.correctCount + '</span><span class="s-cap">答对</span></div>' +
+        '<div class="od-stat"><span class="s-num">' + p.attempts + '</span><span class="s-cap">已答</span></div>' +
+        '<div class="od-stat"><span class="s-num">' + p.streak + '</span><span class="s-cap">连续答对</span></div>' +
+      "</div>" +
+      revealBtn +
+      boardHtml +
+    "</section>";
+  }
+
+  function guideHTML() {
+    var ex = [["add", 47, 25], ["sub", 63, 28], ["mul", 24, 13], ["div", 492, 4]];
+    var items = ex.map(function (e) {
+      var op = e[0], a = e[1], b = e[2], m = OP[op];
+      var model = buildModel(op, a, b);
+      return '<div class="card guide-item">' +
+        '<h3><span class="guide-sym">' + m.sym + "</span> " + m.name + "竖式</h3>" +
+        '<div class="mini-wrap" role="img" aria-label="' + model.expression + ' 的竖式示例">' + renderBoard(model, null) + "</div>" +
+        "</div>";
+    }).join("");
+    return '<section class="screen">' +
+      '<div class="card">' +
+        '<h2 class="h2">竖式小课堂</h2>' +
+        '<p class="muted">竖式把每一位对齐，从个位开始算。进位、借位、落下的数和余数都看得见，多位数的乘除法也一样。</p>' +
+        '<ul class="legend-list">' +
+          '<li class="lg"><i class="dot dot-carry"></i><span><b>进位 / 借位</b>：加法满十进一；减法不够借十，上方标出调整后的数。</span></li>' +
+          '<li class="lg"><i class="dot dot-product"></i><span><b>逐步相减 / 部分积</b>：除法每一步的乘积、乘法每一位的乘积。</span></li>' +
+          '<li class="lg"><i class="dot dot-final"></i><span><b>余数</b>：除法最后剩下的数，写在竖式最下方。</span></li>' +
+        "</ul>" +
+        '<p class="muted">除法使用课本的长除法：先写「厂」字括号，把除数写在左边、被除数写在里面，商写在上面，再一步步相减、把下一位落下来。乘数、除数最多 3 位，被除数最多 4 位。</p>' +
+      "</div>" +
+      items +
+    "</section>";
+  }
+
+  var ROUTE_META = {
+    calc: { sub: "竖式小助手", render: calcHTML },
+    practice: { sub: "练一练", render: practiceHTML },
+    guide: { sub: "竖式小课堂", render: guideHTML }
+  };
+
+  function render() {
+    main.innerHTML = ROUTE_META[state.route].render();
+    brandSub.textContent = ROUTE_META[state.route].sub;
+    Array.prototype.forEach.call(document.querySelectorAll(".tab"), function (t) {
+      var on = t.getAttribute("data-route") === state.route;
+      if (on) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current");
+    });
+    main.scrollTop = 0;
+    var input = document.getElementById("pAnswer");
+    if (input && !practice.answered) { input.focus({ preventScroll: true }); }
+  }
+
+  /* ---------- events ---------- */
+  main.addEventListener("click", function (ev) {
+    var t = ev.target.closest("[data-action]");
+    if (!t) return;
+    var action = t.getAttribute("data-action");
+    if (action === "op") {
+      var o = t.getAttribute("data-op");
+      if (state.route === "practice") { practice.op = o; state.op = o; practice.error = ""; genPractice(); }
+      else { state.op = o; clampDigits(); genProblem(); }
+      render();
+    } else if (action === "dig") {
+      var target = t.getAttribute("data-target");
+      var delta = Number(t.getAttribute("data-delta"));
+      if (target === "a") state.aDigits += delta; else state.bDigits += delta;
+      clampDigits(); genProblem(); render();
+    } else if (action === "generate") {
+      genProblem(); render();
+    } else if (action === "step-next") {
+      if (state.step < state.problem.model.maxStep) state.step += 1; render();
+    } else if (action === "step-prev") {
+      if (state.step > 0) state.step -= 1; render();
+    } else if (action === "expand") {
+      state.step = state.problem.model.maxStep; render();
+    } else if (action === "reset") {
+      state.step = 0; render();
+    } else if (action === "level") {
+      practice.level = Number(t.getAttribute("data-level")); practice.error = ""; genPractice(); render();
+    } else if (action === "p-check") {
+      var inp = document.getElementById("pAnswer");
+      practice.value = inp ? inp.value : ""; checkAnswer(); render();
+    } else if (action === "p-next" || action === "p-skip") {
+      practice.error = ""; genPractice(); render();
+    } else if (action === "p-reveal") {
+      practice.showBoard = true; render();
+    }
+  });
+
+  main.addEventListener("input", function (ev) {
+    if (ev.target && ev.target.id === "pAnswer") practice.value = ev.target.value;
+  });
+  main.addEventListener("keydown", function (ev) {
+    if (ev.target && ev.target.id === "pAnswer" && ev.key === "Enter" && !practice.answered) {
+      ev.preventDefault();
+      practice.value = ev.target.value; checkAnswer(); render();
+    }
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll(".tab"), function (t) {
+    t.addEventListener("click", function () {
+      var r = t.getAttribute("data-route");
+      state.route = r;
+      if (location.hash !== "#/" + r) { location.hash = "#/" + r; }
+      render();
+    });
+  });
+
+  window.addEventListener("hashchange", function () {
+    var r = location.hash.replace(/^#\//, "");
+    if (ROUTE_META[r]) state.route = r;
+    render();
+  });
+
+  /* ---------- init ---------- */
+  (function init() {
+    var r = location.hash.replace(/^#\//, "");
+    state.route = ROUTE_META[r] ? r : "calc";
+    if (!location.hash) location.hash = "#/calc";
+    state.op = "add";
+    clampDigits();
+    genProblem();
+    genPractice();
+    render();
+  })();
+})();
+</script>
+</body>
+</html>

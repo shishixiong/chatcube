@@ -2260,26 +2260,63 @@ function createCategorizationToolConfig(): ToolConfig {
 
 
 // ===== vertical_math 工具 =====
-// 小学竖式闯关工具：让小星老师发起加减乘除竖式计算互动，孩子按位填写并通过 AnimatedVerticalMathBoard 渲染。
+// 小学竖式闯关工具：两种模式——demo（AI 给出操作数，孩子跟着黑板棋盘逐步走竖式）与
+// practice（按运算类型 + 难度出 1–10 道练习题，孩子作答后回传对错计数）。
 // 交互由前端 VerticalMathCard 组件处理，后端 ToolExecutionService.handleVerticalMath 拦截处理记录保存。
 
+interface VerticalMathPracticeArgs {
+  operation?: string
+  difficulty?: number
+  count?: number
+}
+
+interface VerticalMathPracticeEcho {
+  operation: string
+  difficulty: number
+  count: number
+}
+
+interface VerticalMathEchoOutput {
+  mode: string
+  operation: string
+  operand_a: number | null
+  operand_b: number | null
+  practice: VerticalMathPracticeEcho | null
+  completed: boolean
+  correct: boolean
+}
+
 interface VerticalMathArgs {
+  mode?: string
   operation?: string
   operand_a?: number
   operand_b?: number
+  practice?: VerticalMathPracticeArgs
 }
 
 class VerticalMathExecutor implements ToolExecutor {
   async execute(_args: string): Promise<string> {
     try {
       const params = JSON.parse(_args) as VerticalMathArgs
-      return JSON.stringify({
+      let practiceEcho: VerticalMathPracticeEcho | null = null
+      if (params.practice !== undefined) {
+        const echo: VerticalMathPracticeEcho = {
+          operation: params.practice.operation ?? 'add',
+          difficulty: params.practice.difficulty ?? 1,
+          count: params.practice.count ?? 5
+        }
+        practiceEcho = echo
+      }
+      const output: VerticalMathEchoOutput = {
+        mode: params.mode ?? 'demo',
         operation: params.operation ?? '',
         operand_a: params.operand_a ?? null,
         operand_b: params.operand_b ?? null,
+        practice: practiceEcho,
         completed: false,
         correct: false
-      })
+      }
+      return JSON.stringify(output)
     } catch (error) {
       return JSON.stringify(new ErrorOutput(`vertical_math error: ${JSON.stringify(error)}`))
     }
@@ -2290,22 +2327,50 @@ function createVerticalMathToolDefinition(): ToolDefinition {
   const rawSchemaJson: string = `{
     "type": "object",
     "properties": {
+      "mode": {
+        "type": "string",
+        "enum": ["demo", "practice"],
+        "description": "卡片模式：demo=竖式演示（逐步走一遍给定的竖式，默认）；practice=竖式练习（出多道题让孩子自己算，答对得星星）。"
+      },
       "operation": {
         "type": "string",
         "enum": ["add", "subtract", "multiply", "divide"],
-        "description": "运算类型：add=加法、subtract=减法、multiply=乘法、divide=除法。"
+        "description": "运算类型：add=加法、subtract=减法、multiply=乘法、divide=除法。demo 模式必填；practice 模式改用 practice.operation。"
       },
       "operand_a": {
         "type": "integer",
         "minimum": 0,
         "maximum": 99999,
-        "description": "第一个数（被加数/被减数/被乘数/被除数），0–99999（万位以内）。允许省略让孩子自行填入。"
+        "description": "第一个数（被加数/被减数/被乘数/被除数），0–99999（万位以内）。demo 模式使用；减法须 a≥b。允许省略让孩子自行填入。"
       },
       "operand_b": {
         "type": "integer",
         "minimum": 0,
         "maximum": 99999,
-        "description": "第二个数（加数/减数/乘数/除数），0–99999（万位以内）。乘法限制 0–9、除法限制 1–9。允许省略。"
+        "description": "第二个数（加数/减数/乘数/除数），0–99999。乘法乘数须一位数（0–9）、除法除数须一位数（1–9），加减 0–99999。demo 模式使用。允许省略。"
+      },
+      "practice": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": ["add", "subtract", "multiply", "divide"],
+            "description": "练习运算类型，默认 add。"
+          },
+          "difficulty": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3,
+            "description": "难度：1=入门（1 位）、2=进阶（2 位）、3=挑战（2–3 位）；乘法出题固定一位数乘数、除法固定一位数除数（全部整除）。默认 1。"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "description": "练习题数量 1–10，默认 5。"
+          }
+        },
+        "description": "practice 模式的出题配置。除法练习全部整除。"
       }
     },
     "required": [],
@@ -2317,7 +2382,7 @@ function createVerticalMathToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     VERTICAL_MATH_TOOL_ID,
-    '「小学竖式闯关」：输入两个 0–99999（万位以内）之间的整数和孩子选择的加减乘除，AI 引导孩子按位算出标准小学竖式。Use this tool INSTEAD of writing math problems in plain text whenever the child is practicing vertical arithmetic.',
+    '「小学竖式闯关」：竖式计算互动卡片，分两种模式。demo 模式（默认）：给出 operation 和两个操作数（加减 0–99999 且减法 a≥b；乘数须一位数 0–9；除数须一位数 1–9），孩子在黑板棋盘上跟着步骤逐位走完竖式（乘法按"每一位相乘"展开部分积后相加，除法为厂字形长除）。practice 模式：传 mode=「practice」和 practice 配置（operation、difficulty 1–3、count 1–10），卡片自动出多道题让孩子独立计算并统计对错。孩子练习竖式算术时用本工具，INSTEAD of 在纯文本里出竖式题。',
     parameters
   )
 
