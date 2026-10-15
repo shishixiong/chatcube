@@ -72,6 +72,18 @@ const PRESET_PROVIDERS: PresetProviderDef[] = [
     logoProviderKey: 'minimax'
   },
   {
+    id: 'stepfun',
+    name: 'StepFun',
+    type: ProviderType.CUSTOM,
+    apiStyle: ApiStyle.OPENAI,
+    baseUrl: 'https://api.stepfun.com/v1',
+    iconPath: '',
+    brandColorHex: '#3D6BFF',
+    textIcon: 'ST',
+    textIconBgColor: '#3D6BFF',
+    logoProviderKey: 'stepfun'
+  },
+  {
     id: 'mimo',
     name: 'MiMo',
     type: ProviderType.CUSTOM,

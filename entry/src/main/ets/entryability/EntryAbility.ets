@@ -15,11 +15,14 @@ import { registerTtsEngine } from '../services/registry/TtsEngineRegistry';
 import { SystemTtsEngine } from '../services/tts/SystemTtsEngine';
 import { MiMoTtsEngine } from '../services/tts/MiMoTtsEngine';
 import { MiniMaxTtsEngine } from '../services/tts/MiniMaxTtsEngine';
+import { StepFunTtsEngine } from '../services/tts/StepFunTtsEngine';
 import {
   MIMO_TTS_CONFIG,
   MINIMAX_TTS_CONFIG,
   MIMO_TTS_VOICES,
-  MINIMAX_TTS_VOICES
+  MINIMAX_TTS_VOICES,
+  STEPFUN_TTS_CONFIG,
+  STEPFUN_TTS_VOICES
 } from '../config/TtsConfig';
 
 const DOMAIN = 0x0000;
@@ -192,6 +195,18 @@ export default class EntryAbility extends UIAbility {
           defaultVoiceId: 'cartoon_pig'
         },
         factory: () => new MiniMaxTtsEngine()
+      });
+      registerTtsEngine({
+        profile: {
+          id: 'stepfun',
+          displayName: 'StepFun 语音',
+          description: `阶跃 StepFun TTS (${STEPFUN_TTS_CONFIG.model}, ${STEPFUN_TTS_CONFIG.voice})，复用 StepFun API Key，需要联网`,
+          requiresApiKey: true,
+          iconSymbol: 'sys.symbol.waveform',
+          voices: STEPFUN_TTS_VOICES,
+          defaultVoiceId: STEPFUN_TTS_CONFIG.voice
+        },
+        factory: () => new StepFunTtsEngine()
       });
       hilog.info(DOMAIN, 'testTag', 'TTS engines registered successfully');
 
