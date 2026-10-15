@@ -7,7 +7,7 @@
  * - 读取: ChatPage 标题栏菜单项 / TodayStarDetailSheet
  */
 
-export type StarActivityType = 'math_quiz' | 'english_quiz' | 'number_puzzle' | 'handwriting_practice' | 'categorization' | 'maze' | 'sudoku' | 'picture_vocab' | 'listening_quiz' | 'pinyin_quiz' | 'matching_pairs' | 'chat_correct' | 'hanzi_card' | 'pinyin_card' | 'picture_talk' | 'chinese_quiz' | 'vertical_math'
+export type StarActivityType = 'math_quiz' | 'english_quiz' | 'number_puzzle' | 'handwriting_practice' | 'categorization' | 'maze' | 'sudoku' | 'picture_vocab' | 'listening_quiz' | 'pinyin_quiz' | 'matching_pairs' | 'memory_match' | 'snake_game' | 'chat_correct' | 'hanzi_card' | 'pinyin_card' | 'picture_talk' | 'chinese_quiz' | 'vertical_math'
 
 export interface StarEventInsert {
   createdAt: number
@@ -47,6 +47,8 @@ export interface TodayStarSummaryByType {
   listening_quiz: StarTypeBucket
   pinyin_quiz: StarTypeBucket
   matching_pairs: StarTypeBucket
+  memory_match: StarTypeBucket
+  snake_game: StarTypeBucket
   chat_correct: StarTypeBucket
   hanzi_card: StarTypeBucket
   pinyin_card: StarTypeBucket
@@ -87,6 +89,8 @@ export function createEmptyTodayStarSummary(): TodayStarSummary {
     listening_quiz: createEmptyBucket(),
     pinyin_quiz: createEmptyBucket(),
     matching_pairs: createEmptyBucket(),
+    memory_match: createEmptyBucket(),
+    snake_game: createEmptyBucket(),
     chat_correct: createEmptyBucket(),
     hanzi_card: createEmptyBucket(),
     pinyin_card: createEmptyBucket(),
@@ -117,6 +121,8 @@ export interface StarActivityMetaMap {
   listening_quiz: StarActivityMeta
   pinyin_quiz: StarActivityMeta
   matching_pairs: StarActivityMeta
+  memory_match: StarActivityMeta
+  snake_game: StarActivityMeta
   chat_correct: StarActivityMeta
   hanzi_card: StarActivityMeta
   pinyin_card: StarActivityMeta
@@ -195,6 +201,20 @@ const META_MATCHING: StarActivityMeta = {
   grantedHint: '配对完成',
   unit: '局'
 }
+const META_MEMORY_MATCH: StarActivityMeta = {
+  emoji: '🎴',
+  shortLabel: '记忆',
+  longLabel: '记忆翻牌',
+  grantedHint: '记忆翻牌完成',
+  unit: '局'
+}
+const META_SNAKE_GAME: StarActivityMeta = {
+  emoji: '🐍',
+  shortLabel: '贪吃蛇',
+  longLabel: '贪吃蛇',
+  grantedHint: '贪吃蛇完成',
+  unit: '局'
+}
 const META_CHAT_CORRECT: StarActivityMeta = {
   emoji: '💬',
   shortLabel: '聊天',
@@ -257,6 +277,8 @@ const metaRecord: StarActivityMetaMap = {
   listening_quiz: META_LISTENING,
   pinyin_quiz: META_PINYIN,
   matching_pairs: META_MATCHING,
+  memory_match: META_MEMORY_MATCH,
+  snake_game: META_SNAKE_GAME,
   chat_correct: META_CHAT_CORRECT,
   hanzi_card: META_HANZI_CARD,
   pinyin_card: META_PINYIN_CARD,
@@ -266,7 +288,7 @@ const metaRecord: StarActivityMetaMap = {
 }
 export const STAR_ACTIVITY_META: StarActivityMetaMap = metaRecord
 
-const activityTypes: StarActivityType[] = ['math_quiz', 'english_quiz', 'number_puzzle', 'handwriting_practice', 'categorization', 'maze', 'sudoku', 'picture_vocab', 'listening_quiz', 'pinyin_quiz', 'matching_pairs', 'chat_correct', 'hanzi_card', 'pinyin_card', 'picture_talk', 'chinese_quiz', 'vertical_math']
+const activityTypes: StarActivityType[] = ['math_quiz', 'english_quiz', 'number_puzzle', 'handwriting_practice', 'categorization', 'maze', 'sudoku', 'picture_vocab', 'listening_quiz', 'pinyin_quiz', 'matching_pairs', 'memory_match', 'snake_game', 'chat_correct', 'hanzi_card', 'pinyin_card', 'picture_talk', 'chinese_quiz', 'vertical_math']
 export const STAR_ACTIVITY_TYPES: StarActivityType[] = activityTypes
 
 export function getBucketFromSummary(summary: TodayStarSummary, type: StarActivityType): StarTypeBucket {
@@ -303,6 +325,12 @@ export function getBucketFromSummary(summary: TodayStarSummary, type: StarActivi
   }
   if (type === 'matching_pairs') {
     return byType.matching_pairs
+  }
+  if (type === 'memory_match') {
+    return byType.memory_match
+  }
+  if (type === 'snake_game') {
+    return byType.snake_game
   }
   if (type === 'hanzi_card') {
     return byType.hanzi_card
@@ -355,6 +383,12 @@ export function getActivityMeta(type: StarActivityType): StarActivityMeta {
   }
   if (type === 'matching_pairs') {
     return META_MATCHING
+  }
+  if (type === 'memory_match') {
+    return META_MEMORY_MATCH
+  }
+  if (type === 'snake_game') {
+    return META_SNAKE_GAME
   }
   if (type === 'hanzi_card') {
     return META_HANZI_CARD
@@ -411,6 +445,12 @@ export function getActivitySymbol(type: StarActivityType): Resource {
   }
   if (type === 'matching_pairs') {
     return $r('sys.symbol.link')
+  }
+  if (type === 'memory_match') {
+    return $r('sys.symbol.checkmark_square_on_square')
+  }
+  if (type === 'snake_game') {
+    return $r('sys.symbol.dot_grid_2x2')
   }
   if (type === 'hanzi_card') {
     return $r('sys.symbol.character')

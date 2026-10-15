@@ -16,11 +16,15 @@ import {
   generateMaze,
   solveMaze,
   getNeighborPosition,
-  findDeadEnds
+  findDeadEnds,
   MazeDifficulty,
   MazeDimensions,
   MazeExtras,
   getGridDimensions,
+  getDifficultyLabel,
+  getGridSizeLabel,
+  getMazeExtras,
+  getCarrotCount,
   computePar,
   evaluateStars,
   getPortalTarget
@@ -252,12 +256,94 @@ export default function MazeGameTest() {
       const d1: MazeDimensions = getGridDimensions(1 as MazeDifficulty)
       const d2: MazeDimensions = getGridDimensions(2 as MazeDifficulty)
       const d3: MazeDimensions = getGridDimensions(3 as MazeDifficulty)
+      const d4: MazeDimensions = getGridDimensions(4 as MazeDifficulty)
       expect(d1.rows).assertEqual(9)
       expect(d1.cols).assertEqual(9)
       expect(d2.rows).assertEqual(11)
       expect(d2.cols).assertEqual(11)
       expect(d3.rows).assertEqual(13)
       expect(d3.cols).assertEqual(13)
+      expect(d4.rows).assertEqual(15)
+      expect(d4.cols).assertEqual(15)
+    })
+
+    it('difficulty_and_grid_labels_cover_all_four_tiers', 0, () => {
+      expect(getDifficultyLabel(1 as MazeDifficulty)).assertEqual('简单')
+      expect(getDifficultyLabel(2 as MazeDifficulty)).assertEqual('进阶')
+      expect(getDifficultyLabel(3 as MazeDifficulty)).assertEqual('挑战')
+      expect(getDifficultyLabel(4 as MazeDifficulty)).assertEqual('大师')
+      expect(getGridSizeLabel(1 as MazeDifficulty)).assertEqual('9×9')
+      expect(getGridSizeLabel(2 as MazeDifficulty)).assertEqual('11×11')
+      expect(getGridSizeLabel(3 as MazeDifficulty)).assertEqual('13×13')
+      expect(getGridSizeLabel(4 as MazeDifficulty)).assertEqual('15×15')
+    })
+
+    it('getMazeExtras_scales_powerups_treasures_portals_with_difficulty', 0, () => {
+      const e1: MazeExtras = getMazeExtras(1 as MazeDifficulty)
+      const e2: MazeExtras = getMazeExtras(2 as MazeDifficulty)
+      const e3: MazeExtras = getMazeExtras(3 as MazeDifficulty)
+      const e4: MazeExtras = getMazeExtras(4 as MazeDifficulty)
+      expect(e1.powerupCount).assertEqual(2)
+      expect(e1.treasureCount).assertEqual(1)
+      expect(e1.portalPair).assertEqual(false)
+      expect(e2.powerupCount).assertEqual(3)
+      expect(e2.treasureCount).assertEqual(2)
+      expect(e2.portalPair).assertEqual(false)
+      expect(e3.powerupCount).assertEqual(4)
+      expect(e3.treasureCount).assertEqual(2)
+      expect(e3.portalPair).assertEqual(true)
+      expect(e4.powerupCount).assertEqual(5)
+      expect(e4.treasureCount).assertEqual(3)
+      expect(e4.portalPair).assertEqual(true)
+    })
+
+    it('getCarrotCount_scales_with_difficulty', 0, () => {
+      expect(getCarrotCount(1 as MazeDifficulty)).assertEqual(3)
+      expect(getCarrotCount(2 as MazeDifficulty)).assertEqual(4)
+      expect(getCarrotCount(3 as MazeDifficulty)).assertEqual(5)
+      expect(getCarrotCount(4 as MazeDifficulty)).assertEqual(6)
+    })
+
+    it('generateMaze_15x15_has_valid_solution', 0, () => {
+      const maze: MazeData = generateMaze(15, 15, 6)
+      expect(maze.rows).assertEqual(15)
+      expect(maze.cols).assertEqual(15)
+      const goal: MazePosition = { row: 14, col: 14 }
+      const path: MazePosition[] | null = solveMaze(maze.cells, { row: 0, col: 0 }, goal)
+      expect(path !== null).assertTrue()
+      expect(path !== null ? path.length : 0).assertLarger(15)
+    })
+
+    it('generateMaze_difficulty4_config_places_all_extras_on_15x15', 0, () => {
+      const extras: MazeExtras = getMazeExtras(4 as MazeDifficulty)
+      const carrotCount: number = getCarrotCount(4 as MazeDifficulty)
+      const maze: MazeData = generateMaze(15, 15, carrotCount, 20261007, extras)
+      let powerups: number = 0
+      let treasures: number = 0
+      let portals: number = 0
+      let carrots: number = 0
+      for (let r = 0; r < maze.rows; r++) {
+        for (let c = 0; c < maze.cols; c++) {
+          const cell: MazeCell = maze.cells[r][c]
+          if (cell.hasStar) {
+            carrots += 1
+          }
+          if (cell.powerup !== undefined && cell.powerup !== '') {
+            powerups += 1
+            if (cell.powerup === 'treasure') {
+              treasures += 1
+            }
+          }
+          if (cell.portalTo !== undefined && cell.portalTo !== null) {
+            portals += 1
+          }
+        }
+      }
+      // 5 道具 + 3 宝箱; 传送门一对(2 格); 胡萝卜 6 根
+      expect(powerups).assertEqual(8)
+      expect(treasures).assertEqual(3)
+      expect(portals).assertEqual(2)
+      expect(carrots).assertEqual(6)
     })
 
     it('generateMaze_13x13_has_valid_solution', 0, () => {
@@ -316,6 +402,40 @@ export default function MazeGameTest() {
       }
       expect(firstPortal !== null).assertTrue()
       expect(mutual).assertTrue()
+    })
+
+    it('generateMaze_portal_ends_keep_distance_from_start', 0, () => {
+      // 回归: 传送门两端都必须距起点 ≥ floor(min(rows,cols)×1.1),
+      // 修复前第二端 argmax 常落在起点角落(~55% 局距起点 1 步)
+      const seeds: number[] = [7, 424242, 99, 20260930, 20261007]
+      const start: MazePosition = { row: 0, col: 0 }
+      for (let s = 0; s < seeds.length; s++) {
+        const seed: number = seeds[s]
+        // 挑战档 13×13: 阈值 14
+        const extras3: MazeExtras = getMazeExtras(3 as MazeDifficulty)
+        const maze3: MazeData = generateMaze(13, 13, getCarrotCount(3 as MazeDifficulty), seed, extras3)
+        // 大师档 15×15: 阈值 16
+        const extras4: MazeExtras = getMazeExtras(4 as MazeDifficulty)
+        const maze4: MazeData = generateMaze(15, 15, getCarrotCount(4 as MazeDifficulty), seed, extras4)
+        const mazes: MazeData[] = [maze3, maze4]
+        const minDists: number[] = [14, 16]
+        for (let m = 0; m < mazes.length; m++) {
+          const maze: MazeData = mazes[m]
+          const minDist: number = minDists[m]
+          for (let r = 0; r < maze.rows; r++) {
+            for (let c = 0; c < maze.cols; c++) {
+              const cell: MazeCell = maze.cells[r][c]
+              if (cell.portalTo !== undefined && cell.portalTo !== null) {
+                const path: MazePosition[] | null = solveMaze(maze.cells, start, { row: r, col: c })
+                expect(path !== null).assertTrue()
+                // 完美迷宫路径唯一: 路径长-1 即 BFS 距离
+                const dist: number = path !== null ? path.length - 1 : 0
+                expect(dist >= minDist).assertTrue()
+              }
+            }
+          }
+        }
+      }
     })
 
     it('computePar_adds_shortest_path_and_carrot_bonus', 0, () => {

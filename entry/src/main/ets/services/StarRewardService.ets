@@ -162,10 +162,51 @@ export class StarRewardService {
       }
       return MATCHING_DIFFICULTY_STARS[difficulty] ?? 1
     }
+    if (activityType === 'memory_match') {
+      const completed = payload['completed']
+      if (completed !== true) {
+        return 0
+      }
+      // 记忆翻牌: 难度定基数 1-5 星, 步数效率评级 (1-3 星) 调节——
+      // 3 星评价拿满额, 2 星评价减 1 (最低 1), 1 星评价给 1 星。放弃 0 星。
+      const difficulty = (payload['difficulty'] as number) ?? 0
+      const rating = (payload['rating'] as number) ?? 1
+      const MEMORY_DIFFICULTY_STARS: Record<number, number> = {
+        1: 1,
+        2: 2,
+        3: 3,
+        4: 4,
+        5: 5
+      }
+      const base = MEMORY_DIFFICULTY_STARS[difficulty] ?? 1
+      if (rating >= 3) {
+        return base
+      }
+      if (rating === 2) {
+        return Math.max(1, base - 1)
+      }
+      return 1
+    }
     if (activityType === 'hanzi_card') {
       // 汉字小课堂 (讲解型): 完成「我学会了」回执即授星
       const completed = payload['completed']
       return completed === true ? 1 : 0
+    }
+    if (activityType === 'snake_game') {
+      const completed = payload['completed']
+      if (completed !== true) {
+        return 0
+      }
+      // 贪吃蛇: 完成一局 (玩到游戏结束) 至少 1 星鼓励参与,
+      // 分数阈值调节——≥25 得 3 星, ≥12 得 2 星, 其余 1 星。放弃 0 星。
+      const score = (payload['score'] as number) ?? 0
+      if (score >= 25) {
+        return 3
+      }
+      if (score >= 12) {
+        return 2
+      }
+      return 1
     }
     if (activityType === 'pinyin_card') {
       // 拼音小课堂 (讲解型): 完成「我学会了」回执即授星

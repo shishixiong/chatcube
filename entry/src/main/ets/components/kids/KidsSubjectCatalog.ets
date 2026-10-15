@@ -98,7 +98,7 @@ export const KIDS_SUBJECTS: KidsSubjectItem[] = [
     countUnit: '局',
     dailyLimit: 20,
     startPrompt: '我想玩益智游戏：华容道、走迷宫、数独、连一连、分类都可以，请换着花样开始一局吧',
-    activityTypes: ['number_puzzle', 'maze', 'sudoku', 'matching_pairs', 'categorization']
+    activityTypes: ['number_puzzle', 'maze', 'sudoku', 'matching_pairs', 'memory_match', 'categorization', 'snake_game']
   }
 ]
 

@@ -122,6 +122,7 @@ MVVM 分层（`entry/src/main/ets/`）：
 | `ListeningQuizCard` | `listening_quiz` | 英语听力辨音（TTS 朗读） |
 | `PinyinQuizCard` | `pinyin_quiz` | 拼音认读（看字选拼音，内置字表） |
 | `MatchingPairsCard` | `matching_pairs` | 连一连观察配对 |
+| `MemoryMatchCard` | `memory_match` | 记忆翻牌（宝石配对，kids_games 专属） |
 | `AskUserCard` | `ask_user` | AI 反问收集偏好 |
 
 出题类工具（math_quiz / english_quiz / picture_vocab / listening_quiz / pinyin_quiz / matching_pairs / categorization）参数在渲染前经 `utils/*Validation.ets` 预校验，坏题以 `should_retry` 回传 LLM 自行修正。

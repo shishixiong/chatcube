@@ -46,7 +46,7 @@
 | `kids_math` | 小星数学老师 | 数 | #4E8FE0 | ask_user, child_profile, get_time_info, grant_star, math_verify, math_quiz, vertical_math, math_teach, matching_pairs | 1 |
 | `kids_english` | 小星英语老师 | 英 | #35A98A | ask_user, child_profile, get_time_info, grant_star, english_quiz, picture_vocab, listening_quiz | 2 |
 | `kids_chinese` | 小星语文老师 | 语 | #E2603C | ask_user, child_profile, get_time_info, grant_star, pinyin_quiz, handwriting_practice, hanzi_card, pinyin_card, picture_talk, chinese_quiz | 3 |
-| `kids_games` | 小星游戏老师 | 玩 | #8B72E0 | ask_user, child_profile, get_time_info, grant_star, number_puzzle, maze, sudoku, matching_pairs, categorization | 4 |
+| `kids_games` | 小星游戏老师 | 玩 | #8B72E0 | ask_user, child_profile, get_time_info, grant_star, number_puzzle, maze, sudoku, matching_pairs, memory_match, categorization | 4 |
 
 - 定义：`models/AssistantModels.ets` 的 `KIDS_SUBJECT_SPECS`（行 374-411）+ `createKidsSubjectAssistants()`（行 439）。系统提示词与小星老师同源（共用 `SharedPromptFragments.buildBasePrompt`），按学科裁剪；每科提示词约束 `child_profile(action:"update")` 只更新本学科维度。
 - **不含** `image_generation` / `music_generation`（学科助手不出图不出乐）。
@@ -133,6 +133,7 @@
 | `listening_quiz` | `ListeningQuizCard.ets` | ✓ | 听力辨音，TTS + 预校验 |
 | `pinyin_quiz` | `PinyinQuizCard.ets` | ✓ | 拼音认读，内置 72 字表 + 预校验 |
 | `matching_pairs` | `MatchingPairsCard.ets` | ✓ | 连一连观察配对，预校验 |
+| `memory_match` | `MemoryMatchCard.ets` | ✓ | 记忆翻牌（宝石配对）：5 难度 3×2–6×4 + 预览倒计时 + 步数效率 1-3 星评级 + 按难度最佳成绩；kids_games 专属（镜像 math_teach 先例），2026-10-05 |
 | `ask_user` | `AskUserCard.ets` | ✓（v2 已并入锁定列表） | AI 反问 |
 | `hanzi_card` | `HanziCard.ets` | ✓ | 汉字小课堂（六步识字讲解 + 笔顺动画），讲解型回执，预校验 |
 | `pinyin_card` | `PinyinCard.ets` | ✓ | 拼音小课堂（拼装公式 + 四声 TTS 示范），讲解型回执，预校验 |
@@ -231,6 +232,7 @@ DB 行 `DailyLessonPlanRow`（行 248-263）→ 表 `daily_lesson_plans`，状�
 | `maze` | `completed === true` | 1 + 收集星数 |
 | `sudoku` | `completed === true` | 按难度 1/2/3/5/7 |
 | `matching_pairs` | 全对 0 失误 / 有失误 / 放弃 | 难度 1/2/3 / 1 / 0 |
+| `memory_match` | `completed === true` | 难度基数 1-5 星，评级调节（3★ 满额 / 2★ 减 1 / 1★ 给 1）；放弃 0 |
 | `chat_correct` | 聊天答对 | 1 |
 
 **副作用**（`StarRewardService.ets:119-164` 的 `recordEvent`）：

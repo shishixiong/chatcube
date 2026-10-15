@@ -41,6 +41,8 @@ import {
   getDifficultyLabel,
   getGridSizeLabel,
   getGridDimensions,
+  getMazeExtras,
+  getCarrotCount,
   computePar,
   evaluateStars,
   getPortalTarget
@@ -169,8 +171,7 @@ export struct MazeCard {
     return withColorAlpha(this.wallColor, this.isDarkMode ? '0C' : '06')
   }
 
-  // 单元格尺寸: 根据网格大小动态调整,8×8 自动缩小以适应聊天气泡宽度
-  // 单元格尺寸: sheet 全屏下按实测宽度自适应 (9/11/13 列)
+  // 单元格尺寸: 根据网格大小动态调整 (9/11/13/15 列)
   private get cellSize(): number {
     const cols: number = this.maze !== null
       ? this.maze.cols
@@ -182,7 +183,9 @@ export struct MazeCard {
     const gap: number = this.largeSize ? 2 : 1
     const gapTotal: number = gap * 2 * (cols + 2)
     const per: number = Math.floor((inner - gapTotal) / cols)
-    return Math.max(20, Math.min(44, per))
+    // 15 列 (大师档) 时格子天然算出 ~16vp, 20 的下限会顶爆 sheet 宽度 → 放宽到 15
+    const minCell: number = cols >= 15 ? 15 : 20
+    return Math.max(minCell, Math.min(44, per))
   }
 
   private get cellGap(): number {
@@ -213,6 +216,7 @@ export struct MazeCard {
   }
 
   private difficultyToRows(d: number): number {
+    if (d >= 4) return 15
     if (d >= 3) return 13
     if (d >= 2) return 11
     return 9
@@ -276,7 +280,7 @@ export struct MazeCard {
     try {
       const args = JSON.parse(this.toolCall.arguments) as Record<string, Object>
       const rawDiff = (args['difficulty'] as number) ?? 1
-      const clamped: MazeDifficulty = (rawDiff >= 1 && rawDiff <= 3 ? rawDiff : 1) as MazeDifficulty
+      const clamped: MazeDifficulty = (rawDiff >= 1 && rawDiff <= 4 ? rawDiff : 1) as MazeDifficulty
       this.difficulty = clamped
 
       if (this.isAnswered && this.answeredPayload !== '') {
@@ -344,15 +348,11 @@ export struct MazeCard {
     }
   }
 
-  // 新局生成: 9/11/13 档, 道具 2 + 宝箱 1, 挑战档加传送门; 胡萝卜 3/4/5
+  // 新局生成: 9/11/13/15 档; 道具/宝箱/传送门/胡萝卜按难度走 MazeGame 共享表(与后端 handleMaze 一致)
   private generateFreshMaze(diff: MazeDifficulty): MazeData {
     const dims: MazeDimensions = getGridDimensions(diff)
-    const extras: MazeExtras = {
-      powerupCount: 2,
-      treasureCount: 1,
-      portalPair: diff === 3
-    }
-    const carrotCount: number = diff === 1 ? 3 : (diff === 2 ? 4 : 5)
+    const extras: MazeExtras = getMazeExtras(diff)
+    const carrotCount: number = getCarrotCount(diff)
     return generateMaze(dims.rows, dims.cols, carrotCount, undefined, extras)
   }
 

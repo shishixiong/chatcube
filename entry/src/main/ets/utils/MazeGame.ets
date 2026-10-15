@@ -57,7 +57,7 @@ export interface MazeData {
 
 export type Direction = 'top' | 'right' | 'bottom' | 'left'
 
-export type MazeDifficulty = 1 | 2 | 3
+export type MazeDifficulty = 1 | 2 | 3 | 4
 
 interface MazeNeighbor {
   pos: MazePosition
@@ -169,21 +169,10 @@ function countWalls(walls: MazeCellWalls): number {
  * - 每格初始化 4 面墙
  * - 从 (0,0) 起随机挑未访问邻居打通墙、压栈,直到栈空
  * - 结果:无环、任意两格唯一路径
- *
- * @param rows 行数(2-10)
- * @param cols 列数(2-10)
- * @param starCount 收藏星数量(0-3,会在死胡同里随机放置)
- * @param seed 可选种子(同种子产生同迷宫,便于测试)
- */
-/**
- * 递归回溯 DFS 生成完美迷宫
- * - 每格初始化 4 面墙
- * - 从 (0,0) 起随机挑未访问邻居打通墙、压栈,直到栈空
- * - 结果:无环、任意两格唯一路径
  * - 随后在死胡同放胡萝卜星,再按 extras 摆放道具/宝箱/传送门
  *
- * @param rows 行数(2-13)
- * @param cols 列数(2-13)
+ * @param rows 行数(2-15)
+ * @param cols 列数(2-15)
  * @param starCount 收藏星数量(0-5,会在死胡同里随机放置)
  * @param seed 可选种子(同种子产生同迷宫,便于测试)
  * @param extras 道具/宝箱/传送门摆放配置(可选,默认全关)
@@ -198,8 +187,8 @@ export function generateMaze(
   if (rows < 2 || cols < 2) {
     throw new Error(`Maze size must be at least 2x2, got ${rows}x${cols}`)
   }
-  if (rows > 13 || cols > 13) {
-    throw new Error(`Maze size must be at most 13x13, got ${rows}x${cols}`)
+  if (rows > 15 || cols > 15) {
+    throw new Error(`Maze size must be at most 15x15, got ${rows}x${cols}`)
   }
   if (starCount < 0) {
     starCount = 0
@@ -336,7 +325,7 @@ export function generateMaze(
     cells[p.row][p.col].powerup = powerupKinds[i % 2]
   }
   if (extras.portalPair === true) {
-    const pair: MazePosition[] | null = pickPortalPair(cells, rows, cols, freeCells, freeIndex)
+    const pair: MazePosition[] | null = pickPortalPair(cells, rows, cols, freeCells, freeIndex, rng)
     if (pair !== null) {
       cells[pair[0].row][pair[0].col].portalTo = { row: pair[1].row, col: pair[1].col }
       cells[pair[1].row][pair[1].col].portalTo = { row: pair[0].row, col: pair[0].col }
@@ -533,7 +522,10 @@ export function getDifficultyLabel(difficulty: MazeDifficulty): string {
   if (difficulty === 2) {
     return '进阶'
   }
-  return '挑战'
+  if (difficulty === 3) {
+    return '挑战'
+  }
+  return '大师'
 }
 
 /**
@@ -546,7 +538,10 @@ export function getGridSizeLabel(difficulty: MazeDifficulty): string {
   if (difficulty === 2) {
     return '11×11'
   }
-  return '13×13'
+  if (difficulty === 3) {
+    return '13×13'
+  }
+  return '15×15'
 }
 
 /**
@@ -559,7 +554,47 @@ export function getGridDimensions(difficulty: MazeDifficulty): MazeDimensions {
   if (difficulty === 2) {
     return { rows: 11, cols: 11 }
   }
-  return { rows: 13, cols: 13 }
+  if (difficulty === 3) {
+    return { rows: 13, cols: 13 }
+  }
+  return { rows: 15, cols: 15 }
+}
+
+/**
+ * 难度档位 → 道具/宝箱/传送门摆放配置(v3.1: 随难度递增)
+ * - 简单 9×9: 2 道具 + 1 宝箱, 无传送门
+ * - 进阶 11×11: 3 道具 + 2 宝箱
+ * - 挑战 13×13: 4 道具 + 2 宝箱 + 一对传送门
+ * - 大师 15×15: 5 道具 + 3 宝箱 + 一对传送门
+ * ToolExecutionService.handleMaze 与 MazeCard.generateFreshMaze 共用, 避免两处漂移
+ */
+export function getMazeExtras(difficulty: MazeDifficulty): MazeExtras {
+  if (difficulty === 1) {
+    return { powerupCount: 2, treasureCount: 1, portalPair: false }
+  }
+  if (difficulty === 2) {
+    return { powerupCount: 3, treasureCount: 2, portalPair: false }
+  }
+  if (difficulty === 3) {
+    return { powerupCount: 4, treasureCount: 2, portalPair: true }
+  }
+  return { powerupCount: 5, treasureCount: 3, portalPair: true }
+}
+
+/**
+ * 难度档位 → 死胡同胡萝卜数量(3/4/5/6)
+ */
+export function getCarrotCount(difficulty: MazeDifficulty): number {
+  if (difficulty === 1) {
+    return 3
+  }
+  if (difficulty === 2) {
+    return 4
+  }
+  if (difficulty === 3) {
+    return 5
+  }
+  return 6
 }
 
 /**
@@ -641,17 +676,23 @@ function computeDistanceField(cells: MazeCell[][], from: MazePosition): number[]
 }
 
 /**
- * 挑一对互相远离的传送门格
+ * 挑一对互相远离、且都远离起点的传送门格
  * - 候选 = candidates 中 startIndex 起的空位(已洗牌)
- * - 第一端优先取距起点 ≥ floor(min(rows,cols)×1.1) 的格
- * - 第二端取与第一端 BFS 距离最远的格(至少 ≥ 2, 否则放弃)
+ * - 远格池 = 距起点 BFS ≥ floor(min(rows,cols)×1.1) 的候选
+ * - 两端都从远格池取:第一端取池首(保持洗牌序),第二端优先随机取距第一端
+ *   ≥ 同阈值的格,池内没有时退化为池内距第一端最远的格(至少 ≥ 2, 否则放弃)
+ * - 远格池不足 2 格(病态迷宫)时退回 pickPortalPairFallback 的"各自最远"旧策略
+ *
+ * 修复记录: 旧实现第二端取"全池距第一端最远"——完美迷宫是生成树,全局最远点
+ * 几乎总落在起点角落,导致 ~55% 的局有一个传送门贴着起点(实测 200 局中位 1 步)。
  */
 function pickPortalPair(
   cells: MazeCell[][],
   rows: number,
   cols: number,
   candidates: MazePosition[],
-  startIndex: number
+  startIndex: number,
+  rng: () => number
 ): MazePosition[] | null {
   if (startIndex >= candidates.length) {
     return null
@@ -661,6 +702,57 @@ function pickPortalPair(
     return null
   }
   const minDist: number = Math.floor(Math.min(rows, cols) * 1.1)
+  const distFromStart: number[] = computeDistanceField(cells, { row: 0, col: 0 })
+  const farPool: MazePosition[] = []
+  for (let i = 0; i < pool.length; i++) {
+    const d: number = distFromStart[pool[i].row * cols + pool[i].col]
+    if (d >= minDist) {
+      farPool.push(pool[i])
+    }
+  }
+  if (farPool.length < 2) {
+    return pickPortalPairFallback(cells, cols, pool, minDist)
+  }
+  const first: MazePosition = farPool[0]
+  const distFromFirst: number[] = computeDistanceField(cells, first)
+  const farFromFirst: MazePosition[] = []
+  for (let i = 1; i < farPool.length; i++) {
+    const p: MazePosition = farPool[i]
+    if (distFromFirst[p.row * cols + p.col] >= minDist) {
+      farFromFirst.push(p)
+    }
+  }
+  let second: MazePosition | null = null
+  if (farFromFirst.length > 0) {
+    second = farFromFirst[Math.floor(rng() * farFromFirst.length)]
+  } else {
+    let bestDist: number = -1
+    for (let i = 1; i < farPool.length; i++) {
+      const p: MazePosition = farPool[i]
+      const d: number = distFromFirst[p.row * cols + p.col]
+      if (d > bestDist) {
+        bestDist = d
+        second = p
+      }
+    }
+    if (second === null || bestDist < 2) {
+      return null
+    }
+  }
+  const pair: MazePosition[] = [first, second]
+  return pair
+}
+
+/**
+ * 病态迷宫兜底(远格池不足 2 格): 沿用 v3 旧策略保证传送门仍然存在——
+ * 第一端取距起点 ≥ minDist 的候选(没有则首个), 第二端取距第一端最远的候选。
+ */
+function pickPortalPairFallback(
+  cells: MazeCell[][],
+  cols: number,
+  pool: MazePosition[],
+  minDist: number
+): MazePosition[] | null {
   const distFromStart: number[] = computeDistanceField(cells, { row: 0, col: 0 })
   let first: MazePosition = pool[0]
   for (let i = 0; i < pool.length; i++) {

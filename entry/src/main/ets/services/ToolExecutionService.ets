@@ -26,6 +26,8 @@ import {
   LISTENING_QUIZ_TOOL_ID,
   PINYIN_QUIZ_TOOL_ID,
   MATCHING_PAIRS_TOOL_ID,
+  MEMORY_MATCH_TOOL_ID,
+  SNAKE_GAME_TOOL_ID,
   MATH_TEACH_TOOL_ID,
   HANZI_CARD_TOOL_ID,
   PINYIN_CARD_TOOL_ID,
@@ -46,6 +48,8 @@ import {
   isListeningQuizFunctionName,
   isPinyinQuizFunctionName,
   isMatchingPairsFunctionName,
+  isMemoryMatchFunctionName,
+  isSnakeGameFunctionName,
   isHanziCardFunctionName,
   isPinyinCardFunctionName,
   isPictureTalkFunctionName,
@@ -58,7 +62,7 @@ import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
 import { getImageIndexService, ImageIndexService } from './ImageIndexService'
 import { ImageSource } from '../models/ImageIndexModels'
-import { generateMaze, getGridDimensions, getGridSizeLabel } from '../utils/MazeGame'
+import { generateMaze, getGridDimensions, getGridSizeLabel, getMazeExtras, getCarrotCount } from '../utils/MazeGame'
 import type { MazeDimensions, MazeExtras, MazeDifficulty } from '../utils/MazeGame'
 import { generateSudoku, getDifficultyConfig } from '../utils/SudokuGenerator'
 import { validateAndNormalizeCategorization } from '../utils/CategorizationValidation'
@@ -1891,19 +1895,17 @@ export class ToolExecutionService {
     try {
       const parsed = JSON.parse(toolCall.arguments) as Record<string, Object>
       const difficulty = (parsed['difficulty'] as number) ?? 1
-      const clampedDifficulty = Math.max(1, Math.min(3, difficulty))
+      const clampedDifficulty = Math.max(1, Math.min(4, difficulty))
 
       console.info('ToolExecutionService',
         `maze generation start: difficulty=${clampedDifficulty}`)
 
-      // 走迷宫 v3: 尺寸按难度 9/11/13; 道具 2 + 宝箱 1; 挑战档加一对传送门; 胡萝卜 3/4/5
-      const dims: MazeDimensions = getGridDimensions(clampedDifficulty as MazeDifficulty)
-      const extras: MazeExtras = {
-        powerupCount: 2,
-        treasureCount: 1,
-        portalPair: clampedDifficulty === 3
-      }
-      const carrotCount: number = clampedDifficulty === 1 ? 3 : (clampedDifficulty === 2 ? 4 : 5)
+      // 走迷宫 v3.1: 尺寸按难度 9/11/13/15; 道具/宝箱/胡萝卜随难度递增; 挑战/大师档各一对传送门
+      // 摆放配置统一走 MazeGame 共享表(与 MazeCard.generateFreshMaze 兜底一致, 防两处漂移)
+      const mazeDiff = clampedDifficulty as MazeDifficulty
+      const dims: MazeDimensions = getGridDimensions(mazeDiff)
+      const extras: MazeExtras = getMazeExtras(mazeDiff)
+      const carrotCount: number = getCarrotCount(mazeDiff)
       const maze = generateMaze(dims.rows, dims.cols, carrotCount, undefined, extras)
 
       // 序列化 cells(供 MazeCard 在 aboutToAppear 还原)
@@ -1912,7 +1914,7 @@ export class ToolExecutionService {
       parsed['cols'] = maze.cols as Object
       parsed['stars_total'] = maze.starsTotal as Object
       parsed['difficulty'] = clampedDifficulty as Object
-      parsed['grid_size'] = getGridSizeLabel(clampedDifficulty as MazeDifficulty) as Object
+      parsed['grid_size'] = getGridSizeLabel(mazeDiff) as Object
       toolCall.arguments = JSON.stringify(parsed)
 
       console.info('ToolExecutionService',
@@ -2250,6 +2252,172 @@ export class ToolExecutionService {
     toolCall.approvalReason = answerJson
     console.info('ToolExecutionService', `matching_pairs answered: ${toolCall.id}`)
     this.recordStarEvent('matching_pairs', toolCall, context, answerJson)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
+  // memory_match 特殊路径: 挂起等待 MemoryMatchCard 回答。
+  // 牌面布局由卡片在 aboutToAppear 内随机生成（镜像 number_puzzle 模式, 无 handler 注入）;
+  // handler 只做难度规范化 + pending 等待 + 星星记录。
+  private async handleMemoryMatch(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = MEMORY_MATCH_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '记忆翻牌'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 难度规范化: 非法值 clamp 回 1-5, 卡片侧仍有防御性兜底
+    try {
+      const parsed = JSON.parse(toolCall.arguments) as Record<string, Object>
+      const difficulty = Math.max(1, Math.min(5, Math.floor((parsed['difficulty'] as number) ?? 1)))
+      parsed['difficulty'] = difficulty as Object
+      toolCall.arguments = JSON.stringify(parsed)
+    } catch (_e) {
+      // 参数不可解析时交给卡片侧兜底 (默认难度 1)
+    }
+
+    toolCall.approvalState = 'pending'
+    this.recordLedgerServed('memory_match', toolCall, context)
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = MEMORY_MATCH_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `memory_match answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `memory_match 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'memory_match cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未完成记忆翻牌' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `memory_match answered: ${toolCall.id}`)
+    this.recordStarEvent('memory_match', toolCall, context, answerJson)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
+  // snake_game 特殊路径: 挂起等待 SnakeCard 回答。
+  // 棋局由卡片内部运行（镜像 number_puzzle 模式, 无 handler 注入）;
+  // handler 只做难度规范化 + pending 等待 + 星星记录。
+  private async handleSnakeGame(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = SNAKE_GAME_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '贪吃蛇'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 难度规范化: 非法值 clamp 回 1-3, 卡片侧仍有防御性兜底
+    try {
+      const parsed = JSON.parse(toolCall.arguments) as Record<string, Object>
+      const difficulty = Math.max(1, Math.min(3, Math.floor((parsed['difficulty'] as number) ?? 1)))
+      parsed['difficulty'] = difficulty as Object
+      toolCall.arguments = JSON.stringify(parsed)
+    } catch (_e) {
+      // 参数不可解析时交给卡片侧兜底 (默认难度 2)
+    }
+
+    toolCall.approvalState = 'pending'
+    this.recordLedgerServed('snake_game', toolCall, context)
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = SNAKE_GAME_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `snake_game answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `snake_game 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'snake_game cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未完成贪吃蛇' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `snake_game answered: ${toolCall.id}`)
+    this.recordStarEvent('snake_game', toolCall, context, answerJson)
     return new ToolResult(
       toolCall.id,
       answerJson,
@@ -2641,6 +2809,18 @@ export class ToolExecutionService {
     // 连一连配对互动工具, 由 MatchingPairsCard 收集小朋友的配对结果。
     if (isMatchingPairsFunctionName(normalizedFunctionName)) {
       return await this.handleMatchingPairs(toolCall, context)
+    }
+
+    // === memory_match 特殊路径 ===
+    // 记忆翻牌互动工具, 由 MemoryMatchCard 收集小朋友的配对结果。
+    if (isMemoryMatchFunctionName(normalizedFunctionName)) {
+      return await this.handleMemoryMatch(toolCall, context)
+    }
+
+    // === snake_game 特殊路径 ===
+    // 贪吃蛇互动工具, 由 SnakeCard 收集小朋友的对局结果。
+    if (isSnakeGameFunctionName(normalizedFunctionName)) {
+      return await this.handleSnakeGame(toolCall, context)
     }
 
     // === hanzi_card 特殊路径 ===

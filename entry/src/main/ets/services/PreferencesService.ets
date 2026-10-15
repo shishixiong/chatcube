@@ -62,7 +62,7 @@ export class PreferenceKeys {
   static readonly NUMBER_PUZZLE_BEST_TIME_PREFIX: string = 'number_puzzle_best_time_'
   static readonly NUMBER_PUZZLE_BEST_MOVES_PREFIX: string = 'number_puzzle_best_moves_'
 
-  // 走迷宫最佳成绩 (按难度区分: maze_best_time_1/2/3, maze_best_moves_1/2/3, maze_best_stars_1/2/3)
+  // 走迷宫最佳成绩 (按难度区分: maze_best_time_1/2/3/4, maze_best_moves_1/2/3/4, maze_best_stars_1/2/3/4)
   static readonly MAZE_BEST_TIME_PREFIX: string = 'maze_best_time_'
   static readonly MAZE_BEST_MOVES_PREFIX: string = 'maze_best_moves_'
   static readonly MAZE_BEST_STARS_PREFIX: string = 'maze_best_stars_'
@@ -71,6 +71,14 @@ export class PreferenceKeys {
   // 数独最佳成绩 (按难度区分: sudoku_best_time_1..5, sudoku_best_mistakes_1..5)
   static readonly SUDOKU_BEST_TIME_PREFIX: string = 'sudoku_best_time_'
   static readonly SUDOKU_BEST_MISTAKES_PREFIX: string = 'sudoku_best_mistakes_'
+
+  // 记忆翻牌最佳成绩 (按难度区分: memory_match_best_moves_1..5, memory_match_best_time_1..5, memory_match_best_rating_1..5)
+  static readonly MEMORY_MATCH_BEST_MOVES_PREFIX: string = 'memory_match_best_moves_'
+  static readonly MEMORY_MATCH_BEST_TIME_PREFIX: string = 'memory_match_best_time_'
+  static readonly MEMORY_MATCH_BEST_RATING_PREFIX: string = 'memory_match_best_rating_'
+
+  // 贪吃蛇最佳得分 (按难度区分: snake_best_score_1..3)
+  static readonly SNAKE_BEST_SCORE_PREFIX: string = 'snake_best_score_'
 
   // 速度王: 任意完成的最快用时; 全对王: correct===total 时的最快用时
   static readonly CATEGORIZATION_BEST_TIME_PREFIX: string = 'categorization_best_time_'

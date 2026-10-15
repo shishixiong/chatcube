@@ -135,7 +135,9 @@ import {
   SUDOKU_TOOL_ID,
   PICTURE_VOCAB_TOOL_ID,
   PINYIN_QUIZ_TOOL_ID,
-  MATCHING_PAIRS_TOOL_ID
+  MATCHING_PAIRS_TOOL_ID,
+  MEMORY_MATCH_TOOL_ID,
+  SNAKE_GAME_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { MessagePartKind } from '../models/MessageParts'
 import { normalizeAssistantAvatarValue } from '../components/AssistantAvatar'
@@ -4819,7 +4821,7 @@ export struct ChatPage {
     this.applyPendingToolExecutionApproval(interaction)
   }
 
-  // 语音模式：互动工具（math_quiz / math_teach / hanzi_card / pinyin_card / picture_talk / chinese_quiz / english_quiz / number_puzzle / handwriting_practice / categorization / vertical_math / maze / sudoku / picture_vocab / pinyin_quiz / matching_pairs）出现 pending 交互时自动朗读题目
+  // 语音模式：互动工具（math_quiz / math_teach / hanzi_card / pinyin_card / picture_talk / chinese_quiz / english_quiz / number_puzzle / handwriting_practice / categorization / vertical_math / maze / sudoku / picture_vocab / pinyin_quiz / matching_pairs / memory_match / snake_game）出现 pending 交互时自动朗读题目
   private tryAutoTtsForQuizInteraction(interaction: PendingToolInteractionSnapshot): void {
     if (!this.isVoiceMode || this.isRecording) {
       return
@@ -4839,7 +4841,9 @@ export struct ChatPage {
       interaction.toolId === SUDOKU_TOOL_ID ||
       interaction.toolId === PICTURE_VOCAB_TOOL_ID ||
       interaction.toolId === PINYIN_QUIZ_TOOL_ID ||
-      interaction.toolId === MATCHING_PAIRS_TOOL_ID
+      interaction.toolId === MATCHING_PAIRS_TOOL_ID ||
+      interaction.toolId === MEMORY_MATCH_TOOL_ID ||
+      interaction.toolId === SNAKE_GAME_TOOL_ID
     if (!isAutoTtsTool) {
       return
     }
@@ -5099,13 +5103,15 @@ export struct ChatPage {
           quizText = '我们来做竖式练习。在卡片里输入两个数字，选好运算符号，开始算吧。'
         }
       } else if (interaction.toolId === MAZE_TOOL_ID) {
-        // 走迷宫：difficulty 1=4×4, 2=6×6, 3=8×8 (与 MazeCard 一致)
+        // 走迷宫：difficulty 1=9×9, 2=11×11, 3=13×13, 4=15×15 (与 MazeCard 一致)
         const rawDifficulty = (parsed['difficulty'] as number) ?? 1
-        let gridSize = 4
+        let gridSize = 9
         if (rawDifficulty === 2) {
-          gridSize = 6
-        } else if (rawDifficulty >= 3) {
-          gridSize = 8
+          gridSize = 11
+        } else if (rawDifficulty === 3) {
+          gridSize = 13
+        } else if (rawDifficulty >= 4) {
+          gridSize = 15
         }
         quizText = '我们来玩走迷宫，' + gridSize + ' 乘 ' + gridSize + ' 的格子。点击旁边的格子，带着小星星走出迷宫，走到小房子那里吧！'
       } else if (interaction.toolId === SUDOKU_TOOL_ID) {
@@ -5145,6 +5151,30 @@ export struct ChatPage {
           quizText = '我们来玩连一连：' + theme + '。先点左边，再点右边，把它们配成一对吧。'
         } else {
           quizText = '我们来玩连一连。先点左边，再点右边，把它们配成一对吧。'
+        }
+      } else if (interaction.toolId === MEMORY_MATCH_TOOL_ID) {
+        // 记忆翻牌：只读玩法引导。不朗读关卡结构外的任何内容——翻牌本身没有可泄底文本,
+        // 孩子看屏幕上的宝石牌面配对即可。
+        const gridSize = ((parsed['grid_size'] as string) ?? '').trim()
+        const hint = ((parsed['hint'] as string) ?? '').trim()
+        if (hint !== '') {
+          quizText = hint
+        } else if (gridSize !== '') {
+          quizText = '我们来玩记忆翻牌，棋盘是 ' + gridSize + '。先记住牌面的位置，再两张两张找出一样的。'
+        } else {
+          quizText = '我们来玩记忆翻牌。先记住牌面的位置，再两张两张找出一样的。'
+        }
+      } else if (interaction.toolId === SNAKE_GAME_TOOL_ID) {
+        // 贪吃蛇：只读玩法引导。棋面没有可朗读的题目文本,
+        // 孩子看屏幕上的苹果与金星位置即可。
+        const gridSize = ((parsed['grid_size'] as string) ?? '').trim()
+        const hint = ((parsed['hint'] as string) ?? '').trim()
+        if (hint !== '') {
+          quizText = hint
+        } else if (gridSize !== '') {
+          quizText = '我们来玩贪吃蛇，棋盘是 ' + gridSize + '。用方向键或滑动控制小蛇吃苹果吧。'
+        } else {
+          quizText = '我们来玩贪吃蛇。用方向键或滑动控制小蛇吃苹果吧。'
         }
       }
     } catch (_e) {}

@@ -24,6 +24,11 @@ export const PICTURE_VOCAB_TOOL_ID: string = 'picture_vocab'
 export const LISTENING_QUIZ_TOOL_ID: string = 'listening_quiz'
 export const PINYIN_QUIZ_TOOL_ID: string = 'pinyin_quiz'
 export const MATCHING_PAIRS_TOOL_ID: string = 'matching_pairs'
+// 记忆翻牌（2026-10-05）：宝石主题翻牌配对小游戏, kids_games 专属（镜像 math_teach 先例）。
+export const MEMORY_MATCH_TOOL_ID: string = 'memory_match'
+// 贪吃蛇（2026-10-06）：经典贪吃蛇小游戏, 参考 docs/tanshishe_game.html 原型。
+// 16×16 网格, 红苹果 + 金色星星限时奖励 + 连击系统, kids_games 专属（镜像 memory_match 先例）。
+export const SNAKE_GAME_TOOL_ID: string = 'snake_game'
 // 语文 v2（2026-09-29）：讲解型 hanzi_card / pinyin_card + 表达型 picture_talk
 // + 练习路由器 chinese_quiz（word_build / sentence_order / lookalike / antonym 四 mode）。
 export const HANZI_CARD_TOOL_ID: string = 'hanzi_card'
@@ -134,6 +139,20 @@ export function isMatchingPairsFunctionName(functionName: string): boolean {
     normalized === 'match_pairs'
 }
 
+export function isMemoryMatchFunctionName(functionName: string): boolean {
+  const normalized = normalizeToolFunctionName(functionName)
+  return normalized === MEMORY_MATCH_TOOL_ID ||
+    normalized === 'memory_game' ||
+    normalized === 'memory_flip'
+}
+
+export function isSnakeGameFunctionName(functionName: string): boolean {
+  const normalized = normalizeToolFunctionName(functionName)
+  return normalized === SNAKE_GAME_TOOL_ID ||
+    normalized === 'snake' ||
+    normalized === 'greedy_snake'
+}
+
 export function isHanziCardFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === HANZI_CARD_TOOL_ID
 }
@@ -215,6 +234,8 @@ export function isInteractiveQuizFunctionName(functionName: string): boolean {
     isListeningQuizFunctionName(functionName) ||
     isPinyinQuizFunctionName(functionName) ||
     isMatchingPairsFunctionName(functionName) ||
+    isMemoryMatchFunctionName(functionName) ||
+    isSnakeGameFunctionName(functionName) ||
     isHuarongdaoFunctionName(functionName) ||
     isNumberPuzzleFunctionName(functionName) ||
     isHandwritingPracticeFunctionName(functionName) ||

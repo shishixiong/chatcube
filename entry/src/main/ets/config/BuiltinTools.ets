@@ -37,6 +37,8 @@ import {
   LISTENING_QUIZ_TOOL_ID,
   PINYIN_QUIZ_TOOL_ID,
   MATCHING_PAIRS_TOOL_ID,
+  MEMORY_MATCH_TOOL_ID,
+  SNAKE_GAME_TOOL_ID,
   GRANT_STAR_TOOL_ID,
   HANZI_CARD_TOOL_ID,
   PINYIN_CARD_TOOL_ID,
@@ -1920,11 +1922,13 @@ class MazeExecutor implements ToolExecutor {
     // 如果工具被直接调用（没有前端交互），返回提示信息。
     try {
       const params = JSON.parse(_args) as MazeArgs
-      const difficulty = Math.max(1, Math.min(3, params.difficulty ?? 1))
+      const difficulty = Math.max(1, Math.min(4, params.difficulty ?? 1))
       // 简单预校验:返回提示让 AI 引导用户使用前端卡片
+      const gridLabel: string = difficulty === 1 ? '9×9'
+        : (difficulty === 2 ? '11×11' : (difficulty === 3 ? '13×13' : '15×15'))
       return JSON.stringify({
         difficulty: difficulty,
-        grid_size: difficulty === 1 ? '9×9' : (difficulty === 2 ? '11×11' : '13×13'),
+        grid_size: gridLabel,
         answered: false,
         hint: '迷宫已生成,请小朋友在卡片里点击相邻格子走出。'
       })
@@ -1940,8 +1944,8 @@ function createMazeToolDefinition(): ToolDefinition {
     "properties": {
       "difficulty": {
         "type": "integer",
-        "description": "难度级别:1 = 简单 9×9(适合 5 岁,81 格,3 根胡萝卜),2 = 进阶 11×11(适合 6-7 岁,121 格,4 根胡萝卜),3 = 挑战 13×13(适合 7-8 岁,169 格,5 根胡萝卜,含一对传送门)。每局均含 2 个道具与 1 个宝箱。建议初次使用从 1 开始,根据 child_profile 中 spatial_reasoning 的 level 选择。",
-        "enum": [1, 2, 3]
+        "description": "难度级别:1 = 简单 9×9(适合 5 岁,81 格,3 根胡萝卜,2 个道具+1 个宝箱),2 = 进阶 11×11(适合 6-7 岁,121 格,4 根胡萝卜,3 个道具+2 个宝箱),3 = 挑战 13×13(适合 7-8 岁,169 格,5 根胡萝卜,4 个道具+2 个宝箱+一对传送门),4 = 大师 15×15(适合 8 岁以上,225 格,6 根胡萝卜,5 个道具+3 个宝箱+一对传送门)。道具越大的迷宫越多。建议初次使用从 1 开始,根据 child_profile 中 spatial_reasoning 的 level 选择。",
+        "enum": [1, 2, 3, 4]
       }
     },
     "required": ["difficulty"]
@@ -1952,7 +1956,7 @@ function createMazeToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     MAZE_TOOL_ID,
-    'Present a maze (走迷宫) to the child as an interactive game. A grid maze is generated with paths and walls; the child taps adjacent cells or swipes to move a rabbit from the start (top-left) to a house (bottom-right). Difficulty maps to grid size: 1=9×9 (easy, 81 cells), 2=11×11 (intermediate, 121 cells), 3=13×13 (challenging, 169 cells). Each maze contains 2 power-ups (❄ freeze timer / 🧭 show correct path) and 1 treasure chest opening a random power-up, plus hidden stars in dead-ends; difficulty 3 also has a pair of portals that teleport the player. Prefer difficulty 1-3 based on the child\'s spatial_reasoning level from child_profile. After completion or giving up, you receive result (moves, time, stars collected, rating 1-3, completed). Then call child_profile update to record spatial_reasoning based on performance.',
+    'Present a maze (走迷宫) to the child as an interactive game. A grid maze is generated with paths and walls; the child taps adjacent cells or swipes to move a rabbit from the start (top-left) to a house (bottom-right). Difficulty maps to grid size: 1=9×9 (easy, 81 cells), 2=11×11 (intermediate, 121 cells), 3=13×13 (challenging, 169 cells), 4=15×15 (master, 225 cells). Power-ups (❄ freeze timer / 🧭 show correct path) and treasure chests scale with difficulty, from 2 power-ups + 1 chest at easy up to 5 power-ups + 3 chests at master; hidden stars sit in dead-ends, and difficulties 3-4 also have a pair of portals that teleport the player. Prefer difficulty 1-4 based on the child\'s spatial_reasoning level from child_profile. After completion or giving up, you receive result (moves, time, stars collected, rating 1-3, completed). Then call child_profile update to record spatial_reasoning based on performance.',
     parameters
   )
 
@@ -2914,6 +2918,150 @@ function createMatchingPairsToolConfig(): ToolConfig {
 }
 
 
+// ===== memory_match 工具 =====
+// 记忆翻牌（2026-10-05）：宝石主题翻牌配对小游戏, 参考 docs/open-close-game.html 原型。
+// 孩子先看短暂预览记住宝石位置, 再两张两张翻开配对; 步数越少评级越高 (1-3 星)。
+// 交互由前端 MemoryMatchCard 组件处理, 后端由 ToolExecutionService.handleMemoryMatch 拦截。
+// 牌面布局由卡片在 aboutToAppear 内随机生成, 不经 handler 注入（镜像 number_puzzle 模式）。
+
+interface MemoryMatchArgs {
+  difficulty: number
+}
+
+class MemoryMatchExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // memory_match 工具的交互由前端 MemoryMatchCard 组件处理。
+    // 后端由 ToolExecutionService.handleMemoryMatch 拦截处理。
+    // 如果工具被直接调用 (没有前端交互), 返回提示信息。
+    try {
+      const params = JSON.parse(_args) as MemoryMatchArgs
+      const difficulty = Math.max(1, Math.min(5, params.difficulty ?? 1))
+      return JSON.stringify({
+        difficulty: difficulty,
+        grid_size: difficulty === 1 ? '3×2' : (difficulty === 2 ? '4×3' : (difficulty === 3 ? '4×4' : (difficulty === 4 ? '5×4' : '6×4'))),
+        answered: false,
+        hint: '记忆翻牌已生成,请小朋友在卡片里先记住位置,再两张两张配对。'
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`memory_match error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createMemoryMatchToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "difficulty": {
+        "type": "integer",
+        "description": "难度级别:1 = 见习 3×2(6 张牌 3 对,预览 2.5 秒,适合 5 岁),2 = 学徒 4×3(12 张牌 6 对,预览 2.2 秒),3 = 行家 4×4(16 张牌 8 对,预览 2 秒),4 = 大师 5×4(20 张牌 10 对,预览 1.6 秒),5 = 宗师 6×4(24 张牌 12 对,预览 1.2 秒,适合 7-8 岁)。按 child_profile 中 observation / spatial_reasoning 的 level 选择,初次使用从 1 开始。",
+        "enum": [1, 2, 3, 4, 5]
+      }
+    },
+    "required": ["difficulty"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    MEMORY_MATCH_TOOL_ID,
+    'Present a memory match game (记忆翻牌) to the child as an interactive game. A grid of face-down cards is dealt; a short preview shows all cards face up first, then they flip back down and the child flips two cards per move to find matching pairs. Card faces are drawn from a random educational theme each round: food / shapes / letters / numbers / colors, to reinforce basic vocabulary and observation. Fewer moves earn a better rating (1-3 stars). Difficulty maps to board size and preview time: 1=3×2 (3 pairs, 2.5s preview, 5y), 2=4×3 (6 pairs, 2.2s), 3=4×4 (8 pairs, 2.0s), 4=5×4 (10 pairs, 1.6s), 5=6×4 (12 pairs, 1.2s, 7-8y). Pick difficulty 1-5 by the child\'s observation / spatial_reasoning level from child_profile. After completion or giving up, you receive result (move_count, time_seconds, rating 1-3, completed). Then call child_profile update to record observation / spatial_reasoning based on performance.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createMemoryMatchToolConfig(): ToolConfig {
+  return new ToolConfig(
+    MEMORY_MATCH_TOOL_ID,
+    '记忆翻牌',
+    '宝石主题翻牌配对:先看预览记住位置,再两张两张翻开配对,锻炼观察力与短时记忆。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    MEMORY_MATCH_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
+// ===== snake_game 工具 =====
+// 贪吃蛇（2026-10-06）：经典贪吃蛇小游戏, 参考 docs/tanshishe_game.html 原型。
+// 16×16 网格, 方向键/滑动控制; 红苹果 +连击分且变长, 金色星星限时出现值 5×连击分,
+// 速度随得分逐渐加快。交互由前端 SnakeCard 组件处理, 后端由 ToolExecutionService.handleSnakeGame 拦截。
+// 棋局由卡片内部运行, 不经 handler 注入（镜像 number_puzzle 模式）。
+
+interface SnakeGameArgs {
+  difficulty: number
+}
+
+class SnakeGameExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // snake_game 工具的交互由前端 SnakeCard 组件处理。
+    // 后端由 ToolExecutionService.handleSnakeGame 拦截处理。
+    // 如果工具被直接调用 (没有前端交互), 返回提示信息。
+    try {
+      const params = JSON.parse(_args) as SnakeGameArgs
+      const difficulty = Math.max(1, Math.min(3, params.difficulty ?? 1))
+      return JSON.stringify({
+        difficulty: difficulty,
+        grid_size: '16×16',
+        answered: false,
+        hint: '贪吃蛇已生成,请小朋友用方向键或滑动控制小蛇吃苹果。'
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`snake_game error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createSnakeGameToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "difficulty": {
+        "type": "integer",
+        "description": "难度级别:1 = 慢慢爬(基础速度较慢,适合 5 岁),2 = 正常速(标准节奏,适合 6-7 岁),3 = 飞快(基础速度较快,适合熟练的孩子)。行进速度还会随得分逐渐加快。按 child_profile 中 logic_thinking / spatial_reasoning 的 level 选择,初次使用从 1 开始。",
+        "enum": [1, 2, 3]
+      }
+    },
+    "required": ["difficulty"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    SNAKE_GAME_TOOL_ID,
+    'Present the classic snake game (贪吃蛇) to the child as an interactive game. A snake crawls on a 16×16 grid; the child steers it with on-screen arrow buttons or swipes to eat red apples (grow longer, score combo points) and time-limited golden stars (5× combo points). Eating quickly within 2.2 seconds builds a combo multiplier up to ×5. The snake speeds up as the score grows, and hitting a wall or its own body ends the round. Difficulty maps to base speed: 1=slow (5y), 2=normal (6-7y), 3=fast. Pick difficulty 1-3 by the child\'s logic_thinking / spatial_reasoning level from child_profile. After the round ends (game over) or the child gives up, you receive result (score, apples_eaten, gold_stars, best_combo, length, time_seconds, completed). Then call child_profile update to record logic_thinking / spatial_reasoning based on performance.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createSnakeGameToolConfig(): ToolConfig {
+  return new ToolConfig(
+    SNAKE_GAME_TOOL_ID,
+    '贪吃蛇',
+    '经典贪吃蛇:方向键或滑动控制小蛇吃苹果,连着吃连击分更高,金色星星限时 5 倍分。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    SNAKE_GAME_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
 // ===== hanzi_card 工具 =====
 // 汉字小课堂（讲解型）：按六步识字法讲一个汉字——认字→正音→明义→观形（笔顺动画）→组词→练写。
 // character 必须在 StrokeOrderData 笔顺字典内（保证米字格笔顺动画可播放）。
@@ -3685,6 +3833,28 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(MEMORY_MATCH_TOOL_ID)) {
+    const memoryMatchTool = new RegisteredTool(
+      MEMORY_MATCH_TOOL_ID,
+      createMemoryMatchToolConfig(),
+      createMemoryMatchToolDefinition(),
+      new MemoryMatchExecutor()
+    )
+    registry.registerTool(memoryMatchTool)
+    registeredNow += 1
+  }
+
+  if (!registry.isToolRegistered(SNAKE_GAME_TOOL_ID)) {
+    const snakeGameTool = new RegisteredTool(
+      SNAKE_GAME_TOOL_ID,
+      createSnakeGameToolConfig(),
+      createSnakeGameToolDefinition(),
+      new SnakeGameExecutor()
+    )
+    registry.registerTool(snakeGameTool)
+    registeredNow += 1
+  }
+
   if (!registry.isToolRegistered(HANZI_CARD_TOOL_ID)) {
     const hanziCardTool = new RegisteredTool(
       HANZI_CARD_TOOL_ID,
@@ -3737,5 +3907,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID]
 }
