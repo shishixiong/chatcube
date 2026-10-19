@@ -2,8 +2,9 @@
  * MathColumnPaperBoard - 草稿纸「竖式计算」面板 (v2 分步块 + 自检)
  *
  * 参考 docs/math_draft_refine.html 原型:
- * - 纯加法链 → 单块多操作数竖式; 含减法链 → 顺序两数块, 前块填完前其后块顶数显示 ?
- * - 预期进位/借位的列上方挂虚线标记格, 点一下标 +1/−1, 再点取消 (tap-toggle)
+ * - 纯加法链 → 单块多操作数竖式; 含减法链 → 顺序两数块, 前块填完前其后块顶数留空, 填完自动接力
+ * - 每列数字下方、横线上方都挂虚线标记格, 不预设哪列有进/借位 (2026-10-19 用户定的:
+ *   位置对齐教学板标记行 + 全列挂格防泄题), 点一下标 1/-1, 再点取消 (tap-toggle)
  * - 「检查」本地自检: 结果逐位 + 标记逐格 ✓/×, 状态条反馈 (不回传、不判星、不持久化)
  * - 借位提示语义 = 「划掉变小才算借位」(布局层 markExpected)
  *
@@ -188,10 +189,10 @@ export struct MathColumnPaperBoard {
     return bi > 0 && !this.isBlockComplete(bi - 1)
   }
 
-  /** 链式顶行显示: 未接力时按原操作数占位 ?, 接力后取孩子自己填的上一块结果 */
-  private chainDisplayDigit(bi: number, opnd: ColumnBlockOperand, p: number): string {
+  /** 链式顶行显示: 未接力时留空 (不显示 ?), 接力后取孩子自己填的上一块结果 */
+  private chainDisplayDigit(bi: number, p: number): string {
     if (this.isTopPending(bi)) {
-      return this.charAt1d(opnd.cells, p) !== '' ? '?' : ''
+      return ''
     }
     const prev = this.layout.blocks[bi - 1]
     return p < prev.answerPlaces ? this.cellValue(this.resultInputs, bi - 1, p) : ''
@@ -217,7 +218,8 @@ export struct MathColumnPaperBoard {
         }
       }
       for (let p = 0; p < b.cols; p++) {
-        if (b.markExpected[p] !== '' && !this.isMarkOk(bi, p)) {
+        // 全列核对: 该标没标、不该标乱标都算错 (markExpected 为 '' 的列必须留空)
+        if (!this.isMarkOk(bi, p)) {
           bad += 1
         }
       }
@@ -246,10 +248,10 @@ export struct MathColumnPaperBoard {
     }
     let hint = '点空格填入数字'
     if (anyCarry) {
-      hint += '; 有进位的那一位, 点上方小格标「+1」'
+      hint += '; 哪一位有进位, 点它下方小格标「1」'
     }
     if (anyBorrow) {
-      hint += '; 要借位的那一位, 点上方小格标「−1」'
+      hint += '; 哪一位要借位, 点它下方小格标「-1」'
     }
     return hint
   }
@@ -293,45 +295,44 @@ export struct MathColumnPaperBoard {
 
   // ---- 渲染 ----
 
-  @Builder
-  MarkSlot(bi: number, block: ColumnBlock, place: number) {
-    if (block.markExpected[place] !== '') {
-      Row() {
-        Text(this.cellValue(this.markInputs, bi, place) === 'carry' ? '+1'
-          : this.cellValue(this.markInputs, bi, place) === 'borrow' ? '−1' : '')
-          .fontSize(13)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(block.markExpected[place] === 'carry' ? this.palette.carry : this.palette.borrow)
-      }
-      .width(CELL_SIZE)
-      .height(SLOT_HEIGHT)
-      .justifyContent(FlexAlign.Center)
-      .borderRadius(8)
-      .border({
-        width: 1.5,
-        color: block.markExpected[place] === 'carry' ? this.palette.carry : this.palette.borrow,
-        style: this.cellValue(this.markInputs, bi, place) === '' ? BorderStyle.Dashed : BorderStyle.Solid
-      })
-      .backgroundColor(block.markExpected[place] === 'carry'
-        ? withColorAlpha(this.palette.carry, this.isDarkMode ? '26' : '14')
-        : withColorAlpha(this.palette.borrow, this.isDarkMode ? '26' : '14'))
-      .onClick(() => {
-        this.toggleMark(bi, place, block.markExpected[place])
-      })
-    } else {
-      Row()
-        .width(CELL_SIZE)
-        .height(SLOT_HEIGHT)
-    }
+  /** 块内标记种类齐次: 加法块标 carry, 减法块标 borrow (由第二个操作数的运算符决定) */
+  private markKindFor(block: ColumnBlock): string {
+    return block.operands.length > 1 && block.operands[1].op === '-' ? 'borrow' : 'carry'
   }
 
   @Builder
-  OperandCell(digit: string, pending: boolean) {
+  MarkSlot(bi: number, place: number, kind: string) {
+    Row() {
+      Text(this.cellValue(this.markInputs, bi, place) === 'carry' ? '1'
+        : this.cellValue(this.markInputs, bi, place) === 'borrow' ? '-1' : '')
+        .fontSize(13)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(kind === 'carry' ? this.palette.carry : this.palette.borrow)
+    }
+    .width(CELL_SIZE)
+    .height(SLOT_HEIGHT)
+    .justifyContent(FlexAlign.Center)
+    .borderRadius(8)
+    .border({
+      width: 1.5,
+      color: kind === 'carry' ? this.palette.carry : this.palette.borrow,
+      style: this.cellValue(this.markInputs, bi, place) === '' ? BorderStyle.Dashed : BorderStyle.Solid
+    })
+    .backgroundColor(kind === 'carry'
+      ? withColorAlpha(this.palette.carry, this.isDarkMode ? '26' : '14')
+      : withColorAlpha(this.palette.borrow, this.isDarkMode ? '26' : '14'))
+    .onClick(() => {
+      this.toggleMark(bi, place, kind)
+    })
+  }
+
+  @Builder
+  OperandCell(digit: string) {
     Row() {
       Text(digit)
         .fontSize(24)
         .fontWeight(FontWeight.Bold)
-        .fontColor(pending ? this.palette.secondaryText : $r('app.color.text_primary'))
+        .fontColor($r('app.color.text_primary'))
     }
     .width(CELL_SIZE)
     .height(DIGIT_ROW_HEIGHT)
@@ -424,14 +425,6 @@ export struct MathColumnPaperBoard {
           .margin({ top: 4, bottom: 2 })
       }
 
-      // 进位/借位标记行
-      Row({ space: CELL_GAP }) {
-        Row().width(OP_SLOT_WIDTH).height(SLOT_HEIGHT)
-        ForEach(this.reverseCols(block.cols), (p: number) => {
-          this.MarkSlot(bi, block, p)
-        }, (p: number) => `slot_${bi}_${p}`)
-      }
-
       // 操作数行
       ForEach(block.operands, (opnd: ColumnBlockOperand, oi: number) => {
         Row({ space: CELL_GAP }) {
@@ -443,14 +436,23 @@ export struct MathColumnPaperBoard {
             .textAlign(TextAlign.Center)
           ForEach(this.reverseCols(block.cols), (p: number) => {
             if (block.chainedTop && bi > 0 && oi === 0) {
-              this.OperandCell(this.chainDisplayDigit(bi, opnd, p), this.isTopPending(bi))
+              this.OperandCell(this.chainDisplayDigit(bi, p))
             } else {
-              this.OperandCell(this.charAt1d(opnd.cells, p), false)
+              this.OperandCell(this.charAt1d(opnd.cells, p))
             }
           }, (p: number) => `opd_${bi}_${oi}_${p}`)
         }
         .height(DIGIT_ROW_HEIGHT)
       }, (opnd: ColumnBlockOperand, oi: number) => `oprow_${bi}_${oi}_${opnd.op}`)
+
+      // 进位/借位标记行: 数字下方、横线上方 (与教学板 markRow 同序); 全列挂格不预设位置,
+      // 标记种类由块的运算符决定, 孩子自行判断哪列要标
+      Row({ space: CELL_GAP }) {
+        Row().width(OP_SLOT_WIDTH).height(SLOT_HEIGHT)
+        ForEach(this.reverseCols(block.cols), (p: number) => {
+          this.MarkSlot(bi, p, this.markKindFor(block))
+        }, (p: number) => `slot_${bi}_${p}`)
+      }
 
       // 横线
       Row()
