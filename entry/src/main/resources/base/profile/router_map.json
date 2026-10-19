@@ -154,6 +154,11 @@
       "name": "GiftRecordsPage",
       "pageSourceFile": "src/main/ets/pages/GiftRecordsPage.ets",
       "buildFunction": "GiftRecordsPageBuilder"
+    },
+    {
+      "name": "GiftManagePage",
+      "pageSourceFile": "src/main/ets/pages/GiftManagePage.ets",
+      "buildFunction": "GiftManagePageBuilder"
     }
   ]
 }

@@ -57,6 +57,7 @@ export struct IndexSettingsPanel {
   @Event onOpenLearningTomorrowPlan: () => void = () => {}
   @Event onOpenLearningEnglishImages: () => void = () => {}
   @Event onOpenLearningDailyEvaluation: () => void = () => {}
+  @Event onOpenGiftManage: () => void = () => {}
   @Event onOpenAbout: () => void = () => {}
   @Event onOpenSupportDevelopment: () => void = () => {}
   @Event onOpenPrivacy: () => void = () => {}
@@ -118,6 +119,13 @@ export struct IndexSettingsPanel {
         title: $r('app.string.learning_daily_evaluation_title'),
         subtitle: $r('app.string.learning_daily_evaluation_desc'),
         action: (): void => { this.onOpenLearningDailyEvaluation() }
+      } as SettingsListItemModel,
+      {
+        key: SettingsRouteName.GIFT_MANAGE,
+        icon: $r('sys.symbol.gift'),
+        title: $r('app.string.gift_manage_title'),
+        subtitle: $r('app.string.gift_manage_desc'),
+        action: (): void => { this.onOpenGiftManage() }
       } as SettingsListItemModel
     ]
     if (this.kidsModeEnabled) {

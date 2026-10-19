@@ -5124,6 +5124,9 @@ struct Index {
       onOpenLearningDailyEvaluation: (): void => {
         this.openSettingsDestination(SettingsRouteName.LEARNING_DAILY_EVALUATION)
       },
+      onOpenGiftManage: (): void => {
+        this.openSettingsDestination(SettingsRouteName.GIFT_MANAGE)
+      },
       onOpenAbout: (): void => {
         this.openSettingsDestination(SettingsRouteName.ABOUT)
       },

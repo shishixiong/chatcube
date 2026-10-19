@@ -3597,6 +3597,14 @@
       "value": "评估老师每晚 21:00 总结当天学习"
     },
     {
+      "name": "gift_manage_title",
+      "value": "星星礼物管理"
+    },
+    {
+      "name": "gift_manage_desc",
+      "value": "配置孩子可用星星兑换的礼物"
+    },
+    {
       "name": "learning_daily_evaluation_summary",
       "value": "评估摘要"
     },
