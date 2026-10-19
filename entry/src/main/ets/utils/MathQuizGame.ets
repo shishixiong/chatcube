@@ -50,6 +50,11 @@ export interface MathQuizAnswerPayload {
   question: string
   skill_key: string
   quiz_type: QuizType
+  // 两次机会流扩展 (2026-10-15): attempts = 提交次数 (首答对=1, 次答对/两错揭示=2);
+  // current_streak = 回传时刻的当前连胜 (AI 据此自适应安排连加连减步数)。
+  // 可选字段: 旧会话恢复 payload 无这两字段, 解析按 undefined 容错。
+  attempts?: number
+  current_streak?: number
 }
 
 export interface ExpressionToken {

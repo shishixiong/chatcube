@@ -1497,7 +1497,7 @@ function createMathQuizToolDefinition(): ToolDefinition {
       },
       "expression": {
         "type": "string",
-        "description": "arithmetic 专用: 算式字符串, e.g. 「3 + 2」. 显示为 「3 + 2 = ?」. 应用题模式 (word_problem=true) 时 expression 留空. 其他 type 不用填."
+        "description": "arithmetic 专用: 算式字符串, e.g. 「3 + 2」 或多步连加连减链式 「47 + 28 - 15」. 显示为 「47 + 28 - 15 = ?」. 链式最多 3 个运算符, 中间过程与最终结果都不能为负数. 题目卡片会提供「草稿纸」(手写+竖式), 孩子答错一次会获得提示再答一次. 应用题模式 (word_problem=true) 时 expression 留空. 其他 type 不用填."
       },
       "word_problem": {
         "type": "boolean",

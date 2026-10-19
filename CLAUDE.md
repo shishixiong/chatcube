@@ -110,7 +110,7 @@ MVVM 分层（`entry/src/main/ets/`）：
 
 | 组件 | 工具名 | 用途 |
 |------|--------|------|
-| `MathQuizCard` | `math_quiz` | 数学题选择/验证（5 题型，含竖式帮助 sheet） |
+| `MathQuizCard` | `math_quiz` | 数学题选择/验证（5 题型；+− 链式算术题带「草稿纸」sheet：手写 Canvas + 分步竖式纸（进/借位标记格 + 链式接力 + 本地「检查」自检，不回传不判星）；两次机会流：首错行内提示、次错揭示答案，payload 含 attempts/current_streak） |
 | `EnglishQuizCard` | `english_quiz` | 英文题（含 phonics） |
 | `VerticalMathCard` | `vertical_math` | 竖式计算演示 |
 | `CategorizationCard` | `categorization` | 分类小管家 |

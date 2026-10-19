@@ -29,7 +29,9 @@ import {
   formatDuration,
   normalizeTimeString,
   normalizeDurationString,
-  tryEvaluateExpression
+  tryEvaluateExpression,
+  sanitizeExpression,
+  tokenizeExpression
 } from './MathQuizGame'
 
 export interface MathQuizValidationResult {
@@ -125,6 +127,25 @@ function validateArithmetic(parsed: Record<string, Object>): MathQuizValidationR
   // 声称值与复算值同时存在且不一致 → 可证明答案错误, 拒绝并让 AI 自我修正
   if (computed !== null && declared !== null && Math.abs(computed - declared) > 0.001) {
     return fail(`arithmetic 题答案不一致: expression「${expression}」计算结果是 ${computed}, 但 correct_answer 是 ${declared}, 请修正后重新出题`)
+  }
+
+  // 连加连减适配 (2026-10-15): 步数上限 3 个运算符 (6-7 岁不适龄更长链),
+  // 括号不计入; 结果不能为负数 (学龄前不涉及负数)。
+  const sanitized = sanitizeExpression(expression)
+  if (sanitized !== '') {
+    const tokens = tokenizeExpression(sanitized)
+    let opCount: number = 0
+    for (const t of tokens) {
+      if (t.type === 'op' && t.value !== '(' && t.value !== ')') {
+        opCount += 1
+      }
+    }
+    if (opCount > 3) {
+      return fail(`arithmetic 题算式「${expression}」有 ${opCount} 个运算符, 连加连减最多 3 步, 请拆短后重新出题`)
+    }
+  }
+  if (computed !== null && computed < 0) {
+    return fail(`arithmetic 题算式「${expression}」计算结果是负数 (${computed}), 小朋友还没学负数, 请调整为结果非负的算式后重新出题`)
   }
 
   const options = collectNumberOptions(parsed)

@@ -11,6 +11,7 @@ import vocabRepeatValidationTest from './utils/VocabRepeatValidation.test';
 import vocabLedgerSectionTest from './utils/VocabLedgerSection.test';
 import stepAnswerPayloadTest from './utils/StepAnswerPayload.test';
 import stepFunTtsTextUtilsTest from './utils/StepFunTtsTextUtils.test';
+import mathColumnPaperLayoutTest from './utils/MathColumnPaperLayout.test';
 
 export default function testsuite() {
   abilityTest();
@@ -26,4 +27,5 @@ export default function testsuite() {
   vocabLedgerSectionTest();
   stepAnswerPayloadTest();
   stepFunTtsTextUtilsTest();
+  mathColumnPaperLayoutTest();
 }

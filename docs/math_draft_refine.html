@@ -1,0 +1,1139 @@
+<!doctype html>
+<!--
+  Open Design · math_quiz 草稿纸 — 竖式计算原型
+  Presentation shell adapted from the Open Design Android handheld template (Apache-2.0);
+  the product lives inside the APP CONTENT slot (.phone-content).
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>草稿纸 · 竖式计算 — math_quiz</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet" />
+<style>
+/* OD-LAYOUT-PRIMITIVES v1 — structure only: display, flex/grid, overflow, wrapping, ratio.
+   Put this @layer first; product CSS outside the layer always wins. */
+@layer od-layout {
+  :where(.od-stack,.od-row,.od-row-top,.od-cluster,.od-grid,.od-field,.od-stat,.od-cell,.od-tile) > :where(*) { min-width: 0; }
+
+  /* containers */
+  .od-stack   { display: flex; flex-direction: column; gap: var(--od-gap, 8px); }
+  .od-row     { display: flex; align-items: center; gap: var(--od-gap, 8px); }
+  .od-row-top { display: flex; align-items: flex-start; gap: var(--od-gap, 8px); }
+  .od-cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--od-gap, 8px); }
+  .od-fill    { flex: 1 1 0; min-width: 0; }
+  .od-fixed   { flex: none; }
+  .od-grid    { display: grid; gap: var(--od-gap, 12px); grid-template-columns: repeat(var(--od-cols, 3), minmax(0, 1fr)); }
+
+  /* stacked information: each piece is its own line — never sibling inline spans */
+  .od-stat, .od-field, .od-cell { display: grid; gap: var(--od-gap, 2px); }
+  :where(.od-stat,.od-field,.od-cell) > :where(*) { display: block; }
+  .od-tile { display: grid; grid-template-rows: auto 1fr; }
+  :where(.od-tile) > :where(*) { display: block; }
+
+  /* media keeps its intrinsic ratio by default; never a distorted or cropped
+     cover by accident. height:auto lets the ratio win over an <img height="…">
+     attribute. Cropping to a uniform box is an explicit opt-in: set --od-ratio
+     AND add .od-media-cover together (per the core rule, only where a crop is
+     deliberate — tile thumbs, decorative fills — never on full-frame content). */
+  .od-media { display: block; width: 100%; height: auto; aspect-ratio: var(--od-ratio, auto); }
+  .od-media-cover { object-fit: cover; }
+
+  /* data text only — authored copy is rewritten to its budget instead */
+  .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .od-clamp-2, .od-clamp-3 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .od-clamp-2 { -webkit-line-clamp: 2; }
+  .od-clamp-3 { -webkit-line-clamp: 3; }
+  .od-lines-2 { min-height: calc(2 * 1.4em); }   /* block-level reservation for a shared baseline */
+  .od-nowrap  { white-space: nowrap; }           /* 数字+单位 · 价格+起 · 日期+星期 */
+  .od-keep    { word-break: keep-all; overflow-wrap: anywhere; } /* CJK labels break at spaces / <wbr> first */
+
+  /* screen skeleton (optional): bars take their own space, the middle scrolls — no padding guessed for chrome */
+  .od-screen { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; }
+  .od-scroll { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
+
+  /* horizontal rail: the next item peeks at the edge; trailing room survives overflow */
+  .od-rail { display: flex; gap: var(--od-gap, 8px); overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
+             padding-inline: var(--od-rail-pad, 16px); scroll-padding-inline: var(--od-rail-pad, 16px); }
+  .od-rail::-webkit-scrollbar { display: none; }
+  :where(.od-rail) > :where(*) { flex: none; scroll-snap-align: start; }
+  :where(.od-rail) > :where(:last-child) { margin-inline-end: var(--od-rail-pad, 16px); }
+
+  .od-spacer { flex: none; visibility: hidden; pointer-events: none; }
+  .od-touch  { min-width: 44px; min-height: 44px; }
+}
+/* /OD-LAYOUT-PRIMITIVES v1 */
+
+/* ============ shell ============ */
+:root {
+  --phone-screen-width: 412px;
+  --phone-screen-height: 915px;
+  --phone-bezel: 10px;
+  --phone-outer-radius: 46px;
+  --phone-screen-radius: 38px;
+  --phone-safe-top: 52px;
+  --phone-safe-bottom: 28px;
+  --phone-system-fg: #17181a;
+  --phone-screen-bg: #eef3fb;
+  --phone-stage-bg: #e8eaee;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background:
+    radial-gradient(circle at 50% 14%, rgba(255,255,255,.95), transparent 36%),
+    var(--phone-stage-bg);
+  color: #191a1d;
+  font-family: Roboto, "Noto Sans", system-ui, sans-serif;
+}
+.phone-frame {
+  position: relative;
+  width: calc(var(--phone-screen-width) + var(--phone-bezel) * 2);
+  height: calc(var(--phone-screen-height) + var(--phone-bezel) * 2);
+  padding: var(--phone-bezel);
+  border-radius: var(--phone-outer-radius);
+  background:
+    linear-gradient(145deg, rgba(255,255,255,.2), transparent 18%),
+    linear-gradient(155deg, #414348 0%, #23252a 44%, #0c0d10 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.13),
+    inset 0 0 0 2px rgba(0,0,0,.84),
+    0 34px 72px -22px rgba(8,10,14,.56),
+    0 11px 25px -10px rgba(8,10,14,.34);
+  isolation: isolate;
+}
+.phone-frame::before,
+.phone-frame::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 92px;
+  bottom: 92px;
+  width: 2px;
+  background: linear-gradient(to bottom, transparent, rgba(255,255,255,.14) 18%, transparent 32%, transparent 72%, rgba(255,255,255,.07) 88%, transparent);
+}
+.phone-frame::before { left: 0; }
+.phone-frame::after { right: 0; }
+.hardware-button {
+  position: absolute;
+  right: -3px;
+  width: 4px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #08090b, #2d3036 62%, #08090b);
+  box-shadow: inset 0 1px rgba(255,255,255,.1);
+}
+.hardware-button.volume { top: 205px; height: 92px; }
+.hardware-button.power { top: 322px; height: 70px; background: linear-gradient(90deg, #08090b, #3c424c 62%, #08090b); }
+.phone-screen {
+  position: relative;
+  width: var(--phone-screen-width);
+  height: var(--phone-screen-height);
+  overflow: hidden;
+  border-radius: var(--phone-screen-radius);
+  background: var(--phone-screen-bg);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
+}
+.phone-content {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  padding-top: var(--phone-safe-top);
+  padding-bottom: var(--phone-safe-bottom);
+  background: var(--phone-screen-bg);
+}
+.punch-hole {
+  position: absolute;
+  z-index: 20;
+  top: 14px;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, #283343 0 10%, #090b0f 30%, #000 72%);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.08), inset 0 0 3px #000;
+  pointer-events: none;
+}
+.status-bar {
+  position: absolute;
+  z-index: 15;
+  inset: 0 0 auto;
+  height: var(--phone-safe-top);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr);
+  align-items: start;
+  padding: 14px 19px 0;
+  color: var(--phone-system-fg);
+  pointer-events: none;
+}
+.status-time { justify-self: start; display: flex; align-items: center; height: 16px; font-size: 14px; font-weight: 600; line-height: 1; letter-spacing: .01em; }
+.status-cutout-zone { width: 64px; }
+.status-icons { justify-self: end; display: inline-flex; align-items: center; height: 16px; gap: 5px; }
+.status-icons svg { display: block; flex: none; fill: currentColor; }
+.status-icons .wifi { width: 15px; height: 12px; }
+.status-icons .cellular { width: 14px; height: 12px; }
+.status-icons .battery { width: 9px; height: 14px; }
+.gesture-indicator {
+  position: absolute;
+  z-index: 20;
+  left: 50%;
+  bottom: 8px;
+  width: 108px;
+  height: 4px;
+  transform: translateX(-50%);
+  border-radius: 99px;
+  background: var(--phone-system-fg);
+  opacity: .86;
+  pointer-events: none;
+}
+@media (max-height: 998px) { .phone-frame { zoom: 0.9; } }
+@media (max-height: 904px) { .phone-frame { zoom: 0.82; } }
+@media (max-height: 829px) { .phone-frame { zoom: 0.74; } }
+@media (max-height: 754px) { .phone-frame { zoom: 0.66; } }
+@media (max-width: 480px) {
+  body { padding: 0; display: block; }
+  .phone-frame { width: 100%; height: 100dvh; padding: 0; border-radius: 0; background: none; box-shadow: none; zoom: 1; }
+  .phone-frame::before, .phone-frame::after, .hardware-button { display: none; }
+  .phone-screen { width: 100%; height: 100%; border-radius: 0; }
+}
+
+/* ============ app tokens ============ */
+:root {
+  --font-display: "Fredoka", "Noto Sans SC", system-ui, -apple-system, sans-serif;
+  --font-ui: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+
+  --bg: #eef3fb;
+  --surface: #ffffff;
+  --surface-2: #f5f8fd;
+  --ink: #1b2430;
+  --ink-2: #55657a;
+  --line: #dbe4f0;
+
+  --primary: #2f5fe0;
+  --primary-deep: #2447b0;
+  --primary-soft: #e6edff;
+  --primary-tint: #f0f5ff;
+
+  --carry: #ffc53d;
+  --carry-ink: #5a3d00;
+  --carry-soft: #fff4d6;
+
+  --borrow: #b23a1a;
+  --borrow-fill: #e5654a;
+  --borrow-soft: #ffe9e2;
+
+  --mark-plus: #b45309;
+  --mark-plus-bg: #fff4e2;
+  --mark-plus-line: #f0cf9a;
+  --mark-minus: #1d4ed8;
+  --mark-minus-bg: #eaf1ff;
+  --mark-minus-line: #bcd0f7;
+
+  --success: #0f7a4e;
+  --success-fill: #1fb56f;
+  --success-soft: #e1f6ec;
+
+  --error: #c62828;
+
+  --focus: #2447b0;
+  --r-sm: 10px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --pill: 999px;
+  --shadow: 0 8px 24px rgba(27,36,48,.08);
+  --ease-out: cubic-bezier(.22,.61,.36,1);
+}
+
+[hidden] { display: none !important; }
+
+/* ============ app scaffold ============ */
+.app { position: relative; height: 100%; font-family: var(--font-ui); color: var(--ink); }
+.screen {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+.screen .od-scroll { padding: 4px 16px 18px; }
+
+/* app bar */
+.app-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px; }
+.app-bar h1 { margin: 0; font-size: 19px; font-weight: 900; letter-spacing: -.01em; line-height: 1.2; }
+.app-bar .od-fill { min-width: 0; }
+.brand-mark {
+  width: 40px; height: 40px; flex: none;
+  border-radius: 13px;
+  display: grid; place-items: center;
+  background: linear-gradient(150deg, var(--primary) 0%, var(--primary-deep) 100%);
+  color: #fff;
+  box-shadow: 0 6px 14px -6px rgba(47,95,224,.8);
+}
+.brand-mark svg { width: 22px; height: 22px; }
+.icon-btn {
+  width: 40px; height: 40px; flex: none;
+  display: grid; place-items: center;
+  border: 0; border-radius: 13px;
+  background: transparent; color: var(--ink);
+  cursor: pointer;
+  transition: background .18s var(--ease-out);
+}
+.icon-btn svg { width: 22px; height: 22px; }
+@media (hover: hover) { .icon-btn:hover { background: var(--surface-2); } }
+.icon-btn:focus-visible, .key:focus-visible, .result-cell:focus-visible, .mark:focus-visible, .btn:focus-visible, .chip:focus-visible {
+  outline: 3px solid var(--focus); outline-offset: 2px;
+}
+.progress-chip {
+  flex: none;
+  padding: 7px 12px;
+  border-radius: var(--pill);
+  background: var(--primary-soft);
+  color: var(--primary-deep);
+  font-size: 13px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============ quiz screen ============ */
+.quiz-hero {
+  position: relative;
+  margin-top: 6px;
+  padding: 22px 20px 20px;
+  border-radius: var(--r-lg);
+  background: linear-gradient(170deg, #ffffff 0%, #f3f7ff 100%);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.quiz-hero::after {
+  content: "";
+  position: absolute;
+  right: -46px; top: -46px;
+  width: 150px; height: 150px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, rgba(255,197,61,.34), rgba(255,197,61,0) 68%);
+  pointer-events: none;
+}
+.type-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--pill);
+  background: var(--primary-soft);
+  color: var(--primary-deep);
+  font-size: 12.5px; font-weight: 700;
+}
+.type-chip.warm { background: var(--carry-soft); color: var(--carry-ink); }
+.quiz-problem {
+  margin: 16px 0 6px;
+  font-family: var(--font-display);
+  font-size: 42px; font-weight: 600; line-height: 1.1;
+  letter-spacing: .01em;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.quiz-sub { margin: 0 0 18px; color: var(--ink-2); font-size: 14px; line-height: 1.55; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%;
+  border: 0; border-radius: var(--r-md);
+  padding: 15px 18px;
+  font-family: var(--font-ui); font-size: 16px; font-weight: 700;
+  cursor: pointer;
+  transition: transform .15s var(--ease-out), background .18s var(--ease-out), box-shadow .18s var(--ease-out);
+}
+.btn svg { width: 20px; height: 20px; flex: none; }
+.btn:active { transform: translateY(1px); }
+.btn-primary { background: var(--primary); color: #fff; box-shadow: 0 10px 20px -10px rgba(47,95,224,.85); }
+@media (hover: hover) { .btn-primary:hover { background: var(--primary-deep); } }
+.btn-ghost { background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); }
+@media (hover: hover) { .btn-ghost:hover { background: #eaf0fb; } }
+.btn + .btn { margin-top: 10px; }
+
+.jump-title { margin: 22px 16px 8px; font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.rail-wrap { margin: 0 -16px; }
+.chip {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: var(--pill);
+  padding: 10px 15px;
+  font-family: var(--font-ui); font-size: 13.5px; font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .18s var(--ease-out), border-color .18s var(--ease-out);
+}
+@media (hover: hover) { .chip:hover { background: var(--primary-tint); border-color: var(--primary-soft); } }
+.chip[aria-pressed="true"] { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+/* ============ scratch screen ============ */
+.problem-banner {
+  display: flex; align-items: center; gap: 10px;
+  margin: 2px 0 10px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.problem-banner .expr {
+  font-family: var(--font-display);
+  font-size: 24px; font-weight: 600; color: var(--ink);
+  white-space: nowrap;
+}
+.problem-banner .od-fill { min-width: 0; }
+.problem-banner .chip { padding: 7px 11px; font-size: 12px; }
+
+.status-line {
+  display: flex; align-items: center; gap: 9px;
+  margin: 0 0 10px;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.status-line .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); flex: none; }
+.status-line .txt { font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+.status-line.tone-ok { background: var(--success-soft); border-color: #c4ecd8; }
+.status-line.tone-ok .dot { background: var(--success); }
+.status-line.tone-ok .txt { color: var(--success); font-weight: 700; }
+.status-line.tone-bad { background: #fdeceb; border-color: #f6cfcd; }
+.status-line.tone-bad .dot { background: var(--error); }
+.status-line.tone-bad .txt { color: #8f221f; font-weight: 700; }
+
+.board {
+  --cell: clamp(46px, 14.5vw, 60px);
+  --signw: 32px;
+  padding: 16px 6px 18px;
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.vgrid { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.vg-block { display: flex; flex-direction: column; align-items: stretch; }
+.vg-block + .vg-block { padding-top: 14px; border-top: 1px dashed var(--line); }
+.vg-row {
+  display: grid;
+  grid-template-columns: var(--signw) repeat(var(--cols), var(--cell));
+  align-items: center;
+  justify-content: center;
+}
+.cell { position: relative; height: var(--cell); display: grid; place-items: center; }
+.slot-row { position: relative; z-index: 5; }
+.slot-row .cell { height: calc(var(--cell) * .6); }
+.digit-cell .val {
+  position: relative;
+  font-family: var(--font-display);
+  font-size: calc(var(--cell) * .62);
+  font-weight: 600; line-height: 1;
+  color: var(--ink);
+}
+.digit-cell .val.pending { color: var(--line); }
+.sign { font-family: var(--font-display); font-size: calc(var(--cell) * .5); font-weight: 600; color: var(--ink-2); }
+
+/* carry / borrow slot, above each column — tap to choose 进位 / 借位 / 清除 */
+.slot {
+  position: relative;
+  display: inline-flex; align-items: baseline; justify-content: center; gap: 1px;
+  min-width: calc(var(--cell) * .58); height: calc(var(--cell) * .42);
+  padding: 0 5px;
+  border: 2px dashed var(--line);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-family: var(--font-display);
+  font-size: calc(var(--cell) * .26); font-weight: 600; line-height: 1;
+  cursor: pointer;
+  transition: border-color .16s var(--ease-out), background .16s var(--ease-out), transform .16s var(--ease-out);
+}
+.slot .mark-sign { opacity: .42; }
+.slot .mark-digit { display: inline-block; min-width: .6em; }
+@media (hover: hover) { .slot:hover { border-color: var(--primary-soft); background: var(--primary-tint); } }
+.slot.filled { border-style: solid; }
+.slot.filled .mark-sign { opacity: 1; }
+.slot.k-carry { color: var(--mark-plus); border-color: var(--mark-plus-line); background: var(--mark-plus-bg); }
+.slot.k-borrow { color: var(--mark-minus); border-color: var(--mark-minus-line); background: var(--mark-minus-bg); }
+.slot.open { border-style: solid; border-color: var(--primary); transform: scale(1.06); box-shadow: 0 0 0 3px rgba(47,95,224,.16); }
+.slot.ok { border-style: solid; border-color: transparent; background: var(--success-soft); color: var(--success); }
+.slot.bad { border-style: solid; border-color: var(--error); background: #fdecec; color: var(--error); }
+.slot.ok::after { content: "✓"; position: absolute; top: -8px; right: -8px; font-size: 11px; font-weight: 900; color: var(--success); }
+.slot.bad::after { content: "×"; position: absolute; top: -8px; right: -8px; font-size: 13px; font-weight: 900; color: var(--error); }
+
+/* the three-option chooser — small coloured text right under the slot */
+.slot-menu {
+  position: absolute; top: calc(100% + 3px); left: 50%; transform: translateX(-50%);
+  z-index: 12;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 12px 26px -10px rgba(20,28,48,.5);
+}
+.opt {
+  border: 0; border-radius: 8px; background: transparent;
+  padding: 6px 9px;
+  font-family: var(--font-ui); font-size: 12px; font-weight: 700; line-height: 1;
+  white-space: nowrap; cursor: pointer;
+  transition: background .15s var(--ease-out);
+}
+.opt-carry { color: var(--mark-plus); }
+.opt-borrow { color: var(--mark-minus); }
+.opt-clear { color: var(--ink-2); }
+@media (hover: hover) {
+  .opt-carry:hover { background: var(--mark-plus-bg); }
+  .opt-borrow:hover { background: var(--mark-minus-bg); }
+  .opt-clear:hover { background: var(--surface-2); }
+}
+.opt:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+
+.result-row { margin-top: 8px; }
+.result-row .cell { border-top: 3px solid var(--ink); }
+.result-cell { border: 0; background: transparent; font: inherit; cursor: pointer; }
+.result-cell .val {
+  position: relative;
+  display: grid; place-items: center;
+  width: calc(var(--cell) * .82); height: calc(var(--cell) * .82);
+  border-radius: 13px;
+  border: 2px dashed var(--line);
+  background: var(--surface-2);
+  font-family: var(--font-display);
+  font-size: calc(var(--cell) * .5); font-weight: 600; line-height: 1;
+  color: var(--primary-deep);
+  transition: border-color .18s var(--ease-out), background .18s var(--ease-out), transform .18s var(--ease-out);
+}
+.result-cell.filled .val { border-style: solid; border-color: var(--primary-soft); background: var(--primary-soft); }
+.result-cell.active .val {
+  border-style: solid; border-color: var(--primary);
+  background: var(--primary-soft);
+  transform: scale(1.06);
+  box-shadow: 0 0 0 4px rgba(47,95,224,.16);
+}
+.result-cell.ok .val { border-style: solid; border-color: transparent; background: var(--success-soft); color: var(--success); }
+.result-cell.ok .val::after {
+  content: ""; position: absolute; right: 3px; bottom: 2px;
+  width: 9px; height: 5px;
+  border-left: 2.4px solid var(--success); border-bottom: 2.4px solid var(--success);
+  transform: rotate(-45deg);
+}
+.result-cell.bad .val { border-style: solid; border-color: var(--error); background: #fdecec; color: var(--error); }
+.result-cell.bad .val::after { content: "×"; position: absolute; right: 1px; top: -1px; font-size: 12px; font-weight: 900; color: var(--error); }
+
+/* pad footer */
+.pad-wrap {
+  padding: 8px 14px 14px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -8px 18px -14px rgba(27,36,48,.35);
+}
+.pad-actions { display: flex; gap: 8px; margin-bottom: 8px; }
+.btn-hint {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  flex: 1;
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--surface-2); color: var(--primary-deep);
+  padding: 12px 14px;
+  font-family: var(--font-ui); font-size: 14.5px; font-weight: 700;
+  cursor: pointer;
+  transition: background .18s var(--ease-out);
+}
+.btn-hint svg { width: 18px; height: 18px; }
+@media (hover: hover) { .btn-hint:hover { background: var(--primary-tint); } }
+.btn-hint.ghost { color: var(--ink); }
+.btn-hint.solid { background: var(--primary); border-color: var(--primary); color: #fff; }
+@media (hover: hover) { .btn-hint.solid:hover { background: var(--primary-deep); } }
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.key {
+  height: 50px;
+  border: 1px solid var(--line); border-radius: 15px;
+  background: var(--surface); color: var(--ink);
+  font-family: var(--font-display); font-size: 23px; font-weight: 600;
+  cursor: pointer;
+  transition: transform .12s var(--ease-out), background .16s var(--ease-out);
+}
+.key:active { transform: translateY(1px); background: var(--primary-tint); }
+@media (hover: hover) { .key:hover { background: var(--surface-2); } }
+.key-del { color: var(--ink-2); }
+.key-zero { grid-column: span 2; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+}
+</style>
+</head>
+<body>
+<div class="phone-frame" data-phone-shell data-platform="android">
+  <span class="hardware-button volume" aria-hidden="true"></span>
+  <span class="hardware-button power" aria-hidden="true"></span>
+
+  <section class="phone-screen" data-phone-screen>
+    <main class="phone-content" data-phone-content>
+      <div class="app" id="app">
+
+        <!-- APP CONTENT START -->
+        <section class="screen" id="screen-quiz" aria-label="计算题">
+          <header class="app-bar">
+            <span class="brand-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M4 12h16M4 19h16"/><path d="M8 3v18M16 3v18"/></svg>
+            </span>
+            <div class="od-fill"><h1>竖式练习</h1></div>
+            <span class="progress-chip" id="quizProgress">第 1 / 7 题</span>
+          </header>
+
+          <div class="od-scroll">
+            <div class="quiz-hero">
+              <span class="type-chip" id="quizType">进位加法</span>
+              <div class="quiz-problem" id="quizProblem">45 + 37 = ?</div>
+              <p class="quiz-sub">把草稿纸当练习本，自己列竖式算一算～</p>
+              <button class="btn btn-primary" id="toScratch">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                打开草稿纸
+              </button>
+              <button class="btn btn-ghost" id="nextProblem">换一题</button>
+            </div>
+
+            <p class="jump-title">挑一道练练</p>
+            <div class="rail-wrap">
+              <div class="od-rail" id="problemRail" role="list"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" id="screen-scratch" aria-label="草稿纸 竖式计算" hidden>
+          <header>
+            <div class="app-bar">
+              <button class="icon-btn" id="scratchBack" aria-label="返回计算题">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+              </button>
+              <div class="od-fill"><h1>草稿纸 · 竖式</h1></div>
+              <button class="icon-btn" id="scratchReset" aria-label="清空重来">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 4v5h-5"/></svg>
+              </button>
+            </div>
+          </header>
+
+          <div class="od-scroll" id="scratchScroll">
+            <div class="problem-banner">
+              <span class="type-chip warm" id="scratchType">进位加法</span>
+              <div class="od-fill" style="text-align:right">
+                <span class="expr" id="scratchExpr">45 + 37</span>
+              </div>
+            </div>
+
+            <div class="status-line" id="statusLine" role="status" aria-live="polite">
+              <span class="dot" aria-hidden="true"></span>
+              <span class="txt" id="statusText">点空格填入数字</span>
+            </div>
+
+            <div class="board">
+              <div class="vgrid" id="vgrid"></div>
+            </div>
+          </div>
+
+          <footer class="pad-wrap">
+            <div class="pad-actions">
+              <button class="btn-hint solid" id="checkBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                检查
+              </button>
+              <button class="btn-hint ghost" id="clearBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg>
+                清空
+              </button>
+            </div>
+            <div class="keypad" id="keypad">
+              <button class="key" data-d="1">1</button>
+              <button class="key" data-d="2">2</button>
+              <button class="key" data-d="3">3</button>
+              <button class="key" data-d="4">4</button>
+              <button class="key" data-d="5">5</button>
+              <button class="key" data-d="6">6</button>
+              <button class="key" data-d="7">7</button>
+              <button class="key" data-d="8">8</button>
+              <button class="key" data-d="9">9</button>
+              <button class="key key-del" id="keyDel" aria-label="删除">⌫</button>
+              <button class="key key-zero" data-d="0">0</button>
+            </div>
+          </footer>
+        </section>
+        <!-- APP CONTENT END -->
+
+      </div>
+    </main>
+
+    <div class="status-bar" aria-hidden="true">
+      <span class="status-time">9:41</span>
+      <span class="status-cutout-zone"></span>
+      <span class="status-icons">
+        <svg class="wifi" viewBox="0 0 16 12"><path d="M8 11.4 6.55 9.95a2.05 2.05 0 0 1 2.9 0L8 11.4Zm3.58-3.55-1.16 1.16a3.43 3.43 0 0 0-4.84 0L4.42 7.85a5.08 5.08 0 0 1 7.16 0Zm3-2.95-1.16 1.16a7.67 7.67 0 0 0-10.84 0L1.42 4.9a9.31 9.31 0 0 1 13.16 0Z"/></svg>
+        <svg class="cellular" viewBox="0 0 14 12"><path d="M1 11h2V8.5H1V11Zm3.35 0h2V6H4.35v5Zm3.35 0h2V3.5h-2V11Zm3.35 0h2V1h-2v10Z"/></svg>
+        <svg class="battery" viewBox="0 0 9 14"><path d="M3 0h3v1H3V0ZM2 1.5h5a1.25 1.25 0 0 1 1.25 1.25v9.75A1.5 1.5 0 0 1 6.75 14h-4.5a1.5 1.5 0 0 1-1.5-1.5V2.75A1.25 1.25 0 0 1 2 1.5Z"/></svg>
+      </span>
+    </div>
+    <div class="punch-hole" aria-hidden="true"></div>
+    <div class="gesture-indicator" aria-hidden="true"></div>
+  </section>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const $ = (s, r = document) => r.querySelector(s);
+  const el = (tag, cls) => { const n = document.createElement(tag); if (cls) n.className = cls; return n; };
+
+  const PLACE_NAMES = ["个位", "十位", "百位", "千位", "万位"];
+  const SYM = { "+": "+", "-": "−", "×": "×" };
+
+  const PROBLEMS = [
+    { op: "+", operands: [45, 37], label: "进位加法" },
+    { op: "-", operands: [62, 28], label: "借位减法" },
+    { op: "+", operands: [123, 58, 40], label: "多位数连加" },
+    { op: "-", operands: [300, 156], label: "连续借位" },
+    { op: "×", operands: [24, 3], label: "乘法竖式" },
+    { op: "+", operands: [125, 38, 40], label: "多位数连加" },
+    { op: "-", operands: [500, 123, 88], label: "多位数连减" }
+  ];
+
+  const len = (n) => String(n).length;
+  const digitsOf = (n) => String(n).split("").reverse().map(Number);
+  const pad = (arr, n) => { const a = arr.slice(); while (a.length < n) a.push(0); return a; };
+  const exprOf = (p) => p.operands.join(" " + SYM[p.op] + " ");
+
+  function buildAdd(operands) {
+    const result = operands.reduce((a, b) => a + b, 0);
+    const cols = Math.max(Math.max.apply(null, operands.map(len)), len(result));
+    const operandDigits = operands.map((o) => pad(digitsOf(o), cols));
+    const carryOut = new Array(cols).fill(0);
+    const resultDigits = new Array(cols).fill(0);
+    let carry = 0;
+    for (let c = 0; c < cols; c++) {
+      let s = carry;
+      for (const d of operandDigits) s += d[c];
+      resultDigits[c] = s % 10;
+      carryOut[c] = Math.floor(s / 10);
+      carry = carryOut[c];
+    }
+    const markExpected = new Array(cols).fill(null);
+    for (let p = 1; p < cols; p++) if (carryOut[p - 1] > 0) markExpected[p] = "carry";
+    return {
+      op: "+", operands, operandDigits, operandLen: operands.map(len),
+      signs: operands.map((_, i) => (i === 0 ? null : "+")),
+      cols, resultDigits, answerPlaces: len(result), result, markExpected
+    };
+  }
+
+  function buildMul(a, b) {
+    const result = a * b;
+    const cols = Math.max(len(a), len(b), len(result));
+    const ad = pad(digitsOf(a), cols);
+    const bd = pad(digitsOf(b), cols);
+    const resultDigits = new Array(cols).fill(0);
+    const carryOut = new Array(cols).fill(0);
+    let carry = 0;
+    for (let c = 0; c < cols; c++) {
+      const p = ad[c] * b + carry;
+      resultDigits[c] = p % 10;
+      carryOut[c] = Math.floor(p / 10);
+      carry = carryOut[c];
+    }
+    const markExpected = new Array(cols).fill(null);
+    for (let p = 1; p < cols; p++) if (carryOut[p - 1] > 0) markExpected[p] = "carry";
+    return {
+      op: "×", operands: [a, b], operandDigits: [ad, bd], operandLen: [len(a), len(b)],
+      signs: [null, "×"], cols, resultDigits, answerPlaces: len(result), result, markExpected
+    };
+  }
+
+  function buildSub(a, b) {
+    const result = a - b;
+    const cols = Math.max(len(a), len(b), len(result), 1);
+    const t = pad(digitsOf(a), cols);
+    const origDigits = t.slice();
+    const subD = pad(digitsOf(b), cols);
+    const resultDigits = new Array(cols).fill(0);
+    const events = [];
+    for (let c = 0; c < cols; c++) {
+      const need = subD[c];
+      if (t[c] < need) {
+        let h = c + 1;
+        while (h < cols && t[h] === 0) h++;
+        if (h >= cols) {
+          t[c] += 10;
+        } else {
+          const changed = [];
+          t[h] -= 1; changed.push({ place: h, became: t[h] });
+          for (let k = h - 1; k > c; k--) { t[k] += 9; changed.push({ place: k, became: t[k] }); }
+          t[c] += 10;
+          events.push({ target: c, from: h, changed });
+        }
+      }
+      resultDigits[c] = t[c] - need;
+    }
+    const markExpected = new Array(cols).fill(null);
+    events.forEach((ev) => {
+      ev.changed.forEach((ch) => {
+        if (ch.became < origDigits[ch.place]) markExpected[ch.place] = "borrow";
+      });
+    });
+    return {
+      op: "-", operands: [a, b], operandDigits: [origDigits.slice(), subD],
+      operandLen: [len(a), len(b)], signs: [null, "−"],
+      cols, resultDigits, answerPlaces: len(result), result, markExpected
+    };
+  }
+
+  function buildBlocks(problem) {
+    if (problem.op === "+") return [buildAdd(problem.operands)];
+    if (problem.op === "×") return [buildMul(problem.operands[0], problem.operands[1])];
+    const blocks = [];
+    let top = problem.operands[0];
+    for (let i = 1; i < problem.operands.length; i++) {
+      blocks.push(buildSub(top, problem.operands[i]));
+      top -= problem.operands[i];
+    }
+    return blocks;
+  }
+
+  const state = {
+    problemIndex: 0,
+    blocks: [],
+    entries: [],
+    refs: [],
+    sel: null,
+    checked: false,
+    marks: []
+  };
+
+  function emptyEntries(blk) {
+    return {
+      result: new Array(blk.answerPlaces).fill(""),
+      mark: new Array(blk.cols).fill("")
+    };
+  }
+
+  /* ---------- board ---------- */
+  function renderBoard() {
+    const grid = $("#vgrid");
+    grid.innerHTML = "";
+    state.refs = state.blocks.map((blk, bi) => {
+      const wrap = el("div", "vg-block");
+      wrap.style.setProperty("--cols", blk.cols);
+
+      const slotRow = el("div", "vg-row slot-row");
+      slotRow.appendChild(el("div", "cell sign-cell"));
+      const slotRefs = new Array(blk.cols);
+      for (let p = blk.cols - 1; p >= 0; p--) {
+        const cell = el("div", "cell slot-cell");
+        if (blk.markExpected[p] != null) {
+          const btn = el("button", "slot");
+          btn.type = "button";
+          const sign = el("span", "mark-sign");
+          const dig = el("span", "mark-digit");
+          btn.appendChild(sign); btn.appendChild(dig);
+          btn.setAttribute("aria-label", (PLACE_NAMES[p] || ("第" + (p + 1) + "位")) + " 进位借位");
+          btn.addEventListener("click", (e) => { e.stopPropagation(); openSlotMenu(bi, p); });
+          cell.appendChild(btn);
+
+          const menu = el("div", "slot-menu");
+          menu.hidden = true;
+          menu.setAttribute("role", "menu");
+          [["opt-carry", "进位", "carry"], ["opt-borrow", "借位", "borrow"], ["opt-clear", "清除", ""]].forEach((o) => {
+            const b = el("button", "opt " + o[0]);
+            b.type = "button";
+            b.textContent = o[1];
+            b.addEventListener("click", (ev) => { ev.stopPropagation(); chooseMark(bi, p, o[2]); });
+            menu.appendChild(b);
+          });
+          cell.appendChild(menu);
+
+          slotRefs[p] = { btn, sign, dig, menu };
+        }
+        slotRow.appendChild(cell);
+      }
+      wrap.appendChild(slotRow);
+
+      const opRefs = blk.operandDigits.map((digits, oi) => {
+        const row = el("div", "vg-row operand-row");
+        const signCell = el("div", "cell sign-cell");
+        if (blk.signs[oi]) { const s = el("span", "sign"); s.textContent = blk.signs[oi]; signCell.appendChild(s); }
+        row.appendChild(signCell);
+        const cells = new Array(blk.cols);
+        for (let p = blk.cols - 1; p >= 0; p--) {
+          const cell = el("div", "cell digit-cell");
+          const val = el("span", "val");
+          const visible = p < blk.operandLen[oi];
+          if (visible) val.textContent = String(digits[p]);
+          cell.appendChild(val);
+          cells[p] = { cell, val, visible };
+          row.appendChild(cell);
+        }
+        wrap.appendChild(row);
+        return cells;
+      });
+
+      const resultRow = el("div", "vg-row result-row");
+      resultRow.appendChild(el("div", "cell sign-cell"));
+      const resultRefs = new Array(blk.cols);
+      for (let p = blk.cols - 1; p >= 0; p--) {
+        const btn = el("button", "cell result-cell");
+        btn.type = "button";
+        const val = el("span", "val");
+        btn.appendChild(val);
+        if (p < blk.answerPlaces) {
+          btn.setAttribute("aria-label", (PLACE_NAMES[p] || ("第" + (p + 1) + "位")) + " 结果");
+          btn.addEventListener("click", () => selectSlot(bi, "result", p));
+          resultRefs[p] = { cell: btn, val, visible: true };
+        } else {
+          btn.disabled = true;
+          btn.tabIndex = -1;
+          btn.classList.add("ghost");
+          resultRefs[p] = { cell: btn, val, visible: false };
+        }
+        resultRow.appendChild(btn);
+      }
+      wrap.appendChild(resultRow);
+
+      grid.appendChild(wrap);
+      return { block: wrap, slot: slotRefs, op: opRefs, result: resultRefs };
+    });
+  }
+
+  const isSel = (bi, kind, place) => !!state.sel && state.sel.bi === bi && state.sel.kind === kind && state.sel.place === place;
+
+  function chainTop(bi) {
+    if (bi === 0) return null;
+    const prev = state.entries[bi - 1];
+    const prevBlk = state.blocks[bi - 1];
+    if (prev.result.some((v) => v === "")) return null;
+    const digitsMsb = [];
+    for (let p = prevBlk.answerPlaces - 1; p >= 0; p--) digitsMsb.push(prev.result[p]);
+    return Number(digitsMsb.join(""));
+  }
+
+  function syncBoard() {
+    state.blocks.forEach((blk, bi) => {
+      const refs = state.refs[bi];
+      if (!refs) return;
+      const e = state.entries[bi];
+      const m = state.marks[bi];
+
+      for (let p = 0; p < blk.cols; p++) {
+        const ref = refs.slot[p];
+        if (!ref) continue;
+        const kind = e.mark[p];
+        const open = isSel(bi, "mark", p);
+        ref.sign.textContent = kind === "carry" ? "+" : kind === "borrow" ? "−" : "";
+        ref.dig.textContent = kind ? "1" : "";
+        ref.btn.className = "slot" +
+          (kind === "carry" ? " k-carry" : kind === "borrow" ? " k-borrow" : "") +
+          (kind ? " filled" : "") + (open ? " open" : "");
+        ref.menu.hidden = !open;
+        if (state.checked && m) {
+          ref.btn.classList.toggle("ok", m.mark[p] === true);
+          ref.btn.classList.toggle("bad", m.mark[p] === false);
+        } else { ref.btn.classList.remove("ok", "bad"); }
+      }
+
+      if (bi > 0 && refs.op[0]) {
+        const top = chainTop(bi);
+        for (let p = 0; p < blk.cols; p++) {
+          const c = refs.op[0][p];
+          if (!c || !c.visible) continue;
+          if (top == null) { c.val.textContent = "?"; c.val.classList.add("pending"); }
+          else { const ds = pad(digitsOf(top), blk.cols); c.val.textContent = String(ds[p]); c.val.classList.remove("pending"); }
+        }
+      }
+
+      for (let p = 0; p < blk.answerPlaces; p++) {
+        const r = refs.result[p];
+        if (!r) continue;
+        r.val.textContent = e.result[p] || "";
+        r.cell.classList.toggle("filled", !!e.result[p]);
+        r.cell.classList.toggle("active", isSel(bi, "result", p));
+        if (state.checked && m) {
+          r.cell.classList.toggle("ok", m.result[p] === true);
+          r.cell.classList.toggle("bad", m.result[p] === false);
+        } else { r.cell.classList.remove("ok", "bad"); }
+      }
+    });
+  }
+
+  /* ---------- editing ---------- */
+  function selectSlot(bi, kind, place) {
+    state.sel = { bi, kind, place };
+    syncBoard();
+  }
+
+  function openSlotMenu(bi, p) {
+    state.sel = { bi, kind: "mark", place: p };
+    state.checked = false;
+    syncBoard();
+  }
+
+  function chooseMark(bi, p, kind) {
+    state.entries[bi].mark[p] = kind;
+    state.sel = null;
+    state.checked = false;
+    syncBoard();
+  }
+
+  function closeSlotMenu() {
+    if (state.sel && state.sel.kind === "mark") { state.sel = null; syncBoard(); }
+  }
+
+  function typeDigit(d) {
+    if (!state.sel || state.sel.kind !== "result") return;
+    const { bi, place } = state.sel;
+    state.entries[bi].result[place] = String(d);
+    state.checked = false;
+    syncBoard();
+  }
+
+  function backspace() {
+    if (!state.sel || state.sel.kind !== "result") return;
+    const { bi, place } = state.sel;
+    state.entries[bi].result[place] = "";
+    state.checked = false;
+    syncBoard();
+  }
+
+  /* ---------- check ---------- */
+  function checkAll() {
+    state.checked = true;
+    state.marks = [];
+    let bad = 0, total = 0;
+    state.blocks.forEach((blk, bi) => {
+      const e = state.entries[bi];
+      const m = { result: {}, mark: {} };
+      for (let p = 0; p < blk.answerPlaces; p++) {
+        const ok = e.result[p] === String(blk.resultDigits[p]);
+        m.result[p] = ok; total++; if (!ok) bad++;
+      }
+      for (let p = 0; p < blk.cols; p++) {
+        const exp = blk.markExpected[p];
+        const got = e.mark[p];
+        if (exp == null) {
+          if (got !== "") { m.mark[p] = false; total++; bad++; } else m.mark[p] = null;
+        } else {
+          const ok = got === exp;
+          m.mark[p] = ok; total++; if (!ok) bad++;
+        }
+      }
+      state.marks[bi] = m;
+    });
+    refreshStatus(bad);
+    syncBoard();
+  }
+
+  /* ---------- status ---------- */
+  function refreshStatus(bad) {
+    const line = $("#statusLine");
+    const txt = $("#statusText");
+    line.classList.remove("tone-ok", "tone-bad");
+    if (state.checked) {
+      if (bad === 0) {
+        line.classList.add("tone-ok");
+        txt.textContent = "全部正确，太棒了！";
+      } else {
+        line.classList.add("tone-bad");
+        txt.textContent = "有 " + bad + " 处要再看看";
+      }
+      return;
+    }
+    const isSub = PROBLEMS[state.problemIndex].op === "-";
+    txt.textContent = isSub
+      ? "结果位点空格填数字；要借位的那一位，点它上方小格选「借位」"
+      : "结果位点空格填数字；有进位的那一位，点它上方小格选「进位」";
+  }
+
+  /* ---------- lifecycle ---------- */
+  function resetProblem() {
+    state.blocks = buildBlocks(PROBLEMS[state.problemIndex]);
+    state.entries = state.blocks.map(emptyEntries);
+    state.sel = null;
+    state.checked = false;
+    state.marks = [];
+    const pr = PROBLEMS[state.problemIndex];
+    $("#scratchType").textContent = pr.label;
+    $("#scratchExpr").textContent = exprOf(pr);
+    renderBoard();
+    refreshStatus();
+    syncBoard();
+    const sc = $("#scratchScroll");
+    if (sc) sc.scrollTop = 0;
+  }
+
+  /* ---------- quiz ---------- */
+  function updateQuizUI() {
+    const pr = PROBLEMS[state.problemIndex];
+    $("#quizType").textContent = pr.label;
+    $("#quizType").classList.toggle("warm", pr.op === "-" || pr.op === "×");
+    $("#quizProblem").textContent = exprOf(pr) + " = ?";
+    $("#quizProgress").textContent = "第 " + (state.problemIndex + 1) + " / " + PROBLEMS.length + " 题";
+    Array.prototype.forEach.call($("#problemRail").children, (chip, i) => {
+      chip.setAttribute("aria-pressed", String(i === state.problemIndex));
+    });
+  }
+
+  function buildRail() {
+    const rail = $("#problemRail");
+    rail.innerHTML = "";
+    PROBLEMS.forEach((pr, i) => {
+      const chip = el("button", "chip");
+      chip.type = "button";
+      chip.setAttribute("aria-pressed", String(i === state.problemIndex));
+      chip.textContent = pr.label;
+      chip.addEventListener("click", () => openProblem(i));
+      rail.appendChild(chip);
+    });
+  }
+
+  function goQuiz() {
+    $("#screen-quiz").hidden = false;
+    $("#screen-scratch").hidden = true;
+    updateQuizUI();
+    const sc = $("#screen-quiz .od-scroll");
+    if (sc) sc.scrollTop = 0;
+  }
+  function goScratch() {
+    $("#screen-quiz").hidden = true;
+    $("#screen-scratch").hidden = false;
+    resetProblem();
+  }
+  function openProblem(i) {
+    state.problemIndex = i;
+    updateQuizUI();
+    goScratch();
+  }
+
+  /* ---------- wiring ---------- */
+  buildRail();
+  updateQuizUI();
+
+  $("#toScratch").addEventListener("click", goScratch);
+  $("#nextProblem").addEventListener("click", () => { state.problemIndex = (state.problemIndex + 1) % PROBLEMS.length; updateQuizUI(); });
+  $("#scratchBack").addEventListener("click", goQuiz);
+  $("#scratchReset").addEventListener("click", resetProblem);
+  $("#checkBtn").addEventListener("click", checkAll);
+  $("#clearBtn").addEventListener("click", () => { state.sel = null; state.checked = false; state.entries = state.blocks.map(emptyEntries); state.marks = []; refreshStatus(); syncBoard(); });
+  $("#keyDel").addEventListener("click", backspace);
+  Array.prototype.forEach.call(document.querySelectorAll(".key[data-d]"), (k) => {
+    k.addEventListener("click", () => typeDigit(k.dataset.d));
+  });
+  document.addEventListener("keydown", (e) => {
+    if ($("#screen-scratch").hidden) return;
+    if (/^[0-9]$/.test(e.key)) { typeDigit(e.key); }
+    else if (e.key === "Backspace") { e.preventDefault(); backspace(); }
+    else if (e.key === "Escape") { closeSlotMenu(); }
+  });
+  document.addEventListener("click", (e) => {
+    if (state.sel && state.sel.kind === "mark" && !e.target.closest(".slot-menu") && !e.target.closest(".slot")) closeSlotMenu();
+  });
+})();
+</script>
+</body>
+</html>

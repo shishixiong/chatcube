@@ -1,0 +1,1042 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light" />
+<title>math_quiz · 小星数学老师</title>
+<style>
+/* OD-LAYOUT-PRIMITIVES v1 — structure only: display, flex/grid, overflow, wrapping, ratio.
+   Put this @layer first; product CSS outside the layer always wins. */
+@layer od-layout {
+  :where(.od-stack,.od-row,.od-row-top,.od-cluster,.od-grid,.od-field,.od-stat,.od-cell,.od-tile) > :where(*) { min-width: 0; }
+
+  /* containers */
+  .od-stack   { display: flex; flex-direction: column; gap: var(--od-gap, 8px); }
+  .od-row     { display: flex; align-items: center; gap: var(--od-gap, 8px); }
+  .od-row-top { display: flex; align-items: flex-start; gap: var(--od-gap, 8px); }
+  .od-cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--od-gap, 8px); }
+  .od-fill    { flex: 1 1 0; min-width: 0; }
+  .od-fixed   { flex: none; }
+  .od-grid    { display: grid; gap: var(--od-gap, 12px); grid-template-columns: repeat(var(--od-cols, 3), minmax(0, 1fr)); }
+
+  /* stacked information: each piece is its own line — never sibling inline spans */
+  .od-stat, .od-field, .od-cell { display: grid; gap: var(--od-gap, 2px); }
+  :where(.od-stat,.od-field,.od-cell) > :where(*) { display: block; }
+  .od-tile { display: grid; grid-template-rows: auto 1fr; }
+  :where(.od-tile) > :where(*) { display: block; }
+
+  /* media keeps its intrinsic ratio by default; never a distorted or cropped
+     cover by accident. height:auto lets the ratio win over an <img height="…">
+     attribute. Cropping to a uniform box is an explicit opt-in: set --od-ratio
+     AND add .od-media-cover together (per the core rule, only where a crop is
+     deliberate — tile thumbs, decorative fills — never on full-frame content). */
+  .od-media { display: block; width: 100%; height: auto; aspect-ratio: var(--od-ratio, auto); }
+  .od-media-cover { object-fit: cover; }
+
+  /* data text only — authored copy is rewritten to its budget instead */
+  .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .od-clamp-2, .od-clamp-3 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .od-clamp-2 { -webkit-line-clamp: 2; }
+  .od-clamp-3 { -webkit-line-clamp: 3; }
+  .od-lines-2 { min-height: calc(2 * 1.4em); }   /* block-level reservation for a shared baseline */
+  .od-nowrap  { white-space: nowrap; }           /* 数字+单位 · 价格+起 · 日期+星期 */
+  .od-keep    { word-break: keep-all; overflow-wrap: anywhere; } /* CJK labels break at spaces / <wbr> first */
+
+  /* screen skeleton (optional): bars take their own space, the middle scrolls — no padding guessed for chrome */
+  .od-screen { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; }
+  .od-scroll { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
+
+  /* horizontal rail: the next item peeks at the edge; trailing room survives overflow */
+  .od-rail { display: flex; gap: var(--od-gap, 8px); overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
+             padding-inline: var(--od-rail-pad, 16px); scroll-padding-inline: var(--od-rail-pad, 16px); }
+  .od-rail::-webkit-scrollbar { display: none; }
+  :where(.od-rail) > :where(*) { flex: none; scroll-snap-align: start; }
+  :where(.od-rail) > :where(:last-child) { margin-inline-end: var(--od-rail-pad, 16px); }
+
+  .od-spacer { flex: none; visibility: hidden; pointer-events: none; }
+  .od-touch  { min-width: 44px; min-height: 44px; }
+}
+/* /OD-LAYOUT-PRIMITIVES v1 */
+
+/* ─────────────────────────────────────────────────────────────────────────
+   math_quiz · design tokens (product-level, live on :root so overlays inherit)
+   Direction: children-friendly, bright & rounded. Cool light ground (no cream),
+   coral action color, blue math accent. 8px spacing rhythm, ≥44px touch targets.
+   ───────────────────────────────────────────────────────────────────────── */
+:root{
+  --bg:        #EEF4FF;
+  --surface:   #FFFFFF;
+  --surface-2: #F6F9FF;
+  --fg:        #1B2436;
+  --muted:     #5B6B85;
+  --border:    #D9E2F2;
+
+  --accent:      #FF7A45;
+  --on-accent:   #3A1400;
+  --accent-soft: #FFEDE4;
+  --accent-ink:  #B23A0B;
+
+  --math:      #2E7DE0;
+  --math-ink:  #0E4FA6;
+  --math-soft: #E7F0FF;
+
+  --success:      #1FA463;
+  --success-ink:  #0A5533;
+  --success-soft: #E4F6EC;
+
+  --error:      #E2543A;
+  --error-ink:  #8F2A16;
+  --error-soft: #FCEBE7;
+
+  --font-display: 'Yuanti SC','Hanzipen SC','YouYuan','PingFang SC','Hiragino Maru Gothic ProN',system-ui,sans-serif;
+  --font-body:    'PingFang SC','Hiragino Sans GB',system-ui,-apple-system,sans-serif;
+  --font-mono:    ui-monospace,'SF Mono','JetBrains Mono',Menlo,monospace;
+
+  --radius-sm: 12px;
+  --radius-md: 18px;
+  --radius-lg: 24px;
+
+  --dur-fast: 140ms;
+  --dur-base: 260ms;
+  --ease: cubic-bezier(.22,.61,.36,1);
+
+  --shadow: 0 1px 2px rgba(27,36,54,.05), 0 10px 24px -12px rgba(27,36,54,.22);
+  --shadow-lift: 0 2px 6px rgba(27,36,54,.08), 0 18px 40px -18px rgba(27,36,54,.35);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; }
+button { font: inherit; cursor: pointer; color: inherit; }
+:focus-visible { outline: 2.5px solid var(--math); outline-offset: 2px; border-radius: 10px; }
+[hidden] { display: none !important; }
+
+/* ─── the app fills the phone content box; shell chrome stays fixed ─────── */
+.app{
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── header ──────────────────────────────────────────────────────────── */
+.appbar{
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px 12px;
+  background: linear-gradient(180deg, #FFFFFF 0%, #FBFDFF 100%);
+  border-bottom: 1px solid var(--border);
+}
+.brand{ width: 40px; height: 40px; flex: none; border-radius: 13px;
+  display: grid; place-items: center; color: #fff; font-family: var(--font-display);
+  font-size: 20px; font-weight: 700;
+  background: linear-gradient(150deg, var(--math) 0%, #6FB1FF 100%);
+  box-shadow: 0 6px 14px -6px rgba(46,125,224,.75);
+}
+.app-title{ font-family: var(--font-display); font-size: 18px; font-weight: 700; letter-spacing: .01em; }
+.app-sub{ font-size: 12px; color: var(--muted); }
+.score-chip{
+  flex: none; display: inline-flex; align-items: center; gap: 5px;
+  height: 34px; padding: 0 12px; border-radius: 999px;
+  background: var(--math-soft); color: var(--math-ink);
+  font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.score-chip svg{ width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linejoin: round; }
+.icon-btn{
+  flex: none; width: 40px; height: 40px; display: grid; place-items: center;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface); color: var(--fg);
+  transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.icon-btn svg{ width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+@media (hover:hover){ .icon-btn:hover{ background: var(--surface-2); } }
+.icon-btn:active{ transform: scale(.94); }
+
+/* ─── chat ────────────────────────────────────────────────────────────── */
+.chat-scroll{
+  overflow-y: auto; min-height: 0; overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  padding: 14px 14px 18px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.chat-scroll::-webkit-scrollbar{ display: none; }
+
+.msg{ display: flex; align-items: flex-end; gap: 8px; max-width: 100%; }
+.msg.bot{ align-self: flex-start; margin-right: 26px; }
+.msg.user{ align-self: flex-end; flex-direction: row-reverse; margin-left: 26px; }
+.avatar{
+  flex: none; width: 30px; height: 30px; border-radius: 10px;
+  display: grid; place-items: center; color: #fff; font-size: 14px; font-weight: 700;
+  font-family: var(--font-display);
+  background: linear-gradient(150deg, var(--math) 0%, #6FB1FF 100%);
+}
+.bubble{
+  position: relative; padding: 11px 14px; border-radius: 18px;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--fg); box-shadow: var(--shadow);
+  overflow-wrap: anywhere;
+}
+.msg.bot .bubble{ border-bottom-left-radius: 6px; }
+.msg.user .bubble{
+  border-bottom-right-radius: 6px; border-color: transparent;
+  background: var(--accent-soft); color: var(--on-accent); font-weight: 600;
+}
+.bubble.note{ background: var(--surface-2); box-shadow: none; color: var(--muted); font-size: 14px; }
+.bubble.fb{ box-shadow: none; font-size: 14px; font-weight: 600; border-width: 1px; }
+.bubble.fb.ok{ background: var(--success-soft); border-color: color-mix(in oklch, var(--success) 32%, white); color: var(--success-ink); }
+.bubble.fb.bad{ background: var(--error-soft); border-color: color-mix(in oklch, var(--error) 32%, white); color: var(--error-ink); }
+.bubble.fb.hint{ background: var(--math-soft); border-color: color-mix(in oklch, var(--math) 30%, white); color: var(--math-ink); }
+.fb-icon{ display: inline-flex; vertical-align: -2.5px; margin-right: 6px; }
+.fb-icon svg{ width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* question card inside a bubble */
+.q-bubble{ padding: 13px 14px 12px; }
+.q-label{ font-size: 12px; font-weight: 700; letter-spacing: .04em; color: var(--math-ink);
+  display: inline-flex; align-items: center; gap: 6px; }
+.q-label::before{ content:""; width: 6px; height: 6px; border-radius: 50%; background: var(--math); }
+.q-expr{
+  font-family: var(--font-display); font-weight: 700; letter-spacing: .01em;
+  font-size: 27px; line-height: 1.25; margin: 7px 0 3px;
+  color: var(--fg); white-space: nowrap; overflow-x: auto; scrollbar-width: none;
+}
+.q-expr::-webkit-scrollbar{ display: none; }
+.q-expr .blank{ color: var(--math); }
+.q-tools{ display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.scratch-btn{
+  display: inline-flex; align-items: center; gap: 7px;
+  min-height: 44px; padding: 0 15px; border-radius: 999px;
+  border: 1.5px solid var(--math); background: var(--surface); color: var(--math-ink);
+  font-size: 14px; font-weight: 650;
+  transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.scratch-btn svg{ width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+@media (hover:hover){ .scratch-btn:hover{ background: var(--math-soft); } }
+.scratch-btn:active{ transform: scale(.96); }
+.q-status{
+  display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 11px;
+  border-radius: 999px; font-size: 12.5px; font-weight: 650; white-space: nowrap;
+  background: var(--surface-2); color: var(--muted);
+}
+.q-status svg{ width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; }
+.q-status.ok{ background: var(--success-soft); color: var(--success-ink); }
+.q-status.bad{ background: var(--error-soft); color: var(--error-ink); }
+.q-bubble.resolved-ok{ border-color: color-mix(in oklch, var(--success) 40%, white); }
+.q-bubble.resolved-bad{ border-color: color-mix(in oklch, var(--error) 40%, white); }
+
+/* ─── answer dock / keypad ────────────────────────────────────────────── */
+.dock{
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: rgba(255,255,255,.94);
+  border-top: 1px solid var(--border);
+  backdrop-filter: blur(10px);
+}
+.dock-row{ display: flex; align-items: center; gap: 10px; }
+.answer-pill{
+  flex: 1 1 auto; min-width: 0; height: 48px; border-radius: 14px;
+  display: flex; align-items: center; padding: 0 16px;
+  background: var(--surface-2); border: 1.5px solid var(--border);
+  font-family: var(--font-display); font-size: 24px; font-weight: 700;
+  font-variant-numeric: tabular-nums; color: var(--fg);
+  overflow: hidden;
+}
+.answer-pill .ph{ font-family: var(--font-body); font-size: 14px; font-weight: 500; color: var(--muted); }
+.answer-pill.pulse{ animation: pulse .36s var(--ease); }
+@keyframes pulse{ 0%{transform:translateX(0)} 25%{transform:translateX(-5px)} 50%{transform:translateX(5px)} 75%{transform:translateX(-3px)} 100%{transform:translateX(0)} }
+.submit-btn{
+  flex: none; height: 48px; min-width: 84px; padding: 0 18px;
+  border: none; border-radius: 14px; color: var(--on-accent);
+  background: linear-gradient(160deg, #FF9257 0%, var(--accent) 100%);
+  font-size: 16px; font-weight: 750; letter-spacing: .02em;
+  box-shadow: 0 8px 18px -8px rgba(255,122,69,.9);
+  transition: transform var(--dur-fast) var(--ease), filter var(--dur-fast) var(--ease);
+}
+.submit-btn:active{ transform: scale(.96); }
+.keypad{
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 7px; margin-top: 9px;
+}
+.key{
+  height: 46px; border-radius: 13px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--fg);
+  font-family: var(--font-display); font-size: 21px; font-weight: 700;
+  display: grid; place-items: center;
+  transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.key.wide{ font-family: var(--font-body); font-size: 14px; font-weight: 650; color: var(--muted); }
+.key svg{ width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+@media (hover:hover){ .key:hover{ background: var(--surface-2); } }
+.key:active{ transform: scale(.95); background: var(--math-soft); }
+.dock.dim .key, .dock.dim .submit-btn{ opacity: .5; pointer-events: none; }
+
+/* ─── overlays (scratch paper + settings), mounted in .phone-screen ───── */
+.overlay{
+  position: absolute; inset: 0; z-index: 12;
+  display: flex; flex-direction: column;
+  background: var(--bg); color: var(--fg); font-family: var(--font-body);
+  padding-top: var(--phone-safe-top); padding-bottom: var(--phone-safe-bottom);
+}
+.ov-bar{
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px 12px;
+  background: linear-gradient(180deg, #FFFFFF, #FBFDFF);
+  border-bottom: 1px solid var(--border);
+}
+.ov-title{ font-family: var(--font-display); font-size: 18px; font-weight: 700; }
+
+.scratch-expr{
+  margin: 12px 14px 0; padding: 12px 14px; border-radius: var(--radius-md);
+  background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow);
+  font-family: var(--font-display); font-size: 26px; font-weight: 700; letter-spacing: .02em;
+  white-space: nowrap; overflow-x: auto; scrollbar-width: none;
+}
+.scratch-expr::-webkit-scrollbar{ display: none; }
+.scratch-expr small{ display: block; font-family: var(--font-body); font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 2px; letter-spacing: 0; }
+
+.seg{ display: flex; gap: 4px; margin: 12px 14px 0; padding: 4px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--border); }
+.seg button{
+  flex: 1 1 0; min-height: 40px; border: none; border-radius: 11px;
+  background: transparent; color: var(--muted); font-size: 14px; font-weight: 650;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.seg button[aria-selected="true"]{ background: var(--surface); color: var(--math-ink); box-shadow: var(--shadow); }
+
+.scratch-body{ flex: 1 1 auto; min-height: 0; padding: 12px 14px 14px; display: flex; }
+.pane{ flex: 1 1 auto; min-height: 0; display: none; }
+.pane.on{ display: flex; flex-direction: column; }
+
+/* freehand paper */
+.draw-wrap{
+  position: relative; flex: 1 1 auto; min-height: 0; border-radius: var(--radius-md);
+  background:
+    repeating-linear-gradient(0deg, transparent 0 33px, rgba(91,107,133,.16) 33px 34px),
+    var(--surface);
+  border: 1px solid var(--border); box-shadow: var(--shadow); overflow: hidden;
+}
+#drawCanvas{ position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+
+/* column (竖式) paper */
+.col-paper{
+  flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-width: thin;
+  border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--surface);
+  box-shadow: var(--shadow); padding: 18px 16px 22px;
+  background-image:
+    repeating-linear-gradient(0deg, transparent 0 33px, rgba(91,107,133,.10) 33px 34px);
+}
+.col-grid{ display: flex; flex-direction: column; align-items: flex-end; gap: 6px; min-height: 100%; justify-content: center; }
+.col-row{ display: flex; align-items: flex-end; justify-content: flex-end; }
+.col-op{ width: 28px; text-align: center; font-family: var(--font-mono); font-size: 22px; color: var(--math-ink); align-self: center; }
+.col-digits{ display: flex; }
+.col-digits > *{ flex: none; min-width: 0; }
+.col-digit{
+  width: 34px; height: 44px; line-height: 44px; text-align: center;
+  font-family: var(--font-mono); font-size: 26px; font-weight: 600; color: var(--fg);
+}
+input.col-digit{
+  padding: 0; border: none; border-bottom: 2px dashed var(--border); border-radius: 0;
+  background: transparent; color: var(--math-ink); font-weight: 700; caret-color: var(--math);
+}
+input.col-digit:focus-visible{ outline: none; background: var(--math-soft); }
+input.carry-cell{
+  width: 34px; height: 26px; padding: 0; text-align: center; font-family: var(--font-mono);
+  font-size: 13px; color: var(--accent-ink);
+  border: 1px solid var(--border); border-radius: 7px; background: var(--surface-2);
+}
+.carry-row .col-op{ height: 26px; }
+.col-line{ height: 3px; align-self: flex-end; background: var(--fg); border-radius: 2px; opacity: .8; }
+.col-empty{ margin: 0; color: var(--muted); font-size: 14px; text-align: center; padding-top: 40px; }
+
+/* settings sheet */
+.scrim{ position: absolute; inset: 0; z-index: 13; background: rgba(15,23,42,.36); animation: fade var(--dur-base) var(--ease); }
+@keyframes fade{ from{ opacity: 0 } to{ opacity: 1 } }
+.sheet{
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 14;
+  max-height: 84%;
+  display: flex; flex-direction: column;
+  background: var(--surface); color: var(--fg); font-family: var(--font-body);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-shadow: var(--shadow-lift);
+  padding: 10px 16px calc(16px + var(--phone-safe-bottom));
+  animation: sheet-up var(--dur-base) var(--ease);
+}
+@keyframes sheet-up{ from{ transform: translateY(24px); opacity: .5 } to{ transform: translateY(0); opacity: 1 } }
+.sheet-grip{ width: 40px; height: 4px; border-radius: 99px; background: var(--border); margin: 2px auto 8px; }
+.sheet-head{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.sheet-head h2{ margin: 0; font-family: var(--font-display); font-size: 19px; font-weight: 700; }
+.set-group{ padding: 12px 0; border-top: 1px solid var(--border); }
+.set-group:first-of-type{ border-top: none; }
+.set-label{ font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 9px; }
+.set-note{ margin: 12px 0 0; padding: 10px 12px; border-radius: var(--radius-sm);
+  background: var(--math-soft); color: var(--math-ink); font-size: 13px; line-height: 1.6; }
+.chips{ display: flex; flex-wrap: wrap; gap: 8px; }
+.chip{
+  min-height: 42px; padding: 0 15px; border-radius: 999px;
+  border: 1.5px solid var(--border); background: var(--surface); color: var(--fg);
+  font-size: 14px; font-weight: 650;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.chip[aria-pressed="true"]{ background: var(--math-soft); border-color: var(--math); color: var(--math-ink); }
+.switch-row{ display: flex; align-items: center; justify-content: space-between; min-height: 48px; font-size: 15px; font-weight: 600; }
+.switch{ position: relative; width: 54px; height: 32px; flex: none; }
+.switch input{ position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.switch .track{ position: absolute; inset: 0; border-radius: 999px; background: var(--border); transition: background var(--dur-fast) var(--ease); pointer-events: none; }
+.switch .thumb{ position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 50%; background: #fff; box-shadow: var(--shadow); transition: transform var(--dur-base) var(--ease); pointer-events: none; }
+.switch input:checked ~ .track{ background: var(--math); }
+.switch input:checked ~ .thumb{ transform: translateX(22px); }
+.switch input:focus-visible ~ .track{ outline: 2.5px solid var(--math); outline-offset: 2px; }
+.primary-btn{
+  margin-top: 14px; width: 100%; min-height: 50px; border: none; border-radius: 15px;
+  color: var(--on-accent); background: linear-gradient(160deg, #FF9257 0%, var(--accent) 100%);
+  font-size: 16px; font-weight: 750;
+  box-shadow: 0 10px 22px -10px rgba(255,122,69,.9);
+  transition: transform var(--dur-fast) var(--ease);
+}
+.primary-btn:active{ transform: scale(.98); }
+
+/* bubble entrance */
+@media (prefers-reduced-motion: no-preference){
+  .msg.enter{ animation: msg-in var(--dur-base) var(--ease) both; }
+  @keyframes msg-in{ from{ opacity: 0; transform: translateY(8px) } to{ opacity: 1; transform: none } }
+}
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{ animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
+}
+
+/* narrow viewport: the product is the page (shell chrome already collapsed);
+   overlays keep their safe-area padding from the shell variables */
+@media (max-width: 480px){
+  .sheet{ padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+}
+</style>
+</head>
+<body>
+  <div class="phone-frame" data-phone-shell data-platform="neutral">
+    <span class="hardware-button volume" aria-hidden="true"></span>
+    <span class="hardware-button power" aria-hidden="true"></span>
+
+    <section class="phone-screen" data-phone-screen>
+      <main class="phone-content" data-phone-content>
+        <!-- APP CONTENT START -->
+        <div class="app">
+          <header class="appbar">
+            <div class="brand" aria-hidden="true">星</div>
+            <div class="od-fill">
+              <div class="app-title">小星数学老师</div>
+              <div class="app-sub">连加连减 · 竖式草稿纸</div>
+            </div>
+            <span class="score-chip" id="scoreChip" aria-live="polite">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.6l2.6 5.3 5.9.9-4.3 4.1 1 5.9-5.2-2.7-5.2 2.7 1-5.9L3.5 9.8l5.9-.9z"/></svg>
+              <span id="scoreText">0 / 0</span>
+            </span>
+            <button class="icon-btn" id="openSettings" aria-label="出题设置">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.1"/><path d="M12 2.6v2.2M12 19.2v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.6 12h2.2M19.2 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg>
+            </button>
+          </header>
+
+          <div class="chat-scroll" id="chat" aria-live="polite" aria-label="对话区"></div>
+
+          <footer class="dock" id="dock">
+            <div class="dock-row">
+              <div class="answer-pill" id="answerPill"><span class="ph">输入答案…</span></div>
+              <button class="submit-btn" id="submitBtn">提交</button>
+            </div>
+            <div class="keypad" id="keypad"></div>
+          </footer>
+        </div>
+        <!-- APP CONTENT END -->
+      </main>
+
+      <!-- scratch paper page -->
+      <section class="overlay" id="scratch" role="dialog" aria-modal="true" aria-labelledby="scratchTitle" hidden>
+        <div class="ov-bar">
+          <button class="icon-btn" id="scratchBack" aria-label="返回聊天">
+            <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+          </button>
+          <div class="ov-title od-fill" id="scratchTitle">草稿纸</div>
+          <button class="icon-btn" id="scratchClear" aria-label="清空草稿纸">
+            <svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7m-8 0l.9 12a1.6 1.6 0 0 0 1.6 1.5h5a1.6 1.6 0 0 0 1.6-1.5L17 7"/></svg>
+          </button>
+        </div>
+
+        <div class="scratch-expr" id="scratchExpr">—</div>
+
+        <div class="seg" role="tablist" aria-label="草稿纸模式">
+          <button role="tab" id="tabDraw" aria-selected="true" data-mode="draw">手写草稿</button>
+          <button role="tab" id="tabCol" aria-selected="false" data-mode="col">竖式计算</button>
+        </div>
+
+        <div class="scratch-body">
+          <div class="pane on" id="paneDraw">
+            <div class="draw-wrap"><canvas id="drawCanvas" aria-label="手写草稿画布"></canvas></div>
+          </div>
+          <div class="pane" id="paneCol">
+            <div class="col-paper" id="colPaper"><p class="col-empty">打开一道题后再来列竖式吧～</p></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- settings sheet -->
+      <div class="scrim" id="scrim" hidden></div>
+      <section class="sheet" id="settings" role="dialog" aria-modal="true" aria-labelledby="setTitle" hidden>
+        <div class="sheet-grip" aria-hidden="true"></div>
+        <div class="sheet-head">
+          <h2 id="setTitle">出题设置</h2>
+          <button class="icon-btn" id="setClose" aria-label="关闭设置">
+            <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+
+        <div class="set-group">
+          <div class="set-label">难度（数字范围）</div>
+          <div class="chips" id="chipsMax">
+            <button class="chip" data-val="20">20 以内</button>
+            <button class="chip" data-val="50">50 以内</button>
+            <button class="chip" data-val="100">100 以内</button>
+          </div>
+        </div>
+
+        <div class="set-group">
+          <div class="set-label">运算符号</div>
+          <label class="switch-row">
+            <span>允许减法</span>
+            <span class="switch">
+              <input type="checkbox" id="allowSub" checked />
+              <span class="track"></span><span class="thumb"></span>
+            </span>
+          </label>
+        </div>
+
+        <p class="set-note">是否连加连减由小星老师根据你的掌握情况自动安排。</p>
+
+        <button class="primary-btn" id="setDone">完成，出下一题</button>
+      </section>
+
+      <div class="status-bar" aria-hidden="true">
+        <span class="status-time">9:41</span>
+        <span class="status-cutout-zone"></span>
+        <span class="status-icons">
+          <svg class="connectivity" viewBox="0 0 15 12"><path d="M1.5 10.5v-2m4 2v-4.5m4 4.5v-7m4 7v-9"/></svg>
+          <svg class="wifi" viewBox="0 0 16 12"><path d="M1.5 4.7a9.2 9.2 0 0 1 13 0M4.2 7.3a5.4 5.4 0 0 1 7.6 0M6.9 10a1.55 1.55 0 0 1 2.2 0"/></svg>
+          <svg class="battery" viewBox="0 0 20 11"><rect x=".75" y="1.25" width="16.5" height="8.5" rx="2"/><path d="M18.5 4v3M3.2 3.4h10.4v4.2H3.2z" fill="currentColor" stroke="none"/></svg>
+        </span>
+      </div>
+      <div class="camera-dot" aria-hidden="true"></div>
+      <div class="gesture-indicator" aria-hidden="true"></div>
+    </section>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var chat = $('#chat');
+  var dock = $('#dock');
+  var keypad = $('#keypad');
+  var answerPill = $('#answerPill');
+  var submitBtn = $('#submitBtn');
+  var scoreText = $('#scoreText');
+
+  var scratch = $('#scratch');
+  var scratchExpr = $('#scratchExpr');
+  var drawWrap = $('.draw-wrap');
+  var canvas = $('#drawCanvas');
+  var ctx = canvas.getContext('2d');
+  var colPaper = $('#colPaper');
+
+  var scrim = $('#scrim');
+  var settingsSheet = $('#settings');
+
+  var state = {
+    settings: { max: 100, allowSub: true },
+    score: 0,
+    answered: 0,
+    streak: 0,
+    qNo: 0,
+    entry: '',
+    current: null,
+    scratchMode: 'draw'
+  };
+
+  function randInt(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
+
+  /* 小星老师决定这一步是否连加连减：连胜越多，越常安排连加连减的三步题 */
+  function decideSteps() {
+    var r = Math.random();
+    if (state.streak >= 4) return r < 0.65 ? 3 : 2;
+    if (state.streak >= 2) return r < 0.4 ? 3 : 2;
+    return r < 0.35 ? 1 : 2;
+  }
+
+  function makeQuestion() {
+    var max = state.settings.max;
+    var allowSub = state.settings.allowSub;
+    var stepCount = decideSteps();
+
+    var nums = [];
+    var ops = [];
+    var cur = randInt(1, max);
+    nums.push(cur);
+
+    for (var i = 0; i < stepCount; i++) {
+      var choices = [];
+      if (max - cur >= 1) choices.push('+');
+      if (allowSub && cur >= 1) choices.push('-');
+      if (!choices.length) choices.push('+');
+      var op = choices[Math.floor(Math.random() * choices.length)];
+      var b;
+      if (op === '+') { b = randInt(1, max - cur); cur += b; }
+      else { b = randInt(1, cur); cur -= b; }
+      ops.push(op);
+      nums.push(b);
+    }
+
+    var answer = nums[0];
+    for (var j = 0; j < ops.length; j++) {
+      answer = ops[j] === '+' ? answer + nums[j + 1] : answer - nums[j + 1];
+    }
+    return { nums: nums, ops: ops, answer: answer, stepCount: stepCount };
+  }
+
+  function exprString(q, withBlank) {
+    var s = String(q.nums[0]);
+    for (var i = 0; i < q.ops.length; i++) {
+      s += ' ' + (q.ops[i] === '+' ? '+' : '\u2212') + ' ' + q.nums[i + 1];
+    }
+    return withBlank ? s + ' = ?' : s;
+  }
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  function scrollToEnd() {
+    requestAnimationFrame(function () {
+      chat.scrollTo({ top: chat.scrollHeight, behavior: reduce ? 'auto' : 'smooth' });
+    });
+  }
+
+  function addMessage(node, animate) {
+    if (animate !== false && !reduce) node.classList.add('enter');
+    chat.appendChild(node);
+    scrollToEnd();
+    return node;
+  }
+
+  function botBubble(inner, cls) {
+    var msg = el('div', 'msg bot');
+    var av = el('div', 'avatar', '星');
+    av.setAttribute('aria-hidden', 'true');
+    var bub = el('div', 'bubble' + (cls ? ' ' + cls : ''));
+    bub.appendChild(inner);
+    msg.appendChild(av);
+    msg.appendChild(bub);
+    return msg;
+  }
+
+  function addNote(text) {
+    addMessage(botBubble(el('div', null, text), 'note'));
+  }
+
+  var ICON_OK = '<span class="fb-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>';
+  var ICON_BAD = '<span class="fb-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></span>';
+
+  function addFeedback(text, kind) {
+    var msg = botBubble(document.createTextNode(''), 'fb ' + kind);
+    var bub = msg.querySelector('.bubble');
+    if (kind === 'ok' || kind === 'bad') bub.innerHTML = (kind === 'ok' ? ICON_OK : ICON_BAD);
+    bub.appendChild(document.createTextNode(text));
+    addMessage(msg);
+  }
+
+  function addUserBubble(text) {
+    var msg = el('div', 'msg user');
+    var bub = el('div', 'bubble', text);
+    msg.appendChild(bub);
+    addMessage(msg);
+  }
+
+  function addQuestion(q) {
+    state.qNo += 1;
+
+    var bubble = el('div', 'bubble q-bubble');
+    var label = el('div', 'q-label', '第 ' + state.qNo + ' 题 · ' + (q.stepCount > 1 ? '连加连减' : '加减法'));
+    var expr = el('div', 'q-expr');
+    expr.appendChild(document.createTextNode(exprString(q, false) + ' = '));
+    var blank = el('span', 'blank', '?');
+    expr.appendChild(blank);
+
+    var tools = el('div', 'q-tools');
+    var scratchBtn = el('button', 'scratch-btn');
+    scratchBtn.type = 'button';
+    scratchBtn.setAttribute('aria-label', '打开草稿纸列竖式');
+    scratchBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M13.5 6.5l3 3"/></svg>';
+    scratchBtn.appendChild(document.createTextNode('草稿纸'));
+    scratchBtn.addEventListener('click', function () { openScratch(q); });
+
+    var status = el('span', 'q-status');
+    status.hidden = true;
+
+    tools.appendChild(scratchBtn);
+    tools.appendChild(status);
+    bubble.appendChild(label);
+    bubble.appendChild(expr);
+    bubble.appendChild(tools);
+
+    var msg = el('div', 'msg bot');
+    var av = el('div', 'avatar', '星');
+    av.setAttribute('aria-hidden', 'true');
+    msg.appendChild(av);
+    msg.appendChild(bubble);
+
+    state.current = { q: q, bubble: bubble, status: status, resolved: false, attempts: 0 };
+    addMessage(msg);
+    setEntry('');
+    setDockEnabled(true);
+  }
+
+  function updateScore() {
+    scoreText.textContent = state.score + ' / ' + state.answered;
+  }
+
+  function setDockEnabled(on) {
+    dock.classList.toggle('dim', !on);
+    submitBtn.disabled = !on;
+  }
+
+  function setEntry(v) {
+    state.entry = v;
+    answerPill.innerHTML = '';
+    if (v === '') {
+      answerPill.appendChild(el('span', 'ph', '输入答案…'));
+    } else {
+      answerPill.appendChild(document.createTextNode(v));
+    }
+  }
+
+  function submit() {
+    var cur = state.current;
+    if (!cur || cur.resolved) return;
+    if (state.entry === '') {
+      answerPill.classList.remove('pulse');
+      void answerPill.offsetWidth;
+      answerPill.classList.add('pulse');
+      return;
+    }
+    var val = parseInt(state.entry, 10);
+    var correct = val === cur.q.answer;
+    cur.attempts += 1;
+
+    addUserBubble(state.entry);
+    setEntry('');
+
+    if (correct) {
+      state.score += 1;
+      state.answered += 1;
+      state.streak += 1;
+      updateScore();
+      cur.resolved = true;
+      cur.status.hidden = false;
+      cur.status.className = 'q-status ok';
+      cur.status.textContent = '答对啦';
+      cur.bubble.classList.add('resolved-ok');
+      addFeedback('太棒了，答对啦！', 'ok');
+      setDockEnabled(false);
+      window.setTimeout(function () { nextQuestion(); }, reduce ? 400 : 1000);
+    } else if (cur.attempts >= 2) {
+      state.answered += 1;
+      state.streak = 0;
+      updateScore();
+      cur.resolved = true;
+      cur.status.hidden = false;
+      cur.status.className = 'q-status bad';
+      cur.status.textContent = '正确答案 ' + cur.q.answer;
+      cur.bubble.classList.add('resolved-bad');
+      addFeedback('这次的答案是 ' + cur.q.answer + '，我们一起看看竖式吧。', 'bad');
+      setDockEnabled(false);
+      window.setTimeout(function () { nextQuestion(); }, reduce ? 600 : 1600);
+    } else {
+      state.streak = 0;
+      addFeedback('再想想～ 点题目里的「草稿纸」列个竖式试试。', 'hint');
+      setDockEnabled(true);
+    }
+    scrollToEnd();
+  }
+
+  function nextQuestion(note) {
+    if (note) addNote(note);
+    addQuestion(makeQuestion());
+  }
+
+  /* ── keypad ─────────────────────────────────────────────────────────── */
+  function buildKeypad() {
+    keypad.innerHTML = '';
+    '123456789'.split('').forEach(function (d) {
+      keypad.appendChild(makeKey(d, d));
+    });
+    keypad.appendChild(makeKey('\u6e05\u7a7a', 'clear', true));
+    keypad.appendChild(makeKey('0', '0'));
+    var back = el('button', 'key');
+    back.type = 'button';
+    back.setAttribute('aria-label', '删除');
+    back.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9L3 12l6-7z"/><path d="M10 9.5l5 5M15 9.5l-5 5"/></svg>';
+    back.addEventListener('click', function () { setEntry(state.entry.slice(0, -1)); });
+    keypad.appendChild(back);
+  }
+  function makeKey(label, val, wide) {
+    var b = el('button', 'key' + (wide ? ' wide' : ''), label);
+    b.type = 'button';
+    if (val === 'clear') b.setAttribute('aria-label', '清空答案');
+    b.addEventListener('click', function () {
+      if (val === 'clear') setEntry('');
+      else if (state.entry.length < 5) setEntry(state.entry + val);
+    });
+    return b;
+  }
+
+  /* ── scratch paper ──────────────────────────────────────────────────── */
+  function openScratch(q) {
+    scratchExpr.innerHTML = '';
+    scratchExpr.appendChild(document.createTextNode(exprString(q, false)));
+    var tip = el('small', null, '在下面用草稿纸算一算，回到聊天填答案');
+    scratchExpr.appendChild(tip);
+    buildColumn(q);
+    setMode('draw');
+    scratch.hidden = false;
+    resizeCanvas();
+    $('#scratchBack').focus();
+  }
+
+  function closeScratch() {
+    scratch.hidden = true;
+    if (state.current) {
+      var btn = state.current.bubble.querySelector('.scratch-btn');
+      if (btn) btn.focus();
+    }
+  }
+
+  function setMode(mode) {
+    state.scratchMode = mode;
+    $('#tabDraw').setAttribute('aria-selected', mode === 'draw' ? 'true' : 'false');
+    $('#tabCol').setAttribute('aria-selected', mode === 'col' ? 'true' : 'false');
+    $('#paneDraw').classList.toggle('on', mode === 'draw');
+    $('#paneCol').classList.toggle('on', mode === 'col');
+    if (mode === 'draw') resizeCanvas();
+  }
+
+  function resizeCanvas() {
+    var rect = drawWrap.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    var dpr = window.devicePixelRatio || 1;
+    var prev = null;
+    try { if (canvas.width) prev = canvas.toDataURL(); } catch (e) { prev = null; }
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.lineWidth = 2.6;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#1B2436';
+    if (prev) {
+      var img = new Image();
+      img.onload = function () { ctx.drawImage(img, 0, 0, rect.width, rect.height); };
+      img.src = prev;
+    }
+  }
+
+  function clearScratch() {
+    if (state.scratchMode === 'col') {
+      colPaper.querySelectorAll('input').forEach(function (i) { i.value = ''; });
+    } else {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+
+  function buildColumn(q) {
+    colPaper.innerHTML = '';
+    if (!q) {
+      colPaper.appendChild(el('p', 'col-empty', '打开一道题后再来列竖式吧～'));
+      return;
+    }
+    var width = Math.max(
+      String(q.answer).length,
+      q.nums.reduce(function (m, n) { return Math.max(m, String(n).length); }, 1)
+    );
+
+    var grid = el('div', 'col-grid');
+
+    var carry = el('div', 'col-row carry-row');
+    carry.appendChild(el('span', 'col-op'));
+    var carryDigits = el('span', 'col-digits');
+    for (var c = 0; c < width; c++) {
+      var cc = document.createElement('input');
+      cc.type = 'text';
+      cc.inputMode = 'numeric';
+      cc.maxLength = 1;
+      cc.className = 'carry-cell';
+      cc.setAttribute('aria-label', '进位或退位标记 ' + (width - c));
+      carryDigits.appendChild(cc);
+    }
+    carry.appendChild(carryDigits);
+    grid.appendChild(carry);
+
+    q.nums.forEach(function (n, idx) {
+      var row = el('div', 'col-row');
+      var op = el('span', 'col-op');
+      if (idx > 0) op.textContent = q.ops[idx - 1] === '+' ? '+' : '\u2212';
+      var digits = el('span', 'col-digits');
+      String(n).split('').forEach(function (ch) {
+        digits.appendChild(el('span', 'col-digit', ch));
+      });
+      row.appendChild(op);
+      row.appendChild(digits);
+      grid.appendChild(row);
+    });
+
+    var line = el('div', 'col-line');
+    line.style.width = (width * 34) + 'px';
+    grid.appendChild(line);
+
+    var res = el('div', 'col-row result');
+    res.appendChild(el('span', 'col-op'));
+    var resDigits = el('span', 'col-digits');
+    for (var r = 0; r < width; r++) {
+      var ri = document.createElement('input');
+      ri.type = 'text';
+      ri.inputMode = 'numeric';
+      ri.maxLength = 1;
+      ri.className = 'col-digit';
+      ri.setAttribute('aria-label', '结果第 ' + (width - r) + ' 位');
+      resDigits.appendChild(ri);
+    }
+    res.appendChild(resDigits);
+    grid.appendChild(res);
+
+    colPaper.appendChild(grid);
+  }
+
+  /* ── canvas drawing ─────────────────────────────────────────────────── */
+  var drawing = false;
+  var lastPt = null;
+
+  function point(e) {
+    var r = canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+  canvas.addEventListener('pointerdown', function (e) {
+    drawing = true;
+    lastPt = point(e);
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    ctx.beginPath();
+    ctx.moveTo(lastPt.x, lastPt.y);
+    ctx.lineTo(lastPt.x + 0.1, lastPt.y + 0.1);
+    ctx.stroke();
+    e.preventDefault();
+  });
+  canvas.addEventListener('pointermove', function (e) {
+    if (!drawing) return;
+    var p = point(e);
+    ctx.beginPath();
+    ctx.moveTo(lastPt.x, lastPt.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    lastPt = p;
+    e.preventDefault();
+  });
+  function endDraw() { drawing = false; }
+  canvas.addEventListener('pointerup', endDraw);
+  canvas.addEventListener('pointercancel', endDraw);
+  canvas.addEventListener('pointerleave', endDraw);
+
+  /* ── settings ───────────────────────────────────────────────────────── */
+  function openSettings() {
+    scrim.hidden = false;
+    settingsSheet.hidden = false;
+    syncSettingsChips();
+    $('#setClose').focus();
+  }
+  function closeSettings() {
+    scrim.hidden = true;
+    settingsSheet.hidden = true;
+    $('#openSettings').focus();
+  }
+  function syncSettingsChips() {
+    $('#chipsMax').querySelectorAll('.chip').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(Number(b.dataset.val) === state.settings.max));
+    });
+    $('#allowSub').checked = state.settings.allowSub;
+  }
+
+  /* ── wiring ─────────────────────────────────────────────────────────── */
+  buildKeypad();
+  submitBtn.addEventListener('click', submit);
+
+  $('#openSettings').addEventListener('click', openSettings);
+  $('#setClose').addEventListener('click', closeSettings);
+  scrim.addEventListener('click', closeSettings);
+
+  $('#chipsMax').addEventListener('click', function (e) {
+    var b = e.target.closest('.chip');
+    if (!b) return;
+    state.settings.max = Number(b.dataset.val);
+    syncSettingsChips();
+  });
+  $('#allowSub').addEventListener('change', function (e) {
+    state.settings.allowSub = e.target.checked;
+  });
+  $('#setDone').addEventListener('click', function () {
+    closeSettings();
+    if (state.current && !state.current.resolved) {
+      state.current.resolved = true;
+      state.current.status.hidden = false;
+      state.current.status.className = 'q-status';
+      state.current.status.textContent = '已跳过';
+    }
+    nextQuestion('设置已更新，按新规则出题～');
+  });
+
+  $('#scratchBack').addEventListener('click', closeScratch);
+  $('#scratchClear').addEventListener('click', clearScratch);
+  $('#tabDraw').addEventListener('click', function () { setMode('draw'); });
+  $('#tabCol').addEventListener('click', function () { setMode('col'); });
+
+  window.addEventListener('resize', function () {
+    if (!scratch.hidden && state.scratchMode === 'draw') resizeCanvas();
+  });
+
+  window.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      if (!settingsSheet.hidden) { closeSettings(); return; }
+      if (!scratch.hidden) { closeScratch(); return; }
+    }
+    if (!scratch.hidden || !settingsSheet.hidden) return;
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    if (e.key >= '0' && e.key <= '9') {
+      if (state.entry.length < 5) setEntry(state.entry + e.key);
+    } else if (e.key === 'Backspace') {
+      setEntry(state.entry.slice(0, -1));
+    } else if (e.key === 'Enter') {
+      submit();
+    }
+  });
+
+  /* ── boot ───────────────────────────────────────────────────────────── */
+  setDockEnabled(false);
+  updateScore();
+  addNote('你好呀，我是小星老师。题目由我来安排，会看你的情况慢慢加难度。');
+  addNote('算不清的时候，点题目上的「草稿纸」：可以手写，也可以列竖式。');
+  nextQuestion();
+})();
+</script>
+</body>
+</html>

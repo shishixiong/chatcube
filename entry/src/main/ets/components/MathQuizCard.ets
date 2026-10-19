@@ -26,6 +26,8 @@ import {
   getOpDisplay,
   isCorrectAnswer
 } from '../utils/MathQuizGame'
+import { ColumnPaperLayout, parseChainExpression, computeColumnPaperLayout } from '../utils/MathColumnPaperLayout'
+import { MathScratchSheet } from './mathQuiz/MathScratchSheet'
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import { PreferenceKeys } from '../services/PreferencesService'
 import { ClockFaceView } from './mathTeach/ClockFaceView'
@@ -53,6 +55,16 @@ export struct MathQuizCard {
   @Local bestStreak: number = 0
   @Local isNewBestStreak: boolean = false
   @Local streakLoaded: boolean = false
+
+  // 两次机会流 (2026-10-15): 首次答错仅行内提示不提交, 第二次答错才揭示并回传。
+  // submitCount = 本次提交序号 (1 起); wrongPicks = 已试错的选项 (保持红色 wrong 态)。
+  @Local submitCount: number = 0
+  @Local wrongPicks: string[] = []
+  @Local showHint: boolean = false
+
+  // 草稿纸 sheet: aboutToAppear 时按表达式解析一次 (null = 隐藏入口)
+  @Local scratchLayout: ColumnPaperLayout | null = null
+  @Local showScratchSheet: boolean = false
 
   @Local shellConfig: CardShellConfig = {
     title: '数学小游戏',
@@ -94,6 +106,8 @@ export struct MathQuizCard {
     }
     // 异步加载连胜 (fire-and-forget, 由 streakLoaded 守卫竞态)
     this.loadStreak(this.quiz.skillKey)
+    // 草稿纸可用性: 仅 +− 链式算术题可解析出竖式布局时显示入口 (wordProblem 泄题拒绝)
+    this.scratchLayout = this.computeScratchLayout()
 
     // 重建外壳配置 (题面在 slot 内, stem 保持 '')
     this.shellConfig = {
@@ -135,37 +149,79 @@ export struct MathQuizCard {
   }
 
   private handleSubmit(): void {
-    if (this.selectedOption === -1 || this.isAnswered) {
+    if (this.selectedOption === -1 || this.isAnswered || this.showResult) {
       return
     }
 
     const quiz = this.quiz
     const isCorrect = isCorrectAnswer(this.selectedOption, quiz.correctAnswer)
+    this.submitCount += 1
 
-    // 先显示即时反馈
+    if (isCorrect) {
+      // 答对 (任意次): 标准庆祝 + 回传 + 连胜 +1
+      this.showResult = true
+      this.isCorrect = true
+      this.correctAnswerValue = quiz.correctAnswer
+      this.shellState.submitted = true
+      this.shellState.isCorrect = true
+      this.showHint = false
+      this.submitPayload(true)
+      this.updateStreak(quiz.skillKey, true)
+      return
+    }
+
+    // 第 1 次答错: 行内提示不提交不揭示, 清空选中让孩子换答案 (参考稿两次机会流)
+    if (this.submitCount < 2) {
+      this.wrongPicks.push(String(this.selectedOption))
+      this.selectedOption = -1
+      this.shellState.hasSelection = false
+      this.showHint = true
+      this.updateStreak(quiz.skillKey, false)
+      return
+    }
+
+    // 第 2 次答错: 揭示正确答案 + 标准答错反馈 + 回传
     this.showResult = true
-    this.isCorrect = isCorrect
+    this.isCorrect = false
     this.correctAnswerValue = quiz.correctAnswer
     this.shellState.submitted = true
-    this.shellState.isCorrect = isCorrect
+    this.shellState.isCorrect = false
+    this.showHint = false
+    this.submitPayload(false)
+    this.updateStreak(quiz.skillKey, false)
+  }
 
-    // 构建 payload 回传
+  // 最终结果回传 (每次交互只回传一次; pending 在两次尝试期间由卡片持住)
+  private submitPayload(correct: boolean): void {
+    const quiz = this.quiz
     const payload: MathQuizAnswerPayload = {
       answered: true,
       child_answer: this.selectedOption,
       child_answer_valid: true,
-      correct: isCorrect,
+      correct: correct,
       correct_answer: quiz.correctAnswer,
       expression: quiz.expression,
       question: quiz.question,
       skill_key: quiz.skillKey,
-      quiz_type: quiz.type
+      quiz_type: quiz.type,
+      attempts: this.submitCount,
+      current_streak: this.currentStreak
     }
 
     this.onAnswer(this.toolCall.id, JSON.stringify(payload))
+  }
 
-    // 异步更新连胜 (fire-and-forget; @Local 同步变更会立刻触发重渲染, 写盘在后台完成)
-    this.updateStreak(quiz.skillKey, isCorrect)
+  // 草稿纸可用性: 仅 arithmetic 非应用题 + 表达式可解析为 +− 链 + 每步竖式合法 (中间过程非负)。
+  // wordProblem 拒绝 (题干含答案语义, 摆竖式会泄题); × ÷ 题不排竖式。
+  private computeScratchLayout(): ColumnPaperLayout | null {
+    if (this.quiz.type !== 'arithmetic' || this.quiz.wordProblem || this.quiz.expression === '') {
+      return null
+    }
+    const chain = parseChainExpression(this.quiz.expression)
+    if (chain === null) {
+      return null
+    }
+    return computeColumnPaperLayout(chain.nums, chain.ops)
   }
 
   private handleRetry(): void {
@@ -177,6 +233,7 @@ export struct MathQuizCard {
     this.showResult = false
     this.isCorrect = false
     this.correctAnswerValue = 0
+    this.showHint = false
     this.shellState.hasSelection = false
     this.shellState.submitted = false
     this.shellState.isCorrect = false
@@ -261,7 +318,14 @@ export struct MathQuizCard {
 
   private getOptionState(opt: string | number): string {
     if (!this.showResult && !this.isAnswered) {
-      return this.selectedOption === opt ? 'selected' : 'default'
+      if (this.selectedOption === opt) {
+        return 'selected'
+      }
+      // 两次机会流: 已试错的选项保持红色 wrong 态 (换答案后仍可见)
+      if (this.wrongPicks.indexOf(String(opt)) >= 0) {
+        return 'wrong'
+      }
+      return 'default'
     }
     if (opt === this.quiz.correctAnswer) {
       return this.isCorrect ? 'correct' : 'revealed'
@@ -351,18 +415,63 @@ export struct MathQuizCard {
   }
 
   build() {
-    CardShell({
-      config: this.shellConfig,
-      state: this.shellState,
-      isAnswered: this.isAnswered,
-      // showResult=true 才持有真实正确答案; answeredPayload 解析失败时保持 0, 传 '' 让
-      // shell 跳过「正确答案」行 (CardShell 对 '' 不渲染该行), 与迁移前行为一致
-      correctAnswerText: this.showResult ? String(this.correctAnswerValue) : '',
-      onConfirm: (): void => { this.handleConfirm() },
-      onRetry: (): void => { this.handleRetry() }
-    }) {
-      this.QuizContent()
+    Stack() {
+      CardShell({
+        config: this.shellConfig,
+        state: this.shellState,
+        isAnswered: this.isAnswered,
+        // showResult=true 才持有真实正确答案; answeredPayload 解析失败时保持 0, 传 '' 让
+        // shell 跳过「正确答案」行 (CardShell 对 '' 不渲染该行), 与迁移前行为一致
+        correctAnswerText: this.showResult ? String(this.correctAnswerValue) : '',
+        onConfirm: (): void => { this.handleConfirm() },
+        onRetry: (): void => { this.handleRetry() }
+      }) {
+        this.QuizContent()
+      }
+
+      // bindSheet 宿主: 零尺寸 Column 挂载 (custom 组件不能直接挂 bindSheet,
+      // ProviderDetailSheet.UnifiedSheetHost 同款模式)
+      Column()
+        .width(0)
+        .height(0)
+        .bindSheet($$this.showScratchSheet, this.ScratchSheetBuilder(), {
+          height: SheetSize.LARGE,
+          detents: [SheetSize.LARGE],
+          dragBar: true,
+          showClose: false,
+          preferType: SheetType.BOTTOM
+        })
     }
+    .width('100%')
+  }
+
+  @Builder
+  ScratchSheetBuilder() {
+    MathScratchSheet({
+      layout: this.scratchLayout,
+      onClose: (): void => {
+        this.showScratchSheet = false
+      }
+    })
+  }
+
+  // 两次机会流: 第 1 次答错后的行内提示条 (不走 CardShell 标准反馈横幅)
+  @Builder
+  HintRow() {
+    Row({ space: 6 }) {
+      Text('💡')
+        .fontSize(14)
+      Text(this.scratchLayout !== null
+        ? '再想想～ 可以点「草稿纸」列竖式试试'
+        : '再想想～ 换一个答案试试')
+        .fontSize(13)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.themePrimary)
+    }
+    .width('100%')
+    .padding(10)
+    .borderRadius(8)
+    .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '24' : '14'))
   }
 
   @Builder
@@ -420,6 +529,10 @@ export struct MathQuizCard {
     } else {
       this.ArithmeticContent()
     }
+    // 两次机会流: 第 1 次答错后的行内提示 (第 2 次答错走 shell 标准反馈)
+    if (this.showHint && !this.showResult && !this.isAnswered) {
+      this.HintRow()
+    }
   }
 
   @Builder
@@ -467,6 +580,31 @@ export struct MathQuizCard {
           .width('100%')
           .justifyContent(FlexAlign.Center)
           .margin({ top: 2, bottom: 2 })
+        }
+
+        // 草稿纸入口: 仅 +− 链式算术题 (竖式布局可解析) 且未作答时显示;
+        // wordProblem / × ÷ 题 / 非 arithmetic 题型不渲染 (不泄题 + 无竖式可排)
+        if (this.scratchLayout !== null && !this.showResult && !this.isAnswered) {
+          Row() {
+            Row({ space: 6 }) {
+              Text('✏️')
+                .fontSize(14)
+              Text('草稿纸')
+                .fontSize(13)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.themePrimary)
+            }
+            .height(34)
+            .padding({ left: 14, right: 14 })
+            .borderRadius(17)
+            .border({ width: 1.5, color: withColorAlpha(this.themePrimary, '66') })
+            .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '24' : '0D'))
+            .onClick(() => {
+              this.showScratchSheet = true
+            })
+          }
+          .width('100%')
+          .justifyContent(FlexAlign.Start)
         }
 
         // 选项按钮: 2 列 Grid 自动换行, 任意选项数都能整齐排列

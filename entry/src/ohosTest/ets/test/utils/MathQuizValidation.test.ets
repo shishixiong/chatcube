@@ -122,6 +122,32 @@ export default function mathQuizValidationTest() {
       expect(r.error.includes('至少需要 2 个数字选项')).assertTrue()
     })
 
+    it('连加连减超过 3 步 (4 个运算符), 拒绝', 0, () => {
+      const r = validateMathQuizArgs(buildArgs({
+        type: 'arithmetic', question: 'q', expression: '1 + 2 + 3 + 4 + 5',
+        correct_answer: 15, options: [10, 15, 20, 25]
+      }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('最多 3 步')).assertTrue()
+    })
+
+    it('连加连减 3 步 (3 个运算符) 且答案一致, 合法', 0, () => {
+      const r = validateMathQuizArgs(buildArgs({
+        type: 'arithmetic', question: 'q', expression: '47 + 28 - 15',
+        correct_answer: 60, options: [45, 60, 75, 90]
+      }))
+      expect(r.ok).assertTrue()
+    })
+
+    it('计算结果为负数, 拒绝', 0, () => {
+      const r = validateMathQuizArgs(buildArgs({
+        type: 'arithmetic', question: 'q', expression: '5 - 18',
+        correct_answer: -13, options: [-13, 0, 13, 23]
+      }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('负数')).assertTrue()
+    })
+
     it('参数不是合法 JSON, 拒绝', 0, () => {
       const r = validateMathQuizArgs('{not json')
       expect(r.ok).assertFalse()
