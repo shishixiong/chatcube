@@ -1,10 +1,12 @@
-import { GiftItem, GiftShopStats, GiftRedemptionRow,
+import { GiftItem, GiftShopStats, GiftRedemptionRow, GiftRedeemResult,
   countAffordableGifts, filterGiftsByCategory, sortGiftsForShop,
+  canAffordGift, shortfallFor,
   getGiftCategoryMeta, GIFT_CATEGORIES, GIFT_CATEGORY_ALL } from '../models/GiftModels'
 import { getGiftShopService } from '../services/GiftShopService'
 import {
   KIDS_BG, KIDS_SURFACE, KIDS_FG, KIDS_MUTED, KIDS_SUBTLE, KIDS_BORDER,
-  KIDS_ACCENT, KIDS_ACCENT_2, KIDS_ON_HERO, KIDS_ON_HERO_2, KIDS_STAR, KIDS_ON_GOLD
+  KIDS_ACCENT, KIDS_ACCENT_2, KIDS_ON_HERO, KIDS_ON_HERO_2, KIDS_STAR, KIDS_ON_GOLD,
+  KIDS_DANGER
 } from '../components/kids/KidsBrandTokens'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
@@ -24,7 +26,12 @@ struct GiftShopPage {
   @Local gifts: GiftItem[] = []
   @Local selectedCategory: string = GIFT_CATEGORY_ALL
   @Local pendingCount: number = 0
-  // Task 8: 兑换 sheet 状态（showConfirmSheet / confirmGift / redeemState / lastRedemption / redeemError）
+  @Local showConfirmSheet: boolean = false
+  @Local confirmGift: GiftItem | null = null
+  /** 'confirm' | 'success' | 'error' */
+  @Local redeemState: string = 'confirm'
+  @Local lastRedemption: GiftRedemptionRow | null = null
+  @Local redeemError: string = ''
 
   private get topInsetVp(): number {
     return px2vp(getAppUiState().topAvoidHeight)
@@ -91,6 +98,42 @@ struct GiftShopPage {
     if (giftShopPagePathStack !== null) {
       giftShopPagePathStack.pushPath({ name: 'GiftRecordsPage' })
     }
+  }
+
+  private openConfirmSheet(gift: GiftItem): void {
+    this.confirmGift = gift
+    this.redeemState = 'confirm'
+    this.redeemError = ''
+    this.lastRedemption = null
+    this.showConfirmSheet = true
+  }
+
+  private confirmRedeem(): void {
+    if (this.confirmGift === null) {
+      return
+    }
+    const giftId: string = this.confirmGift.id
+    getGiftShopService().redeem(giftId).then((result: GiftRedeemResult): void => {
+      if (result.success && result.redemption !== null) {
+        this.lastRedemption = result.redemption
+        this.redeemState = 'success'
+        this.loadAll()
+      } else if (result.reason === 'insufficient') {
+        this.redeemState = 'error'
+        this.redeemError = `星星还差 ${result.shortfall} 颗，再攒一攒吧`
+      } else {
+        this.redeemState = 'error'
+        this.redeemError = '兑换没有成功，稍后再试试'
+      }
+    }).catch((): void => {
+      this.redeemState = 'error'
+      this.redeemError = '兑换没有成功，稍后再试试'
+    })
+  }
+
+  private goRecordsFromSheet(): void {
+    this.showConfirmSheet = false
+    this.goRecords()
   }
 
   @Builder
@@ -251,7 +294,10 @@ struct GiftShopPage {
           .fontColor(KIDS_FG)
       }
 
-      // Task 8: 点击卡片 → 打开兑换确认 sheet（余额不足置灰 + 「还差 N 颗」）
+      Text(gift.priceStars <= this.balance ? '点击兑换' : `还差 ${shortfallFor(this.balance, gift.priceStars)} 颗`)
+        .fontSize(10.5)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(gift.priceStars <= this.balance ? getGiftCategoryMeta(gift.category).tint : KIDS_SUBTLE)
     }
     .layoutWeight(1)
     .padding(14)
@@ -261,6 +307,12 @@ struct GiftShopPage {
     .border({ width: 1, color: KIDS_BORDER })
     .shadow({ radius: 8, color: '#1424211C', offsetY: 3 })
     .opacity(gift.priceStars <= this.balance ? 1 : 0.55)
+    .accessibilityText(gift.priceStars <= this.balance ?
+      `兑换${gift.name}，需要 ${gift.priceStars} 颗星` :
+      `${gift.name}需要 ${gift.priceStars} 颗星，还差 ${shortfallFor(this.balance, gift.priceStars)} 颗`)
+    .onClick((): void => {
+      this.openConfirmSheet(gift)
+    })
   }
 
   build() {
@@ -282,11 +334,164 @@ struct GiftShopPage {
       .layoutWeight(1)
       .scrollBar(BarState.Off)
       .align(Alignment.Top)
-      // Task 8: bindSheet 宿主（独立零尺寸 Column）
+      Column()
+        .width(0)
+        .height(0)
+        .bindSheet($$this.showConfirmSheet, this.ConfirmSheetBuilder(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          preferType: SheetType.BOTTOM,
+          onDisappear: (): void => {
+            this.showConfirmSheet = false
+          }
+        })
     }
     .width('100%')
     .height('100%')
     .backgroundColor(KIDS_BG)
+  }
+
+  @Builder
+  ConfirmSheetBuilder() {
+    Column({ space: 14 }) {
+      Row() {
+        Text(this.redeemState === 'success' ? '兑换成功' : (this.redeemState === 'error' ? '换个目标吧' : '确认兑换'))
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(KIDS_FG)
+        Blank()
+        Text('✕')
+          .fontSize(15)
+          .fontColor(KIDS_SUBTLE)
+          .width(36).height(36)
+          .textAlign(TextAlign.Center)
+          .onClick((): void => {
+            this.showConfirmSheet = false
+          })
+      }
+      .width('100%')
+
+      if (this.redeemState === 'confirm' && this.confirmGift !== null) {
+        Row({ space: 12 }) {
+          Column() {
+            Image($rawfile(getGiftCategoryMeta(this.confirmGift.category).iconPath)).width(28).height(28)
+          }
+          .width(52).height(52)
+          .borderRadius(16)
+          .justifyContent(FlexAlign.Center)
+          .backgroundColor(withColorAlpha(getGiftCategoryMeta(this.confirmGift.category).tint, '26'))
+          Column({ space: 2 }) {
+            Text(this.confirmGift.name)
+              .fontSize(15)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(KIDS_FG)
+            Text(`现有 ${this.balance} 颗 · 需要 ${this.confirmGift.priceStars} 颗`)
+              .fontSize(12)
+              .fontColor(KIDS_MUTED)
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        Text(`兑换后可用余额变为 ${this.balance - this.confirmGift.priceStars} 颗`)
+          .fontSize(12)
+          .fontColor(KIDS_SUBTLE)
+
+        Row({ space: 8 }) {
+          Text('再想想')
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(KIDS_FG)
+            .layoutWeight(1)
+            .height(46)
+            .textAlign(TextAlign.Center)
+            .borderRadius(999)
+            .border({ width: 1.5, color: KIDS_BORDER })
+          Text(`用 ${this.confirmGift.priceStars} 颗星星兑换`)
+            .fontSize(14)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#FFFFFF')
+            .layoutWeight(2)
+            .height(46)
+            .textAlign(TextAlign.Center)
+            .borderRadius(999)
+            .backgroundColor(KIDS_ACCENT)
+            .opacity(canAffordGift(this.balance, this.confirmGift.priceStars) ? 1 : 0.5)
+            .onClick((): void => {
+              if (this.confirmGift !== null && canAffordGift(this.balance, this.confirmGift.priceStars)) {
+                this.confirmRedeem()
+              }
+            })
+        }
+        .width('100%')
+      }
+
+      if (this.redeemState === 'success' && this.lastRedemption !== null) {
+        Text('把领取码给爸爸妈妈看吧')
+          .fontSize(12.5)
+          .fontColor(KIDS_MUTED)
+        Text(this.lastRedemption.redeemCode)
+          .fontSize(30)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(KIDS_FG)
+          .letterSpacing(6)
+          .padding(14)
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .borderRadius(16)
+          .backgroundColor(withColorAlpha(KIDS_ACCENT, '14'))
+        Row({ space: 8 }) {
+          Text('好的')
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(KIDS_FG)
+            .layoutWeight(1)
+            .height(46)
+            .textAlign(TextAlign.Center)
+            .borderRadius(999)
+            .border({ width: 1.5, color: KIDS_BORDER })
+            .onClick((): void => {
+              this.showConfirmSheet = false
+            })
+          Text('去查看我的兑换')
+            .fontSize(14)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#FFFFFF')
+            .layoutWeight(2)
+            .height(46)
+            .textAlign(TextAlign.Center)
+            .borderRadius(999)
+            .backgroundColor(KIDS_ACCENT)
+            .onClick((): void => {
+              this.goRecordsFromSheet()
+            })
+        }
+        .width('100%')
+      }
+
+      if (this.redeemState === 'error') {
+        Text(this.redeemError)
+          .fontSize(13)
+          .fontColor(KIDS_DANGER)
+        Text('知道了')
+          .fontSize(14)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#FFFFFF')
+          .width('100%')
+          .height(46)
+          .textAlign(TextAlign.Center)
+          .borderRadius(999)
+          .backgroundColor(KIDS_ACCENT)
+          .onClick((): void => {
+            this.showConfirmSheet = false
+          })
+      }
+    }
+    .width('100%')
+    .padding({ left: 20, right: 20, top: 18, bottom: 28 })
   }
 }
 
