@@ -360,6 +360,17 @@ export class StarRewardService {
     return summary.total
   }
 
+  /**
+   * 可用余额 = 累计获得 − 累计兑换（spec §4.3）。
+   * 兑换流水独立存 gift_redemptions 表，不写 star_events（避开 10 处漂移点）。
+   * 负数余额没有意义，防御性钳到 0（数据异常时可见 0 而非负数）。
+   */
+  async getStarBalance(): Promise<number> {
+    const earned = await this.getAllTimeStarTotal()
+    const redeemed = await this.database.getRedeemedStarsTotal()
+    return Math.max(0, earned - redeemed)
+  }
+
   private aggregateEvents(events: StarEventRow[]): TodayStarSummary {
     const summary = createEmptyTodayStarSummary()
     for (let i = 0; i < events.length; i++) {
