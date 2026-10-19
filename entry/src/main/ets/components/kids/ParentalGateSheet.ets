@@ -40,6 +40,7 @@ const DIGIT_KEYS: string[] = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
  * 答案显示框（空态「输入答案」, 答错语文橙红边框 + 抖动 + 换题）
  * + 3×4 数字键盘（1–9 / ⌫ / 0 / 通栏「确定」）, 不依赖系统输入法。
  * 答对 → phase = summary（加载今日数据, 失败降级为 star-hero + 按钮）；
+ * gateOnly=true 时退化为单阶段算术门（礼物核销用，spec 2026-10-19 §5.3）——答对直接 onPassed；
  * summary「进入家长设置」→ onPassed（宿主负责关 sheet + 置解锁态）;
  * 「知道了」/✕/拖拽 → onCancelled。sheet 每次打开都从 gate 开始——
  * 门语义不因看过概览而放宽。无状态持久化: 关闭即清空。
@@ -48,6 +49,8 @@ const DIGIT_KEYS: string[] = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
 export struct ParentalGateSheet {
   @Event onPassed: () => void = () => {}
   @Event onCancelled: () => void = () => {}
+  /** true: 仅算术门（答对直接 onPassed，不进概览）——礼物核销用；默认 false 保持两阶段行为 */
+  @Param gateOnly: boolean = false
   @Local currentQuestion: GateQuestion = { text: '', answer: 0 } as GateQuestion
   @Local inputText: string = ''
   @Local showError: boolean = false
@@ -93,6 +96,10 @@ export struct ParentalGateSheet {
 
   private handleConfirm(): void {
     if (checkGateAnswer(this.currentQuestion, this.inputText)) {
+      if (this.gateOnly) {
+        this.onPassed()
+        return
+      }
       this.phase = 'summary'
       this.loadSummary()
       return
