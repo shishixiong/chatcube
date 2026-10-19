@@ -12,6 +12,7 @@ import vocabLedgerSectionTest from './utils/VocabLedgerSection.test';
 import stepAnswerPayloadTest from './utils/StepAnswerPayload.test';
 import stepFunTtsTextUtilsTest from './utils/StepFunTtsTextUtils.test';
 import mathColumnPaperLayoutTest from './utils/MathColumnPaperLayout.test';
+import giftModelsTest from './utils/GiftModels.test';
 
 export default function testsuite() {
   abilityTest();
@@ -28,4 +29,5 @@ export default function testsuite() {
   stepAnswerPayloadTest();
   stepFunTtsTextUtilsTest();
   mathColumnPaperLayoutTest();
+  giftModelsTest();
 }
