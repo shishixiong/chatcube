@@ -144,6 +144,11 @@
       "name": "CubeSpinnerPreview",
       "pageSourceFile": "src/main/ets/pages/CubeSpinnerPreview.ets",
       "buildFunction": "CubeSpinnerPreviewBuilder"
+    },
+    {
+      "name": "GiftShopPage",
+      "pageSourceFile": "src/main/ets/pages/GiftShopPage.ets",
+      "buildFunction": "GiftShopPageBuilder"
     }
   ]
 }

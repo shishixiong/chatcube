@@ -44,6 +44,8 @@ const KIDS_GARDEN_DAY_LIMIT: number = 7
  * 按「今日 N 题/局」口径计数）——达上限后卡片降透明度置灰、点击无响应，次日自动恢复。
  * 恒定暖色绘本令牌（KidsBrandTokens），不随深色模式切换；图标一律 SVG，无 emoji。
  * 星星数据自加载, starRefreshTick 由宿主在导航栈 didShow(navBar) 时递增触发刷新。
+ * 星星药丸展示「可用余额」（累计获得 − 已兑换礼物, getStarBalance），点击经
+ * onOpenGiftShop 进星星商城（spec 2026-10-19 §5.2）。
  */
 @ComponentV2
 export struct KidsHomeView {
@@ -54,7 +56,10 @@ export struct KidsHomeView {
   /** 新建会话：hero 传 ('', DEFAULT)；学科卡传 (startPrompt, 学科 assistantId)——startPrompt 现为老师开场上下文 */
   @Event onNewChat: (initialPrompt: string, assistantId: string) => void = () => {}
   @Event onGatePassed: () => void = () => {}
-  @Local totalStars: number = 0
+  /** 点击星星药丸 → 打开星星商城（spec 2026-10-19 §5.2, Index push GiftShopPage） */
+  @Event onOpenGiftShop: () => void = () => {}
+  /** 可用余额（累计获得 − 已兑换礼物），非累计总量——口径见 GiftShopService.getStarBalance */
+  @Local starBalance: number = 0
   @Local todayStars: number = 0
   @Local todayEvents: StarEventRow[] = []
   @Local childName: string = ''
@@ -73,6 +78,8 @@ export struct KidsHomeView {
   @Local heroPressed: boolean = false
   /** 按压反馈: 当前按下的学科卡 id（'' = 无） */
   @Local pressedSubjectId: string = ''
+  /** 按压反馈: 星星药丸（scale 0.96 + 70ms, spec 2026-10-19 §5.2） */
+  @Local starPillPressed: boolean = false
 
   @Monitor('starRefreshTick')
   onStarRefreshTickChanged(): void {
@@ -92,10 +99,11 @@ export struct KidsHomeView {
   }
 
   private loadAll(): void {
-    getStarRewardService().getAllTimeStarTotal().then((total: number): void => {
-      this.totalStars = total
+    getStarRewardService().getStarBalance().then((balance: number): void => {
+      this.starBalance = balance
     }).catch((error: Object): void => {
-      console.error('KidsHomeView', `Failed to load total stars: ${(error as BusinessError).message ?? String(error)}`)
+      console.error('KidsHomeView', `Failed to load star balance: ${(error as BusinessError).message ?? String(error)}`)
+      this.starBalance = 0
     })
     getStarRewardService().getTodaySummary().then((summary: TodayStarSummary): void => {
       this.todayStars = summary.total
@@ -253,7 +261,7 @@ export struct KidsHomeView {
 
         Row({ space: 6 }) {
           Image($rawfile('kids/star.svg')).width(14).height(14)
-          Text(`${this.totalStars}`)
+          Text(`${this.starBalance}`)
             .fontSize(17)
             .fontWeight(FontWeight.Bold)
             .fontColor(KIDS_FG)
@@ -266,7 +274,19 @@ export struct KidsHomeView {
         .backgroundColor(KIDS_SURFACE)
         .border({ width: 1, color: KIDS_BORDER })
         .shadow({ radius: 6, color: '#1A24211C', offsetY: 2 })
-        .accessibilityText(`累计获得 ${this.totalStars} 颗星`)
+        .scale({ x: this.starPillPressed ? 0.96 : 1, y: this.starPillPressed ? 0.96 : 1 })
+        .animation({ duration: 70, curve: Curve.EaseOut })
+        .onTouch((event: TouchEvent): void => {
+          if (event.type === TouchType.Down) {
+            this.starPillPressed = true
+          } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+            this.starPillPressed = false
+          }
+        })
+        .onClick((): void => {
+          this.onOpenGiftShop()
+        })
+        .accessibilityText(`可用星星 ${this.starBalance} 颗，点击进入星星商城`)
       }
       .width('100%')
       .padding({ left: 20, right: 20, top: this.topInsetVp + 12, bottom: 8 })

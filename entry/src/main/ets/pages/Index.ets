@@ -2702,6 +2702,9 @@ struct Index {
         onOpenSession: (sessionId: string): void => this.handleKidsOpenSession(sessionId),
         onNewChat: (initialPrompt: string, assistantId: string): void =>
           this.handleKidsNewChat(initialPrompt, assistantId),
+        onOpenGiftShop: (): void => {
+          this.chatTabNavStack.pushPath({ name: 'GiftShopPage' })
+        },
         onGatePassed: (): void => this.handleKidsGatePassed()
       })
     }
