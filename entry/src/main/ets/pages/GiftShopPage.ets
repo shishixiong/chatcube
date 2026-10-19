@@ -32,6 +32,8 @@ struct GiftShopPage {
   @Local redeemState: string = 'confirm'
   @Local lastRedemption: GiftRedemptionRow | null = null
   @Local redeemError: string = ''
+  /** 兑换请求在途（防双击双扣：redeem() 异步窗口内禁用确认按钮） */
+  @Local redeemInFlight: boolean = false
 
   private get topInsetVp(): number {
     return px2vp(getAppUiState().topAvoidHeight)
@@ -105,15 +107,18 @@ struct GiftShopPage {
     this.redeemState = 'confirm'
     this.redeemError = ''
     this.lastRedemption = null
+    this.redeemInFlight = false
     this.showConfirmSheet = true
   }
 
   private confirmRedeem(): void {
-    if (this.confirmGift === null) {
+    if (this.confirmGift === null || this.redeemInFlight) {
       return
     }
+    this.redeemInFlight = true
     const giftId: string = this.confirmGift.id
     getGiftShopService().redeem(giftId).then((result: GiftRedeemResult): void => {
+      this.redeemInFlight = false
       if (result.success && result.redemption !== null) {
         this.lastRedemption = result.redemption
         this.redeemState = 'success'
@@ -126,6 +131,7 @@ struct GiftShopPage {
         this.redeemError = '兑换没有成功，稍后再试试'
       }
     }).catch((): void => {
+      this.redeemInFlight = false
       this.redeemState = 'error'
       this.redeemError = '兑换没有成功，稍后再试试'
     })
@@ -208,20 +214,33 @@ struct GiftShopPage {
   @Builder
   StatsStrip() {
     Row({ space: 12 }) {
-      this.StatCell(`${this.stats.earnedTotal}`, '累计获得')
-      this.StatCell(`${this.stats.redeemedTotal}`, '累计兑换')
-      this.StatCell(`${this.stats.redeemCount}`, '兑换件数')
+      this.StatCell('累计获得', 0)
+      this.StatCell('累计兑换', 1)
+      this.StatCell('兑换件数', 2)
     }
     .width('100%')
   }
 
+  /** 数字在 builder 体内直读 this.stats（@Trace getter 依赖）——传字符串快照会断响应式（CLAUDE.md 已知坑） */
   @Builder
-  StatCell(numText: string, caption: string) {
+  StatCell(caption: string, kind: number) {
     Column({ space: 2 }) {
-      Text(numText)
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(KIDS_FG)
+      if (kind === 0) {
+        Text(`${this.stats.earnedTotal}`)
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(KIDS_FG)
+      } else if (kind === 1) {
+        Text(`${this.stats.redeemedTotal}`)
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(KIDS_FG)
+      } else {
+        Text(`${this.stats.redeemCount}`)
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(KIDS_FG)
+      }
       Text(caption)
         .fontSize(10.5)
         .fontColor(KIDS_SUBTLE)
@@ -410,6 +429,9 @@ struct GiftShopPage {
             .textAlign(TextAlign.Center)
             .borderRadius(999)
             .border({ width: 1.5, color: KIDS_BORDER })
+            .onClick((): void => {
+              this.showConfirmSheet = false
+            })
           Text(`用 ${this.confirmGift.priceStars} 颗星星兑换`)
             .fontSize(14)
             .fontWeight(FontWeight.Bold)
@@ -419,9 +441,10 @@ struct GiftShopPage {
             .textAlign(TextAlign.Center)
             .borderRadius(999)
             .backgroundColor(KIDS_ACCENT)
-            .opacity(canAffordGift(this.balance, this.confirmGift.priceStars) ? 1 : 0.5)
+            .opacity(canAffordGift(this.balance, this.confirmGift.priceStars) && !this.redeemInFlight ? 1 : 0.5)
             .onClick((): void => {
-              if (this.confirmGift !== null && canAffordGift(this.balance, this.confirmGift.priceStars)) {
+              if (this.confirmGift !== null && !this.redeemInFlight &&
+                canAffordGift(this.balance, this.confirmGift.priceStars)) {
                 this.confirmRedeem()
               }
             })
