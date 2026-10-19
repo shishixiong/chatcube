@@ -14,6 +14,7 @@ import {
 import { Assistant, DEFAULT_ASSISTANT_ID, createDefaultAssistant, createKidsSubjectAssistants, getBuiltInAssistantSpec, KidsSubjectAssistantSpec, DEFAULT_ASSISTANT_SYSTEM_PROMPT, DEFAULT_ASSISTANT_LOCKED_TOOL_IDS } from '../models/AssistantModels'
 import { GeneratedMedia } from '../models/ImageGenerationModels'
 import { StarEventInsert, StarEventRow } from '../models/StarEventModels'
+import { GiftItem, GiftRedemptionRow, BUILTIN_GIFTS, builtinGiftId, GIFT_STATUS_PICKED } from '../models/GiftModels'
 import { DailyLessonPlanRow, PreparedMediaRow, PlannerStats } from '../models/LessonPlanModels'
 import { TeachingStyleAdjustmentRow, WeeklyTrendRow } from '../models/TeachingReflectionModels'
 import { ImageIndexRow } from '../models/ImageIndexModels'
@@ -121,6 +122,9 @@ export class TableNames {
   // 词汇台账（重复控制）新增
   static readonly LEARNING_ITEMS: string = 'learning_items'
   static readonly LEARNING_ITEM_EVENTS: string = 'learning_item_events'
+  // 星星礼物商城（spec 2026-10-19）
+  static readonly GIFTS: string = 'gifts'
+  static readonly GIFT_REDEMPTIONS: string = 'gift_redemptions'
 	}
 
 // 拼图记录数据接口
@@ -448,6 +452,35 @@ export class DatabaseService {
       )
     `
 
+    // 星星礼物商城：礼物目录（内置幂等种子 + 家长自定义，spec §4.1）
+    const createGiftsTable = `
+      CREATE TABLE IF NOT EXISTS ${TableNames.GIFTS} (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        price_stars INTEGER NOT NULL,
+        is_builtin INTEGER NOT NULL DEFAULT 0,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL
+      )
+    `
+
+    // 兑换流水（礼物快照字段 name/category/price 落库，礼物后续被改/删不影响历史，spec §4.2）
+    const createGiftRedemptionsTable = `
+      CREATE TABLE IF NOT EXISTS ${TableNames.GIFT_REDEMPTIONS} (
+        id TEXT PRIMARY KEY,
+        gift_id TEXT NOT NULL,
+        gift_name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        price_stars INTEGER NOT NULL,
+        redeem_code TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at INTEGER NOT NULL,
+        picked_at INTEGER NOT NULL DEFAULT 0
+      )
+    `
+
     // 每日教学计划表（备课老师每日生成）
     const createDailyLessonPlansTable = `
       CREATE TABLE IF NOT EXISTS ${TableNames.DAILY_LESSON_PLANS} (
@@ -571,6 +604,8 @@ export class DatabaseService {
       await this.rdbStore.executeSql(createGeneratedMediaTable)
       await this.rdbStore.executeSql(createPuzzleRecordsTable)
       await this.rdbStore.executeSql(createStarEventsTable)
+      await this.rdbStore.executeSql(createGiftsTable)
+      await this.rdbStore.executeSql(createGiftRedemptionsTable)
       await this.rdbStore.executeSql(createDailyLessonPlansTable)
       await this.rdbStore.executeSql(createPreparedMediaTable)
       await this.rdbStore.executeSql(createImageIndexTable)
@@ -632,6 +667,9 @@ export class DatabaseService {
       )
       await this.rdbStore.executeSql(
         `CREATE INDEX IF NOT EXISTS idx_star_events_created_at ON ${TableNames.STAR_EVENTS}(created_at)`
+      )
+      await this.rdbStore.executeSql(
+        `CREATE INDEX IF NOT EXISTS idx_gift_redemptions_created_at ON ${TableNames.GIFT_REDEMPTIONS}(created_at)`
       )
       await this.rdbStore.executeSql(
         `CREATE INDEX IF NOT EXISTS idx_daily_lesson_plans_plan_date ON ${TableNames.DAILY_LESSON_PLANS}(plan_date DESC)`
@@ -707,6 +745,8 @@ export class DatabaseService {
 	      await this.migrateExistingProviders()
 	      await this.ensureDefaultAssistant()
 	      await this.ensureKidsSubjectAssistants()
+      // 内置礼物幂等种子（spec §4.1，紧随助手种子之后）
+      await this.ensureBuiltinGifts()
       // 迁移历史消息: 为 parts_json 为空的助手消息填充 parts
       await this.migrateMessagePartsIfNeeded()
     } catch (error) {
@@ -1367,6 +1407,34 @@ export class DatabaseService {
 	      } catch (error) {
 	        console.error('DatabaseService',
 	          `Failed to create kids subject assistant ${assistant.id}: ${JSON.stringify(error)}`)
+	      }
+	    }
+	  }
+
+	  /**
+	   * 内置礼物幂等种子（spec §4.1）：INSERT OR IGNORE，升级不重复、不覆盖用户态。
+	   * 调用时机: createTables 流程内、ensureKidsSubjectAssistants() 之后。
+	   */
+	  private async ensureBuiltinGifts(): Promise<void> {
+	    if (this.rdbStore === null) {
+	      return
+	    }
+	    for (let i = 0; i < BUILTIN_GIFTS.length; i++) {
+	      const spec = BUILTIN_GIFTS[i]
+	      const bucket: relationalStore.ValuesBucket = {
+	        id: builtinGiftId(i),
+	        name: spec.name,
+	        category: spec.category,
+	        price_stars: spec.priceStars,
+	        is_builtin: 1,
+	        sort_order: i + 1,
+	        enabled: 1,
+	        created_at: Date.now()
+	      }
+	      try {
+	        await this.rdbStore.insert(TableNames.GIFTS, bucket, relationalStore.ConflictResolution.ON_CONFLICT_IGNORE)
+	      } catch (error) {
+	        console.error('DatabaseService', `Failed to seed builtin gift ${i}: ${JSON.stringify(error)}`)
 	      }
 	    }
 	  }
@@ -3367,6 +3435,197 @@ export class DatabaseService {
       totals.set(dayKey, (totals.get(dayKey) ?? 0) + events[i].stars)
     }
     return totals
+  }
+
+  // ============ 星星礼物商城（spec 2026-10-19）============
+
+  private readGiftRow(resultSet: relationalStore.ResultSet): GiftItem {
+    const gift: GiftItem = {
+      id: resultSet.getString(resultSet.getColumnIndex('id')),
+      name: resultSet.getString(resultSet.getColumnIndex('name')),
+      category: resultSet.getString(resultSet.getColumnIndex('category')),
+      priceStars: resultSet.getLong(resultSet.getColumnIndex('price_stars')),
+      isBuiltin: resultSet.getLong(resultSet.getColumnIndex('is_builtin')) === 1,
+      enabled: resultSet.getLong(resultSet.getColumnIndex('enabled')) === 1,
+      sortOrder: resultSet.getLong(resultSet.getColumnIndex('sort_order'))
+    }
+    return gift
+  }
+
+  private readGiftRedemptionRow(resultSet: relationalStore.ResultSet): GiftRedemptionRow {
+    const row: GiftRedemptionRow = {
+      id: resultSet.getString(resultSet.getColumnIndex('id')),
+      giftId: resultSet.getString(resultSet.getColumnIndex('gift_id')),
+      giftName: resultSet.getString(resultSet.getColumnIndex('gift_name')),
+      category: resultSet.getString(resultSet.getColumnIndex('category')),
+      priceStars: resultSet.getLong(resultSet.getColumnIndex('price_stars')),
+      redeemCode: resultSet.getString(resultSet.getColumnIndex('redeem_code')),
+      status: resultSet.getString(resultSet.getColumnIndex('status')),
+      createdAt: resultSet.getLong(resultSet.getColumnIndex('created_at')),
+      pickedAt: resultSet.getLong(resultSet.getColumnIndex('picked_at'))
+    }
+    return row
+  }
+
+  /** 全量礼物（含 enabled=0，管理页需要看到；商城侧在服务层过滤） */
+  async getGifts(): Promise<GiftItem[]> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return []
+    }
+    const gifts: GiftItem[] = []
+    const predicates = new relationalStore.RdbPredicates(TableNames.GIFTS)
+    predicates.orderByAsc('sort_order')
+    try {
+      const resultSet = await this.rdbStore.query(predicates)
+      while (resultSet.goToNextRow()) {
+        gifts.push(this.readGiftRow(resultSet))
+      }
+      resultSet.close()
+    } catch (error) {
+      console.error('DatabaseService', `Failed to query gifts: ${JSON.stringify(error)}`)
+    }
+    return gifts
+  }
+
+  async insertGift(gift: GiftItem): Promise<boolean> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return false
+    }
+    const bucket: relationalStore.ValuesBucket = {
+      id: gift.id,
+      name: gift.name,
+      category: gift.category,
+      price_stars: gift.priceStars,
+      is_builtin: gift.isBuiltin ? 1 : 0,
+      sort_order: gift.sortOrder,
+      enabled: gift.enabled ? 1 : 0,
+      created_at: Date.now()
+    }
+    try {
+      await this.rdbStore.insert(TableNames.GIFTS, bucket)
+      return true
+    } catch (error) {
+      console.error('DatabaseService', `Failed to insert gift: ${JSON.stringify(error)}`)
+      return false
+    }
+  }
+
+  /** 编辑后整行覆盖（is_builtin 由服务层守卫，此处不重复校验） */
+  async updateGift(gift: GiftItem): Promise<boolean> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return false
+    }
+    const bucket: relationalStore.ValuesBucket = {
+      name: gift.name,
+      category: gift.category,
+      price_stars: gift.priceStars,
+      enabled: gift.enabled ? 1 : 0,
+      sort_order: gift.sortOrder
+    }
+    const predicates = new relationalStore.RdbPredicates(TableNames.GIFTS)
+    predicates.equalTo('id', gift.id)
+    try {
+      const rows = await this.rdbStore.update(bucket, predicates)
+      return rows > 0
+    } catch (error) {
+      console.error('DatabaseService', `Failed to update gift: ${JSON.stringify(error)}`)
+      return false
+    }
+  }
+
+  async deleteGift(id: string): Promise<boolean> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return false
+    }
+    const predicates = new relationalStore.RdbPredicates(TableNames.GIFTS)
+    predicates.equalTo('id', id)
+    try {
+      const rows = await this.rdbStore.delete(predicates)
+      return rows > 0
+    } catch (error) {
+      console.error('DatabaseService', `Failed to delete gift: ${JSON.stringify(error)}`)
+      return false
+    }
+  }
+
+  async insertGiftRedemption(redemption: GiftRedemptionRow): Promise<boolean> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return false
+    }
+    const bucket: relationalStore.ValuesBucket = {
+      id: redemption.id,
+      gift_id: redemption.giftId,
+      gift_name: redemption.giftName,
+      category: redemption.category,
+      price_stars: redemption.priceStars,
+      redeem_code: redemption.redeemCode,
+      status: redemption.status,
+      created_at: redemption.createdAt,
+      picked_at: redemption.pickedAt
+    }
+    try {
+      await this.rdbStore.insert(TableNames.GIFT_REDEMPTIONS, bucket)
+      return true
+    } catch (error) {
+      console.error('DatabaseService', `Failed to insert gift redemption: ${JSON.stringify(error)}`)
+      return false
+    }
+  }
+
+  /** 兑换流水，created_at 降序（记录页直接展示） */
+  async getGiftRedemptions(): Promise<GiftRedemptionRow[]> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return []
+    }
+    const rows: GiftRedemptionRow[] = []
+    const predicates = new relationalStore.RdbPredicates(TableNames.GIFT_REDEMPTIONS)
+    predicates.orderByDesc('created_at')
+    try {
+      const resultSet = await this.rdbStore.query(predicates)
+      while (resultSet.goToNextRow()) {
+        rows.push(this.readGiftRedemptionRow(resultSet))
+      }
+      resultSet.close()
+    } catch (error) {
+      console.error('DatabaseService', `Failed to query gift redemptions: ${JSON.stringify(error)}`)
+    }
+    return rows
+  }
+
+  /** 已兑换星星总额（余额 = 累计获得 − 本值，spec §4.3）。client-side 聚合，对齐 MVP 策略 */
+  async getRedeemedStarsTotal(): Promise<number> {
+    const rows: GiftRedemptionRow[] = await this.getGiftRedemptions()
+    let total = 0
+    for (let i = 0; i < rows.length; i++) {
+      total += rows[i].priceStars
+    }
+    return total
+  }
+
+  async markRedemptionPicked(id: string, pickedAtMs: number): Promise<boolean> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return false
+    }
+    const bucket: relationalStore.ValuesBucket = {
+      status: GIFT_STATUS_PICKED,
+      picked_at: pickedAtMs
+    }
+    const predicates = new relationalStore.RdbPredicates(TableNames.GIFT_REDEMPTIONS)
+    predicates.equalTo('id', id)
+    try {
+      const rows = await this.rdbStore.update(bucket, predicates)
+      return rows > 0
+    } catch (error) {
+      console.error('DatabaseService', `Failed to mark redemption picked: ${JSON.stringify(error)}`)
+      return false
+    }
   }
 
   // ============ 词汇台账操作（learning_items + learning_item_events）============
