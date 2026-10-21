@@ -1,4 +1,5 @@
 import abilityTest from './Ability.test';
+import chinaMapDataTest from './utils/ChinaMapData.test';
 import kidsSubjectUtilsTest from './utils/KidsSubjectUtils.test';
 import learningLedgerModelsTest from './utils/LearningLedgerModels.test';
 import ledgerExtractUtilsTest from './utils/LedgerExtractUtils.test';
@@ -17,6 +18,7 @@ import redeemCodeUtilsTest from './utils/RedeemCodeUtils.test';
 
 export default function testsuite() {
   abilityTest();
+  chinaMapDataTest();
   kidsSubjectUtilsTest();
   learningLedgerModelsTest();
   ledgerExtractUtilsTest();
