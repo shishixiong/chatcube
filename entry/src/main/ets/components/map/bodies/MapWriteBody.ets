@@ -242,7 +242,8 @@ export struct MapWriteBody {
   @Local targetShort: string = ''
   @Local targetAbbr: string = ''
   @Local skillKey: string = 'general_social'
-  @Local showGhost: boolean = true
+  // 默认关——描红格预印答案字会替代回忆（原型 traceOn=false）；孩子可随时手动开
+  @Local showGhost: boolean = false
   @Local showDemo: boolean = false
   @Local revealAnswer: boolean = false
   @Local hasInk: boolean = false
@@ -285,9 +286,20 @@ export struct MapWriteBody {
     if (this.isAnswered) {
       try {
         const prev = JSON.parse(this.answeredPayload) as Record<string, Object>
+        const correctFlag: boolean = prev['correct'] === true
         this.revealAnswer = true
-        this.summaryText = prev['correct'] === true ? '你自评写对了，继续加油！' : '这次没写对，下次看准笔画慢慢写。'
+        this.summaryText = correctFlag ? '你自评写对了，继续加油！' : '这次没写对，下次看准笔画慢慢写。'
+        // 已回答恢复守卫（MapChoiceBody 同款）：回写 shellState，避免默认 isCorrect=false 渲染假「再试一次」
+        this.shellState.submitted = true
+        this.shellState.hasSelection = true
+        this.shellState.isCorrect = correctFlag
+        this.shellState.headPill = '已回答'
+        this.shellState.headPillColor = '#4CAF50'
       } catch (_e) {
+        // payload 缺失/不可解析: 无法判定当时对错, 抑制反馈横幅 (MapChoiceBody 同款守卫)
+        this.shellState.feedbackSuppressed = true
+        this.shellState.headPill = '已回答'
+        this.shellState.headPillColor = '#4CAF50'
         this.revealAnswer = false
         this.summaryText = ''
       }

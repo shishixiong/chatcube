@@ -56,8 +56,9 @@ export struct ChinaMapStage {
   private canvasContext: CanvasRenderingContext2D = new CanvasRenderingContext2D(
     new RenderingContextSettings(true)
   )
-  private canvasWidth: number = 0
-  private canvasHeight: number = 0
+  // @Local——build 内 .position 读取（缩放按钮列），onAreaChange 写入须触发重渲染
+  @Local canvasWidth: number = 0
+  @Local canvasHeight: number = 0
   // 解析缓存：path → 环数组（19k 点/帧不重复解析）
   private polygonCache: Map<string, number[][][]> = new Map()
   // 手势状态
@@ -342,7 +343,8 @@ export struct ChinaMapStage {
                 MAP_GRID_H * this.drawScale(), this.canvasHeight, this.baseY())
               this.scheduleRedraw()
             }))
-          .gesture(PinchGesture({ fingers: 2 })
+          // pinch 走 priorityGesture——双指捏合不被 distance:5 的单指 pan 抢占（pan 仍在 gesture 通道）
+          .priorityGesture(PinchGesture({ fingers: 2 })
             .onActionStart((_event: GestureEvent) => {
               this.zoomStart = this.zoom
             })
