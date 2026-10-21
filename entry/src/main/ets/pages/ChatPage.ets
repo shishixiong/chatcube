@@ -137,8 +137,14 @@ import {
   PINYIN_QUIZ_TOOL_ID,
   MATCHING_PAIRS_TOOL_ID,
   MEMORY_MATCH_TOOL_ID,
-  SNAKE_GAME_TOOL_ID
+  SNAKE_GAME_TOOL_ID,
+  MAP_CARD_TOOL_ID,
+  MAP_QUIZ_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
+import { getCachedChinaMapData, findProvinceByRef } from '../utils/ChinaMapData'
+import { MapCard, MapCardResult } from '../components/map/MapCard'
+import { MapQuizCard } from '../components/map/MapQuizCard'
+import { MapQuizAnswerPayload, parseMapQuizArgs } from '../components/map/MapQuizTypes'
 import { MessagePartKind } from '../models/MessageParts'
 import { normalizeAssistantAvatarValue } from '../components/AssistantAvatar'
 import {
@@ -313,6 +319,12 @@ export struct ChatPage {
   @Local showMazeSheet: boolean = false
   @Local mazeSheetToolCall: ToolCall = new ToolCall()
   @Local mazeAnswered: boolean = false
+  @Local showMapCardSheet: boolean = false
+  @Local mapCardToolCall: ToolCall = new ToolCall()
+  @Local mapCardAnswered: boolean = false
+  @Local showMapQuizSheet: boolean = false
+  @Local mapQuizToolCall: ToolCall = new ToolCall()
+  @Local mapQuizAnswered: boolean = false
   @Local toolExecutionApprovalName: string = ''
   @Local showStarSheet: boolean = false
   // 星星浮层触发信号: 每次 onStarEarnedTickChanged 自增, StarBurstOverlay 通过 @Monitor 监听
@@ -2535,6 +2547,16 @@ export struct ChatPage {
             this.mazeAnswered = false
             this.showMazeSheet = true
           },
+          onOpenMapCardSheet: (toolCall: ToolCall): void => {
+            this.mapCardToolCall = toolCall
+            this.mapCardAnswered = false
+            this.showMapCardSheet = true
+          },
+          onOpenMapQuizSheet: (toolCall: ToolCall): void => {
+            this.mapQuizToolCall = toolCall
+            this.mapQuizAnswered = false
+            this.showMapQuizSheet = true
+          },
           onReachStart: (): void => {
             this.handleMessageListReachStart()
           },
@@ -2928,6 +2950,60 @@ export struct ChatPage {
                 this.handleAskUserAnswer(this.mazeSheetToolCall.id, JSON.stringify(cancelResult))
               }
               this.showMazeSheet = false
+            }
+          })
+
+        Column()
+          .width(0)
+          .height(0)
+          .bindSheet($$this.showMapCardSheet, this.MapCardSheetBuilder(), {
+            height: SheetSize.LARGE,
+            dragBar: true,
+            showClose: true,
+            blurStyle: BlurStyle.Thick,
+            backgroundColor: this.themeBackground,
+            preferType: SheetType.BOTTOM,
+            onDisappear: () => {
+              if (this.showMapCardSheet && !this.mapCardAnswered) {
+                const cancelResult: MapCardResult = {
+                  completed: false,
+                  focus_province: '',
+                  explored_count: 0,
+                  skill_key: 'general_social'
+                }
+                this.handleAskUserAnswer(this.mapCardToolCall.id, JSON.stringify(cancelResult))
+              }
+              this.showMapCardSheet = false
+            }
+          })
+
+        Column()
+          .width(0)
+          .height(0)
+          .bindSheet($$this.showMapQuizSheet, this.MapQuizSheetBuilder(), {
+            height: SheetSize.LARGE,
+            dragBar: true,
+            showClose: true,
+            blurStyle: BlurStyle.Thick,
+            backgroundColor: this.themeBackground,
+            preferType: SheetType.BOTTOM,
+            onDisappear: () => {
+              if (this.showMapQuizSheet && !this.mapQuizAnswered) {
+                const argsView = parseMapQuizArgs(this.mapQuizToolCall.arguments)
+                const cancelResult: MapQuizAnswerPayload = {
+                  answered: false,
+                  mode: argsView.mode,
+                  province: argsView.valid ? argsView.province : '',
+                  province_id: '',
+                  clue: '',
+                  child_answer: '',
+                  correct: false,
+                  cancelled: true,
+                  skill_key: 'general_social'
+                }
+                this.handleAskUserAnswer(this.mapQuizToolCall.id, JSON.stringify(cancelResult))
+              }
+              this.showMapQuizSheet = false
             }
           })
 
@@ -3446,6 +3522,41 @@ export struct ChatPage {
         this.handwritingAnswered = true
         this.handleAskUserAnswer(toolCallId, answerJson)
         this.showHandwritingSheet = false
+      }
+    })
+  }
+
+  @Builder
+  MapCardSheetBuilder() {
+    MapCard({
+      toolCall: this.mapCardToolCall,
+      isAnswered: false,
+      answeredPayload: '',
+      largeSize: true,
+      onAnswer: (toolCallId: string, answerJson: string): void => {
+        this.mapCardAnswered = true
+        this.handleAskUserAnswer(toolCallId, answerJson)
+        // 讲解型提交「我学会了 · 继续」后即关 (spec §8.2)
+        this.showMapCardSheet = false
+      },
+      onRequestClose: (): void => {
+        this.showMapCardSheet = false
+      }
+    })
+  }
+
+  @Builder
+  MapQuizSheetBuilder() {
+    MapQuizCard({
+      toolCall: this.mapQuizToolCall,
+      isAnswered: false,
+      answeredPayload: '',
+      largeSize: true,
+      onAnswer: (toolCallId: string, answerJson: string): void => {
+        this.mapQuizAnswered = true
+        this.handleAskUserAnswer(toolCallId, answerJson)
+        // 即判即交题型, 提交后即关 (spec §8.2)
+        this.showMapQuizSheet = false
       }
     })
   }
@@ -4821,7 +4932,7 @@ export struct ChatPage {
     this.applyPendingToolExecutionApproval(interaction)
   }
 
-  // 语音模式：互动工具（math_quiz / math_teach / hanzi_card / pinyin_card / picture_talk / chinese_quiz / english_quiz / number_puzzle / handwriting_practice / categorization / vertical_math / maze / sudoku / picture_vocab / pinyin_quiz / matching_pairs / memory_match / snake_game）出现 pending 交互时自动朗读题目
+  // 语音模式：互动工具（math_quiz / math_teach / hanzi_card / pinyin_card / picture_talk / chinese_quiz / english_quiz / number_puzzle / handwriting_practice / categorization / vertical_math / maze / sudoku / picture_vocab / pinyin_quiz / matching_pairs / memory_match / snake_game / map_card / map_quiz）出现 pending 交互时自动朗读题目
   private tryAutoTtsForQuizInteraction(interaction: PendingToolInteractionSnapshot): void {
     if (!this.isVoiceMode || this.isRecording) {
       return
@@ -4843,7 +4954,9 @@ export struct ChatPage {
       interaction.toolId === PINYIN_QUIZ_TOOL_ID ||
       interaction.toolId === MATCHING_PAIRS_TOOL_ID ||
       interaction.toolId === MEMORY_MATCH_TOOL_ID ||
-      interaction.toolId === SNAKE_GAME_TOOL_ID
+      interaction.toolId === SNAKE_GAME_TOOL_ID ||
+      interaction.toolId === MAP_CARD_TOOL_ID ||
+      interaction.toolId === MAP_QUIZ_TOOL_ID
     if (!isAutoTtsTool) {
       return
     }
@@ -5175,6 +5288,32 @@ export struct ChatPage {
           quizText = '我们来玩贪吃蛇，棋盘是 ' + gridSize + '。用方向键或滑动控制小蛇吃苹果吧。'
         } else {
           quizText = '我们来玩贪吃蛇。用方向键或滑动控制小蛇吃苹果吧。'
+        }
+      } else if (interaction.toolId === MAP_CARD_TOOL_ID) {
+        // 中国地图小课堂(讲解型)：focus 有值读「X 的地图课」;无 focus 读通用探索引导。
+        // 不读省份清单——卡片上的省份信息由 ProvinceInfoCard 的 🔊 按需朗读。
+        const focus = ((parsed['focus_province'] as string) ?? '').trim()
+        quizText = focus !== '' ? ('我们来看「' + focus + '」的地图课吧。') : '点一点地图上的省份，认识它们吧。'
+      } else if (interaction.toolId === MAP_QUIZ_TOOL_ID) {
+        // 中国地图出题(练习型)三 mode：choice/write 固定引导(无任何插值——泄题红线),
+        // locate 按 clue 读题面;capital 从地图数据查而非 args, 直辖市/特区(capital===short)回落 name。
+        const mode = ((parsed['mode'] as string) ?? 'choice').trim()
+        const provinceRef = ((parsed['province'] as string) ?? '').trim()
+        const clue = ((parsed['clue'] as string) ?? 'name').trim()
+        if (mode === 'locate') {
+          const data = getCachedChinaMapData()
+          const target = data !== null ? findProvinceByRef(data.provinces, provinceRef) : null
+          if (target !== null) {
+            if (clue === 'capital' && target.capital !== target.short) {
+              quizText = '行政中心是「' + target.capital + '」的是哪个省？'
+            } else {
+              quizText = '在地图上找到' + target.short + '。'
+            }
+          }
+        } else if (mode === 'write') {
+          quizText = '看地图上高亮的省份，把它的名字写下来。'
+        } else {
+          quizText = '看地图上金色的省份，选一选它的名字。'
         }
       }
     } catch (_e) {}
