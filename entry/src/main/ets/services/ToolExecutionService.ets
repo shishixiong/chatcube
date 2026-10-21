@@ -8,6 +8,9 @@ import {
   ToolResult,
   ToolSourceType
 } from '../models/ChatModels'
+import common from '@ohos.app.ability.common'
+import { ChinaMapData, ChinaProvince, loadChinaMapData } from '../utils/ChinaMapData'
+import { validateMapCardArgs, validateMapQuizArgs } from '../utils/MapToolValidation'
 import { getToolRegistry, RegisteredTool, ToolRegistry } from './ToolRegistry'
 import {
   ASK_USER_TOOL_ID,
@@ -54,6 +57,10 @@ import {
   isPinyinCardFunctionName,
   isPictureTalkFunctionName,
   isChineseQuizFunctionName,
+  isMapCardFunctionName,
+  isMapQuizFunctionName,
+  MAP_CARD_TOOL_ID,
+  MAP_QUIZ_TOOL_ID,
   isScrapeWebFunctionName,
   isSearchWebFunctionName,
   isGrantStarFunctionName
@@ -199,6 +206,8 @@ class PendingToolAnswerRuntime {
 export class ToolExecutionService {
   private static instance: ToolExecutionService | null = null
   private registry: ToolRegistry
+  // UIAbilityContext（EntryAbility.onCreate 注入，供 map 工具读 rawfile 地图数据）
+  private appContext: common.UIAbilityContext | null = null
   // 当前取消检查回调
   private cancelCheckCallback: CancelCheckCallback | null = null
   private pendingApprovals: Map<string, PendingToolApprovalRuntime> = new Map()
@@ -207,6 +216,11 @@ export class ToolExecutionService {
 
   private constructor() {
     this.registry = getToolRegistry()
+  }
+
+  // 注入 UIAbilityContext（镜像 ShareService.init / PreferencesService.initialize 模式）
+  init(context: common.UIAbilityContext): void {
+    this.appContext = context
   }
 
   static getInstance(): ToolExecutionService {
@@ -1492,6 +1506,202 @@ export class ToolExecutionService {
       toolCall.displayName,
       toolCall.sourceLabel
     )
+  }
+
+  // map_card 特殊路径: 中国地图小课堂讲解卡, 由 MapCard 收集「我学会了」完成回执。
+  // 讲解型工具: 完成即授星, 无对错判定。
+  private async handleMapCard(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = MAP_CARD_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '中国地图小课堂'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 0. 地图数据就绪 + 预校验 (skill_key / focus_province 命中省份表)
+    const mapData = await this.loadMapProvinces()
+    const provinces: ChinaProvince[] | null = mapData !== null ? mapData.provinces : null
+    const cardValidation = validateMapCardArgs(toolCall.arguments, provinces)
+    if (!cardValidation.ok) {
+      console.warn('ToolExecutionService', `map_card validation failed: ${cardValidation.error}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: 'validation_failed',
+          message: cardValidation.error,
+          should_retry: true
+        }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    // 1. 立即设置 pending 状态, 让卡片立即出现
+    toolCall.approvalState = 'pending'
+    this.recordLedgerServed('map_card', toolCall, context)
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = MAP_CARD_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `map_card answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `map_card 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'map_card cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未完成本课学习' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `map_card answered: ${toolCall.id}`)
+    this.recordStarEvent('map_card', toolCall, context, answerJson)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
+  // map_quiz 特殊路径: 中国地图出题卡, 由 MapQuizCard 收集孩子作答。
+  // 练习型工具: 答对授星 (correct === true)。
+  private async handleMapQuiz(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = MAP_QUIZ_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '中国地图出题'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 0. 地图数据就绪 + 预校验 (mode 枚举 / province 命中 / clue 合法 + 自答省硬拒)
+    const mapData = await this.loadMapProvinces()
+    const provinces: ChinaProvince[] | null = mapData !== null ? mapData.provinces : null
+    const quizValidation = validateMapQuizArgs(toolCall.arguments, provinces)
+    if (!quizValidation.ok) {
+      console.warn('ToolExecutionService', `map_quiz validation failed: ${quizValidation.error}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: 'validation_failed',
+          message: quizValidation.error,
+          should_retry: true
+        }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    // 1. 立即设置 pending 状态, 让卡片立即出现
+    toolCall.approvalState = 'pending'
+    this.recordLedgerServed('map_quiz', toolCall, context)
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = MAP_QUIZ_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `map_quiz answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `map_quiz 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'map_quiz cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未回答该题目' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `map_quiz answered: ${toolCall.id}`)
+    this.recordStarEvent('map_quiz', toolCall, context, answerJson)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
+  // 地图数据加载: 缓存优先, miss 时经 EntryAbility 注入的 context 读 rawfile。
+  // 失败返回 null → 校验层按「数据未就绪」硬拒, AI should_retry。
+  private async loadMapProvinces(): Promise<ChinaMapData | null> {
+    if (this.appContext === null) {
+      console.error('ToolExecutionService', 'map tools: UIAbilityContext not injected')
+      return null
+    }
+    return await loadChinaMapData(this.appContext)
   }
 
   // pinyin_card 特殊路径: 拼音小课堂讲解卡, 由 PinyinCard 收集「我学会了」完成回执。
@@ -2845,6 +3055,18 @@ export class ToolExecutionService {
     // 语文小练习 (四 mode 路由), 由 ChineseQuizCard 收集小朋友的选项 / 排序。
     if (isChineseQuizFunctionName(normalizedFunctionName)) {
       return await this.handleChineseQuiz(toolCall, context)
+    }
+
+    // === map_card 特殊路径 ===
+    // 中国地图小课堂讲解卡, 由 MapCard 收集「我学会了」完成回执。
+    if (isMapCardFunctionName(normalizedFunctionName)) {
+      return await this.handleMapCard(toolCall, context)
+    }
+
+    // === map_quiz 特殊路径 ===
+    // 中国地图出题 (choice/locate/write), 由 MapQuizCard 收集小朋友的作答。
+    if (isMapQuizFunctionName(normalizedFunctionName)) {
+      return await this.handleMapQuiz(toolCall, context)
     }
 
     // 通过函数名获取工具 ID

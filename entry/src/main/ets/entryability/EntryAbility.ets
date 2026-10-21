@@ -121,6 +121,9 @@ export default class EntryAbility extends UIAbility {
       await ServiceRegistry.preferences().initialize(this.context);
       hilog.info(DOMAIN, 'testTag', 'PreferencesService initialized successfully');
 
+      // 注入 UIAbilityContext 给工具执行服务（map 工具读 rawfile 地图数据用）
+      ServiceRegistry.toolExecution().init(this.context);
+
       await ServiceRegistry.language().migrateStoredLanguagePreference();
       hilog.info(DOMAIN, 'testTag', 'Language preference migrated successfully');
 
