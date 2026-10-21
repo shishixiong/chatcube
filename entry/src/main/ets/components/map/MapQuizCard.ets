@@ -10,6 +10,7 @@ import { ToolCall } from '../../models/ChatModels'
 import { parseMapQuizArgs } from './MapQuizTypes'
 import { MapChoiceBody } from './bodies/MapChoiceBody'
 import { MapLocateBody } from './bodies/MapLocateBody'
+import { MapWriteBody } from './bodies/MapWriteBody'
 
 @ComponentV2
 export struct MapQuizCard {
@@ -31,8 +32,18 @@ export struct MapQuizCard {
           this.onAnswer(toolCallId, answerJson)
         }
       })
+    } else if (this.isWriteMode()) {
+      MapWriteBody({
+        toolCall: this.toolCall,
+        isAnswered: this.isAnswered,
+        answeredPayload: this.answeredPayload,
+        largeSize: this.largeSize,
+        onAnswer: (toolCallId: string, answerJson: string): void => {
+          this.onAnswer(toolCallId, answerJson)
+        }
+      })
     } else {
-      // choice 与（Task 12 接线前的）write / 不可解析 mode 兜底
+      // choice 与不可解析 mode 兜底
       MapChoiceBody({
         toolCall: this.toolCall,
         isAnswered: this.isAnswered,
@@ -47,5 +58,9 @@ export struct MapQuizCard {
 
   private isLocateMode(): boolean {
     return parseMapQuizArgs(this.toolCall.arguments).mode === 'locate'
+  }
+
+  private isWriteMode(): boolean {
+    return parseMapQuizArgs(this.toolCall.arguments).mode === 'write'
   }
 }
