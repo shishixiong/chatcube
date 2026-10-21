@@ -223,6 +223,16 @@ export class StarRewardService {
       const correct = payload['correct']
       return correct === true ? 1 : 0
     }
+    if (activityType === 'map_card') {
+      // 中国地图小课堂 (讲解型): 完成探索提交即授星（hanzi_card 同款）
+      const completed = payload['completed']
+      return completed === true ? 1 : 0
+    }
+    if (activityType === 'map_quiz') {
+      // 中国地图出题 (练习型): 答对授星，答错/自评未过 0
+      const correct = payload['correct']
+      return correct === true ? 1 : 0
+    }
     if (activityType === 'vertical_math') {
       // 竖式练习 (练习型): 按答对题数授星, 1 题对 1 星, 封顶 5 (一卡最多 10 题, 防刷星)
       const correctCount = (payload['correct_count'] as number) ?? 0
