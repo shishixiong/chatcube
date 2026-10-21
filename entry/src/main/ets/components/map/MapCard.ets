@@ -226,7 +226,7 @@ export struct MapCard {
             .padding({ left: 8, right: 8, top: 3, bottom: 3 })
             .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '1F' : '14'))
             .borderRadius(8)
-          Button('🔊', { type: ButtonType.Circle, stateEffect: true }) {
+          Button({ type: ButtonType.Circle, stateEffect: true }) {
             Text('🔊').fontSize(14)
           }
           .width(30)

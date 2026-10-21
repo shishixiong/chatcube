@@ -56,6 +56,8 @@ export struct ChatMessageListSection {
     (_toolCallId: string, _answerJson: string): void => {}
   @Event onOpenHandwritingSheet: (toolCall: ToolCall) => void = (_toolCall: ToolCall): void => {}
   @Event onOpenMazeSheet: (toolCall: ToolCall) => void = (_toolCall: ToolCall): void => {}
+  @Event onOpenMapCardSheet: (toolCall: ToolCall) => void = (_toolCall: ToolCall): void => {}
+  @Event onOpenMapQuizSheet: (toolCall: ToolCall) => void = (_toolCall: ToolCall): void => {}
   @Event onListAppear: () => void = (): void => {}
   @Event onReachStart: () => void = (): void => {}
   @Event onReachEnd: () => void = (): void => {}
@@ -498,6 +500,12 @@ export struct ChatMessageListSection {
                     },
                     onOpenMazeSheet: (toolCall: ToolCall): void => {
                       this.onOpenMazeSheet(toolCall)
+                    },
+                    onOpenMapCardSheet: (toolCall: ToolCall): void => {
+                      this.onOpenMapCardSheet(toolCall)
+                    },
+                    onOpenMapQuizSheet: (toolCall: ToolCall): void => {
+                      this.onOpenMapQuizSheet(toolCall)
                     },
                   })
                 }

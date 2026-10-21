@@ -32,6 +32,8 @@ import { HanziCard } from './HanziCard'
 import { PinyinCard } from './PinyinCard'
 import { PictureTalkCard } from './PictureTalkCard'
 import { ChineseQuizCard } from './chinese/ChineseQuizCard'
+import { MapCard } from './map/MapCard'
+import { MapQuizCard } from './map/MapQuizCard'
 import { HtmlPreviewCard } from './HtmlPreviewCard'
 import { MermaidPreviewCard } from './MermaidPreviewCard'
 import { TypingDots } from './TypingDots'
@@ -51,7 +53,7 @@ import {
   getMarkdownTitleSizes
 } from '../utils/MarkdownTypographyUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isMathTeachFunctionName, isEnglishQuizFunctionName, isHuarongdaoFunctionName, isNumberPuzzleFunctionName, isHandwritingPracticeFunctionName, isCategorizationFunctionName, isVerticalMathFunctionName, isMusicGenerationFunctionName, isMazeFunctionName, isSudokuFunctionName, isPictureVocabFunctionName, isListeningQuizFunctionName, isPinyinQuizFunctionName, isMatchingPairsFunctionName, isMemoryMatchFunctionName, isSnakeGameFunctionName, isHanziCardFunctionName, isPinyinCardFunctionName, isPictureTalkFunctionName, isChineseQuizFunctionName } from '../utils/SearchToolIdentityUtils'
+import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isMathTeachFunctionName, isEnglishQuizFunctionName, isHuarongdaoFunctionName, isNumberPuzzleFunctionName, isHandwritingPracticeFunctionName, isCategorizationFunctionName, isVerticalMathFunctionName, isMusicGenerationFunctionName, isMazeFunctionName, isSudokuFunctionName, isPictureVocabFunctionName, isListeningQuizFunctionName, isPinyinQuizFunctionName, isMatchingPairsFunctionName, isMemoryMatchFunctionName, isSnakeGameFunctionName, isHanziCardFunctionName, isPinyinCardFunctionName, isPictureTalkFunctionName, isChineseQuizFunctionName, isMapCardFunctionName, isMapQuizFunctionName } from '../utils/SearchToolIdentityUtils'
 import { MessagePart, MessagePartKind, ToolPartStatus } from '../models/MessageParts'
 import {
   ensureMessageParts,
@@ -266,6 +268,9 @@ export struct MessageBubble {
   // 写字工具大屏模式入口 (handwriting 大屏 sheet)
   @Event onOpenHandwritingSheet: (toolCall: ToolCall) => void = () => {}
   @Event onOpenMazeSheet: (toolCall: ToolCall) => void = () => {}
+  // 中国地图课/题大屏 sheet 入口 (地图在气泡内太小, 参考 maze/handwriting 模式)
+  @Event onOpenMapCardSheet: (toolCall: ToolCall) => void = () => {}
+  @Event onOpenMapQuizSheet: (toolCall: ToolCall) => void = () => {}
 
   // 支持的翻译语言列表
   private translateLanguages: TranslateLanguage[] = [
@@ -2210,6 +2215,98 @@ export struct MessageBubble {
                   }
                 }, (toolCall: ToolCall, index: number) => 'maze_' + toolCall.id + '_' + index.toString())
               }
+              // map_card 待答时显示紧凑横幅, 点击打开全屏 sheet (地图在气泡内太小, 参考 maze/handwriting 模式)
+              if (this.message.hasToolCalls()) {
+                ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
+                  if (this.shouldRenderMapCardInteractionCard(toolCall, index)) {
+                    Row() {
+                      Column() {
+                        SymbolGlyph($r('sys.symbol.map'))
+                          .fontSize(15)
+                          .fontColor([this.themePrimary])
+                      }
+                      .width(32)
+                      .height(32)
+                      .borderRadius(16)
+                      .backgroundColor(withColorAlpha(this.themePrimary, '18'))
+                      .alignItems(HorizontalAlign.Center)
+                      .justifyContent(FlexAlign.Center)
+
+                      Column({ space: 2 }) {
+                        Text('中国地图小课堂')
+                          .fontSize(13)
+                          .fontWeight(FontWeight.Medium)
+                          .fontColor($r('app.color.text_primary'))
+                        Text('点击打开')
+                          .fontSize(11)
+                          .fontColor($r('app.color.text_tertiary'))
+                      }
+                      .alignItems(HorizontalAlign.Start)
+                      .margin({ left: 8 })
+                      .layoutWeight(1)
+
+                      Text('>')
+                        .fontSize(14)
+                        .fontColor($r('app.color.text_tertiary'))
+                    }
+                    .width('100%')
+                    .padding(12)
+                    .backgroundColor(this.themeAiBubble)
+                    .borderRadius(12)
+                    .border({ width: 1, color: $r('app.color.divider') })
+                    .margin({ bottom: 6 })
+                    .onClick(() => {
+                      this.onOpenMapCardSheet(toolCall)
+                    })
+                  }
+                }, (toolCall: ToolCall, index: number) => 'map_card_' + toolCall.id + '_' + index.toString())
+              }
+              // map_quiz 待答时显示紧凑横幅, 点击打开全屏 sheet
+              if (this.message.hasToolCalls()) {
+                ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
+                  if (this.shouldRenderMapQuizInteractionCard(toolCall, index)) {
+                    Row() {
+                      Column() {
+                        SymbolGlyph($r('sys.symbol.map'))
+                          .fontSize(15)
+                          .fontColor([this.themePrimary])
+                      }
+                      .width(32)
+                      .height(32)
+                      .borderRadius(16)
+                      .backgroundColor(withColorAlpha(this.themePrimary, '18'))
+                      .alignItems(HorizontalAlign.Center)
+                      .justifyContent(FlexAlign.Center)
+
+                      Column({ space: 2 }) {
+                        Text('中国地图出题')
+                          .fontSize(13)
+                          .fontWeight(FontWeight.Medium)
+                          .fontColor($r('app.color.text_primary'))
+                        Text('点击打开')
+                          .fontSize(11)
+                          .fontColor($r('app.color.text_tertiary'))
+                      }
+                      .alignItems(HorizontalAlign.Start)
+                      .margin({ left: 8 })
+                      .layoutWeight(1)
+
+                      Text('>')
+                        .fontSize(14)
+                        .fontColor($r('app.color.text_tertiary'))
+                    }
+                    .width('100%')
+                    .padding(12)
+                    .backgroundColor(this.themeAiBubble)
+                    .borderRadius(12)
+                    .border({ width: 1, color: $r('app.color.divider') })
+                    .margin({ bottom: 6 })
+                    .onClick(() => {
+                      this.onOpenMapQuizSheet(toolCall)
+                    })
+                  }
+                }, (toolCall: ToolCall, index: number) => 'map_quiz_' + toolCall.id + '_' + index.toString())
+              }
 
               // sudoku 待答时显示独立互动卡片;提交后收缩到 timeline step 内。
               if (this.message.hasToolCalls()) {
@@ -2866,6 +2963,14 @@ export struct MessageBubble {
     if (isChineseQuizFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
+    if (isMapCardFunctionName(part.toolName)) {
+      // 中国地图小课堂: 已完成的可以展开回看讲解
+      return this.isSuccessfulToolStep(part)
+    }
+    if (isMapQuizFunctionName(part.toolName)) {
+      // 中国地图出题: 已完成的可以展开回看答题结果
+      return this.isSuccessfulToolStep(part)
+    }
     if (isMatchingPairsFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
@@ -2930,7 +3035,7 @@ export struct MessageBubble {
       return true
     }
     // 默认行为: 图片生成/数学游戏/英语看图说话 成功后默认展开查看结果
-    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isMathTeachFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isListeningQuizFunctionName(part.toolName) || isPinyinQuizFunctionName(part.toolName) || isMatchingPairsFunctionName(part.toolName) || isMemoryMatchFunctionName(part.toolName) || isSnakeGameFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName) || isHanziCardFunctionName(part.toolName) || isPinyinCardFunctionName(part.toolName) || isPictureTalkFunctionName(part.toolName) || isChineseQuizFunctionName(part.toolName)) {
+    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isMathTeachFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isListeningQuizFunctionName(part.toolName) || isPinyinQuizFunctionName(part.toolName) || isMatchingPairsFunctionName(part.toolName) || isMemoryMatchFunctionName(part.toolName) || isSnakeGameFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName) || isHanziCardFunctionName(part.toolName) || isPinyinCardFunctionName(part.toolName) || isPictureTalkFunctionName(part.toolName) || isChineseQuizFunctionName(part.toolName) || isMapCardFunctionName(part.toolName) || isMapQuizFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
     return false
@@ -2940,7 +3045,7 @@ export struct MessageBubble {
     const key = this.getToolStepKey(part)
     // 默认展开的工具类型: 图片生成、数学游戏、英语看图说话、数字华容道、迷宫等
     const isDefaultExpanded = this.isSuccessfulToolStep(part) &&
-      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isMathTeachFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isListeningQuizFunctionName(part.toolName) || isPinyinQuizFunctionName(part.toolName) || isMatchingPairsFunctionName(part.toolName) || isMemoryMatchFunctionName(part.toolName) || isSnakeGameFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName) || isHanziCardFunctionName(part.toolName) || isPinyinCardFunctionName(part.toolName) || isPictureTalkFunctionName(part.toolName) || isChineseQuizFunctionName(part.toolName))
+      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isMathTeachFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isListeningQuizFunctionName(part.toolName) || isPinyinQuizFunctionName(part.toolName) || isMatchingPairsFunctionName(part.toolName) || isMemoryMatchFunctionName(part.toolName) || isSnakeGameFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName) || isHanziCardFunctionName(part.toolName) || isPinyinCardFunctionName(part.toolName) || isPictureTalkFunctionName(part.toolName) || isChineseQuizFunctionName(part.toolName) || isMapCardFunctionName(part.toolName) || isMapQuizFunctionName(part.toolName))
     const next: string[] = []
     let found = false
     let foundCollapsed = false
@@ -3155,6 +3260,20 @@ export struct MessageBubble {
 
   private shouldRenderChineseQuizInteractionCard(toolCall: ToolCall, index: number): boolean {
     if (!isChineseQuizFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
+      return false
+    }
+    return !this.isAskUserToolCallAnswered(toolCall, index)
+  }
+
+  private shouldRenderMapCardInteractionCard(toolCall: ToolCall, index: number): boolean {
+    if (!isMapCardFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
+      return false
+    }
+    return !this.isAskUserToolCallAnswered(toolCall, index)
+  }
+
+  private shouldRenderMapQuizInteractionCard(toolCall: ToolCall, index: number): boolean {
+    if (!isMapQuizFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
       return false
     }
     return !this.isAskUserToolCallAnswered(toolCall, index)
@@ -3588,6 +3707,16 @@ export struct MessageBubble {
     }
     // 语文小练习: 展开/折叠查看答题结果
     if (isChineseQuizFunctionName(part.toolName)) {
+      this.toggleToolStep(part)
+      return
+    }
+    // 中国地图小课堂: 展开/折叠回看讲解
+    if (isMapCardFunctionName(part.toolName)) {
+      this.toggleToolStep(part)
+      return
+    }
+    // 中国地图出题: 展开/折叠回看答题结果
+    if (isMapQuizFunctionName(part.toolName)) {
       this.toggleToolStep(part)
       return
     }
@@ -4046,6 +4175,10 @@ export struct MessageBubble {
       this.PictureTalkStepContent(step)
     } else if (isChineseQuizFunctionName(step.toolName)) {
       this.ChineseQuizStepContent(step)
+    } else if (isMapCardFunctionName(step.toolName)) {
+      this.MapCardStepContent(step)
+    } else if (isMapQuizFunctionName(step.toolName)) {
+      this.MapQuizStepContent(step)
     } else if (isImageGenerationFunctionName(step.toolName) && this.isToolStepClickable(step)) {
       // 图片生成: 折叠/展开, 在下方直接展示生成结果缩略图
       Column() {
@@ -4611,6 +4744,116 @@ export struct MessageBubble {
 
       if (this.isToolStepExpanded(step) && step.toolResult !== '') {
         ChineseQuizCard({
+          toolCall: this.buildToolCallFromStep(step),
+          isAnswered: true,
+          answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
+          onAnswer: (_toolCallId: string, _answerJson: string): void => {}
+        })
+        .margin({ top: 8 })
+      }
+    }
+    .width('100%')
+  }
+
+  // map_card 工具步骤: 已完成的中国地图小课堂, 在 timeline 中显示简化结果, 可展开回看讲解
+  @Builder
+  MapCardStepContent(step: MessagePart) {
+    Column() {
+      Row({ space: 6 }) {
+        if (step.toolStatus === 'succeeded') {
+          SymbolGlyph($r('sys.symbol.checkmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_success')])
+        } else if (step.toolStatus === 'failed' || step.toolStatus === 'denied') {
+          SymbolGlyph($r('sys.symbol.xmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_error')])
+        } else {
+          Column()
+            .width(8)
+            .height(8)
+            .borderRadius(4)
+            .backgroundColor(this.themePrimary)
+        }
+
+        Text(this.buildToolStepTitle(step))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+
+        if (this.isToolStepClickable(step)) {
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(12)
+            .fontColor([$r('app.color.text_tertiary')])
+            .rotate({ angle: this.isToolStepExpanded(step) ? 0 : -90 })
+            .animation({ duration: 200, curve: Curve.EaseOut })
+        }
+      }
+      .width('100%')
+      .onClick(() => {
+        if (this.isToolStepClickable(step)) {
+          this.handleToolStepClick(step)
+        }
+      })
+
+      if (this.isToolStepExpanded(step) && step.toolResult !== '') {
+        MapCard({
+          toolCall: this.buildToolCallFromStep(step),
+          isAnswered: true,
+          answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
+          onAnswer: (_toolCallId: string, _answerJson: string): void => {}
+        })
+        .margin({ top: 8 })
+      }
+    }
+    .width('100%')
+  }
+
+  // map_quiz 工具步骤: 已完成的中国地图出题, 在 timeline 中显示简化结果, 可展开回看答题详情
+  @Builder
+  MapQuizStepContent(step: MessagePart) {
+    Column() {
+      Row({ space: 6 }) {
+        if (step.toolStatus === 'succeeded') {
+          SymbolGlyph($r('sys.symbol.checkmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_success')])
+        } else if (step.toolStatus === 'failed' || step.toolStatus === 'denied') {
+          SymbolGlyph($r('sys.symbol.xmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_error')])
+        } else {
+          Column()
+            .width(8)
+            .height(8)
+            .borderRadius(4)
+            .backgroundColor(this.themePrimary)
+        }
+
+        Text(this.buildToolStepTitle(step))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+
+        if (this.isToolStepClickable(step)) {
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(12)
+            .fontColor([$r('app.color.text_tertiary')])
+            .rotate({ angle: this.isToolStepExpanded(step) ? 0 : -90 })
+            .animation({ duration: 200, curve: Curve.EaseOut })
+        }
+      }
+      .width('100%')
+      .onClick(() => {
+        if (this.isToolStepClickable(step)) {
+          this.handleToolStepClick(step)
+        }
+      })
+
+      if (this.isToolStepExpanded(step) && step.toolResult !== '') {
+        MapQuizCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
           answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
