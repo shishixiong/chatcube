@@ -43,6 +43,9 @@ const PINYIN_KEYWORDS: string[] = [
 const MATCHING_PAIRS_KEYWORDS: string[] = [
   'matching_pairs', 'match_pairs'
 ]
+const MAP_KEYWORDS: string[] = [
+  'map_card', 'map_quiz'
+]
 
 function matchesAny(name: string, keywords: string[]): boolean {
   for (let i = 0; i < keywords.length; i++) {
@@ -110,6 +113,9 @@ export function resolveToolSymbol(functionName: string): Resource {
   }
   if (matchesAny(name, MATCHING_PAIRS_KEYWORDS)) {
     return $r('sys.symbol.link')
+  }
+  if (matchesAny(name, MAP_KEYWORDS)) {
+    return $r('sys.symbol.map')
   }
   return $r('sys.symbol.wrench_and_screwdriver')
 }

@@ -43,7 +43,9 @@ import {
   HANZI_CARD_TOOL_ID,
   PINYIN_CARD_TOOL_ID,
   PICTURE_TALK_TOOL_ID,
-  CHINESE_QUIZ_TOOL_ID
+  CHINESE_QUIZ_TOOL_ID,
+  MAP_CARD_TOOL_ID,
+  MAP_QUIZ_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { getPinyinCharsJoined } from './PinyinData'
 import { getStrokeOrderCharsJoined } from './StrokeOrderData'
@@ -3575,6 +3577,166 @@ function createChineseQuizToolConfig(): ToolConfig {
 }
 
 
+// ===== map_card 工具 =====
+// 中国地图小课堂（讲解型）：全屏中国地图，孩子点省份看资料卡（名称/简称/行政中心/大区）+ TTS。
+// focus_province 可选——本节课围绕某省时传入，地图自动高亮并展示资料。
+// 交互由前端 MapCard 组件处理，后台 ToolExecutionService.handleMapCard 拦截。
+
+interface MapCardArgs {
+  focus_province?: string
+  skill_key: string
+}
+
+class MapCardExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // map_card 的交互由前端 MapCard 组件处理。
+    // 后台由 ToolExecutionService.handleMapCard 拦截处理。
+    try {
+      const params = JSON.parse(_args) as MapCardArgs
+      return JSON.stringify({
+        answered: false,
+        focus_province: params.focus_province ?? '',
+        skill_key: 'general_social'
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`map_card error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createMapCardToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "focus_province": {
+        "type": "string",
+        "description": "可选。本次想重点讲的省级行政区常用名，如「山西」。传入后地图自动高亮并展示该省资料。不传则孩子自由探索。"
+      },
+      "skill_key": {
+        "type": "string",
+        "enum": ["general_social"],
+        "description": "固定传 general_social（地理常识）。"
+      }
+    },
+    "required": ["skill_key"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    MAP_CARD_TOOL_ID,
+    'Open the China map lesson card (中国地图小课堂): an interactive map of 34 province-level regions where the child taps provinces to learn names, abbreviations and capitals. Use this INSTEAD of describing geography in plain text. focus_province 是可选参数：当本节课围绕某个省（如讲到家乡、简称、地形）时传入该省常用名。有效省份名列表：北京 天津 河北 山西 内蒙古 辽宁 吉林 黑龙江 上海 江苏 浙江 安徽 福建 江西 山东 河南 湖北 湖南 广东 广西 海南 重庆 四川 贵州 云南 西藏 陕西 甘肃 青海 宁夏 新疆 台湾 香港 澳门。讲解完地图后可用 map_quiz 出题检验。',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createMapCardToolConfig(): ToolConfig {
+  return new ToolConfig(
+    MAP_CARD_TOOL_ID,
+    '中国地图小课堂',
+    '看中国地图认 34 个省级行政区的名字、简称和行政中心，可重点讲一个省。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    MAP_CARD_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
+// ===== map_quiz 工具 =====
+// 中国地图出题（练习型）：choice 看高亮省选名称（选项由 App 端生成）/ locate 按名或行政中心点位置 /
+// write 手写省名自评。一次调用一道题，AI 控制节奏。
+// 交互由前端 MapQuizCard 组件处理，后台 ToolExecutionService.handleMapQuiz 拦截。
+
+interface MapQuizArgs {
+  mode: string
+  province: string
+  clue?: string
+  skill_key: string
+}
+
+class MapQuizExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // map_quiz 的交互由前端 MapQuizCard 组件处理。
+    // 后台由 ToolExecutionService.handleMapQuiz 拦截处理。
+    try {
+      const params = JSON.parse(_args) as MapQuizArgs
+      return JSON.stringify({
+        answered: false,
+        mode: params.mode ?? '',
+        province: params.province ?? '',
+        clue: params.clue ?? '',
+        skill_key: 'general_social'
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`map_quiz error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createMapQuizToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "mode": {
+        "type": "string",
+        "enum": ["choice", "locate", "write"],
+        "description": "题型：choice=看高亮省份选名称（4 个选项，由卡片自动生成，不要自己传选项）；locate=按名称或行政中心在地图上点出该省；write=把高亮省份的名字手写下来（孩子自评）。"
+      },
+      "province": {
+        "type": "string",
+        "description": "目标省份常用名，如「黑龙江」，必须在有效省份列表内。"
+      },
+      "clue": {
+        "type": "string",
+        "enum": ["name", "capital"],
+        "description": "仅 locate 有效：name=按省名找位置；capital=给行政中心找省份（如「行政中心是哈尔滨的是哪个省」）。choice/write 不要传。"
+      },
+      "skill_key": {
+        "type": "string",
+        "enum": ["general_social"],
+        "description": "固定传 general_social。"
+      }
+    },
+    "required": ["mode", "province", "skill_key"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    MAP_QUIZ_TOOL_ID,
+    'Present one China map question (中国地图出题): three modes — choice (pick the highlighted province\'s name from 4 card-generated options), locate (tap the province by name or capital on the map), write (handwrite the province name, child self-judges). Use this INSTEAD of asking map questions in plain text. 每次调用只出一道题，由你在对话节奏中选择 mode。choice 的选项由卡片自动生成——严禁在参数中传选项数组。同一省份避免连续重复出同一 mode。严禁把答案直接写在题目文字里（locate+capital 模式题干只出现行政中心名）。有效省份名列表：北京 天津 河北 山西 内蒙古 辽宁 吉林 黑龙江 上海 江苏 浙江 安徽 福建 江西 山东 河南 湖北 湖南 广东 广西 海南 重庆 四川 贵州 云南 西藏 陕西 甘肃 青海 宁夏 新疆 台湾 香港 澳门。',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createMapQuizToolConfig(): ToolConfig {
+  return new ToolConfig(
+    MAP_QUIZ_TOOL_ID,
+    '中国地图出题',
+    '出一道中国地图题：看图选名、按名找位置或手写省名。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    MAP_QUIZ_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
 // 注册所有内置工具
 export function registerBuiltinTools(): void {
   const registry = getToolRegistry()
@@ -3899,6 +4061,28 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(MAP_CARD_TOOL_ID)) {
+    const mapCardTool = new RegisteredTool(
+      MAP_CARD_TOOL_ID,
+      createMapCardToolConfig(),
+      createMapCardToolDefinition(),
+      new MapCardExecutor()
+    )
+    registry.registerTool(mapCardTool)
+    registeredNow += 1
+  }
+
+  if (!registry.isToolRegistered(MAP_QUIZ_TOOL_ID)) {
+    const mapQuizTool = new RegisteredTool(
+      MAP_QUIZ_TOOL_ID,
+      createMapQuizToolConfig(),
+      createMapQuizToolDefinition(),
+      new MapQuizExecutor()
+    )
+    registry.registerTool(mapQuizTool)
+    registeredNow += 1
+  }
+
   console.info(
     'BuiltinTools',
     `Builtin tools ready: total=${registry.getToolCount()}, newlyRegistered=${registeredNow}`
@@ -3907,5 +4091,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID, MAP_CARD_TOOL_ID, MAP_QUIZ_TOOL_ID]
 }

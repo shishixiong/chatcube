@@ -35,6 +35,9 @@ export const HANZI_CARD_TOOL_ID: string = 'hanzi_card'
 export const PINYIN_CARD_TOOL_ID: string = 'pinyin_card'
 export const PICTURE_TALK_TOOL_ID: string = 'picture_talk'
 export const CHINESE_QUIZ_TOOL_ID: string = 'chinese_quiz'
+// 中国地图教学工具（2026-10-21）：讲解型 map_card + 练习型 map_quiz（choice/locate/write 三 mode）。
+export const MAP_CARD_TOOL_ID: string = 'map_card'
+export const MAP_QUIZ_TOOL_ID: string = 'map_quiz'
 
 
 export function normalizeToolFunctionName(raw: string): string {
@@ -174,6 +177,14 @@ export function isChineseQuizFunctionName(functionName: string): boolean {
     normalized === 'chinese_practice'
 }
 
+export function isMapCardFunctionName(functionName: string): boolean {
+  return normalizeToolFunctionName(functionName) === MAP_CARD_TOOL_ID
+}
+
+export function isMapQuizFunctionName(functionName: string): boolean {
+  return normalizeToolFunctionName(functionName) === MAP_QUIZ_TOOL_ID
+}
+
 export function isHuarongdaoFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === HUARONGDAO_TOOL_ID
 }
@@ -246,7 +257,9 @@ export function isInteractiveQuizFunctionName(functionName: string): boolean {
     isHanziCardFunctionName(functionName) ||
     isPinyinCardFunctionName(functionName) ||
     isPictureTalkFunctionName(functionName) ||
-    isChineseQuizFunctionName(functionName)
+    isChineseQuizFunctionName(functionName) ||
+    isMapCardFunctionName(functionName) ||
+    isMapQuizFunctionName(functionName)
 }
 
 
