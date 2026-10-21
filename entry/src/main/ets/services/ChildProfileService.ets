@@ -58,7 +58,7 @@ const SKILL_DEFINITIONS: [string, string][] = [
   ['english_phonics', '自然拼读'],
   ['english_reading', '英语跟读'],
   ['general_nature', '自然常识'],
-  ['general_social', '社交礼仪'],
+  ['general_social', '社会常识'],
   ['general_life', '生活常识'],
   ['logic_thinking', '逻辑思维'],
   ['observation', '观察力'],

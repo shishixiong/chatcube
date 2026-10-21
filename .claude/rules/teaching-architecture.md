@@ -11,9 +11,11 @@
 
 ## 1. 总览
 
-教学体系分三层：**教学策略**（AI 助手 + 系统提示词；v2 起为 1 个全科小星老师 + 4 个学科专用助手）→ **教学工具**（AI 调用的 24 个锁定工具 + 18 张互动卡片；小星老师锁 23，`math_teach` 为 kids_math 专属）→ **教学数据**（孩子画像 28 维技能 + 每日备课 + 星星奖励）。这三层通过 `ChatViewModel` 串成闭环：会话开始时注入今日教学目标（仅小星老师），AI 据孩子表现出题并更新画像，小星老师会话结束后 5 分钟防抖触发"备课老师"自动生成次日计划。
+教学体系分三层：**教学策略**（AI 助手 + 系统提示词；v2 起为 1 个全科小星老师 + 4 个学科专用助手）→ **教学工具**（AI 调用的 26 个锁定工具 + 20 张互动卡片；小星老师锁 25，`math_teach` 为 kids_math 专属）→ **教学数据**（孩子画像 28 维技能 + 每日备课 + 星星奖励）。这三层通过 `ChatViewModel` 串成闭环：会话开始时注入今日教学目标（仅小星老师），AI 据孩子表现出题并更新画像，小星老师会话结束后 5 分钟防抖触发"备课老师"自动生成次日计划。
 
 > **2026-09-30 语文套件 v2**：新增 hanzi_card / pinyin_card / picture_talk / chinese_quiz 四工具（讲解/练习二分）+ chinese_vocab / chinese_reading 两画像维度。实施记录见 `docs/superpowers/specs/2026-09-30-chinese-teaching-tools-implementation.md`。
+>
+> **2026-10-21 地图套件**：新增 map_card（讲解型中国地图小课堂）/ map_quiz（练习型三 mode：choice/locate/write），锁进 default + kids_chinese；组件 `components/map/`（ChinaMapStage 渲染器 + MapCard + MapQuizCard），数据 `utils/ChinaMapData.ets`（34 省级行政区 GeoJSON-lite），笔顺数据扩 101 地理字（`config/StrokeOrderData.ets`）。画像维度复用 `general_social`（家长端标签改名「社会常识」）。spec：`docs/superpowers/specs/2026-10-21-china-map-teaching-tools-design.md`。
 
 ---
 
@@ -30,7 +32,7 @@
 | `isDefault` | `true` | `Assistant` 构造函数按 id 判定 |
 | `sortOrder` | `0` | `createDefaultAssistant()` |
 | 系统提示词 | `DEFAULT_ASSISTANT_SYSTEM_PROMPT`（经 `utils/SharedPromptFragments.ets` 共享片段拼装，~60 行） | `models/AssistantModels.ets:32-95` |
-| 锁定工具 | 23 个（见 §4） | `DEFAULT_ASSISTANT_LOCKED_TOOL_IDS` |
+| 锁定工具 | 25 个（见 §4） | `DEFAULT_ASSISTANT_LOCKED_TOOL_IDS` |
 
 **锁定语义（v2 · 注册表驱动）**：`services/AssistantService.ets` 的 `normalizeAssistant()` 对**全部 5 个内置助手**（default + 4 学科）经 `getBuiltInAssistantSpec(id)`（`models/AssistantModels.ets:418`）查注册表，命中即强制覆盖 `name` / `systemPrompt` / `enabledToolIds`（取 `lockedToolIds` 副本）——用户在前端编辑时无法修改内置助手的名称、提示词与工具白名单。非内置 id 返回 `null`，仅做 trim/兜底规整。
 
@@ -45,7 +47,7 @@
 |----|------|--------------|-------|--------------|-----------|
 | `kids_math` | 小星数学老师 | 数 | #4E8FE0 | ask_user, child_profile, get_time_info, grant_star, math_verify, math_quiz, vertical_math, math_teach, matching_pairs | 1 |
 | `kids_english` | 小星英语老师 | 英 | #35A98A | ask_user, child_profile, get_time_info, grant_star, english_quiz, picture_vocab, listening_quiz | 2 |
-| `kids_chinese` | 小星语文老师 | 语 | #E2603C | ask_user, child_profile, get_time_info, grant_star, pinyin_quiz, handwriting_practice, hanzi_card, pinyin_card, picture_talk, chinese_quiz | 3 |
+| `kids_chinese` | 小星语文老师 | 语 | #E2603C | ask_user, child_profile, get_time_info, grant_star, pinyin_quiz, handwriting_practice, hanzi_card, pinyin_card, picture_talk, chinese_quiz, map_card, map_quiz | 3 |
 | `kids_games` | 小星游戏老师 | 玩 | #8B72E0 | ask_user, child_profile, get_time_info, grant_star, number_puzzle, maze, sudoku, matching_pairs, memory_match, categorization | 4 |
 
 - 定义：`models/AssistantModels.ets` 的 `KIDS_SUBJECT_SPECS`（行 374-411）+ `createKidsSubjectAssistants()`（行 439）。系统提示词与小星老师同源（共用 `SharedPromptFragments.buildBasePrompt`），按学科裁剪；每科提示词约束 `child_profile(action:"update")` 只更新本学科维度。
@@ -110,7 +112,7 @@
 
 ## 4. 教学工具生态
 
-小星老师 **锁定 23 个工具**（§2 `DEFAULT_ASSISTANT_LOCKED_TOOL_IDS`），其中 17 个有 UI 互动卡片（含 `ask_user`，已并入锁定白名单），3 个纯后端（`child_profile`、`math_verify`、`grant_star`），2 个非互动生成类（`image_generation`、`music_generation`），外加 `get_time_info`。4 个学科助手各锁定其中一个子集（见 §2.1，均不含 image_generation / music_generation）；唯一例外是 kids_math 额外锁定小星老师集合之外的 `math_teach`（2026-09-27 起，见下表）。
+小星老师 **锁定 25 个工具**（§2 `DEFAULT_ASSISTANT_LOCKED_TOOL_IDS`），其中 19 个有 UI 互动卡片（含 `ask_user`，已并入锁定白名单），3 个纯后端（`child_profile`、`math_verify`、`grant_star`），2 个非互动生成类（`image_generation`、`music_generation`），外加 `get_time_info`。4 个学科助手各锁定其中一个子集（见 §2.1，均不含 image_generation / music_generation）；唯一例外是 kids_math 额外锁定小星老师集合之外的 `math_teach`（2026-09-27 起，见下表）。
 
 | 工具 ID | UI 卡片 | 是否锁定 | 备注 |
 |---------|---------|----------|------|
@@ -139,10 +141,12 @@
 | `pinyin_card` | `PinyinCard.ets` | ✓ | 拼音小课堂（拼装公式 + 四声 TTS 示范），讲解型回执，预校验 |
 | `picture_talk` | `PictureTalkCard.ets` | ✓ | 看图说话（生图 + ASR 口语），讲解型回执，预校验 |
 | `chinese_quiz` | `chinese/ChineseQuizCard.ets` | ✓ | 语文小练习 4 mode（word_build/sentence_order/lookalike/antonym），预校验 |
+| `map_card` | `map/MapCard.ets` | ✓ | 中国地图小课堂（讲解型）：34 省可点地图 + 省份资料卡（简称/行政中心/TTS）+ focus_province 高亮，预校验；待答态入口横幅 → 全屏 sheet |
+| `map_quiz` | `map/MapQuizCard.ets` | ✓ | 中国地图出题 3 mode（choice 程序生成选项/locate 点图即判/write 手写自评），预校验；待答态入口横幅 → 全屏 sheet |
 
-**讲解/练习二分（2026-09-30 语文套件）**：`hanzi_card` / `pinyin_card` / `picture_talk` 为**讲解型**——无对错判定，`feedbackSuppressed = true` 永久抑制反馈横幅，孩子完成交互门槛后点「我学会了 · 继续」提交回执，`computeStars` 走 `completed === true → 1 星`（MathTeachCard 同款范式）；`chinese_quiz` 为**练习型**——即判即交，`correct === true → 1 星`。
+**讲解/练习二分（2026-09-30 语文套件）**：`hanzi_card` / `pinyin_card` / `picture_talk` 为**讲解型**——无对错判定，`feedbackSuppressed = true` 永久抑制反馈横幅，孩子完成交互门槛后点「我学会了 · 继续」提交回执，`computeStars` 走 `completed === true → 1 星`（MathTeachCard 同款范式）；`chinese_quiz` 为**练习型**——即判即交，`correct === true → 1 星`。2026-10-21 地图套件沿用：`map_card` 讲解型（探索 ≥1 省后提交，1 星）；`map_quiz` 练习型（choice/locate 即判、write 自评，`correct === true → 1 星`）。
 
-**预校验 + should_retry**：`math_quiz` / `english_quiz` / `picture_vocab` / `listening_quiz` / `pinyin_quiz` / `matching_pairs` / `categorization` / `hanzi_card` / `pinyin_card` / `picture_talk` / `chinese_quiz` 的参数在进入 pending 前先经 `utils/*Validation.ets` 校验；坏题返回 `{error: 'validation_failed', should_retry: true}` 让 LLM 自行修正，不会渲染不可玩的卡片。
+**预校验 + should_retry**：`math_quiz` / `english_quiz` / `picture_vocab` / `listening_quiz` / `pinyin_quiz` / `matching_pairs` / `categorization` / `hanzi_card` / `pinyin_card` / `picture_talk` / `chinese_quiz` / `map_card` / `map_quiz` 的参数在进入 pending 前先经 `utils/*Validation.ets` 校验（地图工具为 `utils/MapToolValidation.ets`：province 必须命中 34 省表、locate 的 clue 限定 name/capital 且 capital===short 拒绝）；坏题返回 `{error: 'validation_failed', should_retry: true}` 让 LLM 自行修正，不会渲染不可玩的卡片。
 
 **`largeSize` 模式**：部分较复杂的卡片（数字华容道、学写字、分类等）支持双视图——内联（MessageBubble 内带气泡外壳）vs 全屏 sheet（ChatPage 大尺寸容器，透明背景让 sheet 接管）。其余卡片仅内联。
 
@@ -447,6 +451,10 @@ ChatViewModel（会话结束路径）调 getLessonPlanningService().notifySessio
 | `components/kids/KidsDayGroupCard.ets` | 学习乐园按天分组卡 |
 | `components/kids/KidsStarDetailSheet.ets` | 今日星星明细 sheet |
 | `components/kids/ParentalGateSheet.ets` | 家长门两阶段（算术验证 → 今日概览） |
+| `components/map/ChinaMapStage.ets` | 可复用中国地图渲染器（evenodd 命中检测 + 缩放平移 + 四态填色） |
+| `components/map/MapCard.ets` + `components/map/MapQuizCard.ets` | 地图课讲解卡 + 地图出题薄路由器（bodies/ 三 mode） |
+| `utils/ChinaMapData.ets` + `utils/ChinaMapGeometry.ets` | 34 省地图数据（缓存加载）+ 几何纯函数（bbox/point-in-polygon） |
+| `utils/MapToolValidation.ets` + `utils/MapChoiceOptions.ets` | 地图工具预校验 + choice 选项程序生成 |
 | `utils/KidsSubjectUtils.ets` | 儿童主屏纯函数（countTodayBySubject / groupSessionsByDay / findTodaySession / buildToday*Rows 等） |
 | `pages/Index.ets` | `isKidsAllowedSessionId`（KIDS_BUILT_IN_ASSISTANT_IDS 放行）+ `handleKidsNewChat(initialPrompt, assistantId)` |
 | `pages/LearningProfilePage.ets` | 孩子画像查看页 |

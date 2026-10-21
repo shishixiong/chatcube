@@ -124,8 +124,10 @@ MVVM 分层（`entry/src/main/ets/`）：
 | `MatchingPairsCard` | `matching_pairs` | 连一连观察配对 |
 | `MemoryMatchCard` | `memory_match` | 记忆翻牌（宝石配对，kids_games 专属） |
 | `AskUserCard` | `ask_user` | AI 反问收集偏好 |
+| `map/MapCard` | `map_card` | 中国地图小课堂（讲解型：34 省可点 + 资料卡 + focus 高亮；待答态横幅 → 全屏 sheet） |
+| `map/MapQuizCard` | `map_quiz` | 中国地图出题（3 mode：choice/locate/write；待答态横幅 → 全屏 sheet） |
 
-出题类工具（math_quiz / english_quiz / picture_vocab / listening_quiz / pinyin_quiz / matching_pairs / categorization）参数在渲染前经 `utils/*Validation.ets` 预校验，坏题以 `should_retry` 回传 LLM 自行修正。
+出题类工具（math_quiz / english_quiz / picture_vocab / listening_quiz / pinyin_quiz / matching_pairs / categorization / map_card / map_quiz）参数在渲染前经 `utils/*Validation.ets` 预校验，坏题以 `should_retry` 回传 LLM 自行修正。
 
 完整设计文档见 `docs/superpowers/specs/`。
 
