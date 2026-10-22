@@ -169,7 +169,7 @@ export default function englishQuizValidationTest() {
     it('齐全合法', 0, () => {
       const r = validateEnglishQuizArgs(buildArgs({
         mode: 'listen_choice', question: '听一听,选出你听到的单词', correct_answer: 'cat',
-        options: ['cat', 'cap', 'can', 'hat'], tts_text: 'cat'
+        options: ['cat', 'dog', 'fish', 'bird'], tts_text: 'cat'
       }))
       expect(r.ok).assertTrue()
       expect(r.mode).assertEqual('listen_choice')
@@ -224,6 +224,24 @@ export default function englishQuizValidationTest() {
       expect(r.ok).assertFalse()
       expect(r.error.includes('image_prompt')).assertTrue()
     })
+    it('correct_answer 不在本地词库, 拒绝', 0, () => {
+      const r = validateEnglishQuizArgs(buildArgs({
+        mode: 'picture_word', question: 'q', correct_answer: 'kiwi',
+        options: ['kiwi', 'apple', 'banana', 'pear'],
+        image_prompt: 'a kiwi fruit'
+      }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('本地词库')).assertTrue()
+    })
+    it('选项含本地词库外的词, 拒绝', 0, () => {
+      const r = validateEnglishQuizArgs(buildArgs({
+        mode: 'picture_word', question: 'q', correct_answer: 'apple',
+        options: ['apple', 'banana', 'kiwi', 'pear'],
+        image_prompt: 'a red apple'
+      }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('本地词库')).assertTrue()
+    })
   })
   describe('phonics_blend', () => {
     it('short a 规则全 CVC 合法', 0, () => {
@@ -267,8 +285,8 @@ export default function englishQuizValidationTest() {
   describe('sentence_fill', () => {
     it('恰一个空合法', 0, () => {
       const r = validateEnglishQuizArgs(buildArgs({
-        mode: 'sentence_fill', question: '选词填空', correct_answer: 'apples',
-        options: ['apples', 'banana', 'milk', 'eggs'], pattern: 'I like ___.'
+        mode: 'sentence_fill', question: '选词填空', correct_answer: 'apple',
+        options: ['apple', 'banana', 'milk', 'cake'], pattern: 'I like ___.'
       }))
       expect(r.ok).assertTrue()
     })

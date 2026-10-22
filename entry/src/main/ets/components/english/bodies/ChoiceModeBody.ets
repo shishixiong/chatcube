@@ -20,6 +20,7 @@ import {
   parseEnglishQuizModeArgs
 } from '../ModeTypes'
 import { resolveQuizImagePath } from '../QuizImageResolver'
+import { findLocalVocabEntry } from '../../../utils/LocalVocabCatalog'
 
 @ComponentV2
 export struct ChoiceModeBody {
@@ -36,6 +37,7 @@ export struct ChoiceModeBody {
   @Local speakText: string = ''
   @Local showImage: boolean = false
   @Local displayImagePath: string = ''
+  @Local displayImageRawfile: string = ''
   @Local isImageLoading: boolean = false
   @Local imageLoadFailed: boolean = false
   @Local selectedOption: string = ''
@@ -66,6 +68,7 @@ export struct ChoiceModeBody {
     this.stage = args.stage
     this.speakText = args.ttsText !== '' ? args.ttsText : args.correctAnswer
     this.showImage = args.mode === 'picture_word'
+    this.displayImageRawfile = args.imageRawfile
     this.shellConfig = {
       title: modeDisplayName(args.mode), subtitle: args.theme !== '' ? `主题 · ${args.theme}` : '',
       icon: this.showImage ? $r('sys.symbol.picture') : $r('sys.symbol.speaker_wave_2_fill'),
@@ -114,6 +117,13 @@ export struct ChoiceModeBody {
       return
     }
     const args = parseEnglishQuizModeArgs(this.toolCall.arguments)
+    if (args.imageRawfile !== '' && args.imageRawfile !== this.displayImageRawfile) {
+      this.displayImageRawfile = args.imageRawfile
+      this.displayImagePath = ''
+      this.isImageLoading = false
+      this.imageLoadFailed = false
+      return
+    }
     if (args.imagePath !== '' && args.imagePath !== this.displayImagePath) {
       this.displayImagePath = args.imagePath
       this.isImageLoading = false
@@ -144,6 +154,20 @@ export struct ChoiceModeBody {
 
   private resolveImage(): void {
     const args = parseEnglishQuizModeArgs(this.toolCall.arguments)
+    if (args.imageRawfile !== '') {
+      this.displayImageRawfile = args.imageRawfile
+      this.isImageLoading = false
+      this.imageLoadFailed = false
+      return
+    }
+    // 兜底: 注入尚未到达时也先按本地词库查一次, 保证本地词秒开
+    const localEntry = findLocalVocabEntry(args.correctAnswer)
+    if (localEntry !== null) {
+      this.displayImageRawfile = localEntry.image
+      this.isImageLoading = false
+      this.imageLoadFailed = false
+      return
+    }
     if (args.imagePath !== '') {
       this.displayImagePath = args.imagePath
       return
@@ -282,7 +306,14 @@ export struct ChoiceModeBody {
 
   @Builder
   ImageArea() {
-    if (this.displayImagePath !== '') {
+    if (this.displayImageRawfile !== '') {
+      Image($rawfile(this.displayImageRawfile))
+        .width('100%')
+        .height(180)
+        .objectFit(ImageFit.Contain)
+        .borderRadius(10)
+        .backgroundColor($r('app.color.surface'))
+    } else if (this.displayImagePath !== '') {
       Image(this.toFileUrl(this.displayImagePath))
         .width('100%')
         .height(180)

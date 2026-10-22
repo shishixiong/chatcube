@@ -18,7 +18,14 @@
  *  - word / sentence: correct_answer / question / image_prompt 非空
  *    (word 模式无 image_prompt → 图片管线生成失败 → 卡片卡 loading →
  *     pendingAnswer 永不 resolve → 会话死锁, 正是预校验要防的模式)
+ *
+ * 本地词库硬约束 (2026-10-22):
+ *  - listen_choice / picture_word / sentence_fill / legacy word 的 correct_answer
+ *    与 4 个 options 必须全部命中 utils/LocalVocabCatalog (100 词)
+ *  - phonics_blend / read_aloud / letter_trace 是拼读/朗读/书写模式, 不受此约束
  */
+
+import { findLocalVocabEntry } from './LocalVocabCatalog'
 
 export interface EnglishQuizValidationResult {
   ok: boolean
@@ -174,6 +181,13 @@ function validateLegacyArgs(parsed: Record<string, Object>, mode: string): Engli
   if (imagePrompt === '') {
     return fail(`${questionType} 题缺少 image_prompt — 没有图片描述, 卡片会一直停在加载占位上无法作答, 请补上后重新出题`, mode, true)
   }
+  // legacy word 也是词汇选词题: 只允许本地词库内的词; sentence 题不限制正文词汇
+  if (questionType !== 'sentence') {
+    const localErr = validateLocalVocabWords(correct, undefined, questionType)
+    if (localErr !== '') {
+      return fail(localErr, mode, true)
+    }
+  }
   return pass(mode, true)
 }
 
@@ -184,6 +198,29 @@ function readString(parsed: Record<string, Object>, key: string): string {
   // 流入既有「缺少字段」校验失败路径 (should_retry) 而非 .trim() 运行时崩溃
   const raw = parsed[key]
   return (typeof raw === 'string' ? (raw as string) : '').trim()
+}
+
+/**
+ * 本地词库硬约束: 词汇题的 correct_answer 与 4 个选项都必须来自 LocalVocabCatalog。
+ * 返回 '' = 通过; 否则返回写给 LLM 的修正提示 (should_retry)。
+ * 说明: phonics_blend / read_aloud / letter_trace 不是词汇选词模式, 不走这条约束。
+ */
+function validateLocalVocabWords(correct: string, optionsRaw: Object | undefined, modeLabel: string): string {
+  if (findLocalVocabEntry(correct) === null) {
+    return `${modeLabel} 只能从本地词库选词, 但「${correct}」不在词库中; 请从工具描述里的本地词表重新选词后出题。`
+  }
+  if (!Array.isArray(optionsRaw)) {
+    return ''
+  }
+  const arr = optionsRaw as Object[]
+  for (let i = 0; i < arr.length; i++) {
+    const raw = arr[i]
+    const opt = typeof raw === 'string' ? (raw as string).trim() : ''
+    if (opt !== '' && findLocalVocabEntry(opt) === null) {
+      return `${modeLabel} 的选项「${opt}」不在本地词库中; correct_answer 与 4 个选项必须全部来自本地词库, 请换成本地词后重新出题。`
+    }
+  }
+  return ''
 }
 
 /**
@@ -252,6 +289,10 @@ function validateListenChoice(parsed: Record<string, Object>, mode: string): Eng
   if (readString(parsed, 'tts_text') === '') {
     return fail('listen_choice 题缺少 tts_text (TTS 要朗读的英文词), 没有它小朋友听不到题目, 请补上后重新出题', mode, false)
   }
+  const localErr = validateLocalVocabWords(correct, parsed['options'], 'listen_choice')
+  if (localErr !== '') {
+    return fail(localErr, mode, false)
+  }
   return pass(mode, false)
 }
 
@@ -266,6 +307,10 @@ function validatePictureWord(parsed: Record<string, Object>, mode: string): Engl
   }
   if (readString(parsed, 'image_prompt') === '') {
     return fail('picture_word 题缺少 image_prompt — 没有图片描述卡片无法出图, 请补上后重新出题', mode, false)
+  }
+  const localErr = validateLocalVocabWords(correct, parsed['options'], 'picture_word')
+  if (localErr !== '') {
+    return fail(localErr, mode, false)
   }
   return pass(mode, false)
 }
@@ -319,6 +364,10 @@ function validateSentenceFill(parsed: Record<string, Object>, mode: string): Eng
   const blanks = pattern === '' ? 0 : pattern.split('___').length - 1
   if (pattern === '' || blanks !== 1) {
     return fail(`sentence_fill 题的 pattern 必须恰好含一个 ___ 空格 (当前 ${blanks} 个), 如「I like ___.」; 严禁 0 个或多个空, 请修正后重新出题`, mode, false)
+  }
+  const localErr = validateLocalVocabWords(correct, parsed['options'], 'sentence_fill')
+  if (localErr !== '') {
+    return fail(localErr, mode, false)
   }
   return pass(mode, false)
 }

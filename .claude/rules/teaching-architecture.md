@@ -32,7 +32,7 @@
 | `isDefault` | `true` | `Assistant` 构造函数按 id 判定 |
 | `sortOrder` | `0` | `createDefaultAssistant()` |
 | 系统提示词 | `DEFAULT_ASSISTANT_SYSTEM_PROMPT`（经 `utils/SharedPromptFragments.ets` 共享片段拼装，~60 行） | `models/AssistantModels.ets:32-95` |
-| 锁定工具 | 25 个（见 §4） | `DEFAULT_ASSISTANT_LOCKED_TOOL_IDS` |
+| 锁定工具 | 26 个（见 §4） | `DEFAULT_ASSISTANT_LOCKED_TOOL_IDS` |
 
 **锁定语义（v2 · 注册表驱动）**：`services/AssistantService.ets` 的 `normalizeAssistant()` 对**全部 5 个内置助手**（default + 4 学科）经 `getBuiltInAssistantSpec(id)`（`models/AssistantModels.ets:418`）查注册表，命中即强制覆盖 `name` / `systemPrompt` / `enabledToolIds`（取 `lockedToolIds` 副本）——用户在前端编辑时无法修改内置助手的名称、提示词与工具白名单。非内置 id 返回 `null`，仅做 trim/兜底规整。
 
@@ -112,7 +112,7 @@
 
 ## 4. 教学工具生态
 
-小星老师 **锁定 25 个工具**（§2 `DEFAULT_ASSISTANT_LOCKED_TOOL_IDS`），其中 19 个有 UI 互动卡片（含 `ask_user`，已并入锁定白名单），3 个纯后端（`child_profile`、`math_verify`、`grant_star`），2 个非互动生成类（`image_generation`、`music_generation`），外加 `get_time_info`。4 个学科助手各锁定其中一个子集（见 §2.1，均不含 image_generation / music_generation）；唯一例外是 kids_math 额外锁定小星老师集合之外的 `math_teach`（2026-09-27 起，见下表）。
+小星老师 **锁定 26 个工具**（§2 `DEFAULT_ASSISTANT_LOCKED_TOOL_IDS`；2026-10-22 起 `snake_game` 从 kids_games 专属扩入默认助手），其中 19 个有 UI 互动卡片（含 `ask_user`，已并入锁定白名单），3 个纯后端（`child_profile`、`math_verify`、`grant_star`），2 个非互动生成类（`image_generation`、`music_generation`），外加 `get_time_info`。4 个学科助手各锁定其中一个子集（见 §2.1，均不含 image_generation / music_generation）；唯一例外是 kids_math 额外锁定小星老师集合之外的 `math_teach`（2026-09-27 起，见下表）。
 
 | 工具 ID | UI 卡片 | 是否锁定 | 备注 |
 |---------|---------|----------|------|
@@ -136,6 +136,7 @@
 | `pinyin_quiz` | `PinyinQuizCard.ets` | ✓ | 拼音认读，内置 72 字表 + 预校验 |
 | `matching_pairs` | `MatchingPairsCard.ets` | ✓ | 连一连观察配对，预校验 |
 | `memory_match` | `MemoryMatchCard.ets` | ✓ | 记忆翻牌（宝石配对）：5 难度 3×2–6×4 + 预览倒计时 + 步数效率 1-3 星评级 + 按难度最佳成绩；kids_games 专属（镜像 math_teach 先例），2026-10-05 |
+| `snake_game` | `SnakeCard.ets` | ✓ | 贪吃蛇（2026-10-06，2026-10-22 目标果子制改版）：16×16 硬墙，难度 1-3 = 基础速度 × 目标果子数（慢慢爬·8 颗 / 正常速·12 颗 / 飞快·16 颗），吃满过关；方向键/屏幕按钮/滑动三通道转弯；原 kids_games 专属，2026-10-22 扩入 default |
 | `ask_user` | `AskUserCard.ets` | ✓（v2 已并入锁定列表） | AI 反问 |
 | `hanzi_card` | `HanziCard.ets` | ✓ | 汉字小课堂（六步识字讲解 + 笔顺动画），讲解型回执，预校验 |
 | `pinyin_card` | `PinyinCard.ets` | ✓ | 拼音小课堂（拼装公式 + 四声 TTS 示范），讲解型回执，预校验 |
@@ -237,6 +238,7 @@ DB 行 `DailyLessonPlanRow`（行 248-263）→ 表 `daily_lesson_plans`，状�
 | `sudoku` | `completed === true` | 按难度 1/2/3/5/7 |
 | `matching_pairs` | 全对 0 失误 / 有失误 / 放弃 | 难度 1/2/3 / 1 / 0 |
 | `memory_match` | `completed === true` | 难度基数 1-5 星，评级调节（3★ 满额 / 2★ 减 1 / 1★ 给 1）；放弃 0 |
+| `snake_game` | 通关（吃满目标果子）/ 撞墙未通关 / 放弃 | 按难度 1/2/3 星 / 1 星（参与）/ 0 |
 | `chat_correct` | 聊天答对 | 1 |
 
 **副作用**（`StarRewardService.ets:119-164` 的 `recordEvent`）：

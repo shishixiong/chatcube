@@ -13,6 +13,7 @@ import {
   ToolSourceType
 } from '../models/ChatModels'
 import { ToolExecutor, RegisteredTool, getToolRegistry } from '../services/ToolRegistry'
+import { getLocalVocabPromptHint, getLocalVocabBilingualPromptHint } from '../utils/LocalVocabCatalog'
 import { getWebSearchService, SearchResult, WebSearchResult } from '../services/WebSearchService'
 import {
   ASK_USER_TOOL_ID,
@@ -1716,13 +1717,14 @@ class EnglishQuizExecutor implements ToolExecutor {
 }
 
 function createEnglishQuizToolDefinition(): ToolDefinition {
+  const localVocabHint: string = getLocalVocabPromptHint()
   const rawSchemaJson: string = `{
     "type": "object",
     "properties": {
       "mode": {
         "type": "string",
         "enum": ["listen_choice", "picture_word", "phonics_blend", "sentence_fill", "read_aloud", "letter_trace"],
-        "description": "Quiz mode, exactly one of six. listen_choice: child hears a word via TTS and picks it from 4 options (tts_text REQUIRED). picture_word: child sees an image and picks the matching word (image_prompt REQUIRED). phonics_blend: pick the word matching phonics_rule from 4 same-rule options (phonics_rule REQUIRED). sentence_fill: fill the one blank in pattern by picking from 4 options (pattern REQUIRED). read_aloud: child reads target_text aloud, card auto-scores via speech recognition (target_text REQUIRED). letter_trace: trace a single letter (letter and case REQUIRED). phonics_blend 的 4 个选项都符合 phonics_rule, 孩子只能靠听音作答——question 要写成「听一听, 选出你听到的词」这类听音指令."
+        "description": "Quiz mode, exactly one of six. listen_choice: child hears a word via TTS and picks it from 4 options (tts_text REQUIRED). picture_word: child sees an image and picks the matching word (image_prompt REQUIRED). phonics_blend: pick the word matching phonics_rule from 4 same-rule options (phonics_rule REQUIRED). sentence_fill: fill the one blank in pattern by picking from 4 options (pattern REQUIRED). read_aloud: child reads target_text aloud, card auto-scores via speech recognition (target_text REQUIRED). letter_trace: trace a single letter (letter and case REQUIRED). phonics_blend 的 4 个选项都符合 phonics_rule, 孩子只能靠听音作答——question 要写成「听一听, 选出你听到的词」这类听音指令. listen_choice / picture_word / sentence_fill 的 correct_answer 和 4 个 options 只能从内置本地词库选词; 词库外的词会被校验拒绝并要求重出, picture_word 命中本地词时图片直接读取本地资源、不再生成。phonics_blend / read_aloud / letter_trace 是拼读/朗读/书写练习, 不按本地词库限制。本地词库（主题: 词）—— ${localVocabHint}。"
       },
       "question": {
         "type": "string",
@@ -1756,7 +1758,7 @@ function createEnglishQuizToolDefinition(): ToolDefinition {
       },
       "image_prompt": {
         "type": "string",
-        "description": "REQUIRED only for picture_word. English image-generation prompt with a single clearly recognizable subject, child illustration style. Other modes must omit it."
+        "description": "REQUIRED only for picture_word. English image-generation prompt with a single clearly recognizable subject, child illustration style. Keep it even when correct_answer is in the local word bank (the app prefers the bundled local image; the prompt stays as fallback). Other modes must omit it."
       },
       "phonics_rule": {
         "type": "string",
@@ -1811,7 +1813,7 @@ function createEnglishQuizToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     ENGLISH_QUIZ_TOOL_ID,
-    'Present an English quiz to the child as an interactive card. Six modes cover the five-step English lesson: listen_choice (hear and pick), picture_word (see image and pick), phonics_blend (same-rule word pick), sentence_fill (fill one blank), read_aloud (read aloud, auto-scored), letter_trace (trace a letter). Choice modes need options: EXACTLY 4 distinct words including correct_answer, all from the SAME theme. Use this INSTEAD of writing English questions in plain text — only this tool can grade answers and record stars. Pick mode and difficulty from the child_profile english_* levels. 严禁在文字里直接出英语题, 严禁跨主题混选项, 严禁 phonics_blend 里混入违反 phonics_rule 的词.',
+    'Present an English quiz to the child as an interactive card. Six modes cover the five-step English lesson: listen_choice (hear and pick), picture_word (see image and pick), phonics_blend (same-rule word pick), sentence_fill (fill one blank), read_aloud (read aloud, auto-scored), letter_trace (trace a letter). VOCABULARY BANK ONLY: for listen_choice / picture_word / sentence_fill, correct_answer and all 4 options MUST come from the bundled local word bank — the validator rejects out-of-bank words and asks you to retry. Choice modes need EXACTLY 4 distinct words including correct_answer, all from the SAME theme. Use this INSTEAD of writing English questions in plain text — only this tool can grade answers and record stars. Pick mode and difficulty from the child_profile english_* levels. 严禁在文字里直接出英语题, 严禁跨主题混选项, 严禁 phonics_blend 里混入违反 phonics_rule 的词.',
     parameters
   )
 
@@ -2519,32 +2521,33 @@ class PictureVocabExecutor implements ToolExecutor {
 }
 
 function createPictureVocabToolDefinition(): ToolDefinition {
+  const localVocabHint: string = getLocalVocabBilingualPromptHint()
   const rawSchemaJson: string = `{
     "type": "object",
     "properties": {
       "mode": {
         "type": "string",
         "enum": ["en", "zh"],
-        "description": "识词模式：en=看图选英文单词（options 为英文单词），zh=看图选汉字（options 为汉字）。根据教学目标选择，英语课用 en，识字课用 zh。"
+        "description": "识词模式：en=看图选英文单词（options 为英文单词），zh=看图选中文词（options 为完整中文词，如 苹果）。根据教学目标选择，英语课用 en，识字课用 zh。只能从内置本地词库选词（correct_answer 与 4 个选项都必须命中词库），命中时图片直接读本地、无需生成。"
       },
       "image_prompt": {
         "type": "string",
-        "description": "Detailed English prompt for generating the image. Should be child-friendly, colorful, and clearly depict a single recognizable object/concept. e.g. 'A bright red apple on a wooden table, children illustration style, colorful, simple background'"
+        "description": "Detailed English prompt for generating the image. Should be child-friendly, colorful, and clearly depict a single recognizable object/concept. Required even when the word is in the local bank (the app then prefers the bundled image); it is the fallback for non-local words."
       },
       "image": {
         "type": "string",
-        "description": "可选：若已先调 image_generation 生成了图片，直接传入返回的 base64 或 file_path，避免重复生成。未传时 handler 会用 image_prompt 兜底生成。"
+        "description": "可选：非本地词可先调 image_generation 并把返回的 base64/file_path 传进来；本地词库命中的词不要调 image_generation，应用会直接使用内置图。未传时 handler 会用 image_prompt 兜底生成。"
       },
       "correct_answer": {
         "type": "string",
-        "description": "正确答案。mode=en 时为英文单词（如 apple），mode=zh 时为汉字（如 苹）。必须出现在 options 中。"
+        "description": "正确答案。mode=en 时为英文单词（如 apple），mode=zh 时为对应的完整中文词（如 苹果，不要只写单字）。必须使用内置本地词库（命中时图片直接读本地，不生成）—— ${localVocabHint}。必须出现在 options 中，且 4 个选项也必须全部来自本地词库。"
       },
       "options": {
         "type": "array",
         "items": { "type": "string", "minLength": 1 },
         "minItems": 4,
         "maxItems": 4,
-        "description": "恰好 4 个选项字符串，必须包含 correct_answer。mode=en 时为 4 个英文单词，mode=zh 时为 4 个汉字。distractor 选取同类或形近词，避免过于明显。"
+        "description": "恰好 4 个选项字符串，必须包含 correct_answer。mode=en 时为 4 个英文单词，mode=zh 时为 4 个完整中文词（如 苹果、香蕉）。distractor 也必须来自本地词库，选取同类或形近词，避免过于明显。"
       },
       "question": {
         "type": "string",
@@ -2568,7 +2571,7 @@ function createPictureVocabToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     PICTURE_VOCAB_TOOL_ID,
-    'Present a picture vocabulary quiz: show an image and let the child choose the correct English word or Chinese character from 4 options. Use this INSTEAD of plain-text vocabulary questions — plain-text questions cannot grade answers or record stars/skill progress, only this tool can. Recommended flow: first call image_generation with a child-friendly image_prompt, then pass the result to the image field; or just pass image_prompt and the handler will generate the image. Set mode to en for English vocabulary or zh for Chinese character recognition. Provide exactly 4 options including the correct_answer, with plausible distractors (same category or visually/semantically similar). Set difficulty based on the child\'s english_vocab or chinese_writing level from child_profile.',
+    'Present a picture vocabulary quiz: show an image and let the child choose the correct English word or Chinese word from 4 options. Use this INSTEAD of plain-text vocabulary questions — plain-text questions cannot grade answers or record stars/skill progress, only this tool can. LOCAL BANK ONLY: correct_answer and all 4 options MUST come from the bundled local word bank — the validator rejects out-of-bank words and asks you to retry. For bank words, do NOT call image_generation; the app reads the bundled image directly (en matches the English word, zh matches the full Chinese label, e.g. 苹果). Set mode to en for English vocabulary or zh for Chinese word recognition. Provide exactly 4 options including the correct_answer, with plausible distractors from the SAME theme. Set difficulty based on the child\'s english_vocab or chinese_writing level from child_profile.',
     parameters
   )
 
@@ -2993,9 +2996,11 @@ function createMemoryMatchToolConfig(): ToolConfig {
 
 
 // ===== snake_game 工具 =====
-// 贪吃蛇（2026-10-06）：经典贪吃蛇小游戏, 参考 docs/tanshishe_game.html 原型。
-// 16×16 网格, 方向键/滑动控制; 红苹果 +连击分且变长, 金色星星限时出现值 5×连击分,
-// 速度随得分逐渐加快。交互由前端 SnakeCard 组件处理, 后端由 ToolExecutionService.handleSnakeGame 拦截。
+// 贪吃蛇（2026-10-06, 2026-10-22 目标果子制改版）：经典贪吃蛇小游戏, 参考 docs/tanshishe.html 原型。
+// 16×16 网格, 方向键/屏幕按钮/手指滑动三种方式控制; 红苹果 +连击分且变长, 金色星星限时出现值
+// 5×连击分。硬墙模式: 撞到边界或自己的身体直接结束。难度由老师决定, 每档 = 基础速度 × 目标
+// 果子数 (1=慢慢爬·8 颗, 2=正常速·12 颗, 3=飞快·16 颗), 吃满目标果子过关。
+// 交互由前端 SnakeCard 组件处理, 后端由 ToolExecutionService.handleSnakeGame 拦截。
 // 棋局由卡片内部运行, 不经 handler 注入（镜像 number_puzzle 模式）。
 
 interface SnakeGameArgs {
@@ -3010,11 +3015,13 @@ class SnakeGameExecutor implements ToolExecutor {
     try {
       const params = JSON.parse(_args) as SnakeGameArgs
       const difficulty = Math.max(1, Math.min(3, params.difficulty ?? 1))
+      const targetFruits = difficulty === 3 ? 16 : difficulty === 2 ? 12 : 8
       return JSON.stringify({
         difficulty: difficulty,
         grid_size: '16×16',
+        target_fruits: targetFruits,
         answered: false,
-        hint: '贪吃蛇已生成,请小朋友用方向键或滑动控制小蛇吃苹果。'
+        hint: '贪吃蛇已生成,请小朋友用方向键/按钮/滑动控制小蛇,吃满目标果子过关,小心别撞墙撞到自己。'
       })
     } catch (error) {
       return JSON.stringify(new ErrorOutput(`snake_game error: ${JSON.stringify(error)}`))
@@ -3028,7 +3035,7 @@ function createSnakeGameToolDefinition(): ToolDefinition {
     "properties": {
       "difficulty": {
         "type": "integer",
-        "description": "难度级别:1 = 慢慢爬(基础速度较慢,适合 5 岁),2 = 正常速(标准节奏,适合 6-7 岁),3 = 飞快(基础速度较快,适合熟练的孩子)。行进速度还会随得分逐渐加快。按 child_profile 中 logic_thinking / spatial_reasoning 的 level 选择,初次使用从 1 开始。",
+        "description": "难度级别(由老师决定):1 = 慢慢爬(基础速度慢,吃满 8 颗果子过关,适合 5 岁),2 = 正常速(吃满 12 颗过关,适合 6-7 岁),3 = 飞快(基础速度快,吃满 16 颗过关,适合熟练的孩子)。硬墙模式:撞到四周边界或自己的身体都直接结束。行进速度还会随吃到的果子逐渐加快。按 child_profile 中 logic_thinking / spatial_reasoning 的 level 选择,初次使用从 1 开始。",
         "enum": [1, 2, 3]
       }
     },
@@ -3040,7 +3047,7 @@ function createSnakeGameToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     SNAKE_GAME_TOOL_ID,
-    'Present the classic snake game (贪吃蛇) to the child as an interactive game. A snake crawls on a 16×16 grid; the child steers it with on-screen arrow buttons or swipes to eat red apples (grow longer, score combo points) and time-limited golden stars (5× combo points). Eating quickly within 2.2 seconds builds a combo multiplier up to ×5. The snake speeds up as the score grows, and hitting a wall or its own body ends the round. Difficulty maps to base speed: 1=slow (5y), 2=normal (6-7y), 3=fast. Pick difficulty 1-3 by the child\'s logic_thinking / spatial_reasoning level from child_profile. After the round ends (game over) or the child gives up, you receive result (score, apples_eaten, gold_stars, best_combo, length, time_seconds, completed). Then call child_profile update to record logic_thinking / spatial_reasoning based on performance.',
+    'Present the classic snake game (贪吃蛇) to the child as an interactive game. A snake crawls on a 16×16 grid with HARD WALLS: leaving the grid or hitting its own body immediately ends the round. The child steers with on-screen arrow buttons, keyboard arrow keys, or swipes on the board. Eating red apples grows the snake and scores combo points (eating quickly within 2.2 seconds builds a combo multiplier up to ×5); time-limited golden stars are worth 5× combo points. Each difficulty sets BOTH the base speed AND the fruit target the child must reach to win: 1=slow, 8 fruits (5y); 2=normal, 12 fruits (6-7y); 3=fast, 16 fruits. The snake speeds up as fruits are eaten. Pick difficulty 1-3 by the child\'s logic_thinking / spatial_reasoning level from child_profile. After the round (win by reaching the fruit target, or game over) or the child gives up, you receive result (score, apples_eaten, target_fruits, won, gold_stars, best_combo, length, time_seconds, completed). Then call child_profile update to record logic_thinking / spatial_reasoning based on performance.',
     parameters
   )
 
@@ -3051,7 +3058,7 @@ function createSnakeGameToolConfig(): ToolConfig {
   return new ToolConfig(
     SNAKE_GAME_TOOL_ID,
     '贪吃蛇',
-    '经典贪吃蛇:方向键或滑动控制小蛇吃苹果,连着吃连击分更高,金色星星限时 5 倍分。',
+    '经典贪吃蛇:方向键/按钮/滑动控制小蛇,吃满目标果子过关,硬墙模式。',
     null,
     true,
     false,

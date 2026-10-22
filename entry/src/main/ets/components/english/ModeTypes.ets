@@ -38,6 +38,7 @@ export interface EnglishQuizModeArgs {
   correctAnswer: string
   options: string[]
   imagePath: string            // handleEnglishQuiz 注入的 image_path (可能为 '')
+  imageRawfile: string         // 本地词库命中时注入的 rawfile 路径 (如 kids/vocab/apple.svg)
   imagePrompt: string
   phonicsRule: string
   pattern: string
@@ -87,7 +88,7 @@ export function modeDisplayName(mode: EnglishQuizMode): string {
 export function parseEnglishQuizModeArgs(argsJson: string): EnglishQuizModeArgs {
   const empty: EnglishQuizModeArgs = {
     mode: 'legacy', question: '', correctAnswer: '', options: [],
-    imagePath: '', imagePrompt: '', phonicsRule: '', pattern: '',
+    imagePath: '', imageRawfile: '', imagePrompt: '', phonicsRule: '', pattern: '',
     ttsText: '', targetText: '', phoneticHint: '', letter: '', letterCase: '',
     skillKey: 'english_vocab', difficulty: 1, stage: '', theme: '',
     legacyQuestionType: 'word', legacyLetterOptions: [], legacySoundText: ''
@@ -110,6 +111,7 @@ export function parseEnglishQuizModeArgs(argsJson: string): EnglishQuizModeArgs 
     correctAnswer: ((parsed['correct_answer'] as string) ?? '').trim(),
     options: [],
     imagePath: ((parsed['image_path'] as string) ?? '').trim(),
+    imageRawfile: ((parsed['image_rawfile'] as string) ?? '').trim(),
     imagePrompt: ((parsed['image_prompt'] as string) ?? '').trim(),
     phonicsRule: ((parsed['phonics_rule'] as string) ?? '').trim(),
     pattern: ((parsed['pattern'] as string) ?? '').trim(),

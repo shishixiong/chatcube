@@ -10,7 +10,11 @@
  *  - mode ∈ {en, zh}
  *  - options 恰好 4 个非空字符串
  *  - correct_answer 非空且在 options 里 (精确匹配)
+ *  - correct_answer 与 4 个 options 必须命中 utils/LocalVocabCatalog
+ *    (en 按英文词, zh 按中文释义; zh 允许唯一首字前缀命中)
  */
+
+import { findLocalVocabEntryForMode } from './LocalVocabCatalog'
 
 export interface PictureVocabValidationResult {
   ok: boolean
@@ -78,6 +82,17 @@ export function validatePictureVocabArgs(args: string): PictureVocabValidationRe
   }
   if (!found) {
     return fail(`picture_vocab 题的正确答案「${correct}」不在选项里, 请把正确答案放进 options 后重新出题`)
+  }
+
+  // 本地词库硬约束: correct_answer 与 4 个选项都必须能在本地词库中解析到
+  // (en 按英文词, zh 按中文释义; zh 允许唯一首字前缀命中)。
+  if (findLocalVocabEntryForMode(mode, correct) === null) {
+    return fail(`picture_vocab 只能从本地词库出题, 但「${correct}」不在本地词库中; 请从工具描述的中英词表选词后重新出题。`)
+  }
+  for (let i = 0; i < options.length; i++) {
+    if (findLocalVocabEntryForMode(mode, options[i]) === null) {
+      return fail(`picture_vocab 的选项「${options[i]}」不在本地词库中; correct_answer 与 4 个选项必须全部来自本地词库, 请换成本地词后重新出题。`)
+    }
   }
   return pass()
 }

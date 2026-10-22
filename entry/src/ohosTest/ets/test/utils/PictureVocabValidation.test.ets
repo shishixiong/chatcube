@@ -23,10 +23,10 @@ export default function pictureVocabValidationTest() {
       expect(r.ok).assertTrue()
     })
 
-    it('mode=zh: 4 个汉字选项含答案, 合法', 0, () => {
+    it('mode=zh: 4 个中文词选项含答案, 合法', 0, () => {
       const r = validatePictureVocabArgs(buildArgs({
         mode: 'zh', image_prompt: 'a red apple',
-        correct_answer: '苹', options: ['苹', '蕉', '葡', '梨'],
+        correct_answer: '苹果', options: ['苹果', '香蕉', '葡萄', '梨'],
         difficulty: 1, skill_key: 'chinese_writing'
       }))
       expect(r.ok).assertTrue()
@@ -68,6 +68,24 @@ export default function pictureVocabValidationTest() {
       }))
       expect(r.ok).assertFalse()
       expect(r.error.includes('不在选项里')).assertTrue()
+    })
+
+    it('correct_answer 不在本地词库, 拒绝', 0, () => {
+      const r = validatePictureVocabArgs(buildArgs({
+        mode: 'en', correct_answer: 'kiwi',
+        options: ['kiwi', 'apple', 'banana', 'pear']
+      }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('本地词库')).assertTrue()
+    })
+
+    it('选项含本地词库外的词, 拒绝', 0, () => {
+      const r = validatePictureVocabArgs(buildArgs({
+        mode: 'en', correct_answer: 'apple',
+        options: ['apple', 'banana', 'kiwi', 'pear']
+      }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('本地词库')).assertTrue()
     })
 
     it('correct_answer 为空, 拒绝', 0, () => {

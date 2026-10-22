@@ -1,9 +1,11 @@
 /**
  * SnakeCard - 贪吃蛇互动卡片
  *
- * 参考 docs/tanshishe_game.html 原型: 16×16 网格上方向键/滑动控制小蛇,
- * 吃红苹果变长并得连击分, 金色星星限时出现值 5×连击分, 速度随得分加快,
- * 撞墙/撞到自己游戏结束。难度 1-3 映射基础速度 (慢慢爬/正常速/飞快)。
+ * 参考 docs/tanshishe.html 原型: 16×16 网格上方向键/屏幕按钮/手指滑动三种方式控制小蛇,
+ * 吃红苹果变长并得连击分, 金色星星限时出现值 5×连击分。硬墙模式: 撞到边界或自己的
+ * 身体直接结束。难度 1-3 由老师(小星老师/小星游戏老师)经工具参数决定, 每档 =
+ * 基础速度 × 目标果子数 (1=慢慢爬·8 颗, 2=正常速·12 颗, 3=飞快·16 颗),
+ * 吃满目标果子过关(果园大通关); 速度随吃到的果子逐渐加快。
  *
  * CardShell 统一外壳 (feedbackAboveSlot 棋盘卡范式, 镜像 MemoryMatchCard),
  * direct 模式 (usesConfirm: false)。挂到 kids_games (小星游戏老师),
@@ -17,8 +19,11 @@
  *   重新发起工具调用控制节奏 (镜像 number_puzzle 先例); CardShell 放弃链提交 completed: false
  * - 控制入口: D-pad 方向按钮 (真实 Button, 防 List 滚动吞点击) + 棋盘滑动
  *   (priorityGesture + onTouch stopPropagation, 镜像 NumberPuzzleCard §6.3)
+ *   + 键盘方向键 (棋盘 focusable + focusOnTouch + onKeyEvent, 开局/恢复时
+ *   requestFocus; 点棋盘也可重新聚焦)
  * - 最佳得分按难度持久化 (snake_best_score_<difficulty>, bestScoresLoaded 竞态守卫
- *   镜像 MemoryMatchCard); 星级由 StarRewardService 按分数阈值计算 (≥25→3★, ≥12→2★, 其余 1★)
+ *   镜像 MemoryMatchCard); 星级由 StarRewardService 计算: 通关(吃满目标果子)
+ *   按难度 1/2/3 星, 中途撞墙未通关 1 星, 放弃 0 星
  * - 音效不做 (HTML 的 WebAudio 在 ArkTS 无对应简单基建), 保留 +N 得分飘字
  *
  * aboutToAppear 做防御性难度 clamp (双保险, 历史消息渲染不经 handler)。
@@ -27,6 +32,7 @@
 import { ToolCall } from '../models/ChatModels'
 import { getAppUiState } from '../state/AppUiState'
 import { getPreferencesService, PreferenceKeys } from '../services/PreferencesService'
+import { KeyCode } from '@ohos.multimodalInput.keyCode'
 import { CardShell } from './cardshell/CardShell'
 import { CardShellConfig } from './cardshell/CardShellTypes'
 import { CardShellState } from './cardshell/CardShellState'
@@ -38,6 +44,10 @@ export interface SnakeGameResult {
   grid_size: string
   score: number
   apples_eaten: number
+  /** 本档目标果子数 (难度 = 速度 × 果子数) */
+  target_fruits: number
+  /** 吃满目标果子过关 (果园大通关) */
+  won: boolean
   gold_stars: number
   best_combo: number
   length: number
@@ -49,13 +59,15 @@ interface SnakeLevel {
   difficulty: number
   name: string
   baseSpeedMs: number
+  /** 过关所需果子数 (难度系数的第二维度) */
+  targetFruits: number
 }
 
 /** 难度表: 与工具 schema description 严格一致 (BuiltinTools.createSnakeGameToolDefinition) */
 const SNAKE_LEVELS: SnakeLevel[] = [
-  { difficulty: 1, name: '慢慢爬', baseSpeedMs: 210 },
-  { difficulty: 2, name: '正常速', baseSpeedMs: 180 },
-  { difficulty: 3, name: '飞快', baseSpeedMs: 150 }
+  { difficulty: 1, name: '慢慢爬', baseSpeedMs: 210, targetFruits: 8 },
+  { difficulty: 2, name: '正常速', baseSpeedMs: 180, targetFruits: 12 },
+  { difficulty: 3, name: '飞快', baseSpeedMs: 150, targetFruits: 16 }
 ]
 
 const GRID: number = 16
@@ -67,9 +79,9 @@ const COMBO_MAX: number = 5
 /** 金星出现概率 / 存活时长 (与原型 0.4 / 6500ms 一致) */
 const GOLD_CHANCE: number = 0.4
 const GOLD_TTL_MS: number = 6500
-/** 速度下限与每分加速 (与原型 max(85, base - score*3) 一致) */
-const SPEED_FLOOR_MS: number = 85
-const SPEED_RAMP_PER_POINT: number = 3
+/** 速度下限与每颗果子加速 (难度 = 基础速度 × 目标果子数; 越接近过关越快) */
+const SPEED_FLOOR_MS: number = 100
+const SPEED_RAMP_PER_FRUIT: number = 4
 /** 渲染 tick 间隔 (HTML requestAnimationFrame 的简化等价) */
 const RENDER_TICK_MS: number = 50
 
@@ -132,6 +144,7 @@ export struct SnakeCard {
   @Local elapsedSeconds: number = 0
   @Local levelName: string = '正常速'
   @Local difficulty: number = 2
+  @Local targetFruits: number = 12
 
   // 覆盖层 (开始/倒计时/暂停/结束)
   @Local overlayShow: boolean = false
@@ -147,6 +160,7 @@ export struct SnakeCard {
   // 已答态恢复用
   @Local prevCompleted: boolean = false
   @Local prevScore: number = 0
+  private prevWon: boolean = false
 
   private snakeBody: GridPos[] = []
   private dir: GridPos = makePos(1, 0)
@@ -210,6 +224,7 @@ export struct SnakeCard {
     }
     this.difficulty = difficulty
     this.levelName = SNAKE_LEVELS[difficulty - 1].name
+    this.targetFruits = SNAKE_LEVELS[difficulty - 1].targetFruits
     this.quizOk = true
 
     if (this.isAnswered && this.answeredPayload !== '') {
@@ -220,9 +235,9 @@ export struct SnakeCard {
 
     this.shellConfig = {
       title: '贪吃蛇',
-      subtitle: `${this.levelName} · 16×16`,
+      subtitle: `${this.levelName} · 16×16 · 硬墙`,
       icon: $r('sys.symbol.dot_grid_2x2'),
-      stem: '吃苹果变长，连着吃连击分更高，金色星星 ×5',
+      stem: `屏幕按钮/键盘方向键/滑动都能转弯，吃满 ${this.targetFruits} 颗果子过关`,
       hasAudio: false,
       usesConfirm: false,
       feedbackTitleCorrect: '游戏结束',
@@ -271,6 +286,11 @@ export struct SnakeCard {
   }
 
   private restoreAnsweredState(difficulty: number): void {
+    // 先重置棋面, 再回填最终成绩——顺序反了会被 resetGame 清零 (存量 bug 修复)
+    this.resetGame()
+    this.gamePhase = 'over'
+    this.overlayShow = false
+
     // 已答态: 棋面 payload 不携带, 按确定性初始局面绘制作汇总视图 (同 NumberPuzzleCard
     // 还原 solvedBoard 思路), HUD 显示最终成绩。
     let completed = true
@@ -280,6 +300,8 @@ export struct SnakeCard {
       this.prevScore = prev.score ?? 0
       this.score = this.prevScore
       this.applesEaten = prev.apples_eaten ?? 0
+      this.targetFruits = (prev.target_fruits as number) ?? SNAKE_LEVELS[difficulty - 1].targetFruits
+      this.prevWon = prev.won === true
       this.goldStars = prev.gold_stars ?? 0
       this.bestCombo = prev.best_combo ?? 1
       this.snakeLength = prev.length ?? 3
@@ -292,10 +314,6 @@ export struct SnakeCard {
       this.shellState.feedbackSuppressed = true
     }
     this.prevCompleted = completed
-
-    this.resetGame()
-    this.gamePhase = 'over'
-    this.overlayShow = false
 
     this.shellState.isFinished = true
     this.shellState.submitted = true
@@ -361,10 +379,10 @@ export struct SnakeCard {
     this.redraw()
   }
 
-  /** 当前步进间隔: 基础速度随得分加快 (镜像原型 speedFor) */
+  /** 当前步进间隔: 基础速度随吃到的果子加快 (越接近过关越快) */
   private currentIntervalMs(): number {
     const base = SNAKE_LEVELS[this.difficulty - 1].baseSpeedMs
-    return Math.max(SPEED_FLOOR_MS, base - this.score * SPEED_RAMP_PER_POINT)
+    return Math.max(SPEED_FLOOR_MS, base - this.applesEaten * SPEED_RAMP_PER_FRUIT)
   }
 
   // ---- 棋局逻辑 (镜像原型 step) ----
@@ -400,6 +418,12 @@ export struct SnakeCard {
       this.applesEaten += 1
       this.score += this.combo
       this.addPopup('+' + this.combo, nx, ny, POPUP_APPLE)
+      this.snakeLength = this.snakeBody.length
+      // 吃满目标果子 → 过关 (果园大通关), 不再刷新苹果
+      if (this.applesEaten >= this.targetFruits) {
+        this.handleWin()
+        return
+      }
       this.placeFood()
       this.maybeGold()
     } else if (this.gold !== null && nx === this.gold.x && ny === this.gold.y) {
@@ -504,6 +528,38 @@ export struct SnakeCard {
     this.pushDir(dx, dy)
   }
 
+  // ---- 键盘方向键 (第三控制通道: 方向键/屏幕按钮/滑动三通道等价) ----
+
+  private handleKeyEvent(event: KeyEvent): void {
+    if (event.type !== KeyType.Down) {
+      return
+    }
+    let dx = 0
+    let dy = 0
+    if (event.keyCode === KeyCode.KEYCODE_DPAD_UP) {
+      dy = -1
+    } else if (event.keyCode === KeyCode.KEYCODE_DPAD_DOWN) {
+      dy = 1
+    } else if (event.keyCode === KeyCode.KEYCODE_DPAD_LEFT) {
+      dx = -1
+    } else if (event.keyCode === KeyCode.KEYCODE_DPAD_RIGHT) {
+      dx = 1
+    } else {
+      return
+    }
+    event.stopPropagation()
+    this.handleDirInput(dx, dy)
+  }
+
+  /** 开局/恢复时把焦点移到棋盘, 让键盘方向键立即生效 (失败由 focusOnTouch 兜底) */
+  private focusBoard(): void {
+    try {
+      this.getUIContext().getFocusController().requestFocus('snakeBoard')
+    } catch (_e) {
+      // 焦点请求失败静默: 点一下棋盘也能聚焦
+    }
+  }
+
   private togglePause(): void {
     if (this.gamePhase === 'playing') {
       this.gamePhase = 'paused'
@@ -518,6 +574,7 @@ export struct SnakeCard {
       this.lastTickTs = Date.now()
       this.lastEatAt = Date.now()
       this.overlayShow = false
+      this.focusBoard()
     }
   }
 
@@ -561,13 +618,14 @@ export struct SnakeCard {
       this.startTime = Date.now()
       this.lastEatAt = Date.now()
       this.startRenderLoop()
+      this.focusBoard()
     }
   }
 
   private showStartOverlay(): void {
     this.overlayCount = ''
     this.overlayTitle = '贪吃蛇'
-    this.overlaySub = '吃苹果变长，金星限时 5 倍分'
+    this.overlaySub = `吃满 ${this.targetFruits} 颗果子过关 · 撞墙或撞到自己都结束`
     this.overlayBtnText = '开始游戏'
     this.overlayShow = true
   }
@@ -584,12 +642,27 @@ export struct SnakeCard {
 
   // ---- 结算 ----
 
+  /** 撞墙/撞到自己: 玩到结束但未通关 (completed: true, won: false) */
   private handleGameOver(): void {
     if (this.gamePhase !== 'playing') {
       return
     }
     this.gamePhase = 'over'
     this.combo = 1
+    this.finalizeRound(false)
+  }
+
+  /** 吃满目标果子: 果园大通关 (completed: true, won: true) */
+  private handleWin(): void {
+    if (this.gamePhase !== 'playing') {
+      return
+    }
+    this.gamePhase = 'over'
+    this.combo = 1
+    this.finalizeRound(true)
+  }
+
+  private finalizeRound(won: boolean): void {
     this.stopRenderLoop()
     this.elapsedSeconds = this.startTime > 0 ? Math.floor((Date.now() - this.startTime) / 1000) : this.elapsedSeconds
     void this.saveBestScoreIfImproved()
@@ -599,12 +672,17 @@ export struct SnakeCard {
     this.shellState.isFinished = true
     this.shellState.submitted = true
     this.shellState.isCorrect = true
-    this.shellState.feedbackTitle = isNewBest ? '新纪录！' : '游戏结束'
+    if (won) {
+      this.shellState.feedbackTitle = isNewBest ? '果园大通关 · 新纪录！' : '果园大通关！'
+      this.shellState.feedbackBadge = isNewBest ? '新纪录' : '过关'
+    } else {
+      this.shellState.feedbackTitle = isNewBest ? '新纪录！' : '游戏结束'
+      this.shellState.feedbackBadge = isNewBest ? '新纪录' : ''
+    }
     this.shellState.feedbackDetail = this.getBannerSub()
-    this.shellState.feedbackBadge = isNewBest ? '新纪录' : ''
     this.shellState.headPill = '已完成'
     this.shellState.headPillColor = SUCCESS_GREEN
-    this.submitAnswer(true)
+    this.submitAnswer(true, won)
   }
 
   private handleGiveUp(): void {
@@ -626,16 +704,18 @@ export struct SnakeCard {
     this.shellState.feedbackDetail = this.getBannerSub()
     this.shellState.headPill = '已放弃'
     this.shellState.headPillColor = GIVEUP_ORANGE
-    this.submitAnswer(false)
+    this.submitAnswer(false, false)
   }
 
-  private submitAnswer(completed: boolean): void {
+  private submitAnswer(completed: boolean, won: boolean): void {
     const payload: SnakeGameResult = {
       difficulty: this.difficulty,
       level_name: this.levelName,
       grid_size: '16×16',
       score: this.score,
       apples_eaten: this.applesEaten,
+      target_fruits: this.targetFruits,
+      won: won,
       gold_stars: this.goldStars,
       best_combo: this.bestCombo,
       length: this.snakeLength,
@@ -647,17 +727,24 @@ export struct SnakeCard {
 
   private getBannerTitle(): string {
     if (this.gamePhase === 'over' && this.shellState.isCorrect) {
-      return this.isNewBest() && this.bestScore >= 0 ? '新纪录！' : '游戏结束'
+      if (this.isNewBest() && this.bestScore >= 0) {
+        return this.gameWonRound() ? '果园大通关 · 新纪录！' : '新纪录！'
+      }
+      return this.gameWonRound() ? '果园大通关！' : '游戏结束'
     }
     if (this.prevCompleted) {
-      return '游戏结束'
+      return this.prevWon ? '果园大通关！' : '游戏结束'
     }
     return '没关系，下次再试试～'
   }
 
+  private gameWonRound(): boolean {
+    return this.applesEaten >= this.targetFruits
+  }
+
   private getBannerSub(): string {
     const best = this.bestScore >= 0 ? ` · 最佳 ${this.bestScore}` : ''
-    return `得分 ${this.score}${best} · 苹果 ${this.applesEaten} · 金星 ${this.goldStars}`
+    return `得分 ${this.score}${best} · 果子 ${this.applesEaten}/${this.targetFruits} · 金星 ${this.goldStars}`
   }
 
   // ---- 最佳得分 (按难度, bestScoresLoaded 竞态守卫镜像 MemoryMatchCard) ----
@@ -903,12 +990,13 @@ export struct SnakeCard {
         .fontSize(13)
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.text_primary'))
+      Text(`果子 ${this.applesEaten}/${this.targetFruits}`)
+        .fontSize(11)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.applesEaten >= this.targetFruits ? SUCCESS_GREEN : $r('app.color.text_secondary'))
       Text(`连击 x${this.combo}`)
         .fontSize(11)
         .fontColor(this.combo > 1 ? '#FF6B6B' : $r('app.color.text_tertiary'))
-      Text(`长度 ${this.snakeLength}`)
-        .fontSize(11)
-        .fontColor($r('app.color.text_tertiary'))
       Blank()
       if (this.gamePhase === 'playing' || this.gamePhase === 'paused') {
         Button(this.gamePhase === 'paused' ? '继续' : '暂停')
@@ -949,6 +1037,12 @@ export struct SnakeCard {
     .backgroundColor(BOARD_BG)
     .constraintSize({ maxWidth: 340 })
     .alignSelf(ItemAlign.Center)
+    .id('snakeBoard')
+    .focusable(true)
+    .focusOnTouch(true)
+    .onKeyEvent((event: KeyEvent) => {
+      this.handleKeyEvent(event)
+    })
     .onTouch((e: TouchEvent) => {
       e.stopPropagation()
     })
@@ -1024,6 +1118,9 @@ export struct SnakeCard {
         this.DirButton(0, 0, 1, '向下')
         this.DirButton(-90, 1, 0, '向右')
       }
+      Text('方向键 / 按钮 / 滑动都能转弯')
+        .fontSize(11)
+        .fontColor($r('app.color.text_tertiary'))
     }
     .width('100%')
     .alignItems(HorizontalAlign.Center)

@@ -76,6 +76,7 @@ import { validateAndNormalizeCategorization } from '../utils/CategorizationValid
 import { validateMathQuizArgs } from '../utils/MathQuizValidation'
 import { validateMathTeachArgs, MathTeachValidationResult } from '../utils/MathTeachValidation'
 import { validateEnglishQuizArgs } from '../utils/EnglishQuizValidation'
+import { findLocalVocabEntry, findLocalVocabEntryForMode } from '../utils/LocalVocabCatalog'
 import { validatePictureVocabArgs } from '../utils/PictureVocabValidation'
 import { validateListeningQuizArgs } from '../utils/ListeningQuizValidation'
 import { validatePinyinQuizArgs } from '../utils/PinyinQuizValidation'
@@ -950,9 +951,22 @@ export class ToolExecutionService {
       const resolvedMode = englishValidation.mode
       const needsImage = resolvedMode === 'picture_word' || resolvedMode === 'word' || resolvedMode === 'sentence'
 
+      // 本地词库优先: picture_word / legacy word 的答案命中内置词库时,
+      // 直接把 rawfile 插图路径注入 arguments, 跳过缓存查询与在线生成。
+      const localAnswerRaw = parsed['correct_answer']
+      const localAnswer = typeof localAnswerRaw === 'string' ? (localAnswerRaw as string) : ''
+      const localEntry = (needsImage && resolvedMode !== 'sentence' && localAnswer !== '')
+        ? findLocalVocabEntry(localAnswer)
+        : null
+
       if (!needsImage) {
         console.info('ToolExecutionService',
           `english_quiz mode=${resolvedMode}: skip image pipeline`)
+      } else if (localEntry !== null) {
+        parsed['image_rawfile'] = localEntry.image as Object
+        toolCall.arguments = JSON.stringify(parsed)
+        console.info('ToolExecutionService',
+          `english_quiz local_vocab HIT: word="${localAnswer}", image="${localEntry.image}"`)
       } else {
         const question = (parsed['question'] as string) ?? ''
         const answer = (parsed['correct_answer'] as string) ?? ''
@@ -1092,7 +1106,7 @@ export class ToolExecutionService {
   }
 
   // picture_vocab 特殊路径: 看图识词互动工具, 由 PictureVocabCard 收集小朋友的选择。
-  // 图片优先用 AI 传入的 image 字段 (base64 或 file_path), 未传时用 image_prompt 兜底生成。
+  // 图片本地词库优先 (en 按英文词 / zh 按中文释义命中 rawfile), 未命中再用 AI image 或 image_prompt 兜底生成。
   private async handlePictureVocab(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
     toolCall.toolId = PICTURE_VOCAB_TOOL_ID
     if (toolCall.displayName.trim() === '') {
@@ -1142,7 +1156,14 @@ export class ToolExecutionService {
       const correctAnswer = (parsed['correct_answer'] as string) ?? ''
       const mode = (parsed['mode'] as string) ?? 'en'
 
-      if (imageField !== '') {
+      // 本地词库优先: en 按英文词、zh 按中文释义查; 命中就注入 rawfile, 不再生图。
+      const localEntry = findLocalVocabEntryForMode(mode, correctAnswer)
+      if (localEntry !== null) {
+        parsed['image_rawfile'] = localEntry.image as Object
+        toolCall.arguments = JSON.stringify(parsed)
+        console.info('ToolExecutionService',
+          `picture_vocab local_vocab HIT: mode="${mode}", answer="${correctAnswer}", image="${localEntry.image}"`)
+      } else if (imageField !== '') {
         parsed['image_path'] = imageField as Object
         toolCall.arguments = JSON.stringify(parsed)
         console.info('ToolExecutionService', `picture_vocab: using AI-provided image for "${correctAnswer}"`)

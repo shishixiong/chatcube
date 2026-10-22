@@ -197,14 +197,15 @@ export class StarRewardService {
       if (completed !== true) {
         return 0
       }
-      // 贪吃蛇: 完成一局 (玩到游戏结束) 至少 1 星鼓励参与,
-      // 分数阈值调节——≥25 得 3 星, ≥12 得 2 星, 其余 1 星。放弃 0 星。
-      const score = (payload['score'] as number) ?? 0
-      if (score >= 25) {
-        return 3
-      }
-      if (score >= 12) {
-        return 2
+      // 贪吃蛇(目标果子制): 通关(吃满目标果子)按难度授星——1=1星, 2=2星, 3=3星;
+      // 中途撞墙未通关给 1 星鼓励参与; 放弃 0 星。
+      // 旧 payload 无 won 字段(2026-10-22 前的对局)按未通关计 1 星。
+      if (payload['won'] === true) {
+        const difficulty = (payload['difficulty'] as number) ?? 1
+        if (difficulty >= 3) {
+          return 3
+        }
+        return difficulty >= 2 ? 2 : 1
       }
       return 1
     }

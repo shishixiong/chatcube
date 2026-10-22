@@ -16,10 +16,12 @@ import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { CardShell } from './cardshell/CardShell'
 import { CardShellConfig } from './cardshell/CardShellTypes'
 import { CardShellState } from './cardshell/CardShellState'
+import { findLocalVocabEntryForMode } from '../utils/LocalVocabCatalog'
 
 interface PictureVocabQuestion {
   mode: string
   imagePath: string
+  imageRawfile: string
   imagePrompt: string
   correctAnswer: string
   options: string[]
@@ -48,11 +50,13 @@ export struct PictureVocabCard {
   @Local showResult: boolean = false
   @Local isCorrect: boolean = false
   @Local displayImagePath: string = ''
+  @Local displayImageRawfile: string = ''
   @Local isImageLoading: boolean = false
   @Local imageLoadFailed: boolean = false
   @Local quiz: PictureVocabQuestion = {
     mode: 'en',
     imagePath: '',
+    imageRawfile: '',
     imagePrompt: '',
     correctAnswer: '',
     options: [],
@@ -124,6 +128,14 @@ export struct PictureVocabCard {
     }
     try {
       const parsed = JSON.parse(this.toolCall.arguments) as Record<string, Object>
+      const imageRawfile = (parsed['image_rawfile'] as string) ?? ''
+      if (imageRawfile !== '' && imageRawfile !== this.displayImageRawfile) {
+        this.displayImageRawfile = imageRawfile
+        this.displayImagePath = ''
+        this.isImageLoading = false
+        this.imageLoadFailed = false
+        return
+      }
       const imagePath = (parsed['image_path'] as string) ?? (parsed['image'] as string) ?? ''
       if (imagePath !== '' && imagePath !== this.displayImagePath) {
         this.quiz.imagePath = imagePath
@@ -138,6 +150,7 @@ export struct PictureVocabCard {
     const result: PictureVocabQuestion = {
       mode: 'en',
       imagePath: '',
+      imageRawfile: '',
       imagePrompt: '',
       correctAnswer: '',
       options: [],
@@ -149,6 +162,7 @@ export struct PictureVocabCard {
       const parsed = JSON.parse(this.toolCall.arguments) as Record<string, Object>
       result.mode = (parsed['mode'] as string) ?? 'en'
       result.imagePath = (parsed['image_path'] as string) ?? (parsed['image'] as string) ?? ''
+      result.imageRawfile = (parsed['image_rawfile'] as string) ?? ''
       result.imagePrompt = (parsed['image_prompt'] as string) ?? ''
       result.correctAnswer = (parsed['correct_answer'] as string) ?? ''
       const opts = parsed['options']
@@ -181,6 +195,20 @@ export struct PictureVocabCard {
 
   private resolveImage(): void {
     const quiz = this.quiz
+    if (quiz.imageRawfile !== '') {
+      this.displayImageRawfile = quiz.imageRawfile
+      this.isImageLoading = false
+      this.imageLoadFailed = false
+      return
+    }
+    // 本地词库兜底: 注入尚未到达时也能从 correct_answer 直接命中本地图
+    const localEntry = findLocalVocabEntryForMode(quiz.mode, quiz.correctAnswer)
+    if (localEntry !== null) {
+      this.displayImageRawfile = localEntry.image
+      this.isImageLoading = false
+      this.imageLoadFailed = false
+      return
+    }
     if (quiz.imagePath !== '') {
       this.displayImagePath = quiz.imagePath
       this.isImageLoading = false
@@ -249,6 +277,23 @@ export struct PictureVocabCard {
       return 1
     }
     return opt === this.selectedOption ? 3 : 1
+  }
+
+  // 本地词库的 zh 选项是完整中文词（1-3 字），按字数收缩字号，避免 4 列选项溢出
+  private getOptionFontSize(opt: string): number {
+    if (this.quiz.mode === 'zh') {
+      if (opt.length >= 3) {
+        return 18
+      }
+      return opt.length === 2 ? 24 : 32
+    }
+    if (opt.length >= 9) {
+      return 16
+    }
+    if (opt.length >= 7) {
+      return 18
+    }
+    return 22
   }
 
   private getOptionFontColor(opt: string): ResourceColor {
@@ -325,7 +370,14 @@ export struct PictureVocabCard {
 
   @Builder
   ImageArea() {
-    if (this.displayImagePath !== '') {
+    if (this.displayImageRawfile !== '') {
+      Image($rawfile(this.displayImageRawfile))
+        .width('100%')
+        .height(180)
+        .objectFit(ImageFit.Contain)
+        .borderRadius(10)
+        .backgroundColor($r('app.color.surface'))
+    } else if (this.displayImagePath !== '') {
       Image(this.toFileUrl(this.displayImagePath))
         .width('100%')
         .height(180)
@@ -373,9 +425,12 @@ export struct PictureVocabCard {
         ForEach(this.quiz.options, (opt: string, index: number) => {
           Column() {
             Text(opt)
-              .fontSize(this.quiz.mode === 'zh' ? 32 : 22)
+              .fontSize(this.getOptionFontSize(opt))
               .fontWeight(FontWeight.Bold)
               .fontColor(this.getOptionFontColor(opt))
+              .width('100%')
+              .textAlign(TextAlign.Center)
+              .maxLines(this.quiz.mode === 'zh' ? 1 : 2)
           }
           .layoutWeight(1)
           .height(72)

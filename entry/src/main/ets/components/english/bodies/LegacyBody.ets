@@ -20,12 +20,14 @@ import { SpeechRecognitionCallback } from '../../../services/SpeechRecognitionSe
 import { ServiceRegistry } from '../../../services/ServiceRegistry'
 import { EnglishQuizAnswerPayload } from '../ModeTypes'
 import { resolveQuizImagePath } from '../QuizImageResolver'
+import { findLocalVocabEntry } from '../../../utils/LocalVocabCatalog'
 import { common } from '@kit.AbilityKit'
 
 interface EnglishQuizQuestion {
   word: string
   sentence: string
   imagePath: string
+  imageRawfile: string
   imagePrompt: string
   correctAnswer: string
   questionType: string
@@ -57,6 +59,7 @@ export struct LegacyBody {
   @Local resolvedImagePath: string = ''
   // 供 @Builder 直接读取的展示路径, 避免方法调用导致 V2 响应式追踪失效
   @Local displayImagePath: string = ''
+  @Local displayImageRawfile: string = ''
   @Local isImageLoading: boolean = false
   @Local imageLoadFailed: boolean = false
   // ===== phonics_choice 题型专用状态 =====
@@ -150,6 +153,13 @@ export struct LegacyBody {
     }
     try {
       const parsed = JSON.parse(this.toolCall.arguments) as Record<string, Object>
+      const imageRawfile = (parsed['image_rawfile'] as string) ?? ''
+      if (imageRawfile !== '' && imageRawfile !== this.displayImageRawfile) {
+        this.displayImageRawfile = imageRawfile
+        this.isImageLoading = false
+        this.imageLoadFailed = false
+        return
+      }
       const imagePath = (parsed['image_path'] as string) ?? ''
       if (imagePath !== '' && imagePath !== this.displayImagePath) {
         this.resolvedImagePath = imagePath
@@ -190,6 +200,23 @@ export struct LegacyBody {
   private resolveImage(): void {
     const quiz = this.parseQuiz()
 
+    // 本地词库命中: 图片随包内置, 直接读 rawfile
+    if (quiz.imageRawfile !== '') {
+      this.displayImageRawfile = quiz.imageRawfile
+      this.isImageLoading = false
+      this.imageLoadFailed = false
+      return
+    }
+    // 兜底: 注入尚未到达时也先按本地词库查一次 (仅单词题)
+    if (quiz.questionType === 'word' || quiz.questionType === '') {
+      const localEntry = findLocalVocabEntry(quiz.word)
+      if (localEntry !== null) {
+        this.displayImageRawfile = localEntry.image
+        this.isImageLoading = false
+        this.imageLoadFailed = false
+        return
+      }
+    }
     // 已有 image_path (由 handleEnglishQuiz 注入)
     if (quiz.imagePath !== '') {
       this.resolvedImagePath = quiz.imagePath
@@ -233,6 +260,7 @@ export struct LegacyBody {
       word: '',
       sentence: '',
       imagePath: '',
+      imageRawfile: '',
       imagePrompt: '',
       correctAnswer: '',
       questionType: 'word',
@@ -260,6 +288,7 @@ export struct LegacyBody {
         result.sentence = (parsed['sentence'] as string) ?? ''
       }
       result.imagePath = (parsed['image_path'] as string) ?? ''
+      result.imageRawfile = (parsed['image_rawfile'] as string) ?? ''
       result.imagePrompt = (parsed['image_prompt'] as string) ?? ''
       result.correctAnswer = (parsed['correct_answer'] as string) ?? ''
       result.questionType = (parsed['question_type'] as string) ?? 'word'
@@ -597,8 +626,15 @@ export struct LegacyBody {
   @Builder
   QuizContent() {
     Column({ space: 10 }) {
-      // 图片区域: 直接读取 @Local displayImagePath, 确保 V2 响应式追踪生效
-      if (this.displayImagePath !== '') {
+      // 图片区域: 本地词库命中时优先读 rawfile, 否则读文件路径
+      if (this.displayImageRawfile !== '') {
+        Image($rawfile(this.displayImageRawfile))
+          .width('100%')
+          .height(180)
+          .objectFit(ImageFit.Contain)
+          .borderRadius(10)
+          .backgroundColor($r('app.color.surface'))
+      } else if (this.displayImagePath !== '') {
         Image(this.toFileUrl(this.displayImagePath))
           .width('100%')
           .height(180)

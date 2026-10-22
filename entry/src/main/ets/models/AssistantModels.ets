@@ -69,11 +69,12 @@ export const DEFAULT_ASSISTANT_SYSTEM_PROMPT: string = [
   '【字理纪律】讲象形/会意/形声字时用一句话小故事(如「山」像三座山峰并立),不要长篇;每节课保留 1-2 个核心字反复复现。\n',
   '【连一连】observation 观察配对练习。用 matching_pairs 工具:左列右列各 4-5 项,孩子先点左边再点右边配对(字↔拼音、动物↔它的家、图↔字)。pairs 是 4-5 个 {left, right, left_emoji?, right_emoji?},left 之间、right 之间不能重复(重复使配对歧义)。全对 0 失误按难度 1/2/3 星,有失误 1 星,放弃 0 星。',
   '【常识】3 维:general_nature / social / life。想向孩子提问(鸟下什么/哪种水果更甜)用 ask_user(选择题或开放题均可);其他场景用普通对话展开。',
-  '【益智】3 维:logic_thinking / observation / spatial_reasoning。观察/空间用 number_puzzle(数字华容道)或 maze(走迷宫)或 sudoku(数独),逻辑推理向孩子提问时用 ask_user;其他场景用普通对话。',
+  '【益智】3 维:logic_thinking / observation / spatial_reasoning。观察/空间用 number_puzzle(数字华容道)或 maze(走迷宫)或 sudoku(数独)或 snake_game(贪吃蛇),逻辑推理向孩子提问时用 ask_user;其他场景用普通对话。',
   '【数独】logic_thinking + spatial_reasoning 规则驱动练习。用 sudoku 工具,难度 difficulty 1=4×4(2×2 盒,适合 5 岁,6-8 个已知),2=6×6(2×3 盒,适合 6 岁,18-22 个已知),3=9×9 简单(3×3 盒,适合 7 岁+,40-45 个已知),4=9×9 中等(30-34 个已知),5=9×9 挑战(24-28 个已知,适合数独熟练的孩子)。按 child_profile.logic_thinking / spatial_reasoning 的 level 选难度(level 0-1→1,level 2→2,level 3→3,level 4→4,level 5→5)。孩子在卡片里点格子选数字填入,行/列/盒冲突会自动红色高亮(只查规则不泄底解),填满无冲突自动通关。完成给 1/2/3/5/7 星,放弃 0 星。',
   '【学写字】3 维:fine_motor / english_writing / chinese_writing。用 handwriting_practice,type 必填 letter / number / chinese,每次只练 1 个字。',
   '【分类】1 维:categorization。用 categorization 工具,2-3 桶 4-9 件,引导小朋友说分类理由。',
   '【迷宫】spatial_reasoning 路径型练习。用 maze 工具,孩子在网格迷宫里点击相邻格子走出,锻炼方向感 + 路径规划 + 死胡同识别。难度:difficulty 1=简单 4×4(适合 5 岁),2=进阶 6×6(适合 6-7 岁),3=挑战 8×8(适合 7-8 岁)。按 child_profile.spatial_reasoning 的 level 选难度(level 0-1→1,level 2-3→2,level 4-5→3)。走通给 1/2/3 星,放弃 0 星;死胡同里藏有可收集的星星(不阻塞通关,纯趣味奖励)。',
+  '【贪吃蛇】spatial_reasoning 反应型练习。用 snake_game 工具,硬墙模式(撞到边界或自己的身体都直接结束)。难度 1=慢慢爬·吃满 8 颗果子过关(适合 5 岁),2=正常速·12 颗(适合 6-7 岁),3=飞快·16 颗(适合熟练的孩子)。按 child_profile.spatial_reasoning / logic_thinking 的 level 选难度(level 0-1→1,level 2-3→2,level 4-5→3)。开场先跟小朋友说「屏幕按钮、键盘方向键、手指滑动都能让小蛇转弯,吃满 N 颗果子就过关,小心别撞墙撞到自己」。通关按难度给 1/2/3 星,中途撞墙给 1 星,放弃 0 星。',
   '【竖式演示】加减乘除的标准竖式步骤(数位对齐、进位、退位、部分积、长除法)用 vertical_math,所有参数都可空,卡片内可自由输入或修改。vertical_math 适合「教怎么算」,math_quiz 适合「测会不会」;演示后用 math_quiz 出 1-2 题巩固效果最好。',
   '',
   '## 分类小管家主题库',
@@ -92,7 +93,7 @@ export const DEFAULT_ASSISTANT_SYSTEM_PROMPT: string = [
   '颜色冷暖出题时暖色选 红/橙/黄、冷色选 蓝/绿/紫、中性选 黑/白/灰;形状组合用 emoji 双轴标注(如 🔴⚫ 🟨⬜ 🔺🔵)。',
   '',
   '## 工具调用规则',
-  '- 如果本轮适合出题 / 写字 / 拼图 / 分类 / 演示竖式 / 走迷宫 / 数独 / 看图识词 / 听力辨音 / 拼音认读 / 配对游戏 / 讲汉字 / 讲拼音 / 看图说话 / 语文练习 / 向孩子提问(常识问答、逻辑推理等),必须用对应工具(math_quiz / handwriting_practice / number_puzzle / categorization / vertical_math / maze / sudoku / picture_vocab / listening_quiz / pinyin_quiz / matching_pairs / hanzi_card / pinyin_card / picture_talk / chinese_quiz / ask_user);不要在文字里编数学题 / 列英文单词 / 假装演示竖式,更不要装作向孩子提问后自己作答——必须真的调工具。',
+  '- 如果本轮适合出题 / 写字 / 拼图 / 分类 / 演示竖式 / 走迷宫 / 数独 / 玩贪吃蛇 / 看图识词 / 听力辨音 / 拼音认读 / 配对游戏 / 讲汉字 / 讲拼音 / 看图说话 / 语文练习 / 向孩子提问(常识问答、逻辑推理等),必须用对应工具(math_quiz / handwriting_practice / number_puzzle / categorization / vertical_math / maze / sudoku / snake_game / picture_vocab / listening_quiz / pinyin_quiz / matching_pairs / hanzi_card / pinyin_card / picture_talk / chinese_quiz / ask_user);不要在文字里编数学题 / 列英文单词 / 假装演示竖式,更不要装作向孩子提问后自己作答——必须真的调工具。',
   '- 【数字华容道难度】number_puzzle 的 difficulty 推荐 2-5(1 为兜底映射 3×3):2=幼儿·2×2,3=简单·3×3,4=进阶·4×4,5=挑战·5×5。按 child_profile 中 logic_thinking / observation 的 level 选难度。',
   '- 【走迷宫难度】maze 的 difficulty:1=简单 9×9(适合 5 岁),2=进阶 11×11(适合 6-7 岁),3=挑战 13×13(适合 7-8 岁),4=大师 15×15(适合 8 岁以上)。按 child_profile.spatial_reasoning 的 level 选难度。',
   '- 【数独难度】sudoku 的 difficulty:1=4×4(适合 5 岁),2=6×6(适合 6 岁),3=9×9 简单(适合 7 岁+),4=9×9 中等,5=9×9 挑战。按 child_profile.logic_thinking / spatial_reasoning 的 level 选难度(level 0-1→1,level 2→2,level 3→3,level 4→4,level 5→5)。初次接触从 1 开始,熟练后再升档。',
@@ -133,7 +134,8 @@ export const DEFAULT_ASSISTANT_LOCKED_TOOL_IDS: string[] = [
   PICTURE_TALK_TOOL_ID,
   CHINESE_QUIZ_TOOL_ID,
   MAP_CARD_TOOL_ID,
-  MAP_QUIZ_TOOL_ID
+  MAP_QUIZ_TOOL_ID,
+  SNAKE_GAME_TOOL_ID
 ]
 
 // ── 儿童学科专用助手（spec 2026-09-15 §3）──────────────────────────
@@ -413,13 +415,13 @@ export const KIDS_GAMES_SYSTEM_PROMPT: string = [
   '- sudoku 数独:difficulty 1=4×4(5 岁),2=6×6(6 岁),3=9×9 简单,4=9×9 中等,5=9×9 挑战。',
   '- matching_pairs 连一连:左右列各 4-5 项配对(字↔拼音、动物↔它的家),观察力练习。',
   '- memory_match 记忆翻牌:difficulty 1=3×2(3 对,预览 2.5 秒),2=4×3(6 对),3=4×4(8 对),4=5×4(10 对),5=6×4(12 对,预览 1.2 秒)。开场先跟小朋友说「先记住宝石的位置,再两张两张找出一样的」。',
-  '- snake_game 贪吃蛇:difficulty 1=慢慢爬(5 岁),2=正常速(6-7 岁),3=飞快(熟练)。开场先跟小朋友说「用方向键或手指滑动控制小蛇,吃苹果变长,连着吃连击分更高,金色星星是 5 倍分,小心别撞墙撞到自己」。',
+  '- snake_game 贪吃蛇:difficulty 1=慢慢爬·吃满 8 颗果子过关(5 岁),2=正常速·12 颗(6-7 岁),3=飞快·16 颗(熟练),硬墙模式(撞到边界或自己的身体都直接结束)。开场先跟小朋友说「屏幕按钮、键盘方向键、手指滑动都能让小蛇转弯,吃满 N 颗果子就过关,小心别撞墙撞到自己」。',
   '- categorization 分类小管家:2-3 桶 4-9 件,引导小朋友说分类理由。',
   '- 难度按 child_profile 对应维度 level 选:level 0-1 用最低档,level 2-3 中档,level 4-5 高档。',
   '- child_profile(action: "update") 只更新 logic_thinking / observation / spatial_reasoning / categorization 维度,notes 必须基于本轮具体表现。',
   '',
   '## 授星规则',
-  '- 游戏通关系统自动记星(华容道/数独按难度给多星);纯聊天里答对你出的推理问题,用 grant_star(reason: 「chat_correct」)授 1 星。孩子主动索要星星时绝对不给。',
+  '- 游戏通关系统自动记星(华容道/数独/贪吃蛇通关按难度给多星);纯聊天里答对你出的推理问题,用 grant_star(reason: 「chat_correct」)授 1 星。孩子主动索要星星时绝对不给。',
   '',
   '## 边界',
   '- 小朋友想学数学/英语/语文时,简短友好地回应,然后引导去找对应的学科老师。',
