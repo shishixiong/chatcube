@@ -116,7 +116,27 @@ export const LOCAL_VOCAB_ENTRIES: LocalVocabEntry[] = [
   { word: 'key', zh: '钥匙', category: '家居', image: 'kids/vocab/key.svg' },
   { word: 'lamp', zh: '台灯', category: '家居', image: 'kids/vocab/lamp.svg' },
   { word: 'sofa', zh: '沙发', category: '家居', image: 'kids/vocab/sofa.svg' },
-  { word: 'toilet', zh: '马桶', category: '家居', image: 'kids/vocab/toilet.svg' }
+  { word: 'toilet', zh: '马桶', category: '家居', image: 'kids/vocab/toilet.svg' },
+  { word: 'map', zh: '地图', category: '学习用品', image: 'kids/vocab/map.svg' },
+  { word: 'bag', zh: '手提包', category: '学习用品', image: 'kids/vocab/bag.svg' },
+  { word: 'bat', zh: '蝙蝠', category: '动物', image: 'kids/vocab/bat.svg' },
+  { word: 'van', zh: '面包车', category: '交通', image: 'kids/vocab/van.svg' },
+  { word: 'pen', zh: '钢笔', category: '学习用品', image: 'kids/vocab/pen.svg' },
+  { word: 'hen', zh: '母鸡', category: '动物', image: 'kids/vocab/hen.svg' },
+  { word: 'ten', zh: '十', category: '学习用品', image: 'kids/vocab/ten.svg' },
+  { word: 'net', zh: '球网', category: '学习用品', image: 'kids/vocab/net.svg' },
+  { word: 'pig', zh: '猪', category: '动物', image: 'kids/vocab/pig.svg' },
+  { word: 'pin', zh: '图钉', category: '学习用品', image: 'kids/vocab/pin.svg' },
+  { word: 'six', zh: '六', category: '学习用品', image: 'kids/vocab/six.svg' },
+  { word: 'bin', zh: '垃圾桶', category: '家居', image: 'kids/vocab/bin.svg' },
+  { word: 'fox', zh: '狐狸', category: '动物', image: 'kids/vocab/fox.svg' },
+  { word: 'box', zh: '盒子', category: '家居', image: 'kids/vocab/box.svg' },
+  { word: 'pot', zh: '锅', category: '食物', image: 'kids/vocab/pot.svg' },
+  { word: 'log', zh: '木头', category: '家居', image: 'kids/vocab/log.svg' },
+  { word: 'cup', zh: '杯子', category: '食物', image: 'kids/vocab/cup.svg' },
+  { word: 'mug', zh: '马克杯', category: '食物', image: 'kids/vocab/mug.svg' },
+  { word: 'nut', zh: '坚果', category: '食物', image: 'kids/vocab/nut.svg' },
+  { word: 'bug', zh: '虫子', category: '动物', image: 'kids/vocab/bug.svg' }
 ]
 
 let entryMap: Map<string, LocalVocabEntry> | null = null
@@ -207,4 +227,49 @@ export function getLocalVocabPromptHint(): string {
     }
   }
   return parts.join('；')
+}
+
+export interface LocalCvcGroup {
+  vowel: string
+  words: LocalVocabEntry[]
+}
+
+const DISPLAY_CVC_VOWELS: string[] = ['a', 'e', 'i', 'o', 'u']
+
+/**
+ * 结构上是否为该短元音的 CVC 词 (与 EnglishQuizValidation.isCvcWithVowel 同规则)。
+ * key 虽符合 k-e-y 结构, 但读长元音 e, 不作为 short e 教学词展示。
+ */
+function isDisplayCvcWord(word: string, vowel: string): boolean {
+  const w = word.trim().toLowerCase()
+  if (w.length !== 3 || w === 'key') {
+    return false
+  }
+  return w[1] === vowel &&
+    DISPLAY_CVC_VOWELS.indexOf(w[0]) < 0 &&
+    DISPLAY_CVC_VOWELS.indexOf(w[2]) < 0 &&
+    w[2] !== 'r'
+}
+
+/** 老师端 CVC 分组: short a/e/i/o/u 各自可用的本地词 (含中文与本地图)。 */
+export function getLocalCvcGroups(): LocalCvcGroup[] {
+  const groups: LocalCvcGroup[] = []
+  for (let v = 0; v < DISPLAY_CVC_VOWELS.length; v++) {
+    const vowel = DISPLAY_CVC_VOWELS[v]
+    const words: LocalVocabEntry[] = []
+    for (let i = 0; i < LOCAL_VOCAB_ENTRIES.length; i++) {
+      const entry = LOCAL_VOCAB_ENTRIES[i]
+      if (isDisplayCvcWord(entry.word, vowel)) {
+        words.push(entry)
+      }
+    }
+    words.sort((a: LocalVocabEntry, b: LocalVocabEntry): number => {
+      return a.word < b.word ? -1 : (a.word > b.word ? 1 : 0)
+    })
+    if (words.length > 0) {
+      const group: LocalCvcGroup = { vowel: vowel, words: words }
+      groups.push(group)
+    }
+  }
+  return groups
 }

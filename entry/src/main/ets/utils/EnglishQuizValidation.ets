@@ -21,8 +21,10 @@
  *
  * 本地词库硬约束 (2026-10-22):
  *  - listen_choice / picture_word / sentence_fill / legacy word 的 correct_answer
- *    与 4 个 options 必须全部命中 utils/LocalVocabCatalog (100 词)
- *  - phonics_blend / read_aloud / letter_trace 是拼读/朗读/书写模式, 不受此约束
+ *    与 4 个 options 必须全部命中 utils/LocalVocabCatalog (120 词)
+ *  - phonics_blend 的 correct_answer 与 4 个选项同样必须全部命中本地词库
+ *    (本地已备齐 a/e/i/o/u 的 CVC 组, 请使用 short 元音规则)
+ *  - read_aloud / letter_trace 是朗读/书写模式, 不受此约束
  */
 
 import { findLocalVocabEntry } from './LocalVocabCatalog'
@@ -203,7 +205,7 @@ function readString(parsed: Record<string, Object>, key: string): string {
 /**
  * 本地词库硬约束: 词汇题的 correct_answer 与 4 个选项都必须来自 LocalVocabCatalog。
  * 返回 '' = 通过; 否则返回写给 LLM 的修正提示 (should_retry)。
- * 说明: phonics_blend / read_aloud / letter_trace 不是词汇选词模式, 不走这条约束。
+ * 说明: phonics_blend 也走这条约束; read_aloud / letter_trace 不是词汇选词模式, 不走这条约束。
  */
 function validateLocalVocabWords(correct: string, optionsRaw: Object | undefined, modeLabel: string): string {
   if (findLocalVocabEntry(correct) === null) {
@@ -270,7 +272,8 @@ function parseShortVowelRule(rule: string): string {
 /** CVC 结构且元音位 == vowel (如 short a → cat ✓, car ✗) */
 function isCvcWithVowel(word: string, vowel: string): boolean {
   const w = word.toLowerCase().trim()
-  if (w.length !== 3) {
+  if (w.length !== 3 || w === 'key') {
+    // key 结构像 CVC, 但读长元音 e, 不能进 short e 题
     return false
   }
   // 末位 r 与元音构成 r-controlled (ar/er/ir/or/ur), 不再是短元音 → 拒绝 (如 car)
@@ -343,6 +346,12 @@ function validatePhonicsBlend(parsed: Record<string, Object>, mode: string): Eng
     }
   } else {
     console.warn('EnglishQuizValidation', `phonics_blend rule not parseable, skip structure check: "${rule}"`)
+  }
+  // phonics_blend 一律只允许本地词库; 本地已备齐 a/e/i/o/u 的 CVC 组,
+  // 模型应选择 short 元音规则并使用工具描述里列出的本地 CVC 词。
+  const localErr = validateLocalVocabWords(correct, parsed['options'], 'phonics_blend')
+  if (localErr !== '') {
+    return fail(localErr, mode, false)
   }
   return pass(mode, false)
 }

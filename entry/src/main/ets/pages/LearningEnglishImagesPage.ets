@@ -12,6 +12,7 @@ import {
 import { AdaptiveImageThumbnail } from '../components/AdaptiveImageThumbnail'
 import { ImportEnglishImageSheet } from '../components/ImportEnglishImageSheet'
 import { getImageIndexService } from '../services/ImageIndexService'
+import { getLocalCvcGroups, LocalCvcGroup, LocalVocabEntry } from '../utils/LocalVocabCatalog'
 import { getDatabaseService } from '../services/DatabaseService'
 import { ImageIndexRow, ImageSource } from '../models/ImageIndexModels'
 import {
@@ -37,7 +38,8 @@ enum EnglishImageSource {
 enum EnglishImageFilter {
   ALL = 0,
   QUIZ = 1,
-  PLAN = 2
+  PLAN = 2,
+  CVC = 3
 }
 
 interface EnglishImageGalleryItem {
@@ -94,6 +96,7 @@ struct LearningEnglishImagesPage {
   @Local isLoading: boolean = true
   @Local filterIndex: number = EnglishImageFilter.ALL
   @Local showImportSheet: boolean = false
+  @Local cvcGroups: LocalCvcGroup[] = []
 
   private compactScroller: Scroller = new Scroller()
   private loadToken: number = 0
@@ -103,6 +106,7 @@ struct LearningEnglishImagesPage {
   }
 
   aboutToAppear(): void {
+    this.cvcGroups = getLocalCvcGroups()
     this.loadItems()
   }
 
@@ -372,25 +376,28 @@ struct LearningEnglishImagesPage {
       this.FilterChip(EnglishImageFilter.ALL, $r('app.string.learning_image_filter_all'))
       this.FilterChip(EnglishImageFilter.QUIZ, $r('app.string.learning_image_filter_quiz'))
       this.FilterChip(EnglishImageFilter.PLAN, $r('app.string.learning_image_filter_plan'))
+      this.FilterChip(EnglishImageFilter.CVC, $r('app.string.learning_image_filter_cvc'))
       Blank()
-      Button() {
-        Row({ space: 4 }) {
-          SymbolGlyph($r('sys.symbol.plus'))
-            .fontSize(13)
-            .fontColor([$r('app.color.text_primary')])
-          Text($r('app.string.english_image_import_title'))
-            .fontSize(13)
-            .fontColor($r('app.color.text_primary'))
-            .fontWeight(FontWeight.Medium)
+      if (this.filterIndex !== EnglishImageFilter.CVC) {
+        Button() {
+          Row({ space: 4 }) {
+            SymbolGlyph($r('sys.symbol.plus'))
+              .fontSize(13)
+              .fontColor([$r('app.color.text_primary')])
+            Text($r('app.string.english_image_import_title'))
+              .fontSize(13)
+              .fontColor($r('app.color.text_primary'))
+              .fontWeight(FontWeight.Medium)
+          }
+          .padding({ left: 10, right: 10, top: 4, bottom: 4 })
         }
-        .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+        .height(30)
+        .backgroundColor(this.themePrimaryLight)
+        .borderRadius(14)
+        .onClick(() => {
+          this.openImportSheet()
+        })
       }
-      .height(30)
-      .backgroundColor(this.themePrimaryLight)
-      .borderRadius(14)
-      .onClick(() => {
-        this.openImportSheet()
-      })
     }
     .width('100%')
     .padding({ left: 0, right: 0, top: 4, bottom: 4 })
@@ -477,6 +484,82 @@ struct LearningEnglishImagesPage {
   }
 
   @Builder
+  private CvcChip(entry: LocalVocabEntry) {
+    Row({ space: 6 }) {
+      Image($rawfile(entry.image))
+        .width(22)
+        .height(22)
+        .objectFit(ImageFit.Contain)
+      Column({ space: 0 }) {
+        Text(entry.word)
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+        Text(entry.zh)
+          .fontSize(10)
+          .fontColor($r('app.color.text_tertiary'))
+      }
+      .alignItems(HorizontalAlign.Start)
+    }
+    .padding({ left: 6, right: 10, top: 4, bottom: 4 })
+    .backgroundColor(this.themeBackground)
+    .borderRadius(10)
+    .border({ width: 1, color: $r('app.color.divider') })
+    .margin({ right: 6, bottom: 6 })
+  }
+
+  @Builder
+  private CvcGroupBlock(group: LocalCvcGroup) {
+    Column({ space: 8 }) {
+      Row({ space: 6 }) {
+        Text('short ' + group.vowel)
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.themePrimary)
+          .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+          .backgroundColor(this.themePrimaryLight)
+          .borderRadius(8)
+      }
+      .width('100%')
+      Flex({ wrap: FlexWrap.Wrap }) {
+        ForEach(group.words, (entry: LocalVocabEntry) => {
+          this.CvcChip(entry)
+        }, (entry: LocalVocabEntry) => entry.word)
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  private CvcGroupsSection() {
+    Column({ space: 12 }) {
+      Column({ space: 2 }) {
+        Text($r('app.string.learning_cvc_title'))
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+        Text($r('app.string.learning_cvc_desc'))
+          .fontSize(11)
+          .fontColor($r('app.color.text_tertiary'))
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      ForEach(this.cvcGroups, (group: LocalCvcGroup) => {
+        this.CvcGroupBlock(group)
+      }, (group: LocalCvcGroup) => group.vowel)
+    }
+    .width('100%')
+    .padding(14)
+    .backgroundColor(this.themeSurface)
+    .borderRadius(16)
+    .border({ width: 1, color: $r('app.color.divider') })
+    .alignItems(HorizontalAlign.Start)
+    .margin({ top: 10, bottom: 8 })
+  }
+
+  @Builder
   private PageContent() {
     Scroll(this.compactScroller) {
       Row() {
@@ -487,10 +570,12 @@ struct LearningEnglishImagesPage {
               .height(this.getCompactContentTopPadding())
           }
 
-          if (this.getFilteredItems().length === 0 && !this.isLoading) {
+          this.FilterRow()
+          if (this.filterIndex === EnglishImageFilter.CVC) {
+            this.CvcGroupsSection()
+          } else if (this.getFilteredItems().length === 0 && !this.isLoading) {
             this.EmptyState()
           } else {
-            this.FilterRow()
             Grid() {
               ForEach(this.getFilteredItems(), (item: EnglishImageGalleryItem) => {
                 GridItem() {

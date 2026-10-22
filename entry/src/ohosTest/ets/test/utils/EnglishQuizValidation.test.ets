@@ -247,9 +247,17 @@ export default function englishQuizValidationTest() {
     it('short a 规则全 CVC 合法', 0, () => {
       const r = validateEnglishQuizArgs(buildArgs({
         mode: 'phonics_blend', question: '拼一拼', correct_answer: 'cat',
-        options: ['cat', 'ham', 'map', 'bat'], phonics_rule: 'short a'
+        options: ['cat', 'bat', 'map', 'bag'], phonics_rule: 'short a'
       }))
       expect(r.ok).assertTrue()
+    })
+    it('short a 选项含本地词库外的 CVC, 拒绝', 0, () => {
+      const r = validateEnglishQuizArgs(buildArgs({
+        mode: 'phonics_blend', question: 'q', correct_answer: 'cat',
+        options: ['cat', 'ham', 'map', 'bag'], phonics_rule: 'short a'
+      }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('本地词库')).assertTrue()
     })
     it('correct_answer 不符合 short a (r-controlled car), 拒绝', 0, () => {
       const r = validateEnglishQuizArgs(buildArgs({
@@ -266,12 +274,13 @@ export default function englishQuizValidationTest() {
       }))
       expect(r.ok).assertFalse()
     })
-    it('不可解析的规则 (如 long vowel / digraph) 仅放行', 0, () => {
+    it('不可解析规则也不能绕过本地词库', 0, () => {
       const r = validateEnglishQuizArgs(buildArgs({
         mode: 'phonics_blend', question: 'q', correct_answer: 'rain',
         options: ['rain', 'pain', 'main', 'train'], phonics_rule: 'long a (ai)'
       }))
-      expect(r.ok).assertTrue()
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('本地词库')).assertTrue()
     })
     it('phonics_rule 缺失, 拒绝', 0, () => {
       const r = validateEnglishQuizArgs(buildArgs({

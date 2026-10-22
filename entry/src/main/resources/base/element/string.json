@@ -3234,7 +3234,19 @@
     },
     {
       "name": "learning_english_images_desc",
-      "value": "答英语题时生成的图"
+      "value": "英语图片与 CVC 拼读词"
+    },
+    {
+      "name": "learning_image_filter_cvc",
+      "value": "CVC"
+    },
+    {
+      "name": "learning_cvc_title",
+      "value": "CVC 拼读词"
+    },
+    {
+      "name": "learning_cvc_desc",
+      "value": "按 short a / e / i / o / u 分组 · 本地词库"
     },
     {
       "name": "learning_profile_empty_title",

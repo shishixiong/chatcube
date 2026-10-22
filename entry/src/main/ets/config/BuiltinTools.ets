@@ -1724,7 +1724,7 @@ function createEnglishQuizToolDefinition(): ToolDefinition {
       "mode": {
         "type": "string",
         "enum": ["listen_choice", "picture_word", "phonics_blend", "sentence_fill", "read_aloud", "letter_trace"],
-        "description": "Quiz mode, exactly one of six. listen_choice: child hears a word via TTS and picks it from 4 options (tts_text REQUIRED). picture_word: child sees an image and picks the matching word (image_prompt REQUIRED). phonics_blend: pick the word matching phonics_rule from 4 same-rule options (phonics_rule REQUIRED). sentence_fill: fill the one blank in pattern by picking from 4 options (pattern REQUIRED). read_aloud: child reads target_text aloud, card auto-scores via speech recognition (target_text REQUIRED). letter_trace: trace a single letter (letter and case REQUIRED). phonics_blend 的 4 个选项都符合 phonics_rule, 孩子只能靠听音作答——question 要写成「听一听, 选出你听到的词」这类听音指令. listen_choice / picture_word / sentence_fill 的 correct_answer 和 4 个 options 只能从内置本地词库选词; 词库外的词会被校验拒绝并要求重出, picture_word 命中本地词时图片直接读取本地资源、不再生成。phonics_blend / read_aloud / letter_trace 是拼读/朗读/书写练习, 不按本地词库限制。本地词库（主题: 词）—— ${localVocabHint}。"
+        "description": "Quiz mode, exactly one of six. listen_choice: child hears a word via TTS and picks it from 4 options (tts_text REQUIRED). picture_word: child sees an image and picks the matching word (image_prompt REQUIRED). phonics_blend: pick the word matching phonics_rule from 4 same-rule options (phonics_rule REQUIRED). sentence_fill: fill the one blank in pattern by picking from 4 options (pattern REQUIRED). read_aloud: child reads target_text aloud, card auto-scores via speech recognition (target_text REQUIRED). letter_trace: trace a single letter (letter and case REQUIRED). phonics_blend 的 4 个选项都符合 phonics_rule, 孩子只能靠听音作答——question 要写成「听一听, 选出你听到的词」这类听音指令. listen_choice / picture_word / phonics_blend / sentence_fill 的 correct_answer 和 4 个 options 只能从内置本地词库选词; 词库外的词会被校验拒绝并要求重出, picture_word 命中本地词时图片直接读取本地资源、不再生成。read_aloud / letter_trace 是朗读/书写练习, 不按本地词库限制。本地词库（主题: 词）—— ${localVocabHint}。"
       },
       "question": {
         "type": "string",
@@ -1762,7 +1762,7 @@ function createEnglishQuizToolDefinition(): ToolDefinition {
       },
       "phonics_rule": {
         "type": "string",
-        "description": "REQUIRED only for phonics_blend, e.g. 「short a」. All 4 options must fully satisfy the rule (short a → cat/ham/map/bat). 严禁混入违反规则的词 (r-controlled 的 car, 长元音的 cake)."
+        "description": "REQUIRED only for phonics_blend, e.g. 「short a」. All 4 options must fully satisfy the rule AND come from the bundled local bank; choose a short-vowel rule, because the local bank only provides CVC sets. Local CVC sets (use ONLY these): a: cat/bat/map/bag/van; e: bed/red/pen/hen/ten/net; i: pig/pin/six/bin; o: dog/fox/box/pot/log; u: bus/cup/mug/nut/bug. 严禁混入违反规则的词 (r-controlled 的 car, 长元音的 cake) 或词库外的词."
       },
       "pattern": {
         "type": "string",
@@ -1813,7 +1813,7 @@ function createEnglishQuizToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     ENGLISH_QUIZ_TOOL_ID,
-    'Present an English quiz to the child as an interactive card. Six modes cover the five-step English lesson: listen_choice (hear and pick), picture_word (see image and pick), phonics_blend (same-rule word pick), sentence_fill (fill one blank), read_aloud (read aloud, auto-scored), letter_trace (trace a letter). VOCABULARY BANK ONLY: for listen_choice / picture_word / sentence_fill, correct_answer and all 4 options MUST come from the bundled local word bank — the validator rejects out-of-bank words and asks you to retry. Choice modes need EXACTLY 4 distinct words including correct_answer, all from the SAME theme. Use this INSTEAD of writing English questions in plain text — only this tool can grade answers and record stars. Pick mode and difficulty from the child_profile english_* levels. 严禁在文字里直接出英语题, 严禁跨主题混选项, 严禁 phonics_blend 里混入违反 phonics_rule 的词.',
+    'Present an English quiz to the child as an interactive card. Six modes cover the five-step English lesson: listen_choice (hear and pick), picture_word (see image and pick), phonics_blend (same-rule word pick), sentence_fill (fill one blank), read_aloud (read aloud, auto-scored), letter_trace (trace a letter). VOCABULARY BANK ONLY: for listen_choice / picture_word / phonics_blend / sentence_fill, correct_answer and all 4 options MUST come from the bundled local word bank — the validator rejects out-of-bank words and asks you to retry. Choice modes need EXACTLY 4 distinct words including correct_answer, all from the SAME theme. Use this INSTEAD of writing English questions in plain text — only this tool can grade answers and record stars. Pick mode and difficulty from the child_profile english_* levels. 严禁在文字里直接出英语题, 严禁跨主题混选项, 严禁 phonics_blend 里混入违反 phonics_rule 的词.',
     parameters
   )
 
