@@ -1591,7 +1591,8 @@ export class ToolExecutionService {
     toolCall.approvalState = 'answered'
     toolCall.approvalReason = answerJson
     console.info('ToolExecutionService', `map_card answered: ${toolCall.id}`)
-    this.recordStarEvent('map_card', toolCall, context, answerJson)
+    // 讲解课不授星（2026-10-22 定案：小课堂不是题）——不再记 star_event；
+    // StarEventModels/StarRewardService 的 map_card 分支保留，历史星星行仍可显示
     return new ToolResult(
       toolCall.id,
       answerJson,

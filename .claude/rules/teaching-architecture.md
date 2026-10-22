@@ -15,7 +15,7 @@
 
 > **2026-09-30 语文套件 v2**：新增 hanzi_card / pinyin_card / picture_talk / chinese_quiz 四工具（讲解/练习二分）+ chinese_vocab / chinese_reading 两画像维度。实施记录见 `docs/superpowers/specs/2026-09-30-chinese-teaching-tools-implementation.md`。
 >
-> **2026-10-21 地图套件**：新增 map_card（讲解型中国地图小课堂）/ map_quiz（练习型三 mode：choice/locate/write），锁进 default + kids_chinese；组件 `components/map/`（ChinaMapStage 渲染器 + MapCard + MapQuizCard），数据 `utils/ChinaMapData.ets`（34 省级行政区 GeoJSON-lite），笔顺数据扩 101 地理字（`config/StrokeOrderData.ets`）。画像维度复用 `general_social`（家长端标签改名「社会常识」）。spec：`docs/superpowers/specs/2026-10-21-china-map-teaching-tools-design.md`。
+> **2026-10-21 地图套件**：新增 map_card（讲解型中国地图小课堂）/ map_quiz（练习型三 mode：choice/locate/write），锁进 default + kids_chinese；组件 `components/map/`（ChinaMapStage 渲染器 + MapCard + MapQuizCard），数据 `utils/ChinaMapData.ets`（34 省级行政区 GeoJSON-lite），笔顺数据扩 101 地理字（`config/StrokeOrderData.ets`）。画像维度复用 `general_social`（家长端标签改名「社会常识」）。spec：`docs/superpowers/specs/2026-10-21-china-map-teaching-tools-design.md`。**2026-10-22 微调**：map_card 不授星（讲解课不是题，recordStarEvent 调用移除）、点省份直接 TTS 播报（点省即读，🔊 保留重播）。
 
 ---
 
@@ -141,10 +141,10 @@
 | `pinyin_card` | `PinyinCard.ets` | ✓ | 拼音小课堂（拼装公式 + 四声 TTS 示范），讲解型回执，预校验 |
 | `picture_talk` | `PictureTalkCard.ets` | ✓ | 看图说话（生图 + ASR 口语），讲解型回执，预校验 |
 | `chinese_quiz` | `chinese/ChineseQuizCard.ets` | ✓ | 语文小练习 4 mode（word_build/sentence_order/lookalike/antonym），预校验 |
-| `map_card` | `map/MapCard.ets` | ✓ | 中国地图小课堂（讲解型）：34 省可点地图 + 省份资料卡（简称/行政中心/TTS）+ focus_province 高亮，预校验；待答态入口横幅 → 全屏 sheet |
+| `map_card` | `map/MapCard.ets` | ✓ | 中国地图小课堂（讲解型）：34 省可点地图 + 省份资料卡（简称/行政中心；**点省即读 TTS**，🔊 重播）+ focus_province 高亮，预校验；待答态入口横幅 → 全屏 sheet；不授星 |
 | `map_quiz` | `map/MapQuizCard.ets` | ✓ | 中国地图出题 3 mode（choice 程序生成选项/locate 点图即判/write 手写自评），预校验；待答态入口横幅 → 全屏 sheet |
 
-**讲解/练习二分（2026-09-30 语文套件）**：`hanzi_card` / `pinyin_card` / `picture_talk` 为**讲解型**——无对错判定，`feedbackSuppressed = true` 永久抑制反馈横幅，孩子完成交互门槛后点「我学会了 · 继续」提交回执，`computeStars` 走 `completed === true → 1 星`（MathTeachCard 同款范式）；`chinese_quiz` 为**练习型**——即判即交，`correct === true → 1 星`。2026-10-21 地图套件沿用：`map_card` 讲解型（探索 ≥1 省后提交，1 星）；`map_quiz` 练习型（choice/locate 即判、write 自评，`correct === true → 1 星`）。
+**讲解/练习二分（2026-09-30 语文套件）**：`hanzi_card` / `pinyin_card` / `picture_talk` 为**讲解型**——无对错判定，`feedbackSuppressed = true` 永久抑制反馈横幅，孩子完成交互门槛后点「我学会了 · 继续」提交回执，`computeStars` 走 `completed === true → 1 星`（MathTeachCard 同款范式）；`chinese_quiz` 为**练习型**——即判即交，`correct === true → 1 星`。2026-10-21 地图套件沿用：`map_card` 讲解型（探索 ≥1 省后提交；**2026-10-22 起不授星**——讲解课不是题，`recordStarEvent` 调用已移除，StarEventModels/computeStars 的 map_card 分支保留供历史行显示）；`map_quiz` 练习型（choice/locate 即判、write 自评，`correct === true → 1 星`）。
 
 **预校验 + should_retry**：`math_quiz` / `english_quiz` / `picture_vocab` / `listening_quiz` / `pinyin_quiz` / `matching_pairs` / `categorization` / `hanzi_card` / `pinyin_card` / `picture_talk` / `chinese_quiz` / `map_card` / `map_quiz` 的参数在进入 pending 前先经 `utils/*Validation.ets` 校验（地图工具为 `utils/MapToolValidation.ets`：province 必须命中 34 省表、locate 的 clue 限定 name/capital 且 capital===short 拒绝）；坏题返回 `{error: 'validation_failed', should_retry: true}` 让 LLM 自行修正，不会渲染不可玩的卡片。
 

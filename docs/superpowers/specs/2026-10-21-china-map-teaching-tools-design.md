@@ -170,6 +170,8 @@ builder 审查确认全部集成触点声明与代码一致，另产生 4 个问
 
 ## 8. 星星系统（两个新 activityType）
 
+> **勘误（2026-10-22，产品定案）**：`map_card` 讲解课**不再授星**——"小课堂不是题"，`ToolExecutionService.handleMapCard` 的 `recordStarEvent('map_card', ...)` 调用已移除。本节及 §10/§14 中 map_card "→ 1 星" 的描述作废（map_quiz 不变）。`StarEventModels` 10 处漂移点与 `computeStars` map_card 分支**保留**：历史星星行的面板显示/明细归类仍依赖它们；`KidsSubjectCatalog` chinese 的 `activityTypes` 也保留 map_card（历史当日明细仍可归类，新事件自然为 0）。
+
 ### 8.1 StarEventModels.ets 10 处漂移点
 
 新增 `'map_card'` 与 `'map_quiz'`（顺序排在 'chinese_quiz' / 'vertical_math' 附近，保持语文族聚合）：

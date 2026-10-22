@@ -4,8 +4,8 @@
  *
  * 镜像 HanziCard 范式：CardShell 外壳 + feedbackSuppressed 永久抑制反馈横幅，
  * 无对错判定，孩子探索地图（focus 省自动展示 / 自由点选）后点「我学会了 · 继续」
- * 提交完成回执 → computeStars: completed=true → 1 星。
- * 省份资料卡：region 徽章 + 简称大字 + abbr 印章 + 行政中心 + 🔊 TTS 朗读。
+ * 提交完成回执（讲解课不授星——小课堂不是题，2026-10-22 定案）。
+ * 省份资料卡：region 徽章 + 简称大字 + abbr 印章 + 行政中心；点省即读 TTS，🔊 重播。
  */
 
 import common from '@ohos.app.ability.common'
@@ -160,6 +160,8 @@ export struct MapCard {
     } else if (this.exploredCount === 0) {
       this.exploredCount = 1
     }
+    // 点省即读：资料卡展示的同时直接 TTS 播报，免去单独点小喇叭（🔊 保留作重播）
+    this.speakProvinceInfo()
   }
 
   // ====== TTS 朗读（HanziCard narrateLesson 同通道） ======
