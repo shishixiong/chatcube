@@ -2219,42 +2219,50 @@ export struct MessageBubble {
               if (this.message.hasToolCalls()) {
                 ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
                   if (this.shouldRenderMapCardInteractionCard(toolCall, index)) {
-                    Row() {
+                    // 入口卡式横幅（map-card-redesign 的 lesson-entry）：图标 + 课名/规模 + 「打开」
+                    Row({ space: 11 }) {
                       Column() {
                         SymbolGlyph($r('sys.symbol.map'))
-                          .fontSize(15)
+                          .fontSize(21)
                           .fontColor([this.themePrimary])
                       }
-                      .width(32)
-                      .height(32)
-                      .borderRadius(16)
-                      .backgroundColor(withColorAlpha(this.themePrimary, '18'))
+                      .width(42)
+                      .height(42)
+                      .borderRadius(13)
+                      .backgroundColor(withColorAlpha(this.themePrimary, '1C'))
                       .alignItems(HorizontalAlign.Center)
                       .justifyContent(FlexAlign.Center)
 
-                      Column({ space: 2 }) {
+                      Column({ space: 3 }) {
                         Text('中国地图小课堂')
-                          .fontSize(13)
-                          .fontWeight(FontWeight.Medium)
+                          .fontSize(14)
+                          .fontWeight(FontWeight.Bold)
                           .fontColor($r('app.color.text_primary'))
-                        Text('点击打开')
+                        Text('讲解课 · 34 个省级行政区')
                           .fontSize(11)
                           .fontColor($r('app.color.text_tertiary'))
                       }
                       .alignItems(HorizontalAlign.Start)
-                      .margin({ left: 8 })
                       .layoutWeight(1)
 
-                      Text('>')
-                        .fontSize(14)
-                        .fontColor($r('app.color.text_tertiary'))
+                      Row({ space: 1 }) {
+                        Text('打开')
+                          .fontSize(11.5)
+                          .fontWeight(FontWeight.Medium)
+                          .fontColor(this.themePrimary)
+                        SymbolGlyph($r('sys.symbol.chevron_right'))
+                          .fontSize(13)
+                          .fontColor([this.themePrimary])
+                      }
+                      .alignItems(VerticalAlign.Center)
                     }
                     .width('100%')
-                    .padding(12)
+                    .padding({ left: 12, right: 12, top: 10, bottom: 10 })
                     .backgroundColor(this.themeAiBubble)
-                    .borderRadius(12)
+                    .borderRadius(14)
                     .border({ width: 1, color: $r('app.color.divider') })
                     .margin({ bottom: 6 })
+                    .accessibilityText('打开中国地图小课堂，讲解课，34 个省级行政区')
                     .onClick(() => {
                       this.onOpenMapCardSheet(toolCall)
                     })
