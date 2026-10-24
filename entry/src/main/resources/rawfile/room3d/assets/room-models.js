@@ -44,13 +44,15 @@
     depthWrite: false
   });
 
+  // 调色板里的 L 是 OKLCH 的百分比（0-100），线性 sRGB 计算要 0-1，先归一化。
   function linearSrgb([L, C, H]) {
+    const lightness = L / 100;
     const h = (H * Math.PI) / 180;
     const a = C * Math.cos(h);
     const b = C * Math.sin(h);
-    const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
-    const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
-    const s_ = L - 0.0894841775 * a - 1.291485548 * b;
+    const l_ = lightness + 0.3963377774 * a + 0.2158037573 * b;
+    const m_ = lightness - 0.1055613458 * a - 0.0638541728 * b;
+    const s_ = lightness - 0.0894841775 * a - 1.291485548 * b;
     const l = l_ * l_ * l_;
     const m = m_ * m_ * m_;
     const s = s_ * s_ * s_;
@@ -61,8 +63,12 @@
     ];
   }
 
+  // 原始配色是给网页大屏调的柔和低彩度；手机上缩到一半后几乎读不出颜色，
+  // 这里统一放大彩度（上限 0.4 防止超出 sRGB 色域）。
+  const CHROMA_GAIN = 1.4;
+
   function color(token) {
-    const [r, g, b] = linearSrgb(token);
+    const [r, g, b] = linearSrgb([token[0], Math.min(0.4, token[1] * CHROMA_GAIN), token[2]]);
     return new THREE.Color().setRGB(r, g, b, THREE.LinearSRGBColorSpace);
   }
 

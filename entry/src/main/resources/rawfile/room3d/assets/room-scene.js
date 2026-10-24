@@ -77,7 +77,8 @@
       this.renderer.setClearColor(0x000000, 0);
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, window.innerWidth < 760 ? 1.65 : 2));
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-      this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      // ACES 会把这种高亮柔和的场景压成灰白，Neutral 保留彩度。
+      this.renderer.toneMapping = THREE.NeutralToneMapping;
       this.renderer.toneMappingExposure = 1.05;
       this.renderer.shadowMap.enabled = true;
       this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -108,13 +109,13 @@
       const hemi = new THREE.HemisphereLight(
         new THREE.Color().setRGB(1.0, 0.96, 0.87, THREE.LinearSRGBColorSpace),
         new THREE.Color().setRGB(0.63, 0.72, 0.68, THREE.LinearSRGBColorSpace),
-        1.55
+        0.85
       );
       this.scene.add(hemi);
 
       const key = new THREE.DirectionalLight(
         new THREE.Color().setRGB(1.0, 0.91, 0.77, THREE.LinearSRGBColorSpace),
-        2.35
+        1.45
       );
       key.position.set(6.5, 9.5, 7.5);
       key.castShadow = true;
@@ -133,14 +134,14 @@
 
       const fill = new THREE.DirectionalLight(
         new THREE.Color().setRGB(0.78, 0.9, 1.0, THREE.LinearSRGBColorSpace),
-        0.72
+        0.38
       );
       fill.position.set(-6, 6, 6);
       this.scene.add(fill);
 
       const backFill = new THREE.DirectionalLight(
         new THREE.Color().setRGB(1.0, 0.83, 0.7, THREE.LinearSRGBColorSpace),
-        0.38
+        0.20
       );
       backFill.position.set(1.5, 5, -5);
       this.scene.add(backFill);
