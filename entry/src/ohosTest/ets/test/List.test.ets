@@ -3,6 +3,7 @@ import chinaMapDataTest from './utils/ChinaMapData.test';
 import chinaMapGeometryTest from './utils/ChinaMapGeometry.test';
 import mapChoiceOptionsTest from './utils/MapChoiceOptions.test';
 import mapToolValidationTest from './utils/MapToolValidation.test';
+import roomEnglishValidationTest from './utils/RoomEnglishValidation.test';
 import kidsSubjectUtilsTest from './utils/KidsSubjectUtils.test';
 import learningLedgerModelsTest from './utils/LearningLedgerModels.test';
 import ledgerExtractUtilsTest from './utils/LedgerExtractUtils.test';
@@ -25,6 +26,7 @@ export default function testsuite() {
   chinaMapGeometryTest();
   mapChoiceOptionsTest();
   mapToolValidationTest();
+  roomEnglishValidationTest();
   kidsSubjectUtilsTest();
   learningLedgerModelsTest();
   ledgerExtractUtilsTest();

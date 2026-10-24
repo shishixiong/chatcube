@@ -1,0 +1,944 @@
+/* 低多边形客餐厅模型。所有可点击物品都是独立 Group，并保留 OBJ_* 命名。 */
+(function () {
+  'use strict';
+
+  const THREE = window.THREE;
+  const FLOOR_Y = 0.03;
+  const TABLE_TOP = FLOOR_Y + 0.805;
+
+  const RGB = {
+    floorA: [77, 0.071, 76],
+    floorB: [74, 0.068, 71],
+    floorC: [80, 0.06, 84],
+    wall: [94, 0.019, 88],
+    wallCool: [93, 0.025, 166],
+    trim: [88, 0.025, 80],
+    cream: [96, 0.014, 82],
+    white: [99, 0.003, 80],
+    ink: [25, 0.018, 240],
+    wood: [69, 0.083, 64],
+    woodLight: [78, 0.069, 73],
+    woodDark: [57, 0.076, 57],
+    sofa: [70, 0.105, 43],
+    sofaDark: [60, 0.105, 38],
+    sofaLight: [82, 0.064, 52],
+    teal: [58, 0.092, 171],
+    tealDark: [45, 0.08, 171],
+    mint: [84, 0.055, 168],
+    rug: [91, 0.028, 80],
+    rugInner: [95, 0.023, 78],
+    coral: [69, 0.125, 33],
+    mustard: [81, 0.115, 83],
+    green: [57, 0.105, 143],
+    greenDark: [45, 0.09, 145],
+    sky: [88, 0.045, 220],
+    metal: [76, 0.008, 230],
+    glass: [85, 0.045, 220]
+  };
+
+  const dataById = new Map(window.WordRoomData.objects.map((item) => [item.id, item]));
+  const hitMaterial = new THREE.MeshBasicMaterial({
+    transparent: true,
+    opacity: 0,
+    colorWrite: false,
+    depthWrite: false
+  });
+
+  function linearSrgb([L, C, H]) {
+    const h = (H * Math.PI) / 180;
+    const a = C * Math.cos(h);
+    const b = C * Math.sin(h);
+    const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+    const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+    const s_ = L - 0.0894841775 * a - 1.291485548 * b;
+    const l = l_ * l_ * l_;
+    const m = m_ * m_ * m_;
+    const s = s_ * s_ * s_;
+    return [
+      Math.max(0, Math.min(1, 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s)),
+      Math.max(0, Math.min(1, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s)),
+      Math.max(0, Math.min(1, -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s))
+    ];
+  }
+
+  function color(token) {
+    const [r, g, b] = linearSrgb(token);
+    return new THREE.Color().setRGB(r, g, b, THREE.LinearSRGBColorSpace);
+  }
+
+  const materialCache = new Map();
+
+  function material(token, options) {
+    const opts = options || {};
+    const key = token.join(',') + JSON.stringify(opts);
+    if (materialCache.has(key)) return materialCache.get(key);
+    const mat = new THREE.MeshStandardMaterial({
+      color: color(token),
+      roughness: opts.roughness ?? 0.78,
+      metalness: opts.metalness ?? 0.02,
+      flatShading: opts.flatShading ?? true,
+      transparent: opts.transparent ?? false,
+      opacity: opts.opacity ?? 1,
+      side: opts.side ?? THREE.FrontSide,
+      emissive: opts.emissive ? color(opts.emissive) : new THREE.Color(0x000000),
+      emissiveIntensity: opts.emissiveIntensity ?? 0
+    });
+    mat.userData.token = token;
+    materialCache.set(key, mat);
+    return mat;
+  }
+
+  function canvasTexture(width, height, draw) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    draw(ctx, width, height);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.anisotropy = 4;
+    return texture;
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    const radius = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + w, y, x + w, y + h, radius);
+    ctx.arcTo(x + w, y + h, x, y + h, radius);
+    ctx.arcTo(x, y + h, x, y, radius);
+    ctx.arcTo(x, y, x + w, y, radius);
+    ctx.closePath();
+  }
+
+  function makeScreenTexture() {
+    return canvasTexture(900, 520, (ctx, w, h) => {
+      const grad = ctx.createLinearGradient(0, 0, w, h);
+      grad.addColorStop(0, '#dff6ec');
+      grad.addColorStop(0.55, '#eff3d7');
+      grad.addColorStop(1, '#f7dfc0');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.fillStyle = 'rgba(255,255,255,0.68)';
+      ctx.beginPath();
+      ctx.arc(758, 102, 78, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#2b6858';
+      ctx.font = '800 178px "Assistant Local", Arial, sans-serif';
+      ctx.textBaseline = 'middle';
+      ctx.letterSpacing = '-8px';
+      ctx.fillText('ABC', 72, 244);
+      ctx.letterSpacing = '0px';
+
+      ctx.fillStyle = '#1c5f50';
+      ctx.font = '700 42px "Assistant Local", Arial, sans-serif';
+      ctx.fillText("Let's learn together!", 78, 370);
+
+      const colors = ['#e4a06f', '#76b9a3', '#eac464'];
+      for (let i = 0; i < 3; i += 1) {
+        ctx.fillStyle = colors[i];
+        roundRect(ctx, 78 + i * 94, 408, 72, 26, 13);
+        ctx.fill();
+      }
+
+      ctx.strokeStyle = 'rgba(43,104,88,0.28)';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(730, 386, 90, Math.PI * 1.05, Math.PI * 1.78);
+      ctx.stroke();
+    });
+  }
+
+  function makePictureTexture() {
+    return canvasTexture(700, 460, (ctx, w, h) => {
+      ctx.fillStyle = '#f6eddb';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#dfa06d';
+      ctx.beginPath();
+      ctx.arc(512, 156, 106, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#5e9d8a';
+      ctx.beginPath();
+      ctx.moveTo(90, 372);
+      ctx.lineTo(90, 242);
+      ctx.arc(225, 242, 135, Math.PI, 0, true);
+      ctx.lineTo(360, 372);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#eac464';
+      ctx.beginPath();
+      ctx.arc(480, 336, 48, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#1f594d';
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.moveTo(92, 398);
+      ctx.bezierCurveTo(245, 306, 396, 442, 610, 350);
+      ctx.stroke();
+    });
+  }
+
+  function makeClockTexture() {
+    return canvasTexture(512, 512, (ctx, w, h) => {
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = '#fbf6ea';
+      ctx.beginPath();
+      ctx.arc(256, 256, 248, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#2c6658';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '700 58px "Assistant Local", Arial, sans-serif';
+      ctx.fillText('12', 256, 84);
+      ctx.fillText('3', 428, 256);
+      ctx.fillText('6', 256, 428);
+      ctx.fillText('9', 84, 256);
+
+      for (let i = 0; i < 60; i += 1) {
+        const angle = (i / 60) * Math.PI * 2;
+        const major = i % 5 === 0;
+        const r1 = major ? 196 : 207;
+        const r2 = 218;
+        ctx.strokeStyle = major ? '#2c6658' : '#d7cbb8';
+        ctx.lineWidth = major ? 4 : 2;
+        ctx.beginPath();
+        ctx.moveTo(256 + Math.sin(angle) * r1, 256 - Math.cos(angle) * r1);
+        ctx.lineTo(256 + Math.sin(angle) * r2, 256 - Math.cos(angle) * r2);
+        ctx.stroke();
+      }
+    });
+  }
+
+  function makeWindowTexture() {
+    return canvasTexture(600, 700, (ctx, w, h) => {
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, '#dfeff5');
+      grad.addColorStop(0.55, '#cfe8dc');
+      grad.addColorStop(1, '#b8d6b8');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = 'rgba(255,250,220,0.78)';
+      ctx.beginPath();
+      ctx.arc(418, 148, 92, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(128,174,147,0.32)';
+      ctx.beginPath();
+      ctx.arc(180, 640, 260, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.42)';
+      ctx.beginPath();
+      ctx.ellipse(420, 310, 110, 32, -0.1, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  function roundedRectShape(w, h, r) {
+    const radius = Math.max(0.002, Math.min(r, w / 2 - 0.001, h / 2 - 0.001));
+    const s = new THREE.Shape();
+    s.moveTo(-w / 2 + radius, -h / 2);
+    s.lineTo(w / 2 - radius, -h / 2);
+    s.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + radius);
+    s.lineTo(w / 2, h / 2 - radius);
+    s.quadraticCurveTo(w / 2, h / 2, w / 2 - radius, h / 2);
+    s.lineTo(-w / 2 + radius, h / 2);
+    s.quadraticCurveTo(-w / 2, h / 2, -w / 2, h / 2 - radius);
+    s.lineTo(-w / 2, -h / 2 + radius);
+    s.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + radius, -h / 2);
+    s.closePath();
+    return s;
+  }
+
+  function roundedBoxGeometry(w, h, d, r) {
+    const radius = Math.max(0.002, Math.min(r, w / 2 - 0.002, h / 2 - 0.002));
+    const bevel = Math.min(0.018, d * 0.18, radius * 0.32);
+    const shape = roundedRectShape(w, h, radius);
+    const geo = new THREE.ExtrudeGeometry(shape, {
+      depth: Math.max(0.002, d - bevel * 2),
+      bevelEnabled: bevel > 0.001,
+      bevelSegments: 2,
+      steps: 1,
+      bevelSize: bevel,
+      bevelThickness: bevel,
+      curveSegments: 4
+    });
+    geo.center();
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  function roundedPlaneGeometry(w, d, r) {
+    const shape = roundedRectShape(w, d, r);
+    const geo = new THREE.ShapeGeometry(shape, 5);
+    geo.rotateX(-Math.PI / 2);
+    geo.center();
+    return geo;
+  }
+
+  function roundedRingGeometry(w, d, r, thickness) {
+    const shape = roundedRectShape(w, d, r);
+    const hole = roundedRectShape(w - thickness * 2, d - thickness * 2, Math.max(0.01, r - thickness));
+    shape.holes.push(hole);
+    const geo = new THREE.ShapeGeometry(shape, 5);
+    geo.rotateX(-Math.PI / 2);
+    geo.center();
+    return geo;
+  }
+
+  function addMesh(parent, geometry, mat, position, cast, receive) {
+    const mesh = new THREE.Mesh(geometry, mat);
+    if (position) mesh.position.set(position[0] || 0, position[1] || 0, position[2] || 0);
+    mesh.castShadow = cast !== false;
+    mesh.receiveShadow = receive !== false;
+    parent.add(mesh);
+    return mesh;
+  }
+
+  function box(parent, w, h, d, r, mat, x, y, z, cast) {
+    return addMesh(parent, roundedBoxGeometry(w, h, d, r), mat, [x, y, z], cast);
+  }
+
+  function cylinder(parent, rt, rb, h, seg, mat, x, y, z, cast) {
+    return addMesh(parent, new THREE.CylinderGeometry(rt, rb, h, seg), mat, [x, y, z], cast);
+  }
+
+  function buildRoomShell(root) {
+    const base = box(root, 8.38, 0.28, 6.38, 0.09, material(RGB.trim), 0, -0.14, 0, false);
+    base.receiveShadow = true;
+
+    for (let i = 0; i < 10; i += 1) {
+      const w = 0.795;
+      const x = -3.6 + i * 0.8;
+      const token = i % 3 === 0 ? RGB.floorA : i % 3 === 1 ? RGB.floorB : RGB.floorC;
+      const plank = addMesh(
+        root,
+        new THREE.BoxGeometry(w, 0.036, 5.92),
+        material(token, { roughness: 0.86 }),
+        [x, FLOOR_Y - 0.018, 0],
+        false
+      );
+      plank.receiveShadow = true;
+    }
+
+    const wallMat = material(RGB.wall, { roughness: 0.9 });
+    const trimMat = material(RGB.trim, { roughness: 0.82 });
+    const plankMat = material(RGB.woodLight, { roughness: 0.82 });
+
+    box(root, 2.29, 3, 0.16, 0.04, wallMat, -2.855, 1.5, -3.06, false);
+    box(root, 4.04, 3, 0.16, 0.04, wallMat, 1.94, 1.5, -3.06, false);
+    box(root, 1.64, 0.92, 0.16, 0.035, wallMat, -0.9, 0.46, -3.06, false);
+    box(root, 1.64, 0.62, 0.16, 0.035, wallMat, -0.9, 2.69, -3.06, false);
+    box(root, 0.16, 3, 6, 0.04, wallMat, -4.06, 1.5, 0, false);
+
+    box(root, 7.98, 0.09, 0.07, 0.025, plankMat, 0, 0.095, -2.94, false);
+    box(root, 0.07, 0.09, 5.9, 0.025, plankMat, -3.94, 0.095, 0, false);
+    box(root, 7.98, 0.025, 0.03, 0.012, trimMat, 0, 0.9, -2.955, false);
+
+    const wainscot = material(RGB.wallCool, { roughness: 0.9 });
+    box(root, 3.82, 0.74, 0.035, 0.03, wainscot, 1.96, 0.47, -2.955, false);
+    box(root, 3.86, 0.035, 0.055, 0.012, plankMat, 1.96, 0.855, -2.94, false);
+    for (let i = 0; i < 4; i += 1) {
+      box(root, 0.022, 0.63, 0.025, 0.008, material(RGB.trim, { roughness: 0.9 }), 0.55 + i * 0.94, 0.43, -2.932, false);
+    }
+
+    const doorTrim = material(RGB.trim, { roughness: 0.82 });
+    box(root, 8.2, 0.06, 0.05, 0.018, doorTrim, 0, 2.96, -2.98, false);
+  }
+
+  function buildWindowAndCurtain(objects, hitboxes, root) {
+    const windowGroup = new THREE.Group();
+    windowGroup.name = 'OBJ_window';
+    windowGroup.position.set(-0.9, FLOOR_Y, -2.9);
+    windowGroup.userData = objectMeta('window');
+    root.add(windowGroup);
+    objects.push(windowGroup);
+
+    const frameMat = material(RGB.cream, { roughness: 0.72 });
+    const innerFrame = material(RGB.trim, { roughness: 0.7 });
+    box(windowGroup, 1.82, 0.08, 0.12, 0.025, frameMat, 0, 2.38, 0);
+    box(windowGroup, 1.82, 0.08, 0.12, 0.025, frameMat, 0, 0.92, 0);
+    box(windowGroup, 0.08, 1.5, 0.12, 0.025, frameMat, -0.85, 1.65, 0);
+    box(windowGroup, 0.08, 1.5, 0.12, 0.025, frameMat, 0.85, 1.65, 0);
+    box(windowGroup, 0.045, 1.5, 0.075, 0.015, innerFrame, 0, 1.65, 0.03);
+    box(windowGroup, 1.62, 0.04, 0.075, 0.015, innerFrame, 0, 1.66, 0.03);
+    box(windowGroup, 1.94, 0.08, 0.26, 0.025, frameMat, 0, 0.87, 0.08);
+
+    const exteriorMat = new THREE.MeshBasicMaterial({ map: makeWindowTexture() });
+    addMesh(windowGroup, new THREE.PlaneGeometry(1.58, 1.48), exteriorMat, [0, 1.65, -0.09], false, false);
+    const glassMat = material(RGB.glass, {
+      transparent: true,
+      opacity: 0.2,
+      roughness: 0.08,
+      metalness: 0.05,
+      flatShading: false,
+      side: THREE.DoubleSide
+    });
+    addMesh(windowGroup, new THREE.PlaneGeometry(1.57, 1.47), glassMat, [0, 1.65, 0.075], false, false);
+    addMesh(windowGroup, new THREE.BoxGeometry(0.2, 0.03, 0.04), material(RGB.metal), [0.6, 1.08, 0.15], false, false);
+
+    hit(windowGroup, 'window', 1.9, 1.72, 0.3, 0, 1.66, 0, hitboxes);
+
+    const curtainGroup = new THREE.Group();
+    curtainGroup.name = 'OBJ_curtain';
+    curtainGroup.position.set(-0.9, FLOOR_Y, -2.72);
+    curtainGroup.userData = objectMeta('curtain');
+    root.add(curtainGroup);
+    objects.push(curtainGroup);
+
+    const rodMat = material(RGB.woodDark, { roughness: 0.5, metalness: 0.12 });
+    const rod = addMesh(curtainGroup, new THREE.CylinderGeometry(0.027, 0.027, 2.36, 16), rodMat, [0, 2.53, 0], true);
+    rod.rotation.z = Math.PI / 2;
+    cylinder(curtainGroup, 0.06, 0.06, 0.07, 14, rodMat, -1.18, 2.53, 0);
+    cylinder(curtainGroup, 0.06, 0.06, 0.07, 14, rodMat, 1.18, 2.53, 0);
+
+    const curtainMat = material(RGB.coral, {
+      roughness: 0.9,
+      flatShading: true,
+      side: THREE.DoubleSide
+    });
+    const panels = [-1, 1];
+    panels.forEach((side) => {
+      const geo = new THREE.PlaneGeometry(0.5, 2.44, 14, 1);
+      const pos = geo.attributes.position;
+      for (let i = 0; i < pos.count; i += 1) {
+        const x = pos.getX(i);
+        pos.setZ(i, Math.sin((x / 0.5 + 0.5) * Math.PI * 3.2) * 0.05 + 0.02);
+      }
+      geo.computeVertexNormals();
+      const panel = addMesh(curtainGroup, geo, curtainMat, [side * 0.83, 1.27, 0], true, false);
+      panel.rotation.y = side * 0.06;
+      hit(curtainGroup, 'curtain', 0.62, 2.44, 0.24, side * 0.83, 1.27, 0.02, hitboxes);
+    });
+  }
+
+  function buildSofa(objects, hitboxes, root) {
+    const g = objectGroup('sofa', -1.56, FLOOR_Y, -0.1, root);
+    objects.push(g);
+    const body = material(RGB.sofa);
+    const bodyDark = material(RGB.sofaDark);
+    const bodyLight = material(RGB.sofaLight);
+    const wood = material(RGB.woodDark);
+
+    [-0.33, 0.33].forEach((x) => {
+      [-0.96, 0.96].forEach((z) => {
+        cylinder(g, 0.045, 0.05, 0.2, 10, wood, x, 0.1, z);
+      });
+    });
+    box(g, 0.96, 0.28, 2.3, 0.1, bodyDark, 0, 0.28, 0);
+    box(g, 0.9, 0.2, 1.06, 0.09, bodyLight, -0.02, 0.5, -0.55);
+    box(g, 0.9, 0.2, 1.06, 0.09, bodyLight, -0.02, 0.5, 0.55);
+    box(g, 0.24, 0.83, 2.3, 0.1, bodyDark, 0.37, 0.73, 0);
+    const topRoll = addMesh(g, new THREE.CylinderGeometry(0.12, 0.12, 2.3, 18), body, [0.37, 1.15, 0], true);
+    topRoll.rotation.x = Math.PI / 2;
+    [-1.14, 1.14].forEach((z) => {
+      box(g, 0.99, 0.36, 0.2, 0.08, bodyDark, 0, 0.57, z);
+      const armRoll = addMesh(g, new THREE.CylinderGeometry(0.1, 0.1, 0.86, 16), body, [0, 0.75, z], true);
+      armRoll.rotation.z = Math.PI / 2;
+    });
+    [-0.56, 0.56].forEach((z) => {
+      const backCushion = box(g, 0.16, 0.5, 1.02, 0.07, bodyLight, 0.23, 0.83, z);
+      backCushion.rotation.z = -0.05;
+    });
+    box(g, 0.015, 0.06, 2.2, 0.007, material(RGB.cream), -0.47, 0.42, 0, false);
+    hit(g, 'sofa', 1.04, 0.6, 2.5, 0, 0.32, 0, hitboxes);
+    hit(g, 'sofa', 0.3, 1.14, 2.4, 0.36, 0.68, 0, hitboxes);
+    hit(g, 'sofa', 0.96, 0.78, 0.2, 0, 0.62, -1.15, hitboxes);
+    hit(g, 'sofa', 0.96, 0.78, 0.2, 0, 0.62, 1.15, hitboxes);
+  }
+
+  function buildCushion(objects, hitboxes, root) {
+    const g = objectGroup('cushion', -1.46, FLOOR_Y, -1.05, root);
+    objects.push(g);
+    g.rotation.y = 0.16;
+    const mat = material(RGB.mustard);
+    const pillow = box(g, 0.16, 0.58, 0.56, 0.1, mat, 0, 1.16, 0);
+    pillow.rotation.z = -0.1;
+    const patch = box(g, 0.012, 0.3, 0.31, 0.035, material(RGB.cream), -0.087, 1.18, 0, false);
+    patch.rotation.z = -0.1;
+    const button = cylinder(g, 0.023, 0.023, 0.01, 12, material(RGB.woodDark), -0.096, 1.18, 0, false);
+    button.rotation.z = Math.PI / 2;
+    hit(g, 'cushion', 0.34, 0.66, 0.64, 0, 1.16, 0, hitboxes);
+  }
+
+  function buildCoffeeTable(objects, hitboxes, root) {
+    const g = objectGroup('coffee_table', -2.71, FLOOR_Y, 0.02, root);
+    objects.push(g);
+    const wood = material(RGB.woodLight);
+    const woodDark = material(RGB.wood);
+    box(g, 1.24, 0.11, 0.78, 0.12, wood, 0, 0.44, 0);
+    box(g, 1.04, 0.055, 0.6, 0.06, woodDark, 0, 0.19, 0);
+    [-0.49, 0.49].forEach((x) => {
+      [-0.27, 0.27].forEach((z) => {
+        box(g, 0.07, 0.39, 0.07, 0.025, woodDark, x, 0.205, z);
+      });
+    });
+    hit(g, 'coffee_table', 1.32, 0.52, 0.86, 0, 0.25, 0, hitboxes);
+  }
+
+  function buildRemote(objects, hitboxes, root) {
+    const g = objectGroup('remote_control', -3.02, FLOOR_Y + 0.505, 0.18, root);
+    objects.push(g);
+    g.rotation.y = -0.34;
+    const shell = material(RGB.ink, { roughness: 0.55, metalness: 0.08 });
+    box(g, 0.17, 0.04, 0.4, 0.04, shell, 0, 0.025, 0);
+    const buttonMat = material(RGB.cream, { roughness: 0.65 });
+    const accentMat = material(RGB.coral, { roughness: 0.6 });
+    [
+      [-0.035, -0.1, 0.035, 0.035, buttonMat],
+      [0.035, -0.1, 0.035, 0.035, buttonMat],
+      [0, -0.035, 0.085, 0.025, buttonMat],
+      [-0.035, 0.035, 0.035, 0.035, buttonMat],
+      [0.035, 0.035, 0.035, 0.035, buttonMat],
+      [0, 0.11, 0.04, 0.04, accentMat]
+    ].forEach(([x, z, w, d, mat]) => {
+      box(g, w, 0.012, d, 0.008, mat, x, 0.049, z, false);
+    });
+    hit(g, 'remote_control', 0.28, 0.18, 0.46, 0, 0.13, 0, hitboxes);
+  }
+
+  function buildRug(objects, hitboxes, root) {
+    const g = objectGroup('rug', -2.23, FLOOR_Y, 0.1, root);
+    objects.push(g);
+    box(g, 3.36, 0.024, 2.65, 0.18, material(RGB.rug), 0, 0.012, 0, false);
+    addMesh(g, roundedPlaneGeometry(3.06, 2.35, 0.14), material(RGB.rugInner), [0, 0.028, 0], false);
+    addMesh(g, roundedRingGeometry(3.14, 2.43, 0.16, 0.022), material(RGB.teal, { roughness: 0.82 }), [0, 0.031, 0], false);
+    hit(g, 'rug', 3.42, 0.12, 2.7, 0, 0.05, 0, hitboxes);
+  }
+
+  function buildFloorLamp(objects, hitboxes, root) {
+    const g = objectGroup('floor_lamp', -3.47, FLOOR_Y, 1.56, root);
+    objects.push(g);
+    const stand = material(RGB.metal, { roughness: 0.45, metalness: 0.28 });
+    cylinder(g, 0.23, 0.26, 0.055, 24, stand, 0, 0.03, 0);
+    cylinder(g, 0.023, 0.023, 1.42, 12, stand, 0, 0.77, 0);
+    const shadeMat = material(RGB.cream, {
+      roughness: 0.82,
+      emissive: [92, 0.08, 78],
+      emissiveIntensity: 0.22,
+      side: THREE.DoubleSide
+    });
+    const shade = addMesh(g, new THREE.CylinderGeometry(0.19, 0.31, 0.35, 22, 1, true), shadeMat, [0, 1.55, 0], true);
+    shade.rotation.y = 0.3;
+    cylinder(g, 0.19, 0.19, 0.012, 22, shadeMat, 0, 1.73, 0, false);
+    addMesh(g, new THREE.SphereGeometry(0.105, 14, 10), material(RGB.cream, { emissive: [95, 0.1, 82], emissiveIntensity: 1.6 }), [0, 1.44, 0], false);
+    const glow = new THREE.PointLight(color(RGB.cream), 7, 4.4, 2);
+    glow.position.set(0, 1.47, 0);
+    g.add(glow);
+    hit(g, 'floor_lamp', 0.64, 1.86, 0.64, 0, 0.94, 0, hitboxes);
+  }
+
+  function buildBookshelf(objects, hitboxes, root) {
+    const g = objectGroup('bookshelf', -2.58, FLOOR_Y, -2.72, root);
+    objects.push(g);
+    const frame = material(RGB.woodLight);
+    const back = material(RGB.woodDark);
+    box(g, 1.42, 2.06, 0.07, 0.02, back, 0, 1.03, -0.16);
+    box(g, 0.07, 2.08, 0.36, 0.02, frame, -0.69, 1.04, 0);
+    box(g, 0.07, 2.08, 0.36, 0.02, frame, 0.69, 1.04, 0);
+    box(g, 1.45, 0.07, 0.38, 0.02, frame, 0, 0.045, 0);
+    box(g, 1.45, 0.07, 0.38, 0.02, frame, 0, 2.055, 0);
+    [0.71, 1.38].forEach((y) => {
+      box(g, 1.38, 0.055, 0.34, 0.015, frame, 0, y, 0);
+    });
+
+    const bookColors = [RGB.coral, RGB.teal, RGB.mustard, RGB.green, RGB.cream, RGB.sofaDark];
+    const spinePositions = [
+      [-0.5, 0.28], [-0.35, 0.32], [-0.19, 0.26], [0.01, 0.34], [0.17, 0.29],
+      [-0.48, 0.25], [-0.33, 0.3], [-0.17, 0.28], [0.0, 0.32], [0.18, 0.25], [0.34, 0.3]
+    ];
+    spinePositions.forEach(([x, h], i) => {
+      const shelfY = i < 5 ? 0.75 : 1.42;
+      const mat = material(bookColors[i % bookColors.length], { roughness: 0.85 });
+      const book = box(g, 0.11, h, 0.24, 0.012, mat, x, shelfY + h / 2, 0.045, false);
+      book.rotation.z = i % 4 === 0 ? 0.04 : 0;
+    });
+    const bowl = addMesh(g, new THREE.CylinderGeometry(0.11, 0.08, 0.07, 16), material(RGB.cream), [0.4, 1.77, 0.04], false);
+    bowl.rotation.y = 0.4;
+    hit(g, 'bookshelf', 1.58, 2.18, 0.55, 0, 1.08, 0, hitboxes);
+  }
+
+  function buildOpenBook(objects, hitboxes, root) {
+    const g = objectGroup('book', -2.53, FLOOR_Y + 0.505, 0.08, root);
+    objects.push(g);
+    g.rotation.y = 0.3;
+    const cover = material(RGB.coral);
+    const pages = material(RGB.cream, { roughness: 0.95 });
+    const leftCover = box(g, 0.32, 0.018, 0.42, 0.015, cover, -0.17, 0.018, 0, false);
+    leftCover.rotation.z = 0.13;
+    const rightCover = box(g, 0.32, 0.018, 0.42, 0.015, cover, 0.17, 0.018, 0, false);
+    rightCover.rotation.z = -0.13;
+    const leftPage = box(g, 0.29, 0.03, 0.38, 0.01, pages, -0.16, 0.04, 0, false);
+    leftPage.rotation.z = 0.13;
+    const rightPage = box(g, 0.29, 0.03, 0.38, 0.01, pages, 0.16, 0.04, 0, false);
+    rightPage.rotation.z = -0.13;
+    box(g, 0.025, 0.05, 0.4, 0.008, material(RGB.woodDark), 0, 0.035, 0, false);
+    for (let i = 0; i < 3; i += 1) {
+      box(g, 0.23, 0.004, 0.008, 0.002, material(RGB.trim), -0.16, 0.058 + i * 0.007, -0.08 + i * 0.09, false);
+      box(g, 0.23, 0.004, 0.008, 0.002, material(RGB.trim), 0.16, 0.058 + i * 0.007, -0.08 + i * 0.09, false);
+    }
+    hit(g, 'book', 0.66, 0.2, 0.54, 0, 0.13, 0, hitboxes);
+  }
+
+  function buildPlant(objects, hitboxes, root) {
+    const g = objectGroup('plant', -3.43, FLOOR_Y, 2.38, root);
+    objects.push(g);
+    const pot = material(RGB.coral, { roughness: 0.9 });
+    cylinder(g, 0.27, 0.2, 0.42, 18, pot, 0, 0.21, 0);
+    cylinder(g, 0.29, 0.29, 0.06, 18, pot, 0, 0.44, 0);
+    cylinder(g, 0.245, 0.245, 0.025, 18, material(RGB.woodDark), 0, 0.405, 0, false);
+    const stemMat = material(RGB.greenDark);
+    for (let i = 0; i < 7; i += 1) {
+      const angle = (i / 7) * Math.PI * 2;
+      const height = 0.55 + (i % 3) * 0.2;
+      const stem = addMesh(g, new THREE.CylinderGeometry(0.012, 0.017, height, 7), stemMat, [
+        Math.cos(angle) * 0.05,
+        0.42 + height / 2,
+        Math.sin(angle) * 0.05
+      ], true);
+      stem.rotation.z = Math.cos(angle) * 0.2;
+      stem.rotation.x = Math.sin(angle) * 0.2;
+
+      const leafMat = material(i % 2 === 0 ? RGB.green : RGB.greenDark);
+      const leaf = addMesh(g, new THREE.SphereGeometry(0.18, 9, 6), leafMat, [
+        Math.cos(angle) * (0.17 + (i % 3) * 0.03),
+        0.63 + (i % 3) * 0.21,
+        Math.sin(angle) * (0.17 + (i % 3) * 0.03)
+      ], true);
+      leaf.scale.set(1.46, 0.32, 0.7);
+      leaf.rotation.y = -angle;
+      leaf.rotation.z = 0.35 + (i % 2) * 0.12;
+    }
+    hit(g, 'plant', 0.86, 1.6, 0.86, 0, 0.8, 0, hitboxes);
+  }
+
+  function buildTVStand(objects, hitboxes, root) {
+    const g = objectGroup('tv_stand', -3.58, FLOOR_Y, -0.15, root);
+    objects.push(g);
+    const wood = material(RGB.woodLight);
+    const dark = material(RGB.woodDark);
+    box(g, 0.4, 0.5, 1.92, 0.07, wood, 0, 0.29, 0);
+    box(g, 0.45, 0.06, 1.98, 0.025, material(RGB.cream), 0, 0.555, 0);
+    [-0.46, 0.46].forEach((z) => {
+      box(g, 0.015, 0.36, 0.78, 0.015, material(RGB.cream, { roughness: 0.8 }), 0.208, 0.29, z, false);
+      const handle = addMesh(g, new THREE.CylinderGeometry(0.012, 0.012, 0.18, 8), dark, [0.226, 0.31, z], false);
+      handle.rotation.x = Math.PI / 2;
+    });
+    [-0.75, 0.75].forEach((z) => {
+      box(g, 0.1, 0.07, 0.1, 0.02, dark, -0.1, 0.035, z);
+    });
+    hit(g, 'tv_stand', 0.58, 0.66, 2.08, 0, 0.32, 0, hitboxes);
+  }
+
+  function buildTV(objects, hitboxes, root) {
+    const g = new THREE.Group();
+    g.name = 'OBJ_tv';
+    g.position.set(-3.73, FLOOR_Y + 1.13, -0.15);
+    g.rotation.y = Math.PI / 2;
+    g.userData = objectMeta('tv');
+    root.add(g);
+    objects.push(g);
+
+    const bezel = material(RGB.ink, { roughness: 0.58, metalness: 0.15 });
+    box(g, 1.83, 1.03, 0.075, 0.035, bezel, 0, 0, 0);
+    const screenMat = new THREE.MeshBasicMaterial({ map: makeScreenTexture() });
+    addMesh(g, new THREE.PlaneGeometry(1.68, 0.89), screenMat, [0, 0, 0.044], false, false);
+    const shine = new THREE.MeshBasicMaterial({
+      color: color(RGB.cream),
+      transparent: true,
+      opacity: 0.1,
+      depthWrite: false
+    });
+    addMesh(g, new THREE.PlaneGeometry(0.52, 0.9), shine, [-0.53, 0, 0.047], false, false);
+    box(g, 0.08, 0.1, 0.035, 0.01, bezel, 0, -0.56, 0);
+    box(g, 0.48, 0.035, 0.26, 0.015, bezel, 0, -0.57, 0);
+    hit(g, 'tv', 1.98, 1.16, 0.28, 0, 0, 0.01, hitboxes);
+  }
+
+  function buildPicture(objects, hitboxes, root) {
+    const g = new THREE.Group();
+    g.name = 'OBJ_picture';
+    g.position.set(-3.94, 2.3, -0.15);
+    g.rotation.y = Math.PI / 2;
+    g.userData = objectMeta('picture');
+    root.add(g);
+    objects.push(g);
+
+    const frame = material(RGB.woodLight);
+    box(g, 1.08, 0.08, 0.085, 0.025, frame, 0, 0.35, 0);
+    box(g, 1.08, 0.08, 0.085, 0.025, frame, 0, -0.35, 0);
+    box(g, 0.08, 0.78, 0.085, 0.025, frame, -0.5, 0, 0);
+    box(g, 0.08, 0.78, 0.085, 0.025, frame, 0.5, 0, 0);
+    box(g, 0.96, 0.68, 0.02, 0.01, material(RGB.cream), 0, 0, 0.035, false);
+    const art = new THREE.MeshBasicMaterial({ map: makePictureTexture() });
+    addMesh(g, new THREE.PlaneGeometry(0.9, 0.62), art, [0, 0, 0.049], false, false);
+    hit(g, 'picture', 1.2, 0.9, 0.22, 0, 0, 0, hitboxes);
+  }
+
+  function buildClock(objects, hitboxes, root) {
+    const g = new THREE.Group();
+    g.name = 'OBJ_clock';
+    g.position.set(1.0, 2.3, -2.9);
+    g.userData = objectMeta('clock');
+    root.add(g);
+    objects.push(g);
+
+    const body = addMesh(g, new THREE.CylinderGeometry(0.33, 0.33, 0.085, 32), material(RGB.cream), [0, 0, 0], true);
+    body.rotation.x = Math.PI / 2;
+    const rim = addMesh(g, new THREE.TorusGeometry(0.3, 0.025, 10, 32), material(RGB.tealDark), [0, 0, 0.052], true);
+    const faceMat = new THREE.MeshBasicMaterial({ map: makeClockTexture(), transparent: true });
+    addMesh(g, new THREE.CircleGeometry(0.292, 36), faceMat, [0, 0, 0.056], false, false);
+    const handMat = material(RGB.ink, { roughness: 0.5 });
+    const hour = new THREE.Group();
+    hour.position.z = 0.069;
+    const hourStick = box(hour, 0.024, 0.17, 0.014, 0.006, handMat, 0, 0.075, 0, false);
+    hour.rotation.z = 2.54;
+    g.add(hour);
+    const minute = new THREE.Group();
+    minute.position.z = 0.076;
+    box(minute, 0.018, 0.235, 0.012, 0.005, handMat, 0, 0.105, 0, false);
+    minute.rotation.z = 0.42;
+    g.add(minute);
+    const second = new THREE.Group();
+    second.position.z = 0.083;
+    box(second, 0.012, 0.25, 0.008, 0.003, material(RGB.coral), 0, 0.11, 0, false);
+    second.rotation.z = -1.2;
+    g.add(second);
+    const cap = addMesh(g, new THREE.CylinderGeometry(0.035, 0.035, 0.02, 16), material(RGB.coral), [0, 0, 0.085], false);
+    cap.rotation.x = Math.PI / 2;
+    hit(g, 'clock', 0.76, 0.76, 0.2, 0, 0, 0, hitboxes);
+  }
+
+  function buildAirConditioner(objects, hitboxes, root) {
+    const g = objectGroup('air_conditioner', 3.12, 2.55, -2.9, root);
+    objects.push(g);
+    const shell = material(RGB.white, { roughness: 0.55 });
+    box(g, 1.14, 0.35, 0.25, 0.09, shell, 0, 0, 0);
+    box(g, 1.0, 0.24, 0.035, 0.06, material(RGB.cream, { roughness: 0.7 }), 0, 0, 0.135);
+    for (let i = 0; i < 6; i += 1) {
+      box(g, 0.68, 0.012, 0.012, 0.005, material(RGB.trim), -0.08, -0.08 + i * 0.026, 0.158, false);
+    }
+    const led = addMesh(g, new THREE.SphereGeometry(0.016, 10, 8), material(RGB.teal, { emissive: RGB.teal, emissiveIntensity: 1.2 }), [0.39, -0.1, 0.15], false);
+    box(g, 1.02, 0.028, 0.14, 0.012, shell, 0, -0.15, 0.045).rotation.x = 0.2;
+    hit(g, 'air_conditioner', 1.34, 0.56, 0.42, 0, 0, 0, hitboxes);
+  }
+
+  function buildTrashCan(objects, hitboxes, root) {
+    const g = objectGroup('trash_can', 3.55, FLOOR_Y, 2.35, root);
+    objects.push(g);
+    cylinder(g, 0.25, 0.21, 0.52, 20, material(RGB.white), 0, 0.26, 0);
+    cylinder(g, 0.265, 0.265, 0.07, 20, material(RGB.teal), 0, 0.56, 0);
+    cylinder(g, 0.2, 0.2, 0.012, 20, material(RGB.ink, { roughness: 0.7 }), 0, 0.6, 0, false);
+    box(g, 0.16, 0.035, 0.08, 0.015, material(RGB.woodDark), 0, 0.08, 0.25);
+    box(g, 0.32, 0.035, 0.025, 0.01, material(RGB.tealDark), 0, 0.13, 0.24);
+    hit(g, 'trash_can', 0.64, 0.78, 0.64, 0, 0.4, 0, hitboxes);
+  }
+
+  function buildDiningTable(objects, hitboxes, root) {
+    const g = objectGroup('dining_table', 2.15, FLOOR_Y, -0.4, root);
+    objects.push(g);
+    const lightWood = material(RGB.woodLight);
+    const darkWood = material(RGB.wood);
+    const cream = material(RGB.cream);
+    box(g, 1.94, 0.1, 1.12, 0.13, lightWood, 0, 0.75, 0);
+    box(g, 1.72, 0.12, 0.9, 0.05, darkWood, 0, 0.67, 0);
+    [-0.78, 0.78].forEach((x) => {
+      [-0.41, 0.41].forEach((z) => {
+        box(g, 0.105, 0.67, 0.105, 0.03, darkWood, x, 0.335, z);
+      });
+    });
+    box(g, 1.5, 0.008, 0.3, 0.02, cream, 0, 0.805, 0, false);
+    hit(g, 'dining_table', 2.04, 0.86, 1.24, 0, 0.43, 0, hitboxes);
+  }
+
+  function chair(parent, x, z, rotation) {
+    const g = new THREE.Group();
+    g.position.set(x, 0, z);
+    g.rotation.y = rotation;
+    parent.add(g);
+    const seatMat = material(RGB.teal);
+    const frame = material(RGB.woodLight);
+    const pad = material(RGB.cream);
+    box(g, 0.48, 0.08, 0.46, 0.07, seatMat, 0, 0.45, 0);
+    box(g, 0.42, 0.035, 0.4, 0.05, pad, 0, 0.493, -0.01, false);
+    box(g, 0.48, 0.54, 0.07, 0.06, seatMat, 0, 0.75, 0.215);
+    box(g, 0.42, 0.08, 0.05, 0.03, pad, 0, 0.9, 0.22, false);
+    [-0.18, 0.18].forEach((lx) => {
+      [-0.16, 0.16].forEach((lz) => {
+        box(g, 0.055, 0.43, 0.055, 0.018, frame, lx, 0.215, lz);
+      });
+    });
+    box(g, 0.36, 0.04, 0.04, 0.012, frame, 0, 0.16, 0, false);
+    return g;
+  }
+
+  function buildDiningChairs(objects, hitboxes, root) {
+    const g = objectGroup('dining_chair', 2.15, FLOOR_Y, -0.4, root);
+    objects.push(g);
+    chair(g, -0.48, 0.98, 0);
+    chair(g, 0.48, 0.98, 0);
+    chair(g, -0.48, -0.98, Math.PI);
+    chair(g, 0.48, -0.98, Math.PI);
+    [[-0.48, 0.98], [0.48, 0.98], [-0.48, -0.98], [0.48, -0.98]].forEach(([x, z]) => {
+      hit(g, 'dining_chair', 0.58, 0.46, 0.62, x, 0.24, z, hitboxes);
+      hit(g, 'dining_chair', 0.54, 0.58, 0.2, x, 0.76, z + 0.2, hitboxes);
+    });
+    g.userData.labelAnchorLocal = new THREE.Vector3(0.48, 1.18, 0.98);
+  }
+
+  function buildPlate(objects, hitboxes, root) {
+    const g = objectGroup('plate', 1.63, TABLE_TOP + 0.012, -0.5, root);
+    objects.push(g);
+    const ceramic = material(RGB.cream, { roughness: 0.48 });
+    cylinder(g, 0.16, 0.15, 0.018, 26, ceramic, 0, 0, 0, false);
+    const rim = addMesh(g, new THREE.TorusGeometry(0.145, 0.012, 8, 26), material(RGB.teal, { roughness: 0.55 }), [0, 0.015, 0], false);
+    rim.rotation.x = Math.PI / 2;
+    cylinder(g, 0.105, 0.105, 0.006, 24, material(RGB.white), 0, 0.016, 0, false);
+    hit(g, 'plate', 0.42, 0.18, 0.42, 0, 0.07, 0, hitboxes);
+  }
+
+  function buildBowl(objects, hitboxes, root) {
+    const g = objectGroup('bowl', 2.47, TABLE_TOP + 0.02, -0.62, root);
+    objects.push(g);
+    const mat = material(RGB.coral, { roughness: 0.5 });
+    const bowl = addMesh(g, new THREE.CylinderGeometry(0.14, 0.075, 0.1, 22, 1, true), mat, [0, 0.06, 0], false);
+    bowl.material.side = THREE.DoubleSide;
+    cylinder(g, 0.08, 0.08, 0.018, 20, material(RGB.cream), 0, 0.012, 0, false);
+    const rim = addMesh(g, new THREE.TorusGeometry(0.138, 0.009, 7, 22), material(RGB.cream), [0, 0.11, 0], false);
+    rim.rotation.x = Math.PI / 2;
+    hit(g, 'bowl', 0.38, 0.25, 0.38, 0, 0.12, 0, hitboxes);
+  }
+
+  function buildCup(objects, hitboxes, root) {
+    const g = objectGroup('cup', 2.8, TABLE_TOP + 0.012, -0.33, root);
+    objects.push(g);
+    const mat = material(RGB.mustard, { roughness: 0.5 });
+    cylinder(g, 0.07, 0.062, 0.12, 20, mat, 0, 0.06, 0, false);
+    cylinder(g, 0.061, 0.061, 0.01, 20, material(RGB.woodDark, { roughness: 0.8 }), 0, 0.122, 0, false);
+    const handle = addMesh(g, new THREE.TorusGeometry(0.05, 0.012, 7, 16), mat, [0.075, 0.07, 0], false);
+    handle.rotation.y = 0;
+    hit(g, 'cup', 0.28, 0.27, 0.28, 0, 0.12, 0, hitboxes);
+  }
+
+  function buildSpoon(objects, hitboxes, root) {
+    const g = objectGroup('spoon', 1.94, TABLE_TOP + 0.015, -0.26, root);
+    objects.push(g);
+    g.rotation.y = -0.28;
+    const metal = material(RGB.metal, { roughness: 0.32, metalness: 0.5 });
+    box(g, 0.037, 0.012, 0.3, 0.014, metal, 0, 0.012, 0.05, false);
+    const head = addMesh(g, new THREE.SphereGeometry(0.062, 16, 10), metal, [0, 0.022, -0.145], false);
+    head.scale.set(1, 0.3, 1.45);
+    hit(g, 'spoon', 0.22, 0.13, 0.48, 0, 0.05, 0, hitboxes);
+  }
+
+  function buildFork(objects, hitboxes, root) {
+    const g = objectGroup('fork', 1.3, TABLE_TOP + 0.015, -0.27, root);
+    objects.push(g);
+    g.rotation.y = 0.26;
+    const metal = material(RGB.metal, { roughness: 0.32, metalness: 0.5 });
+    box(g, 0.034, 0.012, 0.29, 0.014, metal, 0, 0.012, 0.06, false);
+    box(g, 0.075, 0.012, 0.055, 0.015, metal, 0, 0.015, -0.11, false);
+    [-0.026, 0, 0.026].forEach((x) => {
+      box(g, 0.012, 0.01, 0.09, 0.004, metal, x, 0.015, -0.17, false);
+    });
+    hit(g, 'fork', 0.23, 0.13, 0.48, 0, 0.05, 0, hitboxes);
+  }
+
+  function buildKettle(objects, hitboxes, root) {
+    const g = objectGroup('kettle', 2.88, TABLE_TOP + 0.018, -0.80, root);
+    objects.push(g);
+    const shell = material(RGB.white, { roughness: 0.36, metalness: 0.1 });
+    const accent = material(RGB.teal);
+    const body = addMesh(g, new THREE.SphereGeometry(0.15, 20, 12), shell, [0, 0.14, 0], false);
+    body.scale.set(1, 0.86, 1);
+    cylinder(g, 0.105, 0.105, 0.025, 20, material(RGB.cream), 0, 0.018, 0, false);
+    cylinder(g, 0.09, 0.1, 0.035, 18, accent, 0, 0.268, 0, false);
+    addMesh(g, new THREE.SphereGeometry(0.034, 12, 8), accent, [0, 0.302, 0], false);
+    const spout = addMesh(g, new THREE.CylinderGeometry(0.016, 0.036, 0.23, 10), shell, [0.18, 0.2, 0], false);
+    spout.rotation.z = -0.95;
+    const handle = addMesh(g, new THREE.TorusGeometry(0.095, 0.015, 7, 18, Math.PI * 1.38), accent, [-0.135, 0.19, 0], false);
+    handle.rotation.z = -0.1;
+    hit(g, 'kettle', 0.48, 0.44, 0.48, 0, 0.2, 0, hitboxes);
+  }
+
+  function objectMeta(id) {
+    const meta = dataById.get(id);
+    if (!meta) throw new Error('Unknown object: ' + id);
+    return {
+      id,
+      objectId: id,
+      objectName: meta.objectName,
+      word: meta.word,
+      phonetic: meta.phonetic,
+      zh: meta.zh,
+      kidDefinition: meta.kidDefinition,
+      example: meta.example,
+      category: meta.category,
+      labelBias: meta.labelBias,
+      interactive: true
+    };
+  }
+
+  function objectGroup(id, x, y, z, root) {
+    const g = new THREE.Group();
+    g.name = 'OBJ_' + id;
+    g.position.set(x, y, z);
+    g.userData = objectMeta(id);
+    root.add(g);
+    return g;
+  }
+
+  function hit(group, id, w, h, d, x, y, z, hitboxes) {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), hitMaterial);
+    mesh.position.set(x, y, z);
+    mesh.userData = { isHitbox: true, objectId: id };
+    mesh.renderOrder = -1;
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    group.add(mesh);
+    hitboxes.push(mesh);
+    return mesh;
+  }
+
+  function buildRoom(root) {
+    materialCache.clear();
+    const hitboxes = [];
+    const objects = [];
+    buildRoomShell(root);
+    buildWindowAndCurtain(objects, hitboxes, root);
+    buildSofa(objects, hitboxes, root);
+    buildCushion(objects, hitboxes, root);
+    buildCoffeeTable(objects, hitboxes, root);
+    buildRemote(objects, hitboxes, root);
+    buildRug(objects, hitboxes, root);
+    buildFloorLamp(objects, hitboxes, root);
+    buildBookshelf(objects, hitboxes, root);
+    buildOpenBook(objects, hitboxes, root);
+    buildPlant(objects, hitboxes, root);
+    buildTVStand(objects, hitboxes, root);
+    buildTV(objects, hitboxes, root);
+    buildPicture(objects, hitboxes, root);
+    buildClock(objects, hitboxes, root);
+    buildAirConditioner(objects, hitboxes, root);
+    buildTrashCan(objects, hitboxes, root);
+    buildDiningTable(objects, hitboxes, root);
+    buildDiningChairs(objects, hitboxes, root);
+    buildPlate(objects, hitboxes, root);
+    buildBowl(objects, hitboxes, root);
+    buildCup(objects, hitboxes, root);
+    buildSpoon(objects, hitboxes, root);
+    buildFork(objects, hitboxes, root);
+    buildKettle(objects, hitboxes, root);
+
+    if (objects.length !== 25) {
+      throw new Error('Expected 25 interactive objects, built ' + objects.length);
+    }
+
+    return { objects, hitboxes };
+  }
+
+  window.WordRoomModels = { buildRoom, FLOOR_Y };
+})();

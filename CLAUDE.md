@@ -126,6 +126,7 @@ MVVM 分层（`entry/src/main/ets/`）：
 | `AskUserCard` | `ask_user` | AI 反问收集偏好 |
 | `map/MapCard` | `map_card` | 中国地图小课堂（讲解型：34 省可点 + 资料卡 + focus 高亮；待答态横幅 → 全屏 sheet） |
 | `map/MapQuizCard` | `map_quiz` | 中国地图出题（3 mode：choice/locate/write；待答态横幅 → 全屏 sheet） |
+| `room/RoomEnglishCard` | `room_english` | 客餐厅 3D 英语探索（讲解型：Web 容器加载 `rawfile/room3d/` 的 three.js 场景，25 件家具可点开单词卡；`RoomNativeBridge` 接原生 TTS，讲解型不授星） |
 
 出题类工具（math_quiz / english_quiz / picture_vocab / listening_quiz / pinyin_quiz / matching_pairs / categorization / map_card / map_quiz）参数在渲染前经 `utils/*Validation.ets` 预校验，坏题以 `should_retry` 回传 LLM 自行修正。
 
@@ -156,3 +157,4 @@ MVVM 分层（`entry/src/main/ets/`）：
 - **`sys.symbol.*` 命名空间 ≠ iOS SF Symbols**：`stop_fill` / `doc_on_clipboard` 等不存在，可用 `pause_fill` / `doc` 等。
 - **`Row.alignItems` 用 `VerticalAlign`、`Column.alignItems` 用 `HorizontalAlign`**——互相翻转时易错。
 - **`@Trace` 字段必须在子 Builder 的形参里**才能被识别为响应式依赖；直接读 `this.xxx` 在 `@Builder` 内部有效，**但传字符串快照会断响应式**。
+- **rawfile 里的本地网页**用 `resource://rawfile/<dir>/index.html` 加载（`mermaid/`、`document-parser/`、`room3d/` 都是），页面内 `./assets/x.js` 这类相对路径由 ArkWeb 同源解析，无需 `fileAccess`。ArkWeb 没有 `speechSynthesis`，发音要走 `javaScriptProxy` 注入的桥接对象转原生 `TTSService`。

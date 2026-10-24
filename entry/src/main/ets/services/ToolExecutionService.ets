@@ -11,6 +11,7 @@ import {
 import common from '@ohos.app.ability.common'
 import { ChinaMapData, ChinaProvince, loadChinaMapData } from '../utils/ChinaMapData'
 import { validateMapCardArgs, validateMapQuizArgs } from '../utils/MapToolValidation'
+import { validateRoomEnglishArgs } from '../utils/RoomEnglishValidation'
 import { getToolRegistry, RegisteredTool, ToolRegistry } from './ToolRegistry'
 import {
   ASK_USER_TOOL_ID,
@@ -58,9 +59,11 @@ import {
   isPictureTalkFunctionName,
   isChineseQuizFunctionName,
   isMapCardFunctionName,
+  isRoomEnglishFunctionName,
   isMapQuizFunctionName,
   MAP_CARD_TOOL_ID,
   MAP_QUIZ_TOOL_ID,
+  ROOM_ENGLISH_TOOL_ID,
   isScrapeWebFunctionName,
   isSearchWebFunctionName,
   isGrantStarFunctionName
@@ -1716,6 +1719,98 @@ export class ToolExecutionService {
     )
   }
 
+
+  // room_english 特殊路径: 客餐厅 3D 英语探索（讲解型）。
+  // 前端 RoomEnglishCard 用 Web 容器承载 3D 场景, 收集孩子点开的单词; 点「我学会了」完成回执。
+  // 讲解型工具: 不授星（与 map_card 一致）——星星由后续 english_quiz / matching_pairs 给。
+  private async handleRoomEnglish(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = ROOM_ENGLISH_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '客餐厅 3D 英语探索'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 0. 预校验: skill_key / focus 枚举 / words 必须命中 25 个物品 id
+    const cardValidation = validateRoomEnglishArgs(toolCall.arguments)
+    if (!cardValidation.ok) {
+      console.warn('ToolExecutionService', `room_english validation failed: ${cardValidation.error}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: 'validation_failed',
+          message: cardValidation.error,
+          should_retry: true
+        }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    // 1. 立即设置 pending 状态, 让卡片立即出现
+    toolCall.approvalState = 'pending'
+    this.recordLedgerServed('room_english', toolCall, context)
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = ROOM_ENGLISH_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `room_english answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `room_english 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'room_english cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未完成本课学习' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `room_english answered: ${toolCall.id}`)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
   // 地图数据加载: 缓存优先, miss 时经 EntryAbility 注入的 context 读 rawfile。
   // 失败返回 null → 校验层按「数据未就绪」硬拒, AI should_retry。
   private async loadMapProvinces(): Promise<ChinaMapData | null> {
@@ -3089,6 +3184,12 @@ export class ToolExecutionService {
     // 中国地图出题 (choice/locate/write), 由 MapQuizCard 收集小朋友的作答。
     if (isMapQuizFunctionName(normalizedFunctionName)) {
       return await this.handleMapQuiz(toolCall, context)
+    }
+
+    // === room_english 特殊路径 ===
+    // 客餐厅 3D 英语探索讲解卡, 由 RoomEnglishCard 收集「我学会了」完成回执。
+    if (isRoomEnglishFunctionName(normalizedFunctionName)) {
+      return await this.handleRoomEnglish(toolCall, context)
     }
 
     // 通过函数名获取工具 ID

@@ -1,0 +1,24 @@
+/*
+ * 鸿蒙宿主模式（body.room-host 由 room-app.js 在检测到 RoomNativeBridge 时添加）。
+ * 顶部品牌栏由原生标题栏（标题 + 进度 + 我学会了）替代，页面只负责 3D 舞台与单词面板。
+ */
+
+body.room-host .topbar,
+body.room-host .skip-link {
+  display: none;
+}
+
+body.room-host .workspace {
+  height: 100dvh;
+  min-height: 0;
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+}
+
+@media (max-width: 1000px) {
+  body.room-host .workspace {
+    height: auto;
+    min-height: 0;
+  }
+}
+
+/* 原生桥不可用时（例如在桌面浏览器里打开原型）保持原样式，不受影响 */
