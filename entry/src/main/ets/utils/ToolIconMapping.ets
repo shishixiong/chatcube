@@ -46,6 +46,9 @@ const MATCHING_PAIRS_KEYWORDS: string[] = [
 const MAP_KEYWORDS: string[] = [
   'map_card', 'map_quiz'
 ]
+const ROOM_KEYWORDS: string[] = [
+  'room_english'
+]
 
 function matchesAny(name: string, keywords: string[]): boolean {
   for (let i = 0; i < keywords.length; i++) {
@@ -116,6 +119,9 @@ export function resolveToolSymbol(functionName: string): Resource {
   }
   if (matchesAny(name, MAP_KEYWORDS)) {
     return $r('sys.symbol.map')
+  }
+  if (matchesAny(name, ROOM_KEYWORDS)) {
+    return $r('sys.symbol.house')
   }
   return $r('sys.symbol.wrench_and_screwdriver')
 }

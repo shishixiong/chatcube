@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#f4f8f5" />
+  <meta name="description" content="可旋转、可点击的低多边形 3D 客餐厅，包含 25 个独立物品、儿童友好单词卡和英文发音。" />
+  <title>小词屋 · 3D 客餐厅英语探索</title>
+  <link rel="stylesheet" href="assets/room.css" />
+  <link rel="stylesheet" href="assets/room-panel.css" />
+  <link rel="stylesheet" href="assets/room-dialogs.css" />
+  <!-- 鸿蒙宿主模式：隐藏顶部品牌栏，由原生标题栏接管 -->
+  <link rel="stylesheet" href="assets/room-host.css" />
+</head>
+<body>
+  <a class="skip-link" href="#scene-canvas">跳到 3D 场景</a>
+
+  <header class="topbar" data-od-id="topbar">
+    <div class="brand" aria-label="小词屋 Word Room">
+      <span class="brand-mark" aria-hidden="true">Aa</span>
+      <span class="brand-text">
+        <strong>小词屋</strong>
+        <small>WORD ROOM · 3D 客餐厅</small>
+      </span>
+    </div>
+    <div class="topbar-actions">
+      <span class="topic-pill"><span class="dot" aria-hidden="true"></span>客餐厅 · 25 个单词</span>
+      <button class="btn btn-ghost" type="button" id="openGlossary" data-od-id="open-glossary" aria-haspopup="dialog" aria-expanded="false" aria-controls="glossaryModal">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="4" y="4" width="6" height="6" rx="1.5"></rect>
+          <rect x="14" y="4" width="6" height="6" rx="1.5"></rect>
+          <rect x="4" y="14" width="6" height="6" rx="1.5"></rect>
+          <rect x="14" y="14" width="6" height="6" rx="1.5"></rect>
+        </svg>
+        词汇表
+      </button>
+    </div>
+  </header>
+
+  <main class="workspace" id="main">
+    <section class="stage-card" id="stage" data-od-id="scene-stage" aria-labelledby="sceneHeading">
+      <canvas
+        id="scene-canvas"
+        tabindex="-1"
+        aria-label="可旋转的 3D 客餐厅。点击或触摸物品打开单词卡；也可以打开词汇表选择单词。" aria-describedby="sceneDescription"
+      ></canvas>
+
+      <div class="label-layer" id="label-layer" aria-hidden="true" hidden>
+        <svg class="label-lines" id="label-lines" aria-hidden="true"></svg>
+        <div id="labels"></div>
+      </div>
+
+      <div class="stage-top">
+        <div class="scene-title">
+          <p class="eyebrow">客餐厅 · 3D 场景</p>
+          <h1 id="sceneHeading">客餐厅英语探索</h1>
+          <p class="scene-meta">8m × 6m <span>·</span> 25 件可点击物品</p>
+        </div>
+        <button
+          class="label-toggle"
+          type="button"
+          id="labelToggle"
+          disabled
+          role="switch"
+          aria-checked="false"
+          aria-controls="label-layer"
+          data-od-id="label-toggle"
+        >
+          <span class="toggle-copy">
+            <span>显示英文标签</span>
+            <small>点按切换</small>
+          </span>
+          <span class="switch" aria-hidden="true"><span></span></span>
+        </button>
+      </div>
+
+      <div class="stage-bottom">
+        <div class="gesture-hint" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 12a8 8 0 1 1-2.34-5.66"></path>
+            <path d="M20 4v4h-4"></path>
+          </svg>
+          <span class="desktop-only">拖动旋转 · 滚轮缩放 · 点按物品</span>
+          <span class="touch-only">单指旋转 · 双指缩放 · 点按物品</span>
+        </div>
+        <button class="icon-btn" type="button" id="resetView" data-od-id="reset-view" aria-label="重置 3D 视角" title="重置视角" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4.5 9A8 8 0 1 1 5 15.5"></path>
+            <path d="M4 4v5h5"></path>
+          </svg>
+        </button>
+      </div>
+
+      <div class="hover-chip" id="hoverChip" aria-hidden="true"></div>
+
+      <div class="scene-loader" id="sceneLoader" role="status" aria-live="polite">
+        <div class="loader-inner">
+          <span class="spinner" aria-hidden="true"></span>
+          <p>正在布置小房间…</p>
+        </div>
+      </div>
+
+      <div class="scene-error" id="sceneError" role="alert" hidden>
+        <h2>3D 房间没有打开</h2>
+        <p>请确认浏览器已开启硬件加速，然后刷新页面再试一次。你仍然可以打开词汇表查看全部 25 个单词。</p>
+        <button class="btn btn-primary" type="button" id="retryScene">重新加载</button>
+      </div>
+
+      <div class="sr-only" id="sceneDescription">
+        这个 3D 客餐厅里有 25 个独立物品。使用鼠标拖动或单指滑动旋转视角，滚轮或双指缩放。点击物品会打开单词卡；点击空白处关闭卡片。键盘用户可以打开词汇表选择单词。
+      </div>
+    </section>
+
+    <aside class="panel" id="panel" data-od-id="word-panel" aria-labelledby="panelTitle">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">学习面板</p>
+          <h2 id="panelTitle">发现单词</h2>
+        </div>
+        <div class="panel-head-right">
+          <span class="progress-chip" id="progressChip" data-od-id="collection-progress"><span id="progressCount">0</span><small>/ 25</small></span>
+          <button class="icon-btn" type="button" id="closeWord" data-od-id="close-word" aria-label="关闭单词卡" title="关闭单词卡" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="panel-body" id="panelBody">
+        <section class="welcome" id="welcomeView" data-od-id="welcome-view">
+          <p class="eyebrow">开始探索</p>
+          <h2>点一点，<br />把房间变成单词书。</h2>
+          <p class="lede">在客厅和餐厅里找一找，点开每件物品，就能听发音、看解释，把它收进你的单词口袋。</p>
+
+          <div class="progress-board">
+            <div class="dot-grid" id="dotGrid" aria-hidden="true"></div>
+            <div class="progress-copy">
+              <span class="big"><span id="welcomeCount">0</span><small>/ 25</small></span>
+              <p>每点开一个物品，就会点亮一格。试试从沙发开始？</p>
+            </div>
+          </div>
+
+          <div class="room-stats" aria-label="房间单词数量">
+            <div class="room-stat">
+              <strong>15</strong>
+              <span>客厅物品</span>
+            </div>
+            <div class="room-stat">
+              <strong>10</strong>
+              <span>餐厅物品</span>
+            </div>
+          </div>
+
+          <ol class="how-to">
+            <li>
+              <div>
+                <h3>点一点</h3>
+                <p>选中场景里的物品，就会打开它的单词卡。</p>
+              </div>
+            </li>
+            <li>
+              <div>
+                <h3>听一听</h3>
+                <p>点“听发音”，跟着语音读一遍英文单词。</p>
+              </div>
+            </li>
+            <li>
+              <div>
+                <h3>找一找</h3>
+                <p>打开英文标签，把单词和房间里的东西对起来。</p>
+              </div>
+            </li>
+          </ol>
+
+          <button class="text-link" type="button" id="openGlossaryInline" data-od-id="open-glossary-inline" aria-haspopup="dialog" aria-expanded="false" aria-controls="glossaryModal">
+            先看看全部 25 个单词
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M5 12h13M13 6l6 6-6 6"></path>
+            </svg>
+          </button>
+        </section>
+
+        <article class="word-view" id="wordView" data-od-id="word-card" hidden>
+          <div class="word-topline">
+            <span class="word-category" id="wordCategory" data-category="living">客厅</span>
+            <span id="wordIndex">01 / 25</span>
+          </div>
+
+          <h2 class="word-en" id="wordEnglish" lang="en">sofa</h2>
+
+          <div class="word-subline">
+            <span class="phonetic" id="wordPhonetic" lang="en">/ˈsoʊfə/</span>
+            <span class="word-zh" id="wordZh">沙发</span>
+          </div>
+
+          <div class="kid-definition">
+            <span class="micro-label">小朋友，看这里</span>
+            <p id="wordDefinition">客厅里软软的长椅子，可以坐和躺。</p>
+          </div>
+
+          <div class="example-card">
+            <div class="example-head">
+              <span class="micro-label" style="color: var(--accent-deep)">简单例句</span>
+            </div>
+            <p id="wordExample" lang="en">I sit on the sofa.</p>
+          </div>
+
+          <button class="btn btn-primary pronounce-btn" type="button" id="pronounceButton" data-od-id="pronounce-button">
+            <svg class="play-rings" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 10v4h3l4 3V7L7 10H4z"></path>
+              <path d="M14.5 9a4 4 0 0 1 0 6"></path>
+              <path d="M17.5 6.5a8 8 0 0 1 0 11"></path>
+            </svg>
+            <span id="pronounceLabel">听发音</span>
+          </button>
+
+          <div class="word-nav">
+            <button class="nav-btn" type="button" id="prevWord" data-od-id="prev-word">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M15 6l-6 6 6 6"></path>
+              </svg>
+              上一个
+            </button>
+            <span class="word-nav-index" id="wordNavIndex">01 / 25</span>
+            <button class="nav-btn" type="button" id="nextWord" data-od-id="next-word">
+              下一个
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 6l6 6-6 6"></path>
+              </svg>
+            </button>
+          </div>
+        </article>
+      </div>
+    </aside>
+  </main>
+
+  <div class="modal" id="glossaryModal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="glossaryTitle">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">全部 25 个单词</p>
+          <h2 id="glossaryTitle">词汇表</h2>
+          <p>点一个单词，场景里对应的物品会亮起来，并打开单词卡。</p>
+        </div>
+        <button class="icon-btn" type="button" id="closeGlossary" aria-label="关闭词汇表" title="关闭词汇表">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" id="glossaryBody"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="sr-only" id="liveRegion" aria-live="polite"></div>
+
+  <noscript>
+    <style>.scene-loader { display: none !important; }</style>
+    <p style="position: fixed; inset: auto 16px 16px; padding: 14px; background: #fff; border-radius: 12px; text-align: center;">
+      需要启用 JavaScript 才能使用 3D 客餐厅和单词卡。
+    </p>
+  </noscript>
+
+  <script src="assets/vendor/three.min.js"></script>
+  <script src="assets/scene-data.js"></script>
+  <script src="assets/room-models.js"></script>
+  <script src="assets/room-scene.js"></script>
+  <script src="assets/room-app.js"></script>
+</body>
+</html>

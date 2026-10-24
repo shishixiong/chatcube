@@ -46,7 +46,8 @@ import {
   PICTURE_TALK_TOOL_ID,
   CHINESE_QUIZ_TOOL_ID,
   MAP_CARD_TOOL_ID,
-  MAP_QUIZ_TOOL_ID
+  MAP_QUIZ_TOOL_ID,
+  ROOM_ENGLISH_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { getPinyinCharsJoined } from './PinyinData'
 import { getStrokeOrderCharsJoined } from './StrokeOrderData'
@@ -3744,6 +3745,88 @@ function createMapQuizToolConfig(): ToolConfig {
 }
 
 
+
+// ===== room_english 工具 =====
+// 客餐厅 3D 英语探索（讲解型）：可旋转的低多边形客餐厅，25 件家具/物品可点开单词卡
+// （英文 / 音标 / 中文 / 儿童解释 / 例句 / TTS 发音）。参考 open-design 原型 kid-room-3d-english。
+// 交互由前端 RoomEnglishCard（Web 容器）处理，后台 ToolExecutionService.handleRoomEnglish 拦截。
+
+interface RoomEnglishArgs {
+  focus?: string
+  words?: string[]
+  skill_key: string
+}
+
+class RoomEnglishExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // room_english 的交互由前端 RoomEnglishCard 组件处理。
+    // 后台由 ToolExecutionService.handleRoomEnglish 拦截处理。
+    try {
+      const params = JSON.parse(_args) as RoomEnglishArgs
+      return JSON.stringify({
+        opened: true,
+        focus: params.focus ?? 'all',
+        words: params.words ?? [],
+        skill_key: 'english_vocab'
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`room_english error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createRoomEnglishToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "focus": {
+        "type": "string",
+        "enum": ["living", "dining", "all"],
+        "description": "可选。本次重点探索的区域：living=客厅（15 件物品），dining=餐厅（10 件物品），all=整个客餐厅。默认 all。"
+      },
+      "words": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "可选。本次想重点教的单词 id，最多 8 个，传了会在房间里自动高亮并打开第一个词的单词卡。合法 id：sofa coffee_table tv tv_stand remote_control rug cushion floor_lamp bookshelf book plant curtain window picture clock air_conditioner trash_can dining_table dining_chair plate bowl cup spoon fork kettle。"
+      },
+      "skill_key": {
+        "type": "string",
+        "enum": ["english_vocab"],
+        "description": "固定传 english_vocab（英语词汇）。"
+      }
+    },
+    "required": ["skill_key"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    ROOM_ENGLISH_TOOL_ID,
+    'Open the 3D living room & dining room word room (客餐厅 3D 英语探索): a rotatable low-poly room with 25 tappable objects. Tapping an object opens a kid-friendly word card with the English word, phonetic, Chinese meaning, a one-line kid definition, an example sentence and a TTS pronunciation button. Use this INSTEAD of describing furniture in plain text when teaching home/room vocabulary. Pass words (max 8 ids) to highlight the words of this lesson; pass focus to restrict the scene to living or dining. After exploring, follow up with english_quiz or matching_pairs to check the words and award stars.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createRoomEnglishToolConfig(): ToolConfig {
+  return new ToolConfig(
+    ROOM_ENGLISH_TOOL_ID,
+    '客餐厅 3D 英语探索',
+    '走进 3D 客餐厅，点家具听英文发音、看单词卡，认识 25 个家居单词。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    ROOM_ENGLISH_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
 // 注册所有内置工具
 export function registerBuiltinTools(): void {
   const registry = getToolRegistry()
@@ -4090,6 +4173,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(ROOM_ENGLISH_TOOL_ID)) {
+    const roomEnglishTool = new RegisteredTool(
+      ROOM_ENGLISH_TOOL_ID,
+      createRoomEnglishToolConfig(),
+      createRoomEnglishToolDefinition(),
+      new RoomEnglishExecutor()
+    )
+    registry.registerTool(roomEnglishTool)
+    registeredNow += 1
+  }
+
   console.info(
     'BuiltinTools',
     `Builtin tools ready: total=${registry.getToolCount()}, newlyRegistered=${registeredNow}`
@@ -4098,5 +4192,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID, MAP_CARD_TOOL_ID, MAP_QUIZ_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID, MAP_CARD_TOOL_ID, MAP_QUIZ_TOOL_ID, ROOM_ENGLISH_TOOL_ID]
 }

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased · 3D 客餐厅英语探索
+
+### 新增
+
+- 新增「客餐厅 3D 英语探索」工具 `room_english`：8m × 6m 低多边形客餐厅（three.js 本地渲染、离线可用），25 件家具可点开单词卡（英文 / 音标 / 中文 / 儿童解释 / 例句 / 原生 TTS 发音），含英文标签开关、词汇表与 5×5 进度点阵
+- 3D 页面整体打包进 `entry/src/main/resources/rawfile/room3d/`，走 `resource://rawfile` 加载（与 mermaid / document-parser 同法）；Web 侧通过 `RoomNativeBridge` 把发音接到原生 TTS，并把已点开物品回报给原生统计
+- 讲解型工具不授星（与地图小课堂一致），星星由同一节课后续的 `english_quiz` / `matching_pairs` 给
+- 默认助手与小星英语老师工具白名单加入 `room_english`，系统提示词补充「先用 room_english 呈现家居词、再出题检验」的课堂节奏
+- `utils/RoomEnglishValidation.ets` 参数预校验（skill_key / focus 枚举 / words 命中 25 个物品 id / ≤8 词）+ hypium 单元测试
+
 ## Unreleased
 
 小星老师教学工具优化批次：出题预校验 + 3 个新互动工具 + 工具名规范化。
