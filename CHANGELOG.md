@@ -9,6 +9,7 @@
 - 讲解型工具不授星（与地图小课堂一致），星星由同一节课后续的 `english_quiz` / `matching_pairs` 给
 - 默认助手与小星英语老师工具白名单加入 `room_english`，系统提示词补充「先用 room_english 呈现家居词、再出题检验」的课堂节奏
 - `utils/RoomEnglishValidation.ets` 参数预校验（skill_key / focus 枚举 / words 命中 25 个物品 id / ≤8 词）+ hypium 单元测试
+- 修复 3D 客餐厅整体发灰：`room-models.js` 的 OKLCH 转换把 L（百分比）当 0–1 参与三次方运算，材质全部被 clamp 成纯白（原型同样的 bug）；改为先归一化，并加 1.4 倍彩度增益 + `NeutralToneMapping` 与降曝光/降光强，画面平均彩度 0.032 → 0.144，家具有真实颜色
 
 ## Unreleased
 
