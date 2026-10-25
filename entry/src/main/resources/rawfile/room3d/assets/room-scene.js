@@ -3,6 +3,12 @@
   'use strict';
 
   const THREE = window.THREE;
+  // 房间尺寸由模型层给出（客餐厅 8m + 厨房 3.8m），相机取景跟着走。
+  const BOUNDS = (window.WordRoomModels && window.WordRoomModels.bounds) || {
+    centerX: 0,
+    halfWidth: 4.35,
+    halfDepth: 3.2
+  };
   const ACCENT = new THREE.Color('#2f9d80');
   const WARM = new THREE.Color('#f3b56a');
 
@@ -50,9 +56,9 @@
 
       this.orbit = {
         theta: 0.79,
-        phi: 0.93,
-        radius: 13.5,
-        target: new THREE.Vector3(0, 0.86, 0.05)
+        phi: 0.85,
+        radius: 15.5,
+        target: new THREE.Vector3(BOUNDS.centerX + 0.12, 0.86, 0.05)
       };
       this.desired = {
         theta: this.orbit.theta,
@@ -257,13 +263,20 @@
       }
     }
 
+    zoomRange() {
+      const fit = this.fitRadius();
+      return { min: Math.max(5.4, fit * 0.36), max: fit * 1.14 };
+    }
+
     fitRadius() {
       const fov = (this.camera.fov * Math.PI) / 180;
       const tan = Math.tan(fov / 2);
       const aspect = Math.max(0.5, this.camera.aspect || 1);
-      const widthFit = 4.35 / (tan * aspect);
-      const heightFit = 3.55 / tan;
-      return clamp(Math.max(12.3, widthFit * 1.08, heightFit * 1.1), 12.3, 18.4);
+      const halfWidth = BOUNDS.halfWidth || 4.35;
+      const halfDepth = BOUNDS.halfDepth || 3.2;
+      const widthFit = halfWidth / (tan * aspect);
+      const heightFit = (halfDepth * 1.2) / tan;
+      return clamp(Math.max(12.3, widthFit * 1.13, heightFit), 12.3, 34);
     }
 
     setPointer(event) {
@@ -330,7 +343,8 @@
         const points = Array.from(this.pointers.values());
         const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
         if (this.pinch && this.pinch.distance > 10) {
-          this.desired.radius = clamp(this.pinch.radius * (this.pinch.distance / Math.max(10, distance)), 9.2, 18.8);
+          const zoom = this.zoomRange();
+      this.desired.radius = clamp(this.pinch.radius * (this.pinch.distance / Math.max(10, distance)), zoom.min, zoom.max);
           this.autoFit = false;
           this.gestureMoved = true;
         }
@@ -414,7 +428,8 @@
       event.preventDefault();
       const direction = Math.sign(event.deltaY);
       if (!direction) return;
-      this.desired.radius = clamp(this.desired.radius * (1 + direction * 0.07), 9.2, 18.8);
+      const zoom = this.zoomRange();
+      this.desired.radius = clamp(this.desired.radius * (1 + direction * 0.07), zoom.min, zoom.max);
       this.autoFit = false;
     }
 
@@ -426,10 +441,12 @@
       else if (event.key === 'ArrowUp') this.desired.phi = clamp(this.desired.phi - step, 0.64, 1.24);
       else if (event.key === 'ArrowDown') this.desired.phi = clamp(this.desired.phi + step, 0.64, 1.24);
       else if (event.key === '+' || event.key === '=') {
-        this.desired.radius = clamp(this.desired.radius * 0.94, 9.2, 18.8);
+        const zoom = this.zoomRange();
+        this.desired.radius = clamp(this.desired.radius * 0.94, zoom.min, zoom.max);
         this.autoFit = false;
       } else if (event.key === '-' || event.key === '_') {
-        this.desired.radius = clamp(this.desired.radius * 1.06, 9.2, 18.8);
+        const zoom = this.zoomRange();
+        this.desired.radius = clamp(this.desired.radius * 1.06, zoom.min, zoom.max);
         this.autoFit = false;
       } else if (event.key === 'r' || event.key === 'R') {
         this.resetView();

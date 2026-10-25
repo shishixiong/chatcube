@@ -33,7 +33,24 @@
     greenDark: [45, 0.09, 145],
     sky: [88, 0.045, 220],
     metal: [76, 0.008, 230],
-    glass: [85, 0.045, 220]
+    glass: [85, 0.045, 220],
+    stone: [90, 0.006, 210],
+    stoneDeep: [82, 0.007, 215],
+    steel: [74, 0.006, 250],
+    appliance: [88, 0.004, 235],
+    glassDark: [24, 0.012, 250],
+    tile: [92, 0.007, 195],
+    brass: [72, 0.09, 78]
+  };
+
+  // 房间从 8m × 6m 的客餐厅向东扩出 3.5m 的开放厨房。
+  const ROOM = { minX: -4.19, maxX: 7.65, minZ: -3.19, maxZ: 3.19, centerX: 1.73 };
+  const KITCHEN = {
+    counterZ: -2.68,
+    counterTop: 0.92,
+    islandX: 5.95,
+    islandZ: -0.86,
+    islandTop: 0.9
   };
 
   const dataById = new Map(window.WordRoomData.objects.map((item) => [item.id, item]));
@@ -313,10 +330,10 @@
   }
 
   function buildRoomShell(root) {
-    const base = box(root, 8.38, 0.28, 6.38, 0.09, material(RGB.trim), 0, -0.14, 0, false);
+    const base = box(root, 11.9, 0.28, 6.38, 0.09, material(RGB.trim), ROOM.centerX, -0.14, 0, false);
     base.receiveShadow = true;
 
-    for (let i = 0; i < 10; i += 1) {
+    for (let i = 0; i < 15; i += 1) {
       const w = 0.795;
       const x = -3.6 + i * 0.8;
       const token = i % 3 === 0 ? RGB.floorA : i % 3 === 1 ? RGB.floorB : RGB.floorC;
@@ -336,13 +353,15 @@
 
     box(root, 2.29, 3, 0.16, 0.04, wallMat, -2.855, 1.5, -3.06, false);
     box(root, 4.04, 3, 0.16, 0.04, wallMat, 1.94, 1.5, -3.06, false);
+    // 北墙向东延长，作为开放厨房的背景墙
+    box(root, 3.7, 3, 0.16, 0.04, wallMat, 5.85, 1.5, -3.06, false);
     box(root, 1.64, 0.92, 0.16, 0.035, wallMat, -0.9, 0.46, -3.06, false);
     box(root, 1.64, 0.62, 0.16, 0.035, wallMat, -0.9, 2.69, -3.06, false);
     box(root, 0.16, 3, 6, 0.04, wallMat, -4.06, 1.5, 0, false);
 
-    box(root, 7.98, 0.09, 0.07, 0.025, plankMat, 0, 0.095, -2.94, false);
+    box(root, 11.56, 0.09, 0.07, 0.025, plankMat, ROOM.centerX, 0.095, -2.94, false);
     box(root, 0.07, 0.09, 5.9, 0.025, plankMat, -3.94, 0.095, 0, false);
-    box(root, 7.98, 0.025, 0.03, 0.012, trimMat, 0, 0.9, -2.955, false);
+    box(root, 11.56, 0.025, 0.03, 0.012, trimMat, ROOM.centerX, 0.9, -2.955, false);
 
     const wainscot = material(RGB.wallCool, { roughness: 0.9 });
     box(root, 3.82, 0.74, 0.035, 0.03, wainscot, 1.96, 0.47, -2.955, false);
@@ -352,7 +371,7 @@
     }
 
     const doorTrim = material(RGB.trim, { roughness: 0.82 });
-    box(root, 8.2, 0.06, 0.05, 0.018, doorTrim, 0, 2.96, -2.98, false);
+    box(root, 11.6, 0.06, 0.05, 0.018, doorTrim, ROOM.centerX, 2.96, -2.98, false);
   }
 
   function buildWindowAndCurtain(objects, hitboxes, root) {
@@ -870,6 +889,252 @@
     hit(g, 'kettle', 0.48, 0.44, 0.48, 0, 0.2, 0, hitboxes);
   }
 
+
+  // ---------- 开放式厨房：北墙一字型操作台 + 中岛（参考 open-design 厨房方案） ----------
+
+  function buildKitchenShell(root) {
+    const tileMat = material(RGB.tile, { roughness: 0.58 });
+    const tile = addMesh(root, new THREE.BoxGeometry(3.42, 0.016, 4.2), tileMat, [5.95, FLOOR_Y + 0.006, -0.9], false);
+    tile.receiveShadow = true;
+
+    const grout = material(RGB.trim, { roughness: 0.9 });
+    for (let i = 0; i < 5; i += 1) {
+      box(root, 3.42, 0.005, 0.014, 0.004, grout, 5.95, FLOOR_Y + 0.016, -2.94 + i * 0.82, false);
+    }
+    for (let i = 0; i < 4; i += 1) {
+      box(root, 0.014, 0.005, 4.2, 0.004, grout, 4.4 + i * 0.88, FLOOR_Y + 0.016, -0.9, false);
+    }
+
+    // 台面后挡墙：石材压条 + 浅色墙砖
+    box(root, 3.5, 0.06, 0.06, 0.015, material(RGB.stone, { roughness: 0.45 }), 5.9, 0.95, -2.95, false);
+    box(root, 3.5, 0.56, 0.03, 0.01, material(RGB.tile, { roughness: 0.5 }), 5.9, 1.25, -2.97, false);
+    for (let i = 0; i < 7; i += 1) {
+      box(root, 0.012, 0.56, 0.012, 0.004, material(RGB.trim, { roughness: 0.85 }), 4.3 + i * 0.5, 1.25, -2.955, false);
+    }
+
+    // 微波炉小搁板
+    box(root, 0.72, 0.05, 0.44, 0.02, material(RGB.woodLight, { roughness: 0.7 }), 7.04, 0.99, -2.62, false);
+  }
+
+
+  // 台面：柜体 + 石材台面，灶台/烤箱/洗碗机都嵌在这条橱柜上
+  function buildKitchenRun(root) {
+    const body = material(RGB.woodLight, { roughness: 0.7 });
+    const stone = material(RGB.stoneDeep, { roughness: 0.42 });
+    const dark = material(RGB.woodDark, { roughness: 0.85 });
+    const brass = material(RGB.brass, { roughness: 0.32, metalness: 0.5 });
+
+    box(root, 1.96, 0.1, 0.54, 0.03, dark, 6.31, 0.06, -2.73, false);
+    box(root, 2.0, 0.78, 0.6, 0.03, body, 6.31, 0.48, -2.7, false);
+    const top = box(root, 2.14, 0.055, 0.72, 0.03, stone, 6.31, 0.897, -2.68, false);
+    top.receiveShadow = true;
+    box(root, 2.0, 0.02, 0.02, 0.008, stone, 6.31, 0.875, -2.36, false);
+
+    // 左侧柜门（烤箱和洗碗机占了右边两格）
+    const door = box(root, 0.56, 0.62, 0.03, 0.02, material(RGB.cream, { roughness: 0.64 }), 5.62, 0.5, -2.385, false);
+    door.receiveShadow = true;
+    box(root, 0.44, 0.02, 0.03, 0.01, brass, 5.62, 0.74, -2.36, false);
+    box(root, 0.03, 0.62, 0.03, 0.01, material(RGB.trim, { roughness: 0.8 }), 5.93, 0.5, -2.38, false);
+  }
+
+  function buildIsland(root) {
+    const g = new THREE.Group();
+    g.position.set(KITCHEN.islandX, FLOOR_Y, KITCHEN.islandZ);
+    root.add(g);
+    const body = material(RGB.woodLight, { roughness: 0.7 });
+    const panel = material(RGB.cream, { roughness: 0.68 });
+    const stone = material(RGB.stone, { roughness: 0.42 });
+    box(g, 2.4, 0.86, 1.02, 0.06, body, 0, 0.43, 0);
+    box(g, 2.48, 0.06, 1.1, 0.03, stone, 0, 0.89, 0);
+    [-0.6, 0.6].forEach((x) => {
+      box(g, 0.52, 0.66, 0.03, 0.02, panel, x, 0.46, 0.515, false);
+    });
+    box(g, 2.2, 0.06, 0.9, 0.02, material(RGB.woodDark, { roughness: 0.82 }), 0, 0.03, 0, false);
+    box(g, 0.32, 0.02, 0.16, 0.01, material(RGB.metal), 0.86, 0.79, 0.28, false);
+  }
+
+  function buildHood(root) {
+    const g = new THREE.Group();
+    g.position.set(5.7, 1.56, -2.86);
+    root.add(g);
+    const steel = material(RGB.steel, { roughness: 0.3, metalness: 0.55 });
+    box(g, 0.86, 0.12, 0.4, 0.035, steel, 0, 0, 0.03, false);
+    box(g, 0.62, 0.09, 0.32, 0.025, material(RGB.metal, { roughness: 0.35, metalness: 0.5 }), 0, -0.09, 0.03, false);
+    box(g, 0.3, 0.72, 0.24, 0.025, steel, 0, 0.44, -0.05, false);
+    box(g, 0.18, 0.02, 0.12, 0.008, material(RGB.cream, { emissive: RGB.cream, emissiveIntensity: 0.9 }), 0, -0.068, 0.08, false);
+  }
+
+  function buildFridge(objects, hitboxes, root) {
+    const g = objectGroup('fridge', 4.75, FLOOR_Y, -2.58, root);
+    objects.push(g);
+    const shell = material(RGB.appliance, { roughness: 0.44, metalness: 0.25 });
+    const doorMat = material(RGB.appliance, { roughness: 0.38, metalness: 0.3 });
+    const handle = material(RGB.metal, { roughness: 0.3, metalness: 0.6 });
+    box(g, 0.92, 1.94, 0.7, 0.07, shell, 0, 0.97, 0);
+    box(g, 0.87, 0.62, 0.04, 0.02, doorMat, 0, 1.56, 0.345, false);
+    box(g, 0.87, 1.16, 0.04, 0.02, doorMat, 0, 0.63, 0.345, false);
+    box(g, 0.87, 0.012, 0.02, 0.006, material(RGB.ink, { roughness: 0.7 }), 0, 1.245, 0.355, false);
+    box(g, 0.03, 0.34, 0.03, 0.01, handle, 0.34, 1.56, 0.38, false);
+    box(g, 0.03, 0.5, 0.03, 0.01, handle, 0.34, 0.66, 0.38, false);
+    [-0.24, 0.02].forEach((x, i) => {
+      box(g, 0.11, 0.09, 0.006, 0.01, material([78, 0.1, 40 + i * 30], { roughness: 0.6 }), x, 0.95 + i * 0.16, 0.368, false);
+    });
+    hit(g, 'fridge', 0.98, 2.0, 0.82, 0, 1.0, 0, hitboxes);
+  }
+
+  function buildStove(objects, hitboxes, root) {
+    const g = objectGroup('stove', 5.7, KITCHEN.counterTop, KITCHEN.counterZ, root);
+    objects.push(g);
+    const glassMat = material(RGB.glassDark, { roughness: 0.22, metalness: 0.25 });
+    const steel = material(RGB.metal, { roughness: 0.35, metalness: 0.55 });
+    box(g, 0.8, 0.026, 0.48, 0.03, glassMat, 0, 0.013, 0, false);
+    [-0.19, 0.19].forEach((dx) => {
+      const outer = addMesh(g, new THREE.TorusGeometry(0.082, 0.013, 6, 22), steel, [dx, 0.03, 0.02], false);
+      outer.rotation.x = Math.PI / 2;
+      const inner = addMesh(g, new THREE.TorusGeometry(0.042, 0.009, 6, 18), material(RGB.ink, { roughness: 0.5 }), [dx, 0.032, 0.02], false);
+      inner.rotation.x = Math.PI / 2;
+    });
+    for (let i = 0; i < 3; i += 1) {
+      const knob = cylinder(g, 0.022, 0.022, 0.028, 12, steel, -0.24 + i * 0.24, 0.03, -0.2, false);
+      knob.rotation.x = Math.PI / 2;
+    }
+    hit(g, 'stove', 1.0, 0.2, 0.62, 0, 0.05, 0, hitboxes);
+  }
+
+  function buildOven(objects, hitboxes, root) {
+    const g = objectGroup('oven', 6.34, FLOOR_Y, -2.36, root);
+    objects.push(g);
+    const frame = material(RGB.glassDark, { roughness: 0.3, metalness: 0.25 });
+    const steel = material(RGB.metal, { roughness: 0.3, metalness: 0.6 });
+    box(g, 0.64, 0.64, 0.07, 0.03, frame, 0, 0.54, 0);
+    box(g, 0.54, 0.36, 0.02, 0.02, material(RGB.ink, { roughness: 0.32 }), 0, 0.49, 0.045, false);
+    box(g, 0.5, 0.035, 0.06, 0.014, steel, 0, 0.79, 0.055, false);
+    box(g, 0.42, 0.012, 0.03, 0.006, material(RGB.coral, { emissive: RGB.coral, emissiveIntensity: 0.35 }), 0, 0.87, 0.045, false);
+    hit(g, 'oven', 0.7, 0.72, 0.24, 0, 0.54, 0, hitboxes);
+  }
+
+  function buildDishwasher(objects, hitboxes, root) {
+    const g = objectGroup('dishwasher', 6.98, FLOOR_Y, -2.36, root);
+    objects.push(g);
+    const panel = material(RGB.appliance, { roughness: 0.37, metalness: 0.3 });
+    box(g, 0.6, 0.76, 0.05, 0.02, panel, 0, 0.42, 0);
+    box(g, 0.52, 0.04, 0.045, 0.012, material(RGB.metal), 0, 0.75, 0.035, false);
+    box(g, 0.36, 0.02, 0.02, 0.008, material(RGB.teal, { emissive: RGB.teal, emissiveIntensity: 0.7 }), 0, 0.67, 0.03, false);
+    hit(g, 'dishwasher', 0.68, 0.82, 0.24, 0, 0.42, 0, hitboxes);
+  }
+
+  function buildCabinet(objects, hitboxes, root) {
+    const g = objectGroup('cabinet', 6.6, 1.68, -2.8, root);
+    objects.push(g);
+    const door = material(RGB.cream, { roughness: 0.66 });
+    const line = material(RGB.trim, { roughness: 0.82 });
+    const brass = material(RGB.brass, { roughness: 0.32, metalness: 0.5 });
+    box(g, 1.2, 0.72, 0.36, 0.03, door, 0, 0, 0);
+    box(g, 0.02, 0.66, 0.02, 0.008, line, 0, 0, 0.19, false);
+    [-0.3, 0.3].forEach((x) => {
+      box(g, 0.15, 0.028, 0.03, 0.01, brass, x, -0.07, 0.2, false);
+    });
+    box(g, 1.12, 0.02, 0.07, 0.008, material(RGB.cream, { emissive: RGB.cream, emissiveIntensity: 0.85 }), 0, -0.38, 0.16, false);
+    hit(g, 'cabinet', 1.3, 0.82, 0.4, 0, 0, 0, hitboxes);
+  }
+
+  function buildMicrowave(objects, hitboxes, root) {
+    const g = objectGroup('microwave', 7.04, 1.14, -2.62, root);
+    objects.push(g);
+    const shell = material(RGB.appliance, { roughness: 0.42, metalness: 0.28 });
+    box(g, 0.54, 0.32, 0.38, 0.03, shell, 0, 0.16, 0);
+    box(g, 0.3, 0.22, 0.02, 0.012, material(RGB.glassDark, { roughness: 0.28 }), -0.08, 0.16, 0.2, false);
+    box(g, 0.14, 0.26, 0.03, 0.012, material(RGB.cream, { roughness: 0.6 }), 0.19, 0.16, 0.19, false);
+    box(g, 0.022, 0.2, 0.025, 0.008, material(RGB.metal), 0.12, 0.16, 0.21, false);
+    hit(g, 'microwave', 0.72, 0.5, 0.52, 0, 0.16, 0, hitboxes);
+  }
+
+  function buildToaster(objects, hitboxes, root) {
+    const g = objectGroup('toaster', 6.95, KITCHEN.islandTop, -0.88, root);
+    objects.push(g);
+    const body = material(RGB.coral, { roughness: 0.52 });
+    box(g, 0.3, 0.19, 0.19, 0.05, body, 0, 0.095, 0);
+    box(g, 0.24, 0.03, 0.13, 0.02, material(RGB.ink, { roughness: 0.65 }), 0, 0.19, 0, false);
+    box(g, 0.05, 0.03, 0.045, 0.012, material(RGB.metal), 0.17, 0.12, 0, false);
+    hit(g, 'toaster', 0.52, 0.36, 0.4, 0, 0.12, 0, hitboxes);
+  }
+
+  function buildPot(objects, hitboxes, root) {
+    const g = objectGroup('pot', 5.5, KITCHEN.counterTop + 0.026, -2.72, root);
+    objects.push(g);
+    const steel = material(RGB.steel, { roughness: 0.3, metalness: 0.6 });
+    cylinder(g, 0.145, 0.13, 0.2, 22, steel, 0, 0.1, 0);
+    cylinder(g, 0.15, 0.15, 0.025, 22, material(RGB.steel, { roughness: 0.28, metalness: 0.62 }), 0, 0.21, 0, false);
+    cylinder(g, 0.03, 0.03, 0.035, 12, material(RGB.ink, { roughness: 0.5 }), 0, 0.24, 0, false);
+    [-1, 1].forEach((side) => {
+      const ear = addMesh(g, new THREE.TorusGeometry(0.045, 0.012, 6, 14, Math.PI), material(RGB.ink, { roughness: 0.6 }), [side * 0.16, 0.14, 0], false);
+      ear.rotation.z = side > 0 ? -Math.PI / 2 : Math.PI / 2;
+    });
+    hit(g, 'pot', 0.5, 0.38, 0.48, 0, 0.14, 0, hitboxes);
+  }
+
+  function buildPan(objects, hitboxes, root) {
+    const g = objectGroup('pan', 5.98, KITCHEN.counterTop + 0.026, -2.66, root);
+    objects.push(g);
+    const dark = material(RGB.glassDark, { roughness: 0.42, metalness: 0.3 });
+    cylinder(g, 0.16, 0.14, 0.07, 22, dark, 0, 0.035, 0);
+    const rim = addMesh(g, new THREE.TorusGeometry(0.16, 0.012, 6, 22), dark, [0, 0.07, 0], false);
+    rim.rotation.x = Math.PI / 2;
+    const stem = box(g, 0.26, 0.03, 0.05, 0.015, material(RGB.ink, { roughness: 0.5 }), 0.25, 0.09, 0, false);
+    stem.rotation.z = 0.1;
+    hit(g, 'pan', 0.56, 0.24, 0.5, 0.06, 0.09, 0, hitboxes);
+  }
+
+  function buildKnife(objects, hitboxes, root) {
+    const g = objectGroup('knife', 6.45, KITCHEN.islandTop, -0.54, root);
+    objects.push(g);
+    box(g, 0.16, 0.2, 0.1, 0.03, material(RGB.woodLight, { roughness: 0.72 }), 0, 0.1, 0);
+    [-0.04, 0, 0.04].forEach((x, i) => {
+      const blade = box(g, 0.012, 0.24, 0.022, 0.005, material(RGB.metal, { roughness: 0.24, metalness: 0.62 }), x, 0.19, 0.02 + i * 0.008, false);
+      blade.rotation.z = (i - 1) * 0.1;
+    });
+    hit(g, 'knife', 0.44, 0.42, 0.38, 0, 0.17, 0, hitboxes);
+  }
+
+  function barStool(parent, x, z) {
+    const g = new THREE.Group();
+    g.position.set(x, 0, z);
+    parent.add(g);
+    const legMat = material(RGB.ink, { roughness: 0.34, metalness: 0.5 });
+    cylinder(g, 0.2, 0.2, 0.075, 20, material(RGB.sofa, { roughness: 0.62 }), 0, 0.63, 0);
+    cylinder(g, 0.21, 0.21, 0.02, 20, material(RGB.sofaDark, { roughness: 0.6 }), 0, 0.585, 0, false);
+    [[-0.13, -0.13], [0.13, -0.13], [-0.13, 0.13], [0.13, 0.13]].forEach(([lx, lz]) => {
+      box(g, 0.032, 0.6, 0.032, 0.01, legMat, lx, 0.29, lz);
+    });
+    const ring = addMesh(g, new THREE.TorusGeometry(0.15, 0.012, 6, 20), legMat, [0, 0.2, 0], false);
+    ring.rotation.x = Math.PI / 2;
+    return g;
+  }
+
+  function buildBarStools(objects, hitboxes, root) {
+    const g = objectGroup('stool', 5.95, FLOOR_Y, 0.18, root);
+    objects.push(g);
+    barStool(g, -0.62, 0);
+    barStool(g, 0.62, 0);
+    [-0.62, 0.62].forEach((x) => {
+      hit(g, 'stool', 0.5, 0.72, 0.5, x, 0.36, 0, hitboxes);
+    });
+    g.userData.labelAnchorLocal = new THREE.Vector3(0.62, 0.78, 0);
+  }
+
+  function buildSink(objects, hitboxes, root) {
+    const g = objectGroup('sink', 5.4, KITCHEN.islandTop + 0.02, -0.88, root);
+    objects.push(g);
+    const steel = material(RGB.steel, { roughness: 0.26, metalness: 0.62 });
+    box(g, 0.64, 0.025, 0.48, 0.03, steel, 0, 0.013, 0, false);
+    box(g, 0.52, 0.02, 0.36, 0.02, material(RGB.ink, { roughness: 0.38 }), 0, 0.028, 0, false);
+    box(g, 0.44, 0.016, 0.28, 0.015, material(RGB.steel, { roughness: 0.5, metalness: 0.4 }), 0, 0.036, 0, false);
+    cylinder(g, 0.022, 0.022, 0.28, 12, steel, -0.24, 0.18, -0.16, false);
+    box(g, 0.26, 0.03, 0.03, 0.012, steel, -0.12, 0.31, -0.16, false);
+    box(g, 0.03, 0.07, 0.03, 0.01, steel, -0.01, 0.28, -0.16, false);
+    hit(g, 'sink', 0.7, 0.4, 0.54, 0, 0.16, 0, hitboxes);
+  }
+
   function objectMeta(id) {
     const meta = dataById.get(id);
     if (!meta) throw new Error('Unknown object: ' + id);
@@ -914,6 +1179,10 @@
     const hitboxes = [];
     const objects = [];
     buildRoomShell(root);
+    buildKitchenShell(root);
+    buildKitchenRun(root);
+    buildIsland(root);
+    buildHood(root);
     buildWindowAndCurtain(objects, hitboxes, root);
     buildSofa(objects, hitboxes, root);
     buildCushion(objects, hitboxes, root);
@@ -938,13 +1207,37 @@
     buildSpoon(objects, hitboxes, root);
     buildFork(objects, hitboxes, root);
     buildKettle(objects, hitboxes, root);
+    buildFridge(objects, hitboxes, root);
+    buildStove(objects, hitboxes, root);
+    buildOven(objects, hitboxes, root);
+    buildDishwasher(objects, hitboxes, root);
+    buildCabinet(objects, hitboxes, root);
+    buildMicrowave(objects, hitboxes, root);
+    buildToaster(objects, hitboxes, root);
+    buildPot(objects, hitboxes, root);
+    buildPan(objects, hitboxes, root);
+    buildKnife(objects, hitboxes, root);
+    buildBarStools(objects, hitboxes, root);
+    buildSink(objects, hitboxes, root);
 
-    if (objects.length !== 25) {
-      throw new Error('Expected 25 interactive objects, built ' + objects.length);
+    if (objects.length !== 37) {
+      throw new Error('Expected 37 interactive objects, built ' + objects.length);
     }
 
     return { objects, hitboxes };
   }
 
-  window.WordRoomModels = { buildRoom, FLOOR_Y };
+  window.WordRoomModels = {
+    buildRoom,
+    FLOOR_Y,
+    bounds: {
+      minX: ROOM.minX,
+      maxX: ROOM.maxX,
+      minZ: ROOM.minZ,
+      maxZ: ROOM.maxZ,
+      centerX: ROOM.centerX,
+      halfWidth: (ROOM.maxX - ROOM.minX) / 2,
+      halfDepth: (ROOM.maxZ - ROOM.minZ) / 2
+    }
+  };
 })();

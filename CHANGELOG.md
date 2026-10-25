@@ -1,14 +1,19 @@
 # Changelog
 
-## Unreleased · 3D 客餐厅英语探索
+## Unreleased · 3D 客餐厅 + 厨房英语探索
 
 ### 新增
 
-- 新增「客餐厅 3D 英语探索」工具 `room_english`：8m × 6m 低多边形客餐厅（three.js 本地渲染、离线可用），25 件家具可点开单词卡（英文 / 音标 / 中文 / 儿童解释 / 例句 / 原生 TTS 发音），含英文标签开关、词汇表与 5×5 进度点阵
+- 3D 房间向东扩出开放厨房（参考 open-design 厨房原型）：房间 8m × 6m → 11.8m × 6m，新增一字型橱柜（台面 / 灶台 / 烟机 / 烤箱 / 洗碗机 / 吊柜 / 微波炉）、冰箱、中岛（水槽 / 刀座 / 烤面包机）与两把吧台凳，厨房地面改浅灰方砖
+- 新增 12 个厨房单词：fridge / stove / oven / sink / pot / pan / toaster / microwave / dishwasher / cabinet / knife / stool（含音标、儿童解释、例句），`scene-data.js` 共 37 件可点物品（客厅 15 + 餐厅 10 + 厨房 12），工具 `focus` 枚举新增 `kitchen`
+- 网页内总数、分类计数、进度分母、词汇表分组、进度点阵全部改为从场景数据派生（不再写死 25/15/10）；原生标题栏进度改用 `ROOM_OBJECT_TOTAL`
+- 新增「客餐厅 3D 英语探索」工具 `room_english`：低多边形客餐厅与开放厨房（three.js 本地渲染、离线可用），37 件家具可点开单词卡（英文 / 音标 / 中文 / 儿童解释 / 例句 / 原生 TTS 发音），含英文标签开关、词汇表与进度点阵
 - 3D 页面整体打包进 `entry/src/main/resources/rawfile/room3d/`，走 `resource://rawfile` 加载（与 mermaid / document-parser 同法）；Web 侧通过 `RoomNativeBridge` 把发音接到原生 TTS，并把已点开物品回报给原生统计
 - 讲解型工具不授星（与地图小课堂一致），星星由同一节课后续的 `english_quiz` / `matching_pairs` 给
 - 默认助手与小星英语老师工具白名单加入 `room_english`，系统提示词补充「先用 room_english 呈现家居词、再出题检验」的课堂节奏
-- `utils/RoomEnglishValidation.ets` 参数预校验（skill_key / focus 枚举 / words 命中 25 个物品 id / ≤8 词）+ hypium 单元测试
+- `utils/RoomEnglishValidation.ets` 参数预校验（skill_key / focus 枚举 / words 命中 37 个物品 id / ≤8 词）+ hypium 单元测试
+- 相机取景与缩放范围改为按房间尺寸计算（`WordRoomModels.bounds` → `fitRadius()` / `zoomRange()`），房间变长后仍能完整取景，手机端可拉近看厨房
+- 3D 标签布局：37 个英文标签全开时自动隐藏引线过长的标签（选中项始终显示），避免长引线横穿场景
 - 修复 3D 客餐厅整体发灰：`room-models.js` 的 OKLCH 转换把 L（百分比）当 0–1 参与三次方运算，材质全部被 clamp 成纯白（原型同样的 bug）；改为先归一化，并加 1.4 倍彩度增益 + `NeutralToneMapping` 与降曝光/降光强，画面平均彩度 0.032 → 0.144，家具有真实颜色
 
 ## Unreleased

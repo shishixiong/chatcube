@@ -1,10 +1,10 @@
-# room_english · 客餐厅 3D 英语探索 设计（2026-10-24）
+# room_english · 客餐厅 + 厨房 3D 英语探索 设计（2026-10-24，2026-10-25 扩建厨房）
 
 ## 1. 背景与目标
 
 小星英语老师需要一个「能把孩子带进房间」的词汇教学工具：不是看图选词，而是让孩子在可旋转的 3D 客餐厅里点家具、听英文发音、看单词卡，把单词和实物对应起来。
 
-原型来自 open-design（`kids-room-3d-english`，8m × 6m 低多边形客餐厅、25 件可点击物品、three.js 0.185 本地渲染）。本设计把它落到鸿蒙原生壳里，作为一个内置工具 `room_english` 挂在 `ToolRegistry` 上，由小星英语老师在「呈现」环节调用。
+原型来自 open-design（`kids-room-3d-english`，8m × 6m 低多边形客餐厅、25 件可点击物品、three.js 0.185 本地渲染）；2026-10-25 参考同系列厨房原型（`96a8ae19-…`，东北角开放厨房方案）向东扩出开放厨房，房间变成 11.8m × 6m、37 件可点击物品（客厅 15 + 餐厅 10 + 厨房 12，见 §11）。本设计把它落到鸿蒙原生壳里，作为一个内置工具 `room_english` 挂在 `ToolRegistry` 上，由小星英语老师在「呈现」环节调用。
 
 ## 2. 方案选型
 
@@ -16,13 +16,14 @@
 
 **边界**：ArkWeb 没有 `speechSynthesis`，发音改走原生 TTS 桥；原生标题栏接管「进度 + 我学会了」，页面切到 host 布局（隐藏自带品牌栏）。
 
-## 3. 数据：25 个物品
+## 3. 数据：37 个物品
 
-`sofa / coffee_table / tv / tv_stand / remote_control / rug / cushion / floor_lamp / bookshelf / book / plant / curtain / window / picture / clock`（客厅 15）+ `air_conditioner / trash_can / dining_table / dining_chair / plate / bowl / cup / spoon / fork / kettle`（餐厅 10）。
+`sofa / coffee_table / tv / tv_stand / remote_control / rug / cushion / floor_lamp / bookshelf / book / plant / curtain / window / picture / clock`（客厅 15）+ `air_conditioner / trash_can / dining_table / dining_chair / plate / bowl / cup / spoon / fork / kettle`（餐厅 10）+ `fridge / stove / oven / sink / pot / pan / toaster / microwave / dishwasher / cabinet / knife / stool`（厨房 12）。
 
-每个物品带 `word / phonetic / zh / kidDefinition / example / category`，唯一数据源是 `rawfile/room3d/assets/scene-data.js`，工具侧校验白名单是 `utils/RoomEnglishValidation.ets` 的 `ROOM_OBJECT_IDS`。**两处必须同步**（单元测试断言 25 条）。
+每个物品带 `word / phonetic / zh / kidDefinition / example / category`，唯一数据源是 `rawfile/room3d/assets/scene-data.js`，工具侧校验白名单是 `utils/RoomEnglishValidation.ets` 的 `ROOM_OBJECT_IDS`。**两处必须同步**（单元测试断言 37 条）。
 
-> 原型把空气调节器/垃圾桶归到餐厅（10 条），保持原分组不动，避免与原型 UI 的「15 / 10」计数冲突。
+> 原型把空气调节器/垃圾桶归到餐厅（10 条），保持原分组不动。
+> 网页内的总数、分类计数、进度分母全部由 `scene-data.js` 派生（`data-total` / `OBJECTS.length` / `categories[x].count`），只有 `RoomEnglishCard` 的原生标题栏需要常量 `ROOM_OBJECT_TOTAL`。
 
 ## 4. 工具契约
 
@@ -31,7 +32,7 @@
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `skill_key` | string enum `english_vocab` | 是 | 画像维度固定为英语词汇 |
-| `focus` | string enum `living` / `dining` / `all` | 否 | 默认 `all`，本次重点区域（当前只进 payload + 文案，不做场景裁剪） |
+| `focus` | string enum `living` / `dining` / `kitchen` / `all` | 否 | 默认 `all`，本次重点区域（当前只进 payload + 文案，不做场景裁剪） |
 | `words` | string[] | 否 | 本次重点词 id，最多 8 个；命中后自动显示英文标签并选中第一个词 |
 
 ### 4.2 回执（`ToolResult.result`）
@@ -57,7 +58,7 @@
 
 ```
 Column
-├─ HeaderBar()            原生：标题 + 已收集 N/25 + 「我学会了」
+├─ HeaderBar()            原生：标题 + 已收集 N/37 + 「我学会了」
 └─ Stack
    ├─ Web(resource://rawfile/room3d/index.html)
    ├─ LoadingProgress     页面就绪前的「正在布置小房间…」
@@ -116,7 +117,7 @@ Column
 - [ ] 点沙发 → 右侧（手机为下方）出现单词卡：sofa / /ˈsoʊfə/ / 沙发 / 儿童解释 / 例句
 - [ ] 点「听发音」听到原生 TTS 英文，而不是「不支持语音朗读」提示
 - [ ] 再点电视 → 单词卡切换，不叠加；点空白处 → 关闭单词卡
-- [ ] 原生标题栏进度从 0/25 递增；点「我学会了」→ sheet 关闭，AI 收到 `explored_count` 与 `words`
+- [ ] 原生标题栏进度从 0/37 递增；点「我学会了」→ sheet 关闭，AI 收到 `explored_count` 与 `words`
 - [ ] 时间线里这条工具步骤可展开，显示收集到的单词 chips
 - [ ] 传 `words: ["sofa"]` 时进房间自动选中沙发并显示英文标签
 - [ ] 直接下拉关闭 sheet → AI 收到 `cancelled: true`，不报错
@@ -127,6 +128,7 @@ Column
 - 3D 依赖 WebGL；极低端设备关闭硬件加速时显示「3D 房间没有打开」+ 重新加载，词汇表仍可在网页内使用（当前 sheet 直接展示错误面板，未做词汇表兜底）。
 - 系统 TTS 必须已初始化（`EntryAbility` 已 init）；引擎不可用时返回 `'false'`，Web 侧回落到 `speechSynthesis`，再不行提示「当前设备不支持语音朗读」。
 - `focus` 暂不裁剪场景（原型不支持按分类隐藏），只进回执与提示词。
+- 房间变长后默认视角半径约 22（手机竖屏 402 × 874），厨房物品在默认缩放下偏小；已放宽缩放范围（`zoomRange()` 跟 `fitRadius()` 联动，可拉近到约 8），双指掰合即可贴近厨房。默认俯角也从 37° 收到 41°（`phi` 0.93 → 0.85），长条形户型在竖屏里更饱满。
 - 深色模式下 Web 页自身主题固定浅色（原型只做了浅色），sheet 背景与原生标题栏会跟随深色，页内为浅色卡片，属预期。
 
 ## 10. 复原配色（2026-10-24 修复：整间房发灰）
@@ -154,3 +156,89 @@ Column
 ![修复后](assets/room3d-after.png)
 
 **没有做的**：没有替换调色板本身。房间仍是原型那套「暖木色 + 鼠尾草绿 + 陶土色」的柔和北欧配色，地板/墙面本来就是暖中性色，所以整体基调偏米色；如果希望更「儿童房」的跳色（蓝/黄/粉撞色），那是配色改版，需另开一轮，参照物见 §11。
+
+## 11. 厨房扩建（2026-10-25）
+
+### 11.1 目标与取舍
+
+原型里的 3D 房间只有客餐厅，孩子学家居词时「厨房」这一大类（fridge / stove / sink / pot / pan …）没有可点的实物。参考 open-design 厨房原型（单页 HTML，18 件厨房物品 + 平面「工作台」风格）后，决定在**同一个 3D 房间内向东扩出开放厨房**，而不是再开一个新页面：
+
+- 保持「一间房就可以讲完」的叙事：孩子在客厅坐下 → 走到餐桌 → 进厨房，视角连续。
+- 复用同一套 `RoomExperience`（相机/拾取/标签/桥），不新增 Web 容器，sheet 逻辑零改动。
+- 词汇来源仍是 `scene-data.js` 单一数据源，原生侧只加白名单与 `focus` 枚举。
+
+未采纳：把厨房做成第二个页面（切换成本高、老师讲「走进厨房」会断）、把厨房放在房间南侧（南墙是剖切面，会被相机挡）。
+
+### 11.2 空间布局
+
+房间底面从 `8.38 × 6.38` 扩到 `11.9 × 6.38`（x: −4.19 → 7.65），北墙、踢脚线、收口线同步延长；厨房占 x 4.2 → 7.65 的东北角，地面铺 0.84m 方砖（`RGB.tile` + 灰缝）与客餐厅木地板分开，北墙加石材压条 + 浅色墙砖。
+
+| 家具 | 位置 (x, z) | 尺寸 | 说明 |
+| --- | --- | --- | --- |
+| 橱柜（柜体 + 石材台面） | 6.31, −2.70 | 2.0 × 0.6 × 0.87 | 一字型沿北墙，台面 2.14 × 0.72 @ y0.92 |
+| 冰箱 fridge | 4.75, −2.58 | 0.92 × 0.7 × 1.94 | 台面西端独立高柜，两门 + 把手 + 磁贴 |
+| 灶台 stove | 5.70, −2.68 | 0.8 × 0.48 | 黑玻璃面板 + 2 个深色炉圈 + 3 个旋钮 |
+| 烟机 hood（装饰） | 5.70, −2.86 | 0.86 × 0.4 | 1.56m 高，含烟管 |
+| 锅 pot / 平底锅 pan | 5.50 / 5.98, −2.72 / −2.66 | ⌀0.29 / ⌀0.32 | 坐在灶台玻璃上（y = 台面 + 0.026） |
+| 烤箱 oven | 6.34, −2.36 | 0.64 × 0.64 | 嵌在柜体前脸，深色玻璃门 + 拉手 |
+| 洗碗机 dishwasher | 6.98, −2.36 | 0.6 × 0.76 | 不锈钢面板 + 指示灯条 |
+| 吊柜 cabinet | 6.60, −2.80 | 1.2 × 0.72 × 0.36 | y1.32–2.04，双门 + 黄铜拉手 + 柜底灯带 |
+| 微波炉 microwave | 7.04, −2.62 | 0.54 × 0.38 | 站在 0.99m 小搁板上（搁板属装饰） |
+| 中岛 island（装饰） | 5.95, −0.86 | 2.4 × 1.05 × 0.92 | 木柜体 + 米白门板 + 石材台面 |
+| 水槽 sink | 5.40, −0.88 | 0.64 × 0.48 | 中岛台面上：不锈钢盆口 + 深色盆底 + 鹅颈龙头 |
+| 烤面包机 toaster | 6.95, −0.88 | 0.3 × 0.19 × 0.19 | 中岛台面东端，橙色机身 |
+| 刀座 knife | 6.45, −0.54 | 0.16 × 0.1 | 中岛台面南沿，木座 + 3 把刀 |
+| 吧台凳 stool | 5.95, +0.18 | 2 × ⌀0.4 | 中岛南侧两把，座高 0.62 |
+
+相机随之改成数据驱动：`WordRoomModels.bounds` 提供 `centerX / halfWidth / halfDepth`，`room-scene.js` 的 `orbit.target`、`fitRadius()`、`zoomRange()` 全部读它（原来写死的 `4.35 / 3.55 / 12.3..18.4 / 9.2..18.8` 会让 11.8m 的房间卡在取景外）。
+
+### 11.3 新增单词（12）
+
+| id | word | 音标 | 中文 | 儿童解释（≤20 字） | 例句 |
+| --- | --- | --- | --- | --- | --- |
+| fridge | fridge | /frɪdʒ/ | 冰箱 | 厨房里的大柜子，里面很冷。 | The milk is in the fridge. |
+| stove | stove | /stoʊv/ | 灶台 | 上面有火，锅放在上面煮。 | Put the pot on the stove. |
+| oven | oven | /ˈʌvən/ | 烤箱 | 关上门烤蛋糕和面包。 | The cake is in the oven. |
+| sink | sink | /sɪŋk/ | 水槽 | 洗菜洗碗的水池，有龙头。 | Wash the apple in the sink. |
+| pot | pot | /pɑːt/ | 锅 | 深深的锅，用来煮汤。 | The soup is in the pot. |
+| pan | pan | /pæn/ | 平底锅 | 浅浅的锅，可以煎鸡蛋。 | Fry an egg in the pan. |
+| toaster | toaster | /ˈtoʊstər/ | 烤面包机 | 放进面包，跳起来就好了。 | The toast pops out of the toaster. |
+| microwave | microwave | /ˈmaɪkrəweɪv/ | 微波炉 | 一按就热，热牛奶很快。 | Heat the milk in the microwave. |
+| dishwasher | dishwasher | /ˈdɪʃwɔːʃər/ | 洗碗机 | 把脏碗放进去，它会洗。 | Put the plates in the dishwasher. |
+| cabinet | cabinet | /ˈkæbɪnət/ | 橱柜 | 墙上的柜子，收碗和杯子。 | The bowls are in the cabinet. |
+| knife | knife | /naɪf/ | 刀 | 切菜用的刀，要小心。 | Cut the bread with a knife. |
+| stool | stool | /stuːl/ | 吧台凳 | 高高的小凳子，坐在岛台边。 | I sit on the stool. |
+
+`hood / island / 橱柜台面 / 吊柜灯带 / 地砖` 都是纯装饰，不可点，避免 37 个可点物体挤在 3m 台面上互相遮挡。
+
+### 11.4 代码改动
+
+| 层 | 文件 | 改动 |
+| --- | --- | --- |
+| 场景数据 | `rawfile/room3d/assets/scene-data.js` | +12 条 kitchen 物品、`categories.kitchen`、`roomSize` 改 11.8 × 6 |
+| 模型 | `assets/room-models.js` | 房间/墙/踢脚延长；`buildKitchenShell / buildKitchenRun / buildIsland / buildHood` + 12 个 `build*` 与 `barStool()`；`ROOM`/`KITCHEN` 常量；`objects.length !== 37` 断言；导出 `bounds` |
+| 场景 | `assets/room-scene.js` | 相机 target / `fitRadius()` / `zoomRange()` 读 `bounds`；缩放上下限不再写死 |
+| 页面 | `assets/room-app.js` | 计数全量派生（`TOTAL`、`CATEGORY_ORDER`、`validateData` 分类自洽校验、`[data-total]` 填充、词汇表按 3 类渲染）；标签布局加「引线过长就隐藏」+ 选中项优先；去掉硬编码 25 |
+| 样式 | `room-panel.css` / `room-dialogs.css` | 37 点网格改 8 列 13px；房间统计改 3 列；厨房分类徽标配色 |
+| 页面文案 | `index.html` | 标题/描述/进度分母/统计卡/词汇表副标题加 `data-total`，新增「厨房物品」 |
+| 原生校验 | `utils/RoomEnglishValidation.ets` | `ROOM_OBJECT_IDS` +12，`focus` 加 `kitchen` |
+| 工具定义 | `config/BuiltinTools.ets` | schema `focus` 枚举 + 合法 id 说明按「客厅/餐厅/厨房」分组，描述改 37 件 |
+| 原生 UI | `components/room/RoomEnglishCard.ets` | `ROOM_OBJECT_TOTAL = 37`，标题栏进度与空态文案改「客厅、餐厅、厨房」 |
+| 提示词 | `models/AssistantModels.ets` | 「客餐厅与开放厨房」+ `focus` 可传 `kitchen` |
+| 测试 | `ohosTest/…/RoomEnglishValidation.test.ets` | 37 条断言、kitchen focus、厨房 12 词全覆盖 |
+
+### 11.5 验证
+
+- `node --check` 4 个 rawfile JS；`rawSchemaJson` 26/26 `JSON.parse` 通过；`assembleHap` BUILD SUCCESSFUL。
+- 无头 Chromium（swiftshader）跑交互：
+  - 37 个 `.scene-label` 全部落在画布内，词汇表 37 行、3 组（15 / 10 / 12）。
+  - 桥接 smoke：`onReady` → `onSelect(id, word)` → `onProgress(["fridge"])` → `speak("fridge")` 调用形状不变。
+  - 点击覆盖率（4px 采样射线）：厨房最小可点物体 11–25 格，与客厅原有小物件（fork 4、remote_control 5）同级或更好；无「完全点不到」的厨房物品。
+  - 37 标签全开时引线不跨场景：超距标签自动隐藏，缩放后重新出现。
+- 页面无横向滚动（`scrollWidth == clientWidth`），手机 402 × 874 下统计卡 3 列不折行。
+
+![厨房扩建后的默认视角](assets/room3d-kitchen.png)
+
+![厨房近景：冰箱/灶台/烟机/烤箱/洗碗机/中岛](assets/room3d-kitchen-close.png)
+
+![打开英文标签：37 个单词里超距的自动隐藏，选中项优先](assets/room3d-kitchen-labels.png)
