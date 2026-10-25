@@ -7,7 +7,8 @@
  * 单词卡（英文 / 音标 / 中文 / 儿童解释 / 例句）、英文标签、词汇表与进度点阵。
  *
  * 原生职责：
- *  - TTS 发音（ArkWeb 没有 speechSynthesis，走 RoomNativeBridge.speak → ServiceRegistry.tts）
+ *  - TTS 发音（ArkWeb 没有 speechSynthesis，走 RoomNativeBridge.speak → ServiceRegistry.tts；
+ *    点击物品即自动朗读，单词卡「听发音」按钮保留作重播；语速 0.8 略慢便于跟读）
  *  - 进度统计（桥上报 onProgress）与「我学会了」完成回执（payload 回写 AI）
  * 讲解型工具不授星（与 map_card 一致），星星由后续 english_quiz / matching_pairs 给。
  */
@@ -23,6 +24,9 @@ import { RoomEnglishValidationResult, validateRoomEnglishArgs } from '../../util
 // 与 mermaid / document-parser 同法：rawfile 里的本地页面用 resource:// 加载，
 // 页面内相对路径（assets/three.min.js 等）由 ArkWeb 按同源解析。
 const ROOM_ENGLISH_PAGE_URL: string = 'resource://rawfile/room3d/index.html'
+
+/** 单词朗读语速：三个引擎（system/minimax/stepfun）通用范围 [0.5, 2]，0.8 略慢便于孩子跟读 */
+const ROOM_WORD_TTS_SPEED: number = 0.8
 
 /** 完成回执：写进 toolCall.approvalReason，随 ToolResult 回给 AI。 */
 export interface RoomEnglishAnswerPayload {
@@ -222,7 +226,7 @@ export struct RoomEnglishCard {
           this.speaking = false
           console.error('RoomEnglishCard', `tts error: ${error}`)
         }
-      }).catch((e: Error) => {
+      }, ROOM_WORD_TTS_SPEED).catch((e: Error) => {
         this.speaking = false
         console.error('RoomEnglishCard', `tts speak failed: ${e.message}`)
       })
@@ -266,14 +270,15 @@ export struct RoomEnglishCard {
 
   // ====== Web 控制 ======
 
-  /** 页面就绪后：把本次重点单词的第一件物品高亮出来，并显示英文标签。 */
+  /** 页面就绪后：把本次重点单词的第一件物品高亮出来（选中即自动朗读）。
+   *  英文标签默认不显示，由孩子点场景里的「显示英文标签」开关手动打开。 */
   private applyFocusWords(): void {
     if (this.focusApplied || !this.pageReady || this.argsView.words.length === 0) {
       return
     }
     this.focusApplied = true
     const first = this.argsView.words[0]
-    const script = `(function(){try{window.WordRoomApp&&window.WordRoomApp.setLabels(true);window.WordRoomApp&&window.WordRoomApp.select('${first}');}catch(e){}})();`
+    const script = `(function(){try{window.WordRoomApp&&window.WordRoomApp.select('${first}');}catch(e){}})();`
     this.controller.runJavaScript(script).catch((e: Error) => {
       console.error('RoomEnglishCard', `apply focus words failed: ${e.message}`)
     })

@@ -44,6 +44,7 @@ export interface EnglishQuizModeArgs {
   pattern: string
   ttsText: string
   targetText: string
+  targetZh: string             // read_aloud 中文意思 (target_zh, 可选; 空时卡片兜底查本地词库)
   phoneticHint: string
   letter: string
   letterCase: string
@@ -55,6 +56,9 @@ export interface EnglishQuizModeArgs {
   legacyLetterOptions: string[]
   legacySoundText: string
 }
+
+/** 英语题朗读语速：单词/句子示范都略慢 (范围 [0.5, 2], 1 正常), 便于孩子听清跟读 */
+export const ENGLISH_QUIZ_TTS_SPEED: number = 0.8
 
 /** AI 未传 skill_key 时的默认映射 (spec §8.2) */
 export function defaultSkillKeyForMode(mode: EnglishQuizMode): string {
@@ -89,7 +93,7 @@ export function parseEnglishQuizModeArgs(argsJson: string): EnglishQuizModeArgs 
   const empty: EnglishQuizModeArgs = {
     mode: 'legacy', question: '', correctAnswer: '', options: [],
     imagePath: '', imageRawfile: '', imagePrompt: '', phonicsRule: '', pattern: '',
-    ttsText: '', targetText: '', phoneticHint: '', letter: '', letterCase: '',
+    ttsText: '', targetText: '', targetZh: '', phoneticHint: '', letter: '', letterCase: '',
     skillKey: 'english_vocab', difficulty: 1, stage: '', theme: '',
     legacyQuestionType: 'word', legacyLetterOptions: [], legacySoundText: ''
   }
@@ -117,6 +121,7 @@ export function parseEnglishQuizModeArgs(argsJson: string): EnglishQuizModeArgs 
     pattern: ((parsed['pattern'] as string) ?? '').trim(),
     ttsText: ((parsed['tts_text'] as string) ?? '').trim(),
     targetText: ((parsed['target_text'] as string) ?? '').trim(),
+    targetZh: ((parsed['target_zh'] as string) ?? '').trim(),
     phoneticHint: ((parsed['phonetic_hint'] as string) ?? '').trim(),
     letter: ((parsed['letter'] as string) ?? '').trim(),
     letterCase: ((parsed['case'] as string) ?? '').trim(),

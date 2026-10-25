@@ -1777,6 +1777,10 @@ function createEnglishQuizToolDefinition(): ToolDefinition {
         "type": "string",
         "description": "REQUIRED only for read_aloud: the sentence the child reads aloud. Max 8 words; level 0-1 → max 3 words, 2-3 → max 5, 4-5 → max 8. Use english_sentence level from child_profile."
       },
+      "target_zh": {
+        "type": "string",
+        "description": "Optional for read_aloud: Chinese meaning of target_text, e.g. target_text='I see a cat' → '我看见一只猫', target_text='apple' → '苹果'. The card reads it aloud after the English demo so the child learns the meaning. 单词题也可省略——app 会查内置词库兜底."
+      },
       "phonetic_hint": {
         "type": "string",
         "description": "Optional for read_aloud: tricky-sound hint, e.g. 「th → this」."

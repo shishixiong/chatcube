@@ -16,8 +16,8 @@ import { CardShellState } from '../../cardshell/CardShellState'
 import { ServiceRegistry } from '../../../services/ServiceRegistry'
 import { common } from '@kit.AbilityKit'
 import {
-  EnglishQuizAnswerPayload, EnglishQuizMode, EnglishQuizModeArgs, modeDisplayName,
-  parseEnglishQuizModeArgs
+  EnglishQuizAnswerPayload, EnglishQuizMode, EnglishQuizModeArgs, ENGLISH_QUIZ_TTS_SPEED,
+  modeDisplayName, parseEnglishQuizModeArgs
 } from '../ModeTypes'
 import { resolveQuizImagePath } from '../QuizImageResolver'
 import { findLocalVocabEntry } from '../../../utils/LocalVocabCatalog'
@@ -198,6 +198,7 @@ export struct ChoiceModeBody {
       return
     }
     this.isPlayingSound = true
+    // 慢速朗读, 孩子更容易听清 (听音选词/拼读选词都是纯听测试, 不加中文避免泄题)
     ServiceRegistry.tts().speak(this.speakText, {
       onStart: () => {},
       onComplete: () => {
@@ -207,7 +208,7 @@ export struct ChoiceModeBody {
         this.isPlayingSound = false
         console.error('ChoiceModeBody', `TTS error: ${error}`)
       }
-    }).catch((e: Error) => {
+    }, ENGLISH_QUIZ_TTS_SPEED).catch((e: Error) => {
       this.isPlayingSound = false
       console.error('ChoiceModeBody', `TTS speak failed: ${e.message}`)
     })

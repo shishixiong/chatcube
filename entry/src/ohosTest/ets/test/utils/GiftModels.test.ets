@@ -80,9 +80,14 @@ export default function giftModelsTest() {
     it('builtinGiftId_两位序号', 0, () => {
       expect(builtinGiftId(0)).assertEqual('gift_builtin_00')
       expect(builtinGiftId(11)).assertEqual('gift_builtin_11')
+      expect(builtinGiftId(12)).assertEqual('gift_builtin_12')
     })
-    it('BUILTIN_GIFTS_12件_价格合法_分类合法', 0, () => {
-      expect(BUILTIN_GIFTS.length).assertEqual(12)
+    it('BUILTIN_GIFTS_13件_价格合法_分类合法', 0, () => {
+      expect(BUILTIN_GIFTS.length).assertEqual(13)
+      const lego = BUILTIN_GIFTS[12]
+      expect(lego.name).assertEqual('乐高积木一盒')
+      expect(lego.priceStars).assertEqual(500)
+      expect(lego.category).assertEqual('building')
       for (let i = 0; i < BUILTIN_GIFTS.length; i++) {
         expect(BUILTIN_GIFTS[i].priceStars >= 1).assertTrue()
         expect(GIFT_CATEGORIES.indexOf(BUILTIN_GIFTS[i].category) >= 0).assertTrue()

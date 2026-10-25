@@ -80,7 +80,8 @@ export interface BuiltinGiftSpec {
   priceStars: number
 }
 
-/** 内置目录 12 件（spec §4.1 表格）；sortOrder = 数组下标 + 1 */
+/** 内置目录 13 件（spec §4.1 表格 12 件 + 乐高追加项）；sortOrder = 数组下标 + 1。
+ *  只能尾部追加——id 按下标生成，中间插入会让已种子行的 id/内容错位 */
 export const BUILTIN_GIFTS: BuiltinGiftSpec[] = [
   { name: '迷你积木车', category: 'building', priceStars: 60 } as BuiltinGiftSpec,
   { name: '小颗粒积木盒', category: 'building', priceStars: 150 } as BuiltinGiftSpec,
@@ -93,7 +94,8 @@ export const BUILTIN_GIFTS: BuiltinGiftSpec[] = [
   { name: '彩铅套装', category: 'stationery', priceStars: 100 } as BuiltinGiftSpec,
   { name: '冰淇淋一支', category: 'other', priceStars: 30 } as BuiltinGiftSpec,
   { name: '绘本一本', category: 'other', priceStars: 80 } as BuiltinGiftSpec,
-  { name: '周末公园野餐', category: 'other', priceStars: 200 } as BuiltinGiftSpec
+  { name: '周末公园野餐', category: 'other', priceStars: 200 } as BuiltinGiftSpec,
+  { name: '乐高积木一盒', category: 'building', priceStars: 500 } as BuiltinGiftSpec
 ]
 
 /** 内置礼物固定 id（幂等种子用），index = BUILTIN_GIFTS 下标 */

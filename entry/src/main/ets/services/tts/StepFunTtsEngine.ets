@@ -29,6 +29,8 @@ export class StepFunTtsEngine implements ITtsEngine {
   private pendingChunks: string[] = []
   private chunkIndex: number = 0
   private startNotified: boolean = false
+  // 本轮 speak 会话的语速（跨切段续播保持一致）
+  private currentSpeed: number | undefined = undefined
   // 本轮 speak 会话是否已关闭 (完成/出错/主动 stop), 用于丢弃迟到的网络回调
   private sessionClosed: boolean = false
 
@@ -37,7 +39,7 @@ export class StepFunTtsEngine implements ITtsEngine {
     this.inited = true
   }
 
-  async speak(text: string, callback: TTSCallback): Promise<void> {
+  async speak(text: string, callback: TTSCallback, speed?: number): Promise<void> {
     if (!this.inited) {
       callback.onError('StepFun 朗读引擎未初始化')
       return
@@ -56,6 +58,7 @@ export class StepFunTtsEngine implements ITtsEngine {
     this.currentCallback = callback
     this.startNotified = false
     this.sessionClosed = false
+    this.currentSpeed = speed
     this.pendingChunks = splitTextForStepFun(text, STEPFUN_MAX_INPUT_CHARS)
     this.chunkIndex = 0
 
@@ -78,7 +81,9 @@ export class StepFunTtsEngine implements ITtsEngine {
       voice: this.resolveVoice(),
       response_format: STEPFUN_TTS_CONFIG.audioFormat,
       sample_rate: STEPFUN_TTS_CONFIG.sampleRate,
-      speed: STEPFUN_TTS_CONFIG.speed,
+      // 语速范围 [0.5, 2]；未传时用 TtsConfig 默认 1.0
+      speed: this.currentSpeed !== undefined && this.currentSpeed >= 0.5 && this.currentSpeed <= 2
+        ? this.currentSpeed : STEPFUN_TTS_CONFIG.speed,
       volume: STEPFUN_TTS_CONFIG.volume,
       text_normalization: STEPFUN_TTS_CONFIG.textNormalization
     } as StepFunTtsRequestBody)

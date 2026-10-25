@@ -1,8 +1,9 @@
 // entry/src/main/ets/components/english/bodies/ReadAloudBody.ets
 /**
  * ReadAloudBody - english_quiz v2 跟读评分 body
- * ASR 转写 → ReadAloudMatcher 归一化匹配; 命中自动提交, 未命中可无限重录, 放弃提交 correct=false。
- * 语音流程/权限降级复用原 EnglishQuizCard 语音路径。
+ * 示范朗读（英文慢速 0.8 → 接着读中文意思）→ ASR 转写 → ReadAloudMatcher 归一化匹配;
+ * 命中自动提交, 未命中可无限重录, 放弃提交 correct=false。
+ * 中文意思来源: target_zh 参数优先, 兜底查本地词库 (仅单词命得中); 语音流程/权限降级复用原 EnglishQuizCard 语音路径。
  */
 
 import { ToolCall } from '../../../models/ChatModels'
@@ -15,9 +16,14 @@ import { ServiceRegistry } from '../../../services/ServiceRegistry'
 import { SpeechRecognitionCallback } from '../../../services/SpeechRecognitionService'
 import { common } from '@kit.AbilityKit'
 import { isReadAloudMatch } from '../../../utils/ReadAloudMatcher'
+import { findLocalVocabEntry } from '../../../utils/LocalVocabCatalog'
 import {
-  EnglishQuizAnswerPayload, EnglishQuizModeArgs, parseEnglishQuizModeArgs
+  EnglishQuizAnswerPayload, EnglishQuizModeArgs, ENGLISH_QUIZ_TTS_SPEED,
+  parseEnglishQuizModeArgs
 } from '../ModeTypes'
+
+/** 示范朗读自动播放延迟：让卡片先渲染稳定，避免和进场动画/浮层抢音频焦点 */
+const DEMO_AUTO_PLAY_DELAY_MS: number = 500
 
 @ComponentV2
 export struct ReadAloudBody {
@@ -28,11 +34,13 @@ export struct ReadAloudBody {
   @Event onAnswer: (toolCallId: string, answerJson: string) => void = () => {}
 
   @Local targetText: string = ''
+  @Local wordZh: string = ''
   @Local phoneticHint: string = ''
   @Local question: string = ''
   @Local skillKey: string = 'english_reading'
   @Local stage: string = ''
   @Local isRecording: boolean = false
+  @Local isPlayingSound: boolean = false
   @Local recognitionPreview: string = ''
   @Local lastHeard: string = ''
   @Local attemptFailed: boolean = false
@@ -41,6 +49,7 @@ export struct ReadAloudBody {
   @Local inputText: string = ''
   @Local voicePermissionDenied: boolean = false
   @Local wasCancelled: boolean = false
+  private demoPlayTimer: number = -1
   private shellConfig: CardShellConfig = {
     title: '跟我读', subtitle: '', icon: $r('sys.symbol.mic'),
     stem: '', hasAudio: false, usesConfirm: true, usesGiveUp: true,
@@ -59,6 +68,7 @@ export struct ReadAloudBody {
   aboutToAppear(): void {
     const args: EnglishQuizModeArgs = parseEnglishQuizModeArgs(this.toolCall.arguments)
     this.targetText = args.targetText !== '' ? args.targetText : args.correctAnswer
+    this.wordZh = this.resolveWordZh(args)
     this.phoneticHint = args.phoneticHint
     this.question = args.question
     this.skillKey = args.skillKey
@@ -79,6 +89,90 @@ export struct ReadAloudBody {
         this.shellState.headPill = '已回答'
         this.shellState.headPillColor = '#4CAF50'
       }
+    } else {
+      // 自动示范: 英文慢速 → 中文意思, 孩子听完再跟读
+      this.demoPlayTimer = setTimeout(() => {
+        this.demoPlayTimer = -1
+        this.playDemo()
+      }, DEMO_AUTO_PLAY_DELAY_MS)
+    }
+  }
+
+  aboutToDisappear(): void {
+    this.stopDemo()
+  }
+
+  /** 中文意思解析: target_zh 参数优先 → 本地词库整句查 → 首词去标点再查 (兜底空串) */
+  private resolveWordZh(args: EnglishQuizModeArgs): string {
+    if (args.targetZh !== '') {
+      return args.targetZh
+    }
+    const direct = findLocalVocabEntry(this.targetText)
+    if (direct !== null) {
+      return direct.zh
+    }
+    const firstWordRaw = this.targetText.split(/\s+/)[0]
+    const firstWord = firstWordRaw !== undefined ? firstWordRaw.replace(/[^a-zA-Z'-]/g, '') : ''
+    if (firstWord === '') {
+      return ''
+    }
+    const byFirst = findLocalVocabEntry(firstWord)
+    return byFirst !== null ? byFirst.zh : ''
+  }
+
+  // ===== 示范朗读 =====
+
+  /** 示范朗读: 英文慢速 (0.8) → 接着读中文意思 (正常语速); 无中文则读完英文即结束 */
+  private playDemo(): void {
+    if (this.isPlayingSound || this.targetText === '') {
+      return
+    }
+    this.isPlayingSound = true
+    ServiceRegistry.tts().speak(this.targetText, {
+      onStart: (): void => {},
+      onComplete: (): void => {
+        this.playMeaningAfterEnglish()
+      },
+      onError: (error: string): void => {
+        this.isPlayingSound = false
+        console.error('ReadAloudBody', `demo tts error: ${error}`)
+      }
+    }, ENGLISH_QUIZ_TTS_SPEED).catch((e: Error) => {
+      this.isPlayingSound = false
+      console.error('ReadAloudBody', `demo tts speak failed: ${e.message}`)
+    })
+  }
+
+  private playMeaningAfterEnglish(): void {
+    if (this.wordZh === '') {
+      this.isPlayingSound = false
+      return
+    }
+    ServiceRegistry.tts().speak(this.wordZh, {
+      onStart: (): void => {},
+      onComplete: (): void => {
+        this.isPlayingSound = false
+      },
+      onError: (error: string): void => {
+        this.isPlayingSound = false
+        console.error('ReadAloudBody', `meaning tts error: ${error}`)
+      }
+    }).catch((e: Error) => {
+      this.isPlayingSound = false
+      console.error('ReadAloudBody', `meaning tts speak failed: ${e.message}`)
+    })
+  }
+
+  private stopDemo(): void {
+    if (this.demoPlayTimer >= 0) {
+      clearTimeout(this.demoPlayTimer)
+      this.demoPlayTimer = -1
+    }
+    if (this.isPlayingSound) {
+      try {
+        ServiceRegistry.tts().stop()
+      } catch (_e) {}
+      this.isPlayingSound = false
     }
   }
 
@@ -148,6 +242,8 @@ export struct ReadAloudBody {
     if (this.isRecording || this.isAnswered || this.showResult || this.voicePermissionDenied) {
       return
     }
+    // 录音前先停掉示范朗读, 避免麦克风把 TTS 声音录进转写
+    this.stopDemo()
     const speechService = ServiceRegistry.speechRecognition()
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext
     speechService.checkPermission(context).then((granted: boolean) => {
@@ -237,6 +333,33 @@ export struct ReadAloudBody {
           .fontColor($r('app.color.text_primary'))
           .width('100%')
           .textAlign(TextAlign.Center)
+        Row({ space: 10 }) {
+          Button() {
+            Row({ space: 6 }) {
+              SymbolGlyph($r('sys.symbol.speaker_wave_2_fill'))
+                .fontSize(14)
+                .fontColor([Color.White])
+              Text(this.isPlayingSound ? '朗读中…' : '听示范')
+                .fontSize(13)
+                .fontColor(Color.White)
+            }
+          }
+          .type(ButtonType.Capsule)
+          .height(32)
+          .padding({ left: 14, right: 14 })
+          .backgroundColor(this.isPlayingSound ? '#FF9F43' : this.themePrimary)
+          .enabled(!this.isPlayingSound)
+          .onClick(() => {
+            this.playDemo()
+          })
+          if (this.wordZh !== '') {
+            Text(`中文意思: ${this.wordZh}`)
+              .fontSize(13)
+              .fontColor($r('app.color.text_secondary'))
+          }
+        }
+        .width('100%')
+        .justifyContent(FlexAlign.Center)
         if (this.phoneticHint !== '') {
           Text(`小提示: ${this.phoneticHint}`)
             .fontSize(12)

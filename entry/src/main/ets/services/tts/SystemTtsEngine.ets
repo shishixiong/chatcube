@@ -62,7 +62,7 @@ export class SystemTtsEngine implements ITtsEngine {
     }
   }
 
-  async speak(text: string, callback: TTSCallback): Promise<void> {
+  async speak(text: string, callback: TTSCallback, speed?: number): Promise<void> {
     if (this.speaking) {
       await this.stop();
     }
@@ -116,7 +116,8 @@ export class SystemTtsEngine implements ITtsEngine {
       };
       let extraParam: Record<string, Object> = {
         'queueMode': 0,
-        'speed': 1,
+        // 语速范围 [0.5, 2]，1 为正常；未传时用系统默认 1
+        'speed': speed !== undefined && speed >= 0.5 && speed <= 2 ? speed : 1,
         'volume': 2,
         'pitch': 1,
         'languageContext': 'zh-CN',

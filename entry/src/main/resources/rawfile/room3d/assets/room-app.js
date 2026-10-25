@@ -558,6 +558,8 @@
       updateSelectedLabel();
       hideHoverChip();
       announce(meta.word + '，' + meta.zh + '。' + meta.kidDefinition);
+      // 选中即自动朗读（无需再点「听发音」按钮，按钮保留作重播）
+      speakCurrentWord();
     } else {
       stopSpeech();
       closeWordView();

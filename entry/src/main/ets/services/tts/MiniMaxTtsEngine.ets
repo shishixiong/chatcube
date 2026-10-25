@@ -33,7 +33,7 @@ export class MiniMaxTtsEngine implements ITtsEngine {
     this.inited = true
   }
 
-  async speak(text: string, callback: TTSCallback): Promise<void> {
+  async speak(text: string, callback: TTSCallback, speed?: number): Promise<void> {
 
     if (!this.inited) {
       callback.onError('MiniMax 朗读引擎未初始化')
@@ -64,7 +64,8 @@ export class MiniMaxTtsEngine implements ITtsEngine {
         },
         voice_setting: {
           voice_id: this.resolveVoice(),
-          speed: MINIMAX_TTS_CONFIG.speed,
+          // 语速范围 [0.5, 2]；未传时用 TtsConfig 默认 1.0
+          speed: speed !== undefined && speed >= 0.5 && speed <= 2 ? speed : MINIMAX_TTS_CONFIG.speed,
           vol: 1.0,
           pitch: MINIMAX_TTS_CONFIG.pitch
         },

@@ -59,6 +59,7 @@
 | `pattern` | string | `sentence_fill` 必填 | 如 `"I like ___."`，恰含一个 `___` |
 | `tts_text` | string | `listen_choice` 必填 | TTS 朗读的英文词 |
 | `target_text` | string | `read_aloud` 必填 | 跟读目标句，≤ 8 词 |
+| `target_zh` | string | 可选（read_aloud 用） | 目标句中文意思；卡片示范朗读顺序 = 英文慢速 (0.8) → 中文。缺省时兜底查内置词库（仅单词命得中），仍无则只读英文。2026-10-24 新增 |
 | `phonetic_hint` | string | 可选 | 易错音提示（如 th → "this"） |
 | `letter` | string | `letter_trace` 必填 | 单字母 a-zA-Z |
 | `case` | enum：`upper` \| `lower` | `letter_trace` 必填 | 大小写 |

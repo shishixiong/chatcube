@@ -25,7 +25,8 @@ export class MiMoTtsEngine implements ITtsEngine {
     this.inited = true
   }
 
-  async speak(text: string, callback: TTSCallback): Promise<void> {
+  // mimo-v2.5-tts 走提示词式合成，请求体无语速参数——speed 入参按接口约定接受但忽略
+  async speak(text: string, callback: TTSCallback, speed?: number): Promise<void> {
 
     if (!this.inited) {
       callback.onError('MiMo 朗读引擎未初始化')

@@ -18,7 +18,7 @@ import { CardShellConfig, CardShellCopy } from '../../cardshell/CardShellTypes'
 import { CardShellState } from '../../cardshell/CardShellState'
 import { SpeechRecognitionCallback } from '../../../services/SpeechRecognitionService'
 import { ServiceRegistry } from '../../../services/ServiceRegistry'
-import { EnglishQuizAnswerPayload } from '../ModeTypes'
+import { EnglishQuizAnswerPayload, ENGLISH_QUIZ_TTS_SPEED } from '../ModeTypes'
 import { resolveQuizImagePath } from '../QuizImageResolver'
 import { findLocalVocabEntry } from '../../../utils/LocalVocabCatalog'
 import { common } from '@kit.AbilityKit'
@@ -516,6 +516,7 @@ export struct LegacyBody {
       return
     }
     this.isPlayingSound = true
+    // 慢速朗读, 孩子更容易听清
     ServiceRegistry.tts().speak(this.soundText, {
       onStart: () => {},
       onComplete: () => {
@@ -525,7 +526,7 @@ export struct LegacyBody {
         this.isPlayingSound = false
         console.error('EnglishQuizCard', `TTS error: ${error}`)
       }
-    }).catch((e: Error) => {
+    }, ENGLISH_QUIZ_TTS_SPEED).catch((e: Error) => {
       this.isPlayingSound = false
       console.error('EnglishQuizCard', `TTS speak failed: ${e.message}`)
     })

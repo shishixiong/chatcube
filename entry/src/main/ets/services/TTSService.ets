@@ -45,7 +45,7 @@ export class TTSService {
     return this.initPromise
   }
 
-  async speak(text: string, callback: TTSCallback): Promise<void> {
+  async speak(text: string, callback: TTSCallback, speed?: number): Promise<void> {
     const processedText = this.preprocessTextForTTS(text)
     if (processedText === '') {
       callback.onError('没有可朗读的内容')
@@ -55,7 +55,7 @@ export class TTSService {
       callback.onError('朗读服务未初始化')
       return
     }
-    await this.currentEngine.speak(processedText, callback)
+    await this.currentEngine.speak(processedText, callback, speed)
   }
 
   stop(): void {
