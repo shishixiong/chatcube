@@ -318,14 +318,18 @@
           startX: event.clientX,
           startY: event.clientY,
           startTime: performance.now(),
-          moved: 0
+          moved: 0,
+          // 放大之后单指改成「拖着房间走」，否则只转视角永远看不到两头的客厅/厨房
+          pan: this.desired.radius < this.fitRadius() * 0.85
         };
         this.pinch = null;
       } else if (this.pointers.size === 2) {
         const points = Array.from(this.pointers.values());
         this.pinch = {
           distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y),
-          radius: this.desired.radius
+          radius: this.desired.radius,
+          midX: (points[0].x + points[1].x) / 2,
+          midY: (points[0].y + points[1].y) / 2
         };
         this.drag = null;
         this.gestureMoved = true;
@@ -344,9 +348,21 @@
         const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
         if (this.pinch && this.pinch.distance > 10) {
           const zoom = this.zoomRange();
-      this.desired.radius = clamp(this.pinch.radius * (this.pinch.distance / Math.max(10, distance)), zoom.min, zoom.max);
+          this.desired.radius = clamp(this.pinch.radius * (this.pinch.distance / Math.max(10, distance)), zoom.min, zoom.max);
           this.autoFit = false;
           this.gestureMoved = true;
+        }
+        if (this.pinch) {
+          const midX = (points[0].x + points[1].x) / 2;
+          const midY = (points[0].y + points[1].y) / 2;
+          const panX = midX - (this.pinch.midX ?? midX);
+          const panY = midY - (this.pinch.midY ?? midY);
+          this.pinch.midX = midX;
+          this.pinch.midY = midY;
+          if (Math.abs(panX) + Math.abs(panY) > 1.5) {
+            this.panByPixels(panX, panY);
+            this.gestureMoved = true;
+          }
         }
         return;
       }
@@ -359,8 +375,14 @@
         this.drag.moved += Math.abs(dx) + Math.abs(dy);
         if (this.drag.moved > 4) this.gestureMoved = true;
 
-        this.desired.theta = clamp(this.desired.theta - dx * 0.006, 0.18, 1.4);
-        this.desired.phi = clamp(this.desired.phi + dy * 0.0048, 0.64, 1.24);
+        if (this.drag.pan) {
+          this.panByPixels(dx, dy);
+          this.setHovered(null);
+          return;
+        }
+        this.desired.theta = clamp(this.desired.theta - dx * 0.005, 0.18, 1.4);
+        // 手指上滑 = 视角抬高（原来写反了：上滑会俯视下去）
+        this.desired.phi = clamp(this.desired.phi - dy * 0.0028, 0.64, 1.24);
         this.canvas.classList.add('is-dragging');
         this.setHovered(null);
         return;
@@ -579,12 +601,31 @@
       this.outlineRing = null;
     }
 
+    // 把手指位移换算成 target 在房间平面上的位移：1px ≈ 1px（按当前距离和 fov 换算）
+    panByPixels(dx, dy) {
+      if (!dx && !dy) return;
+      const height = this.canvas.clientHeight || 1;
+      const fov = (this.camera.fov * Math.PI) / 180;
+      const worldPerPixel = (2 * this.orbit.radius * Math.tan(fov / 2)) / height;
+      const theta = this.desired.theta;
+      const rightX = Math.cos(theta);
+      const rightZ = -Math.sin(theta);
+      const upX = -Math.sin(theta);
+      const upZ = -Math.cos(theta);
+      const nextX = this.desired.target.x - rightX * dx * worldPerPixel + upX * dy * worldPerPixel;
+      const nextZ = this.desired.target.z - rightZ * dx * worldPerPixel + upZ * dy * worldPerPixel;
+      // 留出一点内缩量，别让画面中心跑到墙外变成大片空白
+      this.desired.target.x = clamp(nextX, BOUNDS.minX + 1.7, BOUNDS.maxX - 1.7);
+      this.desired.target.z = clamp(nextZ, BOUNDS.minZ + 1.3, BOUNDS.maxZ - 1.3);
+      this.autoFit = false;
+    }
+
     resetView() {
       this.autoFit = true;
       this.desired.theta = 0.79;
-      this.desired.phi = 0.93;
+      this.desired.phi = 0.85;
       this.desired.radius = this.fitRadius();
-      this.desired.target.set(0, 0.86, 0.05);
+      this.desired.target.set(BOUNDS.centerX + 0.12, 0.86, 0.05);
     }
 
     getLabelAnchors() {

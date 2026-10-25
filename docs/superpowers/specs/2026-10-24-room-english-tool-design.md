@@ -72,7 +72,7 @@ Column
 
 | 方向 | 方法 | 说明 |
 | --- | --- | --- |
-| Web → 原生 | `speak(word)` | 返回 `'true'` 表示已交给原生 TTS；Web 侧据此跳过 `speechSynthesis` |
+| Web → 原生 | `speak(word, zh)` | 返回 `'true'` 表示已交给原生 TTS；原生先念 `zh`（中文意思）再念 `word`。Web 侧据此跳过 `speechSynthesis` |
 | Web → 原生 | `stopSpeak()` | 关闭单词卡 / 切词时停播 |
 | Web → 原生 | `onReady()` | 3D 场景首帧就绪（Web 侧 loader 自行收起） |
 | Web → 原生 | `onSelect(id, word)` | 选中物品，原生累计已收集单词 |
@@ -232,7 +232,7 @@ Column
 - `node --check` 4 个 rawfile JS；`rawSchemaJson` 26/26 `JSON.parse` 通过；`assembleHap` BUILD SUCCESSFUL。
 - 无头 Chromium（swiftshader）跑交互：
   - 37 个 `.scene-label` 全部落在画布内，词汇表 37 行、3 组（15 / 10 / 12）。
-  - 桥接 smoke：`onReady` → `onSelect(id, word)` → `onProgress(["fridge"])` → `speak("fridge")` 调用形状不变。
+  - 桥接 smoke：`onReady` → `onSelect(id, word)` → `onProgress(["fridge"])` → `speak("fridge", "冰箱")`；点开物品即自动朗读，先中文后英文。
   - 点击覆盖率（4px 采样射线）：厨房最小可点物体 11–25 格，与客厅原有小物件（fork 4、remote_control 5）同级或更好；无「完全点不到」的厨房物品。
   - 37 标签全开时引线不跨场景：超距标签自动隐藏，缩放后重新出现。
 - 页面无横向滚动（`scrollWidth == clientWidth`），手机 402 × 874 下统计卡 3 列不折行。
@@ -242,3 +242,15 @@ Column
 ![厨房近景：冰箱/灶台/烟机/烤箱/洗碗机/中岛](assets/room3d-kitchen-close.png)
 
 ![打开英文标签：37 个单词里超距的自动隐藏，选中项优先](assets/room3d-kitchen-labels.png)
+
+### 11.6 手势与朗读（2026-10-25 迭代）
+
+真机试用反馈修的三处：
+
+| 反馈 | 原因 | 改法 |
+| --- | --- | --- |
+| 上滑反而「视角向下」 | `phi += dy`，与 three.js `OrbitControls`（拖下 = 相机抬高）相反 | 改成 `phi -= dy`，并把手感调慢（纵向 0.0028 rad/px、横向 0.005 rad/px） |
+| 放大后只能看到中间，去不了客厅/厨房 | 缩放只改 radius，`target` 永远钉在房间中心 | 新增 `panByPixels()`：按屏幕像素换算出房间平面位移，`target` 夹在房间内（x 两侧各内缩 1.7m、z 各 1.3m）；**双指拖动随时可平移**，**放大到 `radius < fit × 0.85` 后单指拖动改为平移**（模式在按下时锁定，不会拖到一半切换） |
+| 点物品只读英文 | 桥只传了 `word`；且 Web 侧只有点「听发音」才发声 | 点开物品自动朗读；`speak(word, zh)` 由原生先念中文再念英文（`SystemTtsEngine` 单次 `speak` 无法混读两种语言，故串两次调用，中文失败也会继续念英文） |
+
+`resetView()` 同时修好：原来把 `target` 写死回 `(0, 0.86, 0.05)`、`phi` 写死 0.93，现在回到 `BOUNDS.centerX + 0.12` 与默认俯角 0.85。

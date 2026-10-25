@@ -587,7 +587,7 @@
       updateSelectedLabel();
       hideHoverChip();
       announce(meta.word + '，' + meta.zh + '。' + meta.kidDefinition);
-      // 选中即自动朗读（无需再点「听发音」按钮，按钮保留作重播）
+      // 点开就念：先中文意思，再英文单词（小朋友先听懂，再记发音）
       speakCurrentWord();
     } else {
       stopSpeech();
@@ -702,11 +702,13 @@
     if (!state.selectedId) return;
     const meta = byId.get(state.selectedId);
     if (!meta) return;
-    if (getBridge() && bridgeCall('speak', meta.word) === 'true') {
+    // 先中文意思，再英文单词：小朋友先听懂是什么，再记发音
+    const zh = meta.zh && meta.zh !== meta.word ? meta.zh : '';
+    if (getBridge() && bridgeCall('speak', meta.word, zh) === 'true') {
       dom.pronounceButton.classList.add('is-playing');
       dom.pronounceLabel.textContent = '正在播放…';
       window.clearTimeout(state.speechTimer);
-      state.speechTimer = window.setTimeout(() => resetPronounceButton(), 3200);
+      state.speechTimer = window.setTimeout(() => resetPronounceButton(), zh ? 4600 : 3200);
       return;
     }
     if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
@@ -716,34 +718,58 @@
     stopSpeech();
     const seq = state.speechSeq;
     try {
-      const utterance = new SpeechSynthesisUtterance(meta.word);
-      utterance.lang = 'en-US';
-      utterance.rate = 0.82;
-      utterance.pitch = 1.04;
-      utterance.volume = 1;
       const voices = window.speechSynthesis.getVoices();
-      const preferred =
+      const preferredEn =
         voices.find((voice) => /en[-_]US/i.test(voice.lang) && /samantha|aria|jenny|zira|google us/i.test(voice.name)) ||
         voices.find((voice) => /en[-_]US/i.test(voice.lang)) ||
         voices.find((voice) => /^en/i.test(voice.lang));
-      if (preferred) utterance.voice = preferred;
+      const preferredZh =
+        voices.find((voice) => /zh[-_]CN/i.test(voice.lang) && /ting|xiaoxiao|huihui|google/i.test(voice.name)) ||
+        voices.find((voice) => /zh[-_]CN/i.test(voice.lang)) ||
+        voices.find((voice) => /^zh/i.test(voice.lang));
 
-      dom.pronounceButton.classList.add('is-playing');
-      dom.pronounceLabel.textContent = '正在播放…';
-      utterance.onend = () => {
+      const wordUtterance = new SpeechSynthesisUtterance(meta.word);
+      wordUtterance.lang = 'en-US';
+      wordUtterance.rate = 0.82;
+      wordUtterance.pitch = 1.04;
+      wordUtterance.volume = 1;
+      if (preferredEn) wordUtterance.voice = preferredEn;
+      wordUtterance.onend = () => {
         if (seq === state.speechSeq) resetPronounceButton();
       };
-      utterance.onerror = (event) => {
+      wordUtterance.onerror = (event) => {
         if (seq !== state.speechSeq) return;
         resetPronounceButton();
         if (event.error !== 'interrupted' && event.error !== 'canceled') {
           showToast('发音没有播放成功，可以再点一次试试。');
         }
       };
-      window.speechSynthesis.speak(utterance);
+
+      dom.pronounceButton.classList.add('is-playing');
+      dom.pronounceLabel.textContent = '正在播放…';
+
+      if (zh) {
+        const meaning = new SpeechSynthesisUtterance(zh);
+        meaning.lang = 'zh-CN';
+        meaning.rate = 0.9;
+        meaning.volume = 1;
+        if (preferredZh) meaning.voice = preferredZh;
+        meaning.onend = () => {
+          if (seq !== state.speechSeq) return;
+          window.speechSynthesis.speak(wordUtterance);
+        };
+        meaning.onerror = () => {
+          if (seq !== state.speechSeq) return;
+          window.speechSynthesis.speak(wordUtterance);
+        };
+        window.speechSynthesis.speak(meaning);
+      } else {
+        window.speechSynthesis.speak(wordUtterance);
+      }
+
       state.speechTimer = window.setTimeout(() => {
         if (seq === state.speechSeq) resetPronounceButton();
-      }, 6000);
+      }, zh ? 8000 : 6000);
     } catch (error) {
       resetPronounceButton();
       showToast('发音没有播放成功，可以再点一次试试。');
