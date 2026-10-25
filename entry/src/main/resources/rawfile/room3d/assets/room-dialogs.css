@@ -442,20 +442,20 @@
   }
 
   .progress-board {
-    grid-template-columns: 122px minmax(0, 1fr);
+    grid-template-columns: 136px minmax(0, 1fr);
     gap: 16px;
     margin-top: 22px;
     padding: 18px 0;
   }
 
   .dot-grid {
-    grid-template-columns: repeat(5, 17px);
-    gap: 7px;
+    grid-template-columns: repeat(8, 13px);
+    gap: 5px;
   }
 
   .progress-dot {
-    width: 17px;
-    height: 17px;
+    width: 13px;
+    height: 13px;
     border-radius: 5px;
   }
 

@@ -1734,7 +1734,7 @@ export class ToolExecutionService {
     }
     toolCall.permissionLevel = ToolPermissionLevel.READ
 
-    // 0. 预校验: skill_key / focus 枚举 / words 必须命中 25 个物品 id
+    // 0. 预校验: skill_key / focus 枚举 / words 必须命中 37 个物品 id（客厅 15 + 餐厅 10 + 厨房 12）
     const cardValidation = validateRoomEnglishArgs(toolCall.arguments)
     if (!cardValidation.ok) {
       console.warn('ToolExecutionService', `room_english validation failed: ${cardValidation.error}`)

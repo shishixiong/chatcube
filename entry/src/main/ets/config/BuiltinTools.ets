@@ -3751,7 +3751,7 @@ function createMapQuizToolConfig(): ToolConfig {
 
 
 // ===== room_english 工具 =====
-// 客餐厅 3D 英语探索（讲解型）：可旋转的低多边形客餐厅，25 件家具/物品可点开单词卡
+// 客餐厅 3D 英语探索（讲解型）：可旋转的低多边形客餐厅 + 开放厨房，37 件家具/物品可点开单词卡
 // （英文 / 音标 / 中文 / 儿童解释 / 例句 / TTS 发音）。参考 open-design 原型 kid-room-3d-english。
 // 交互由前端 RoomEnglishCard（Web 容器）处理，后台 ToolExecutionService.handleRoomEnglish 拦截。
 
@@ -3785,13 +3785,13 @@ function createRoomEnglishToolDefinition(): ToolDefinition {
     "properties": {
       "focus": {
         "type": "string",
-        "enum": ["living", "dining", "all"],
-        "description": "可选。本次重点探索的区域：living=客厅（15 件物品），dining=餐厅（10 件物品），all=整个客餐厅。默认 all。"
+        "enum": ["living", "dining", "kitchen", "all"],
+        "description": "可选。本次重点探索的区域：living=客厅（15 件物品），dining=餐厅（10 件物品），kitchen=开放厨房（12 件物品），all=整个客餐厅与厨房。默认 all。"
       },
       "words": {
         "type": "array",
         "items": { "type": "string" },
-        "description": "可选。本次想重点教的单词 id，最多 8 个，传了会在房间里自动高亮并打开第一个词的单词卡。合法 id：sofa coffee_table tv tv_stand remote_control rug cushion floor_lamp bookshelf book plant curtain window picture clock air_conditioner trash_can dining_table dining_chair plate bowl cup spoon fork kettle。"
+        "description": "可选。本次想重点教的单词 id，最多 8 个，传了会在房间里自动高亮并打开第一个词的单词卡。合法 id：客厅 sofa coffee_table tv tv_stand remote_control rug cushion floor_lamp bookshelf book plant curtain window picture clock air_conditioner trash_can；餐厅 dining_table dining_chair plate bowl cup spoon fork kettle；厨房 fridge stove oven sink pot pan toaster microwave dishwasher cabinet knife stool。"
       },
       "skill_key": {
         "type": "string",
@@ -3807,7 +3807,7 @@ function createRoomEnglishToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     ROOM_ENGLISH_TOOL_ID,
-    'Open the 3D living room & dining room word room (客餐厅 3D 英语探索): a rotatable low-poly room with 25 tappable objects. Tapping an object opens a kid-friendly word card with the English word, phonetic, Chinese meaning, a one-line kid definition, an example sentence and a TTS pronunciation button. Use this INSTEAD of describing furniture in plain text when teaching home/room vocabulary. Pass words (max 8 ids) to highlight the words of this lesson; pass focus to restrict the scene to living or dining. After exploring, follow up with english_quiz or matching_pairs to check the words and award stars.',
+    'Open the 3D living room, dining room & kitchen word room (客餐厅 3D 英语探索): a rotatable low-poly open-plan home with 37 tappable objects. Tapping an object opens a kid-friendly word card with the English word, phonetic, Chinese meaning, a one-line kid definition, an example sentence and a TTS pronunciation button. Use this INSTEAD of describing furniture in plain text when teaching home/room vocabulary. Pass words (max 8 ids) to highlight the words of this lesson; pass focus to restrict the scene to living, dining or kitchen. After exploring, follow up with english_quiz or matching_pairs to check the words and award stars.',
     parameters
   )
 
@@ -3818,7 +3818,7 @@ function createRoomEnglishToolConfig(): ToolConfig {
   return new ToolConfig(
     ROOM_ENGLISH_TOOL_ID,
     '客餐厅 3D 英语探索',
-    '走进 3D 客餐厅，点家具听英文发音、看单词卡，认识 25 个家居单词。',
+    '走进 3D 客餐厅和开放厨房，点家具听英文发音、看单词卡，认识 37 个家居单词。',
     null,
     true,
     false,

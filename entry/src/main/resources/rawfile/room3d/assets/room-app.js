@@ -80,8 +80,11 @@
     });
   }
 
+  const TOTAL = OBJECTS.length;
+  const CATEGORY_ORDER = ['living', 'dining', 'kitchen'];
+
   function validateData() {
-    if (OBJECTS.length !== 25) throw new Error('场景需要 25 个单词，当前为 ' + OBJECTS.length);
+    if (TOTAL < 1) throw new Error('场景没有单词数据');
     const ids = new Set();
     OBJECTS.forEach((item) => {
       if (ids.has(item.id)) throw new Error('重复的对象 id: ' + item.id);
@@ -93,19 +96,27 @@
         throw new Error('儿童解释超过 20 个字符: ' + item.id + ' (' + item.kidDefinition.length + ')');
       }
     });
-    const living = OBJECTS.filter((item) => item.category === 'living').length;
-    const dining = OBJECTS.filter((item) => item.category === 'dining').length;
-    if (living !== 15 || dining !== 10) {
-      throw new Error('分类数量应为 15 + 10，当前为 ' + living + ' + ' + dining);
-    }
+    CATEGORY_ORDER.forEach((category) => {
+      const meta = window.WordRoomData.categories[category];
+      if (!meta) throw new Error('缺少分类文案: ' + category);
+      const count = OBJECTS.filter((item) => item.category === category).length;
+      if (count !== meta.count) {
+        throw new Error('分类 ' + category + ' 数量不一致: ' + count + ' vs ' + meta.count);
+      }
+    });
+    const unknown = OBJECTS.filter((item) => CATEGORY_ORDER.indexOf(item.category) < 0);
+    if (unknown.length) throw new Error('未知分类: ' + unknown[0].category);
   }
 
   function updateStaticCounts() {
     const stats = document.querySelectorAll('.room-stat strong');
-    const living = OBJECTS.filter((item) => item.category === 'living').length;
-    const dining = OBJECTS.filter((item) => item.category === 'dining').length;
-    if (stats[0]) stats[0].textContent = String(living);
-    if (stats[1]) stats[1].textContent = String(dining);
+    CATEGORY_ORDER.forEach((category, index) => {
+      const count = OBJECTS.filter((item) => item.category === category).length;
+      if (stats[index]) stats[index].textContent = String(count);
+    });
+    document.querySelectorAll('[data-total]').forEach((node) => {
+      node.textContent = String(TOTAL);
+    });
   }
 
   function startScene() {
@@ -261,10 +272,17 @@
     const bigFirst = new Set([
       'sofa', 'rug', 'coffee_table', 'dining_table', 'dining_chair', 'bookshelf',
       'window', 'curtain', 'tv', 'tv_stand', 'floor_lamp', 'plant', 'picture',
-      'clock', 'air_conditioner', 'trash_can', 'cushion'
+      'clock', 'air_conditioner', 'trash_can', 'cushion',
+      'fridge', 'cabinet', 'sink', 'dishwasher', 'stove', 'microwave'
     ]);
+    // 37 个单词放不下就宁可隐藏远处的标签，也不要拉出一条横穿场景的长引线
+    const maxLead = width < 700 ? 132 : 156;
 
     const sorted = OBJECTS.slice().sort((a, b) => {
+      if (state.selectedId) {
+        if (a.id === state.selectedId) return -1;
+        if (b.id === state.selectedId) return 1;
+      }
       const priority = (bigFirst.has(a.id) ? 0 : 1) - (bigFirst.has(b.id) ? 0 : 1);
       if (priority !== 0) return priority;
       const da = anchorById.get(a.id)?.depth ?? 0;
@@ -323,6 +341,17 @@
       }
 
       if (!chosen) chosen = { left: baseLeft, top: baseTop, right: baseLeft + metrics.width, bottom: baseTop + metrics.height };
+
+      const leadX = clamp(anchor.x, chosen.left + 4, chosen.right - 4);
+      const leadY = clamp(anchor.y, chosen.top + 4, chosen.bottom - 4);
+      const lead = Math.hypot(leadX - anchor.x, leadY - anchor.y);
+      if (lead > maxLead && state.selectedId !== meta.id) {
+        label.style.opacity = '0';
+        label.style.visibility = 'hidden';
+        line.setAttribute('visibility', 'hidden');
+        dot.setAttribute('visibility', 'hidden');
+        return;
+      }
       placed.push(chosen);
 
       label.style.visibility = 'visible';
@@ -371,7 +400,7 @@
 
   function buildGlossary() {
     const frag = document.createDocumentFragment();
-    ['living', 'dining'].forEach((category) => {
+    CATEGORY_ORDER.forEach((category) => {
       const items = OBJECTS.filter((item) => item.category === category);
       const section = document.createElement('section');
       section.className = 'word-group';
@@ -620,7 +649,7 @@
 
   function updateProgress() {
     const count = state.discovered.size;
-    dom.progressChip.setAttribute('aria-label', '已收集 ' + count + ' / 25 个单词');
+    dom.progressChip.setAttribute('aria-label', '已收集 ' + count + ' / ' + TOTAL + ' 个单词');
     dom.progressCount.textContent = String(count);
     dom.welcomeCount.textContent = String(count);
     dom.dotGrid.querySelectorAll('.progress-dot').forEach((dot) => {
@@ -633,13 +662,13 @@
 
     const copy = dom.welcomeView.querySelector('.progress-copy p');
     if (copy) {
-      copy.textContent = count === 25
-        ? '25 个单词全部点亮了，和这个房间说一声你真棒！'
+      copy.textContent = count === TOTAL
+        ? TOTAL + ' 个单词全部点亮了，和这个房间说一声你真棒！'
         : '每点开一个物品，就会点亮一格。试试从沙发开始？';
     }
-    if (count === 25 && !state.celebrated) {
+    if (count === TOTAL && !state.celebrated) {
       state.celebrated = true;
-      showToast('25 个单词全部收集完成，你真棒！');
+      showToast(TOTAL + ' 个单词全部收集完成，你真棒！');
     }
   }
 

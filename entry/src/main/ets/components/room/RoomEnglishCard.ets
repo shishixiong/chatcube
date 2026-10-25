@@ -3,7 +3,7 @@
  * RoomEnglishCard - 客餐厅 3D 英语探索（room_english 工具，讲解型）
  *
  * 渲染层：Web 容器加载 rawfile/room3d/index.html（three.js 0.185 本地内置，离线可用）。
- * 原型来自 open-design 的 kids-room-3d-english：8m × 6m 低多边形客餐厅、25 件可点击物品、
+ * 原型来自 open-design 的 kids-room-3d-english：11.8m × 6m 低多边形客餐厅 + 开放厨房、37 件可点击物品、
  * 单词卡（英文 / 音标 / 中文 / 儿童解释 / 例句）、英文标签、词汇表与进度点阵。
  *
  * 原生职责：
@@ -24,6 +24,8 @@ import { RoomEnglishValidationResult, validateRoomEnglishArgs } from '../../util
 // 与 mermaid / document-parser 同法：rawfile 里的本地页面用 resource:// 加载，
 // 页面内相对路径（assets/three.min.js 等）由 ArkWeb 按同源解析。
 const ROOM_ENGLISH_PAGE_URL: string = 'resource://rawfile/room3d/index.html'
+// 与 rawfile/room3d/assets/scene-data.js 的物品总数保持一致（客厅 15 + 餐厅 10 + 厨房 12）
+const ROOM_OBJECT_TOTAL: number = 37
 
 /** 单词朗读语速：三个引擎（system/minimax/stepfun）通用范围 [0.5, 2]，0.8 略慢便于孩子跟读 */
 const ROOM_WORD_TTS_SPEED: number = 0.8
@@ -327,7 +329,9 @@ export struct RoomEnglishCard {
           .fontSize(15)
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.text_primary'))
-        Text(this.exploredCount > 0 ? `已收集 ${this.exploredCount} / 25 个单词` : '点一点家具，听听它叫什么')
+        Text(this.exploredCount > 0
+          ? `已收集 ${this.exploredCount} / ${ROOM_OBJECT_TOTAL} 个单词`
+          : '客厅、餐厅、厨房，点一点就知道它叫什么')
           .fontSize(11)
           .fontColor($r('app.color.text_tertiary'))
       }

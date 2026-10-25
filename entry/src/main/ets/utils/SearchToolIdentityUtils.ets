@@ -38,8 +38,8 @@ export const CHINESE_QUIZ_TOOL_ID: string = 'chinese_quiz'
 // 中国地图教学工具（2026-10-21）：讲解型 map_card + 练习型 map_quiz（choice/locate/write 三 mode）。
 export const MAP_CARD_TOOL_ID: string = 'map_card'
 export const MAP_QUIZ_TOOL_ID: string = 'map_quiz'
-// 客餐厅 3D 英语探索（2026-10-24）：讲解型房间工具。25 件可点击物品 + 单词卡 + TTS 发音,
-// 参考 open-design 原型 kid-room-3d-english（8m × 6m 低多边形客餐厅）。
+// 客餐厅 3D 英语探索（2026-10-24）：讲解型房间工具。37 件可点击物品（客厅 15 + 餐厅 10 + 厨房 12）
+// + 单词卡 + TTS 发音, 参考 open-design 原型 kid-room-3d-english（11.8m × 6m 低多边形客餐厅 + 开放厨房）。
 export const ROOM_ENGLISH_TOOL_ID: string = 'room_english'
 
 

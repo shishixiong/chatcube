@@ -252,15 +252,136 @@
       example: 'The kettle is boiling water.',
       category: 'dining',
       labelBias: [-26, -78]
-    }
+    },
+    {
+      id: 'fridge',
+      word: 'fridge',
+      phonetic: '/frɪdʒ/',
+      zh: '冰箱',
+      kidDefinition: '厨房里的大柜子，里面很冷。',
+      example: 'The milk is in the fridge.',
+      category: 'kitchen',
+      labelBias: [-38, -46]
+    },
+    {
+      id: 'stove',
+      word: 'stove',
+      phonetic: '/stoʊv/',
+      zh: '灶台',
+      kidDefinition: '上面有火，锅放在上面煮。',
+      example: 'Put the pot on the stove.',
+      category: 'kitchen',
+      labelBias: [-6, -62]
+    },
+    {
+      id: 'oven',
+      word: 'oven',
+      phonetic: '/ˈʌvən/',
+      zh: '烤箱',
+      kidDefinition: '关上门烤蛋糕和面包。',
+      example: 'The cake is in the oven.',
+      category: 'kitchen',
+      labelBias: [-44, 30]
+    },
+    {
+      id: 'sink',
+      word: 'sink',
+      phonetic: '/sɪŋk/',
+      zh: '水槽',
+      kidDefinition: '洗菜洗碗的水池，有龙头。',
+      example: 'Wash the apple in the sink.',
+      category: 'kitchen',
+      labelBias: [-46, 22]
+    },
+    {
+      id: 'pot',
+      word: 'pot',
+      phonetic: '/pɑːt/',
+      zh: '锅',
+      kidDefinition: '深深的锅，用来煮汤。',
+      example: 'The soup is in the pot.',
+      category: 'kitchen',
+      labelBias: [-30, -74]
+    },
+    {
+      id: 'pan',
+      word: 'pan',
+      phonetic: '/pæn/',
+      zh: '平底锅',
+      kidDefinition: '浅浅的锅，可以煎鸡蛋。',
+      example: 'Fry an egg in the pan.',
+      category: 'kitchen',
+      labelBias: [26, -68]
+    },
+    {
+      id: 'toaster',
+      word: 'toaster',
+      phonetic: '/ˈtoʊstər/',
+      zh: '烤面包机',
+      kidDefinition: '放进面包，跳起来就好了。',
+      example: 'The toast pops out of the toaster.',
+      category: 'kitchen',
+      labelBias: [40, 16]
+    },
+    {
+      id: 'microwave',
+      word: 'microwave',
+      phonetic: '/ˈmaɪkrəweɪv/',
+      zh: '微波炉',
+      kidDefinition: '一按就热，热牛奶很快。',
+      example: 'Heat the milk in the microwave.',
+      category: 'kitchen',
+      labelBias: [46, -30]
+    },
+    {
+      id: 'dishwasher',
+      word: 'dishwasher',
+      phonetic: '/ˈdɪʃwɔːʃər/',
+      zh: '洗碗机',
+      kidDefinition: '把脏碗放进去，它会洗。',
+      example: 'Put the plates in the dishwasher.',
+      category: 'kitchen',
+      labelBias: [40, 34]
+    },
+    {
+      id: 'cabinet',
+      word: 'cabinet',
+      phonetic: '/ˈkæbɪnət/',
+      zh: '橱柜',
+      kidDefinition: '墙上的柜子，收碗和杯子。',
+      example: 'The bowls are in the cabinet.',
+      category: 'kitchen',
+      labelBias: [-4, -88]
+    },
+    {
+      id: 'knife',
+      word: 'knife',
+      phonetic: '/naɪf/',
+      zh: '刀',
+      kidDefinition: '切菜用的刀，要小心。',
+      example: 'Cut the bread with a knife.',
+      category: 'kitchen',
+      labelBias: [38, 12]
+    },
+    {
+      id: 'stool',
+      word: 'stool',
+      phonetic: '/stuːl/',
+      zh: '吧台凳',
+      kidDefinition: '高高的小凳子，坐在岛台边。',
+      example: 'I sit on the stool.',
+      category: 'kitchen',
+      labelBias: [6, 50]
+    },
   ].map((item) => ({ ...item, objectName: 'OBJ_' + item.id }));
 
   window.WordRoomData = {
-    title: '客餐厅英语探索',
-    roomSize: { width: 8, depth: 6, label: '8m × 6m' },
+    title: '客餐厅 · 厨房英语探索',
+    roomSize: { width: 11.8, depth: 6, label: '11.8m × 6m' },
     categories: {
       living: { zh: '客厅', en: 'LIVING ROOM', count: objects.filter((item) => item.category === 'living').length },
-      dining: { zh: '餐厅', en: 'DINING ROOM', count: objects.filter((item) => item.category === 'dining').length }
+      dining: { zh: '餐厅', en: 'DINING ROOM', count: objects.filter((item) => item.category === 'dining').length },
+      kitchen: { zh: '厨房', en: 'KITCHEN', count: objects.filter((item) => item.category === 'kitchen').length }
     },
     objects
   };
