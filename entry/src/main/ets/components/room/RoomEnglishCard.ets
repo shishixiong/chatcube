@@ -61,15 +61,17 @@ export function parseRoomEnglishArgs(raw: string): RoomEnglishArgsView {
  * 见 rawfile/room3d/assets/room-app.js 里的 bridgeCall。
  */
 class RoomNativeBridge {
-  speakHandler: (text: string) => boolean = (): boolean => false
+  speakHandler: (text: string, zh: string) => boolean = (): boolean => false
   stopHandler: () => void = (): void => {}
   readyHandler: () => void = (): void => {}
   selectHandler: (id: string, word: string) => void = (): void => {}
   progressHandler: (idsJson: string) => void = (): void => {}
 
   // 返回值统一用字符串：ArkWeb 代理方法对返回类型最宽容，且 Web 侧只判断真值。
-  speak(text: string): string {
-    return this.speakHandler(text) ? 'true' : 'false'
+  // zh 为物品的中文意思（可空）：原生先读中文、再读英文单词。
+  speak(text: string, zh: string): string {
+    const meaning: string = zh ? zh : ''
+    return this.speakHandler(text, meaning) ? 'true' : 'false'
   }
 
   stopSpeak(): string {
@@ -132,7 +134,7 @@ export struct RoomEnglishCard {
   aboutToAppear(): void {
     this.uiContext = this.getUIContext()
     this.argsView = parseRoomEnglishArgs(this.toolCall.arguments)
-    this.bridge.speakHandler = (text: string): boolean => this.speakWord(text)
+    this.bridge.speakHandler = (text: string, zh: string): boolean => this.speakWord(text, zh)
     this.bridge.stopHandler = (): void => this.stopSpeak()
     this.bridge.readyHandler = (): void => {
       this.runOnUi((): void => {
@@ -209,28 +211,69 @@ export struct RoomEnglishCard {
     }
   }
 
-  private speakWord(text: string): boolean {
+  private speakWord(text: string, zh: string): boolean {
     try {
       ServiceRegistry.tts().stop()
-      this.speaking = true
-      ServiceRegistry.tts().speak(text, {
-        onStart: (): void => {
+      this.runOnUi((): void => {
+        this.speaking = true
+      })
+      const speakEnglish: () => void = (): void => {
+        this.runOnUi((): void => {
           this.speaking = true
+        })
+        ServiceRegistry.tts().speak(text, {
+          onStart: (): void => {
+            this.runOnUi((): void => {
+              this.speaking = true
+            })
+          },
+          onComplete: (): void => {
+            this.runOnUi((): void => {
+              this.speaking = false
+            })
+          },
+          onError: (error: string): void => {
+            this.runOnUi((): void => {
+              this.speaking = false
+            })
+            console.error('RoomEnglishCard', `tts error: ${error}`)
+          }
+        }).catch((e: Error) => {
+          this.runOnUi((): void => {
+            this.speaking = false
+          })
+          console.error('RoomEnglishCard', `tts speak failed: ${e.message}`)
+        })
+      }
+
+      if (zh === '') {
+        speakEnglish()
+        return true
+      }
+
+      // 先念中文意思（“冰箱”），念完接着念英文单词（“fridge”）
+      ServiceRegistry.tts().speak(zh, {
+        onStart: (): void => {
+          this.runOnUi((): void => {
+            this.speaking = true
+          })
         },
         onComplete: (): void => {
-          this.speaking = false
+          speakEnglish()
         },
         onError: (error: string): void => {
-          this.speaking = false
-          console.error('RoomEnglishCard', `tts error: ${error}`)
+          console.error('RoomEnglishCard', `tts zh error: ${error}`)
+          speakEnglish()
         }
       }).catch((e: Error) => {
-        this.speaking = false
-        console.error('RoomEnglishCard', `tts speak failed: ${e.message}`)
+        console.error('RoomEnglishCard', `tts zh speak failed: ${e.message}`)
+        speakEnglish()
       })
       return true
     } catch (e) {
-      this.speaking = false
+      this.runOnUi((): void => {
+        this.speaking = false
+      })
       return false
     }
   }
