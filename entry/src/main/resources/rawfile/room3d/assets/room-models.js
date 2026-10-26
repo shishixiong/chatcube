@@ -1172,7 +1172,8 @@
     // 北墙在窗洞处断开：左侧、右侧、窗下、窗上四块
     box(root, win.x0 + outer, h, 0.16, 0.04, wallMat, (-outer + win.x0) / 2, h / 2, zWall, false);
     box(root, outer - win.x1, h, 0.16, 0.04, wallMat, (win.x1 + outer) / 2, h / 2, zWall, false);
-    box(root, win.x1 - win.x0, win.y0, 0.16, 0.035, wallMat, (win.x0 + win.x1) / 2, win.y0 / 2, zWall, false);
+    // 窗下墙比窗台矮 6cm：两块顶面同高会 z-fighting
+    box(root, win.x1 - win.x0, win.y0 - 0.06, 0.16, 0.035, wallMat, (win.x0 + win.x1) / 2, (win.y0 - 0.06) / 2, zWall, false);
     box(root, win.x1 - win.x0, h - win.y1, 0.16, 0.035, wallMat, (win.x0 + win.x1) / 2, (win.y1 + h) / 2, zWall, false);
 
     // 窗台、玻璃、竖梃
@@ -1183,7 +1184,7 @@
     box(root, 0.05, win.y1 - win.y0, 0.06, 0.015, trimMat, (win.x0 + win.x1) / 2, (win.y0 + win.y1) / 2, zWall + 0.06, false);
 
     // 只砌北墙和西墙：东侧和南侧剖开（相机就在 +x/+z 一侧，砌东墙会把整间房挡掉）
-    box(root, 0.16, h, hd * 2 + 0.16, 0.04, wallMat, -hw - 0.08, h / 2, 0, false);
+    box(root, 0.16, h - 0.02, hd * 2 + 0.16, 0.04, wallMat, -hw - 0.08, (h - 0.02) / 2, 0, false);
 
     // 踢脚线（北 / 西）
     box(root, hw * 2, 0.09, 0.07, 0.025, plankMat, 0, 0.095, -hd + 0.04, false);
@@ -1339,12 +1340,13 @@
       [-0.675, 0.675].forEach((x) => {
         box(g, 0.05, 1.1, 0.45, 0.02, bodyDark, x, 0.55, 0);
       });
-      box(g, 1.4, 0.05, 0.45, 0.02, bodyDark, 0, 1.075, 0);
-      box(g, 1.4, 0.05, 0.45, 0.02, bodyDark, 0, 0.025, 0);
-      box(g, 1.4, 1.1, 0.03, 0.015, material(RGB.sky, { roughness: 0.92 }), 0, 0.55, -0.21, false);
+      // 顶板 / 底板 / 背板都比侧板内缩 2cm：端面与侧面共面会 z-fighting
+      box(g, 1.32, 0.045, 0.43, 0.015, bodyDark, 0, 1.07, 0);
+      box(g, 1.32, 0.045, 0.43, 0.015, bodyDark, 0, 0.026, 0);
+      box(g, 1.32, 1.06, 0.03, 0.01, material(RGB.sky, { roughness: 0.92 }), 0, 0.55, -0.2, false);
       // 两层可用的层板
       [0.39, 0.72].forEach((y) => {
-        box(g, 1.3, 0.04, 0.42, 0.012, body, 0, y, 0.01, false);
+        box(g, 1.26, 0.04, 0.4, 0.012, body, 0, y, 0.01, false);
       });
       const bookTokens = [RGB.coral, RGB.mustard, RGB.teal, RGB.green, RGB.sky, RGB.wood];
       let seed = 0;
@@ -1466,7 +1468,8 @@
       box(g, 1.7, 0.22, 2.0, 0.05, frame, 0, 0.22, 0);
       box(g, 1.62, 0.32, 1.92, 0.1, sheet, 0, 0.5, 0);
       box(g, 1.66, 0.08, 1.24, 0.06, quilt, 0, 0.7, 0.32);
-      box(g, 1.66, 0.2, 0.12, 0.04, quiltDark, 0, 0.62, 0.9, false);
+      // 折边要落在床垫和被子里面，端面一旦和床垫端面共面就会 z-fighting（真机表现为一直在闪）
+      box(g, 1.66, 0.16, 0.12, 0.04, quiltDark, 0, 0.7, 0.85, false);
       const head = box(g, 1.7, 0.72, 0.08, 0.035, frame, 0, 0.5, -0.96);
       head.rotation.x = -0.04;
       // 靠床头的一只枕头是装饰件，可点的那只在东半边
