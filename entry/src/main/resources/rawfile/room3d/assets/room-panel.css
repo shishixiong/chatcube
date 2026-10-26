@@ -98,7 +98,7 @@
 }
 
 .welcome::after {
-  content: '61';
+  content: attr(data-watermark);
   position: absolute;
   z-index: -1;
   top: -34px;
@@ -198,9 +198,11 @@
   line-height: 1.65;
 }
 
+/* 五个房间的件数：五等分一行。第一格（客餐厅 37）数字略大，其余四间都是 12，
+   大小有别才不会看成“复制粘贴写错了”。 */
 .room-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   margin-top: 20px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -208,7 +210,8 @@
 }
 
 .room-stat {
-  padding: 13px 15px 14px;
+  padding: 11px 8px 12px;
+  text-align: center;
   background: oklch(99% 0.004 240);
 }
 
@@ -220,19 +223,40 @@
   display: block;
   color: var(--fg);
   font-family: var(--font-display);
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.03em;
   line-height: 1;
 }
 
+.room-stat:first-child strong {
+  font-size: 26px;
+}
+
 .room-stat span {
   display: block;
   margin-top: 5px;
   color: var(--muted);
-  font-size: 11px;
-  line-height: 1.4;
+  font-size: 10.5px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+/* 极窄屏：名称会挤，退化成两行（数字 1 行 + 名称 1 行但字号再压一档） */
+@media (max-width: 359px) {
+  .room-stat {
+    padding: 9px 4px 10px;
+  }
+
+  .room-stat strong,
+  .room-stat:first-child strong {
+    font-size: 18px;
+  }
+
+  .room-stat span {
+    font-size: 9.5px;
+  }
 }
 
 .how-to {

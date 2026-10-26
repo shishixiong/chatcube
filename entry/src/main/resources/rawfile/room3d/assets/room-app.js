@@ -85,8 +85,8 @@
   }
 
   const TOTAL = OBJECTS.length;
-  const CATEGORY_ORDER = ['living', 'dining', 'kitchen', 'child', 'master'];
-  const ROOM_ORDER = DATA.roomOrder || ['main', 'child', 'master'];
+  const CATEGORY_ORDER = ['living', 'dining', 'kitchen', 'child', 'master', 'bathroom', 'balcony'];
+  const ROOM_ORDER = DATA.roomOrder || ['main', 'child', 'master', 'bathroom', 'balcony'];
   const ROOM_META = DATA.rooms || {};
   const objectsInRoom = (roomId) => OBJECTS.filter((item) => item.room === roomId);
 
@@ -131,6 +131,10 @@
     });
     document.querySelectorAll('[data-total]').forEach((node) => {
       node.textContent = String(TOTAL);
+    });
+    // 欢迎区的背景大数字由 CSS attr() 画，单独同步一次，别让样式表里留一份写死的总数
+    document.querySelectorAll('[data-watermark]').forEach((node) => {
+      node.setAttribute('data-watermark', String(TOTAL));
     });
   }
 
@@ -475,6 +479,21 @@
     dom.glossaryBody.appendChild(frag);
   }
 
+  // 5 间房的标签在 402px 上一行放得下（等分即可）；更窄的屏（<360px）标签条改成横向滚动，
+  // 换房间时用 scrollLeft 把当前胶囊滚进视野 —— 不用 scrollIntoView，它会把整个页面一起滚，舞台会跳。
+  function revealTab(tab) {
+    const strip = dom.roomTabs;
+    if (!strip || strip.scrollWidth <= strip.clientWidth + 1) return;
+    const pad = 12;
+    const stripRect = strip.getBoundingClientRect();
+    const tabRect = tab.getBoundingClientRect();
+    if (tabRect.left < stripRect.left + pad) {
+      strip.scrollLeft -= stripRect.left + pad - tabRect.left;
+    } else if (tabRect.right > stripRect.right - pad) {
+      strip.scrollLeft += tabRect.right - stripRect.right + pad;
+    }
+  }
+
   function syncRoomChrome() {
     const meta = ROOM_META[state.activeRoom] || {};
     if (dom.sceneEyebrow) dom.sceneEyebrow.textContent = meta.eyebrow || '3D 场景';
@@ -489,6 +508,7 @@
         tab.tabIndex = active ? 0 : -1;
         const roomMeta = ROOM_META[tab.dataset.room];
         if (roomMeta && roomMeta.tab) tab.textContent = roomMeta.tab;
+        if (active) revealTab(tab);
       });
     }
     document.querySelectorAll('.word-group[data-room]').forEach((section) => {

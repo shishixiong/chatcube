@@ -2,7 +2,7 @@ import { describe, it, expect } from '@ohos/hypium'
 import { ROOM_OBJECT_IDS, validateRoomEnglishArgs } from '../../../../main/ets/utils/RoomEnglishValidation'
 
 /**
- * RoomEnglishValidation 单元测试（room_english 客餐厅 + 厨房 3D 英语探索, spec 2026-10-24 §5）
+ * RoomEnglishValidation 单元测试（room_english 五间房 3D 英语探索, spec 2026-10-24 §5 / 2026-10-26 §13）
  *
  * 校验纯逻辑层不依赖 rawfile / Web 容器，可直接跑。
  *
@@ -38,7 +38,7 @@ export default function roomEnglishValidationTest() {
     })
 
     it('rejects unknown focus', 0, () => {
-      const r = validateRoomEnglishArgs('{"skill_key":"english_vocab","focus":"balcony"}')
+      const r = validateRoomEnglishArgs('{"skill_key":"english_vocab","focus":"garage"}')
       expect(r.ok).assertFalse()
     })
 
@@ -51,9 +51,9 @@ export default function roomEnglishValidationTest() {
     })
 
     it('rejects unknown word id', 0, () => {
-      const r = validateRoomEnglishArgs('{"skill_key":"english_vocab","words":["sofa","bathtub"]}')
+      const r = validateRoomEnglishArgs('{"skill_key":"english_vocab","words":["sofa","garage"]}')
       expect(r.ok).assertFalse()
-      expect(r.error.indexOf('bathtub') >= 0).assertTrue()
+      expect(r.error.indexOf('garage') >= 0).assertTrue()
     })
 
     it('rejects more than 8 words', 0, () => {
@@ -74,8 +74,8 @@ export default function roomEnglishValidationTest() {
       expect(r.ok).assertFalse()
     })
 
-    it('covers 61 room objects', 0, () => {
-      expect(ROOM_OBJECT_IDS.length).assertEqual(61)
+    it('covers 85 room objects', 0, () => {
+      expect(ROOM_OBJECT_IDS.length).assertEqual(85)
     })
 
     it('includes every kitchen word', 0, () => {
@@ -94,6 +94,33 @@ export default function roomEnglishValidationTest() {
       for (let i = 0; i < bedrooms.length; i++) {
         expect(ROOM_OBJECT_IDS.indexOf(bedrooms[i]) >= 0).assertTrue()
       }
+    })
+
+    it('includes every bathroom word', 0, () => {
+      const bathroom = ['bathtub', 'shower', 'toilet', 'washbasin', 'mirror_bath', 'towel',
+        'toothbrush', 'soap', 'shampoo', 'toilet_paper', 'bath_mat', 'scale']
+      for (let i = 0; i < bathroom.length; i++) {
+        expect(ROOM_OBJECT_IDS.indexOf(bathroom[i]) >= 0).assertTrue()
+      }
+    })
+
+    it('includes every balcony word', 0, () => {
+      const balcony = ['washing_machine', 'mop_bucket', 'mop', 'broom', 'watering_can', 'deck_chair',
+        'side_table', 'flower_pot', 'hanger', 'bag', 'slippers', 'ball']
+      for (let i = 0; i < balcony.length; i++) {
+        expect(ROOM_OBJECT_IDS.indexOf(balcony[i]) >= 0).assertTrue()
+      }
+    })
+
+    it('accepts bathroom and balcony focus', 0, () => {
+      const bath = validateRoomEnglishArgs('{"skill_key":"english_vocab","focus":"bathroom","words":["bathtub","soap"]}')
+      expect(bath.ok).assertTrue()
+      expect(bath.focus).assertEqual('bathroom')
+      expect(bath.words.length).assertEqual(2)
+      const balcony = validateRoomEnglishArgs('{"skill_key":"english_vocab","focus":"balcony","words":["broom","ball"]}')
+      expect(balcony.ok).assertTrue()
+      expect(balcony.focus).assertEqual('balcony')
+      expect(balcony.words[0]).assertEqual('broom')
     })
 
     it('accepts bedroom focus and switches room ids', 0, () => {

@@ -1646,6 +1646,523 @@
     return { objects, hitboxes };
   }
 
+  // ———————————————————————————————— 卫生间 + 阳台（第四、五间房）————————————————————————————————
+  // 和前四间房同一套约定：房间中心在原点，北墙 z = -hd、西墙 x = -hw，东墙与南墙剖开（相机在 +x/+z 侧）。
+  // 卫生间地面仍是 y = 0.03；阳台楼板顶 y = 0.01（比室内低 2cm，门槛处能看见这一级）。
+  const WET_PAL = {
+    tile: [93, 0.012, 188],
+    tilePale: [95.5, 0.008, 195],
+    bathWater: [79, 0.06, 198],
+    deckStone: [80, 0.022, 66],
+    deckStoneDark: [71, 0.026, 64],
+    rail: [46, 0.04, 160],
+    soil: [43, 0.05, 55],
+    leafLight: [65, 0.1, 140]
+  };
+  const WET_CEIL = 2.6;
+
+  // 点击优先级：屏幕上有叠压时“谁先接点击”，小件在前、大件在后；
+  // 同一张台面上的小件按“从台面外沿往里”排，正好是孩子看见它们的顺序。
+  const WET_PICK_PRIORITY = [
+    'towel', 'toothbrush', 'soap', 'shampoo', 'toilet_paper', 'bath_mat', 'scale',
+    'mirror_bath', 'shower', 'toilet', 'washbasin', 'bathtub',
+    'slippers', 'bag', 'watering_can', 'ball', 'mop', 'mop_bucket', 'deck_chair',
+    'side_table', 'flower_pot', 'hanger', 'washing_machine', 'broom'
+  ];
+  const wetPriority = (id) => {
+    const index = WET_PICK_PRIORITY.indexOf(id);
+    return index < 0 ? 99 : index;
+  };
+  const reorder = (list) => list.slice().sort((a, b) => wetPriority(a.userData.objectId) - wetPriority(b.userData.objectId));
+
+  // 一条斜杆：从 (x1,y1) 拉到 (x2,y2)，圆柱轴线对准两点连线。
+  function slantedBar(parent, mat, x1, y1, x2, y2, radius, z) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const length = Math.hypot(dx, dy);
+    const bar = cylinder(parent, radius, radius, length, 8, mat, (x1 + x2) / 2, (y1 + y2) / 2, z || 0);
+    bar.rotation.z = Math.atan2(-dx, dy);
+    return bar;
+  }
+
+  // 卫生间外壳：瓷砖地面 + 北墙（西半白瓷砖、东半浅蓝瓷砖）+ 西墙，东墙与南墙剖开。
+  // 墙往房间外让 1cm，贴墙的家具（马桶、洗手台）背面不和墙面重合打架。
+  function tiledShell(root, hw, hd) {
+    const floor = box(root, hw * 2, 0.06, hd * 2, 0.02, material(WET_PAL.tile, { roughness: 0.55 }), 0, FLOOR_Y - 0.03, 0, false);
+    floor.receiveShadow = true;
+    const wallX = 0.04;
+    const zWall = -hd - 0.01 - wallX / 2;
+    const xWall = -hw - 0.01 - wallX / 2;
+    // 屏幕方向：+x 朝右、+z 朝左，所以北墙是画面右侧那一面，x 越小越靠近画面中线
+    box(root, hw + 0.1, WET_CEIL, wallX, 0.02, material(RGB.wall, { roughness: 0.92 }), (-hw + 0.1) / 2, WET_CEIL / 2, zWall, false);
+    box(root, hw - 0.1, WET_CEIL, wallX, 0.02, material(RGB.sky, { roughness: 0.82 }), (0.1 + hw) / 2, WET_CEIL / 2, zWall - 0.002, false);
+    box(root, wallX, WET_CEIL, hd * 2 + wallX * 2, 0.02, material(RGB.wall, { roughness: 0.92 }), xWall, WET_CEIL / 2, 0, false);
+
+    // 踢脚线：5cm 高、3cm 厚，离墙 1.5cm（贴墙会 z-fighting）
+    const skirt = material(RGB.trim, { roughness: 0.8 });
+    box(root, hw * 2, 0.05, 0.03, 0.008, skirt, 0, FLOOR_Y + 0.025, -hd + 0.015, false);
+    box(root, 0.03, 0.05, hd * 2, 0.008, skirt, -hw + 0.015, FLOOR_Y + 0.025, 0, false);
+  }
+
+  // 卫生间 2.4m × 2.0m：北墙从西到东 = 洗手台（台面 0.86m）、浴缸（缸沿 0.52m）；
+  // 西墙从北到南 = 洗手台 → 马桶 → 卷纸架；花洒立杆在浴缸东头靠北墙；
+  // 地垫在洗手台前、体重秤在东南角，两件都贴地，不挡视线。
+  function buildBathroom(root) {
+    const hw = 1.2;
+    const hd = 1.0;
+    const objects = [];
+    const hitboxes = [];
+    tiledShell(root, hw, hd);
+
+    // 1 浴缸：贴北墙，缸口朝南（相机这侧）—— 外轮廓三块矮挡板 + 水 + 龙头 + 小黄鸭，占地 1.3 × 0.6m。
+    (function bathtub() {
+      const g = objectGroup('bathtub', 0.250, FLOOR_Y, -0.450, root);
+      objects.push(g);
+      const cream = material(RGB.cream, { roughness: 0.45 });
+      box(g, 1.3, 0.52, 0.3, 0.05, cream, 0.015, 0.27, 0.255);
+      box(g, 0.52, 0.44, 0.28, 0.05, cream, -0.4, 0.25, 0.02);
+      box(g, 0.34, 0.52, 0.3, 0.05, cream, 0.48, 0.27, 0.01);
+      box(g, 1.3, 0.36, 0.3, 0.04, cream, 0.015, 0.18, -0.22);
+      box(g, 1.0, 0.03, 0.36, 0.02, material(WET_PAL.bathWater, { roughness: 0.2 }), 0.055, 0.45, -0.02, false);
+      // 龙头立在东侧挡板上，弯向西（东边是剖开的，不会挡住任何东西）
+      const steel = material(RGB.steel, { metalness: 0.3, roughness: 0.35 });
+      cylinder(g, 0.03, 0.03, 0.22, 8, steel, 0.62, 0.6, -0.1);
+      const spout = cylinder(g, 0.018, 0.018, 0.16, 8, steel, 0.55, 0.7, -0.1);
+      spout.rotation.z = Math.PI / 2;
+      // 小黄鸭（纯陪衬，约 20×16px，不可点）
+      const duck = new THREE.Group();
+      cylinder(duck, 0.05, 0.055, 0.07, 8, material(RGB.mustard, { roughness: 0.6 }), 0, 0.035, 0);
+      cylinder(duck, 0.035, 0.035, 0.04, 8, material(RGB.mustard, { roughness: 0.6 }), 0.02, 0.085, 0);
+      box(duck, 0.03, 0.012, 0.02, 0.004, material(RGB.coral, { roughness: 0.6 }), 0.055, 0.08, 0, false);
+      duck.position.set(-0.25, 0.465, -0.02);
+      duck.rotation.y = 0.5;
+      g.add(duck);
+      hit(g, 'bathtub', 1.35, 0.6, 0.72, 0.02, 0.3, 0, hitboxes);
+    }());
+
+    // 2 花洒：贴在浴缸东头的缸沿外侧、背北墙——立杆离地 1.42m，顶上横臂向前伸出，莲蓬头正对镜头，
+    //   是房间里唯一一根“竖线顶着一个圆盘”的东西；杆上安一只彩色手柄（拧开就出水）。
+    (function shower() {
+      const g = objectGroup('shower', 0.84, FLOOR_Y, -0.875, root);
+      objects.push(g);
+      const steel = material(RGB.steel, { metalness: 0.35, roughness: 0.3 });
+      cylinder(g, 0.018, 0.018, 1.42, 8, steel, 0, 0.77, 0);
+      cylinder(g, 0.014, 0.014, 0.4, 8, steel, 0, 1.41, 0.25);
+      const elbow = cylinder(g, 0.016, 0.016, 0.06, 8, steel, 0, 1.41, 0.06);
+      elbow.rotation.x = Math.PI / 2;
+      const head = cylinder(g, 0.09, 0.11, 0.05, 14, steel, 0, 1.38, 0.44);
+      head.rotation.x = -0.35;
+      const face = cylinder(g, 0.085, 0.085, 0.012, 14, material(RGB.sky, { roughness: 0.3 }), 0, 1.352, 0.452, false);
+      face.rotation.x = -0.35;
+      const knob = cylinder(g, 0.035, 0.035, 0.05, 10, material(RGB.coral, { roughness: 0.5 }), 0.0, 1.02, 0.04);
+      knob.rotation.x = Math.PI / 2;
+      box(g, 0.05, 0.04, 0.04, 0.008, steel, 0, 1.18, 0.0, false);
+      // 拾取盒只收“立杆”这一根：北墙只有 4cm 厚，盒子一伸进墙里，点到墙边就会被判成点花洒
+      hit(g, 'shower', 0.1, 1.5, 0.04, 0.0, 0.75, 0.0, hitboxes);
+      hit(g, 'shower', 0.2, 0.12, 0.42, 0.0, 1.39, 0.24, hitboxes);
+    }());
+
+    // 3 马桶：西墙中段，面朝东（+x）。水箱贴墙、坐圈朝镜头，卷纸架就在它前面一拃远。
+    //   注意和洗手台柜的 z 区间要错开（柜身到 z=-0.32，马桶从 z=-0.30 起），否则两者会互相穿模
+    (function toilet() {
+      const g = objectGroup('toilet', -0.940, FLOOR_Y, -0.100, root);
+      objects.push(g);
+      const white = material(RGB.white, { roughness: 0.35 });
+      box(g, 0.16, 0.36, 0.4, 0.03, white, -0.19, 0.46, 0);
+      box(g, 0.22, 0.3, 0.26, 0.03, white, -0.13, 0.15, 0);
+      const bowl = cylinder(g, 0.24, 0.2, 0.26, 16, white, 0.02, 0.13, 0);
+      bowl.scale.set(1.15, 1, 0.78);
+      const seat = cylinder(g, 0.25, 0.25, 0.035, 16, material(RGB.cream, { roughness: 0.4 }), 0.03, 0.28, 0);
+      seat.scale.set(1.15, 1, 0.78);
+      const hole = cylinder(g, 0.15, 0.15, 0.02, 14, material(RGB.sky, { roughness: 0.5 }), 0.03, 0.3, 0, false);
+      hole.scale.set(1.15, 1, 0.78);
+      // 盖板立起来靠在墙上：一眼能认出“马桶”
+      const lid = box(g, 0.04, 0.34, 0.3, 0.02, white, -0.24, 0.48, 0);
+      lid.rotation.z = 0.08;
+      cylinder(g, 0.03, 0.03, 0.016, 10, material(RGB.steel, { metalness: 0.4 }), -0.19, 0.645, 0, false);
+      // 拾取盒只覆盖坐圈 + 桶身（水箱的半截交给洗手盆），所以北缩 5cm、东缩 1cm
+      hit(g, 'toilet', 0.24, 0.20, 0.15, 0.02, 0.10, 0.17, hitboxes);
+      hit(g, 'toilet', 0.2, 0.34, 0.34, -0.1, 0.34, 0.0, hitboxes);
+    }());
+
+    // 4 洗手盆：西北角，台面高 0.86m、柜身落地。水龙头 + 一只盆，台面东端留给小物
+    (function washbasin() {
+      const g = objectGroup('washbasin', -1.025, FLOOR_Y, -0.570, root);
+      objects.push(g);
+      box(g, 0.46, 0.78, 0.5, 0.02, material(RGB.woodLight, { roughness: 0.7 }), 0, 0.39, 0);
+      box(g, 0.5, 0.04, 0.54, 0.015, material(RGB.cream, { roughness: 0.4 }), 0.01, 0.84, 0);
+      box(g, 0.02, 0.02, 0.1, 0.008, material(RGB.steel, { metalness: 0.35 }), 0.235, 0.55, 0.06, false);
+      cylinder(g, 0.16, 0.135, 0.04, 16, material(RGB.white, { roughness: 0.3 }), 0.02, 0.865, 0, false);
+      cylinder(g, 0.13, 0.115, 0.035, 16, material(WET_PAL.bathWater, { roughness: 0.25 }), 0.02, 0.858, 0, false);
+      const steel = material(RGB.steel, { metalness: 0.35 });
+      cylinder(g, 0.02, 0.02, 0.2, 8, steel, -0.12, 0.95, 0);
+      const tap = cylinder(g, 0.014, 0.014, 0.14, 8, steel, -0.06, 1.0, 0);
+      tap.rotation.z = Math.PI / 2;
+      // 台盆的盒子让出南北两端：南端给毛巾（挂件优先），北端给马桶坐圈 —— 三只盒子只贴边不互压
+      hit(g, 'washbasin', 0.3, 0.86, 0.44, 0.005, 0.43, -0.02, hitboxes);
+    }());
+
+    // 5 镜子：挂在西墙、洗手台正上方，下沿离台面 14cm —— 一面薄板 + 两盏镜前灯，笔画清晰
+    (function mirrorBath() {
+      const g = objectGroup('mirror_bath', -1.190, 1.0, -0.570, root);
+      objects.push(g);
+      box(g, 0.05, 0.55, 0.54, 0.03, material(RGB.woodLight), 0, 0.275, 0);
+      box(g, 0.02, 0.45, 0.44, 0.02, material(RGB.glass, { roughness: 0.15, metalness: 0.2 }), 0.03, 0.275, 0, false);
+      [0.17, -0.17].forEach((z) => {
+        const lamp = cylinder(g, 0.04, 0.04, 0.08, 8, material(RGB.mustard, { emissive: RGB.mustard, emissiveIntensity: 0.25 }), 0.06, 0.5, z);
+        lamp.rotation.z = Math.PI / 2;
+      });
+      box(g, 0.04, 0.02, 0.18, 0.008, material(RGB.steel, { metalness: 0.3 }), 0.05, 0.55, 0, false);
+      hit(g, 'mirror_bath', 0.12, 0.55, 0.54, 0.03, 0.275, 0, hitboxes);
+    }());
+
+    // 6 毛巾：挂在北墙浴缸中段上方的毛巾杆上（1.16m 高），垂下来 0.34m —— 泡完澡伸手就够到。
+    //   挂在房间中间的挂钩上会“脚下无墙”，所以一定要贴在墙上。
+    (function towel() {
+      const g = objectGroup('towel', 0.150, FLOOR_Y, -1.000, root);
+      objects.push(g);
+      const steel = material(RGB.steel, { metalness: 0.35 });
+      const rail = cylinder(g, 0.013, 0.013, 0.38, 8, steel, 0, 1.16, 0.02);
+      rail.rotation.z = Math.PI / 2;
+      [-0.17, 0.17].forEach((sx) => box(g, 0.03, 0.05, 0.04, 0.008, steel, sx, 1.155, 0, false));
+      // 毛巾本体垂在杆前 2cm：投影里是一条完整的长方形，和浴缸的白、水的青都分得开
+      box(g, 0.34, 0.3, 0.05, 0.02, material(RGB.sky, { roughness: 0.9 }), 0, 0.98, 0.045);
+      box(g, 0.34, 0.04, 0.054, 0.012, material(RGB.cream, { roughness: 0.9 }), 0, 0.84, 0.045, false);
+      hit(g, 'towel', 0.4, 0.4, 0.13, 0, 0.99, 0.04, hitboxes);
+    }());
+
+    // 7 牙刷：杯子放在台面西端靠墙处，两把牙刷一前一后斜插在杯里（左右并排会把杯子撑宽）
+    (function toothbrush() {
+      const g = objectGroup('toothbrush', -0.950, FLOOR_Y + 0.86, -0.640, root);
+      objects.push(g);
+      cylinder(g, 0.115, 0.105, 0.18, 12, material(RGB.teal), 0, 0.09, 0);
+      cylinder(g, 0.108, 0.108, 0.02, 12, material(WET_PAL.bathWater), 0, 0.17, 0, false);
+      [[-0.06, -0.12, RGB.mustard], [0.05, 0.1, RGB.coral]].forEach(([dz, tilt, token]) => {
+        const handle = cylinder(g, 0.022, 0.022, 0.34, 8, material(token), 0, 0.28, dz);
+        handle.rotation.x = tilt;
+        box(g, 0.045, 0.045, 0.07, 0.01, material(RGB.white), 0, 0.45, dz + (tilt > 0 ? 0.055 : -0.055), false);
+      });
+      hit(g, 'toothbrush', 0.25, 0.44, 0.36, 0, 0.3, 0, hitboxes);
+    }());
+
+    // 7.5 置物板（不可点）：北墙上一块 0.56m 长的白色壁板 + 两只支架，把肥皂和洗发水托住。
+    //     没有它，这两件就悬在台面高度上、脚下什么都没有 —— 浴缸西头的缸沿上方正好空着。
+    (function wallShelf() {
+      const shelfMat = material(RGB.white, { roughness: 0.5 });
+      const bracket = material(RGB.steel, { metalness: 0.35 });
+      box(root, 0.56, 0.03, 0.3, 0.012, shelfMat, -0.52, 0.865, -0.86, false);
+      [-0.75, -0.29].forEach((bx) => {
+        box(root, 0.03, 0.13, 0.24, 0.008, bracket, bx, 0.795, -0.86, false);
+      });
+    }());
+
+    // 8 肥皂：置物板中段一只浅碟 + 一块方皂。碟子是东西长、南北窄的椭圆，只为让“南边”露出来
+    (function soap() {
+      const g = objectGroup('soap', -0.640, 0.88, -0.860, root);
+      objects.push(g);
+      box(g, 0.24, 0.03, 0.26, 0.012, material(RGB.cream), 0, 0.015, 0, false);
+      box(g, 0.18, 0.1, 0.17, 0.05, material(RGB.coral, { roughness: 0.5 }), 0, 0.08, 0.01);
+      hit(g, 'soap', 0.26, 0.14, 0.28, 0, 0.1, 0, hitboxes);
+    }());
+
+    // 9 洗发水：台面东端，一只压嘴瓶 —— 方肩圆身、顶上歪着一个小压嘴，和皂碟、杯子形状完全不同
+    (function shampoo() {
+      const g = objectGroup('shampoo', -0.360, 0.88, -0.880, root);
+      objects.push(g);
+      box(g, 0.2, 0.36, 0.17, 0.05, material(RGB.green, { roughness: 0.5 }), 0, 0.18, 0);
+      box(g, 0.2, 0.1, 0.17, 0.03, material(RGB.cream, { roughness: 0.6 }), 0, 0.1, 0.001, false);
+      cylinder(g, 0.035, 0.035, 0.06, 10, material(RGB.greenDark), 0, 0.39, 0);
+      // 压嘴朝南（镜头方向）探出瓶口：瓶身只有 0.17m 深，靠这一截才凑够“近侧宽度”
+      box(g, 0.05, 0.04, 0.13, 0.012, material(RGB.greenDark), 0, 0.43, 0.06);
+      // 标签：一圈浅色腰封，让孩子看见“瓶上有图案”
+      box(g, 0.208, 0.12, 0.178, 0.01, material(RGB.cream, { roughness: 0.7 }), 0, 0.2, 0, false);
+      hit(g, 'shampoo', 0.26, 0.5, 0.26, 0, 0.25, 0.04, hitboxes);
+    }());
+
+    // 10 卷纸：挂在卷纸架上，就在马桶前面——架杆从卷芯里穿过去，一眼就是“卫生间里的纸”
+    (function toiletPaper() {
+      const g = objectGroup('toilet_paper', -0.800, FLOOR_Y, 0.560, root);
+      objects.push(g);
+      const steel = material(RGB.steel, { metalness: 0.35 });
+      cylinder(g, 0.014, 0.014, 0.46, 8, steel, 0, 0.24, 0);
+      box(g, 0.03, 0.06, 0.06, 0.01, steel, 0.01, 0.45, 0, false);
+      // 卷：横轴朝东西，白色卷纸 + 中间棕色纸芯
+      const rollAxis = new THREE.Group();
+      const roll = cylinder(rollAxis, 0.1, 0.1, 0.18, 16, material(RGB.white, { roughness: 0.7 }), 0, 0, 0);
+      roll.rotation.z = Math.PI / 2;
+      const core = cylinder(rollAxis, 0.045, 0.045, 0.2, 12, material(RGB.woodLight, { roughness: 0.8 }), 0, 0, 0, false);
+      core.rotation.z = Math.PI / 2;
+      // 垂下来的一小截纸：让它一眼就是“能撕的纸”
+      box(rollAxis, 0.16, 0.16, 0.012, 0.004, material(RGB.white, { roughness: 0.8 }), 0, -0.13, 0.055, false);
+      rollAxis.position.set(0, 0.36, 0.04);
+      g.add(rollAxis);
+      hit(g, 'toilet_paper', 0.22, 0.46, 0.22, 0, 0.23, 0.04, hitboxes);
+    }());
+
+    // 11 浴室地垫：洗手台前的地上，一块圆角软垫 + 一圈浅色包边。
+    //    拾取盒贴在本体南半截，这样它和体重秤的拾取盒不重叠 —— 孩子点哪儿都只亮一件。
+    (function bathMat() {
+      const g = objectGroup('bath_mat', -0.100, FLOOR_Y, 0.185, root);
+      objects.push(g);
+      box(g, 0.48, 0.02, 0.32, 0.04, material(RGB.sky, { roughness: 0.95 }), 0, 0.01, 0);
+      box(g, 0.36, 0.012, 0.22, 0.03, material(RGB.cream, { roughness: 0.95 }), 0, 0.022, 0, false);
+      hit(g, 'bath_mat', 0.46, 0.035, 0.15, 0, 0.018, 0.045, hitboxes);
+    }());
+
+    // 12 体重秤：洗手台前、地垫南边，一块白底圆角秤身 + 中间一圈表盘 —— 抬脚就能踩上去
+    (function scale() {
+      const g = objectGroup('scale', -0.100, FLOOR_Y, 0.505, root);
+      objects.push(g);
+      box(g, 0.38, 0.04, 0.38, 0.05, material(RGB.white, { roughness: 0.35 }), 0, 0.02, 0);
+      const dial = cylinder(g, 0.11, 0.11, 0.01, 18, material(RGB.sky, { roughness: 0.3 }), 0, 0.045, -0.06, false);
+      dial.scale.set(1, 1, 0.7);
+      box(g, 0.07, 0.008, 0.012, 0.004, material(RGB.coral), 0.015, 0.052, -0.06, false);
+      hit(g, 'scale', 0.36, 0.07, 0.36, 0, 0.034, 0, hitboxes);
+    }());
+
+    reorder(objects).forEach((o) => root.add(o));
+    if (objects.length !== 12) {
+      throw new Error('卫生间应该有 12 件可点物品，实际 ' + objects.length);
+    }
+    return { objects, hitboxes: reorder(hitboxes) };
+  }
+
+  // 阳台 3.6m × 1.4m：北墙（z=-0.7）与西墙（x=-1.8）是实墙；南侧矮栏板 + 东侧玻璃栏，都是“看得见外面”的围合。
+  // 从镜头看分成三段，每一段自成一片、谁也不挡谁：
+  //   西段（左后）—— 洗衣机、拖把、拖把桶、布袋
+  //   中段（正前）—— 浇水壶、折叠椅、小圆桌、拖鞋、皮球
+  //   东段（右后）—— 花盆、衣架、扫帚
+  function buildBalcony(root) {
+    const hw = 1.8;
+    const hd = 0.7;
+    const DECK_Y = 0.01;
+    const objects = [];
+    const hitboxes = [];
+
+    // 楼板：顶面 y = 0.01，比室内低 2cm
+    const slab = box(root, hw * 2 + 0.24, 0.24, hd * 2 + 0.26, 0.06, material(WET_PAL.deckStoneDark), 0, -0.11, 0.01, false);
+    slab.receiveShadow = true;
+    const deck = box(root, hw * 2 - 0.02, 0.014, hd * 2 - 0.02, 0.008, material(WET_PAL.deckStone, { roughness: 0.9 }), 0, DECK_Y - 0.007, 0, false);
+    deck.receiveShadow = true;
+
+    // 北墙与西墙，阳台侧贴白色踢脚（北墙 = 长边 3.6m，在画面右后；西墙 = 短边 1.4m，在画面左后）
+    const wallX = 0.04;
+    const wallMat = material(RGB.wall, { roughness: 0.92 });
+    box(root, hw * 2 + 0.2, WET_CEIL, wallX, 0.02, wallMat, 0.06, WET_CEIL / 2, -hd - 0.01 - wallX / 2, false);
+    box(root, wallX, WET_CEIL, hd * 2 + wallX * 2, 0.02, wallMat, -hw - 0.01 - wallX / 2, WET_CEIL / 2, 0, false);
+    const trimMat = material(RGB.trim);
+    box(root, hw * 2, 0.05, 0.03, 0.008, trimMat, 0, DECK_Y + 0.025, -hd + 0.015, false);
+    box(root, 0.03, 0.05, hd * 2, 0.008, trimMat, -hw + 0.015, DECK_Y + 0.025, 0, false);
+
+    // 围合：南侧（镜头这一侧）与东侧都用“细线栏杆”——0.92m 的深绿扶手 + 0.12m 的下横杆 + 几根细立柱，
+    // 不砌栏板也不加玻璃。近侧的实心栏板会把镜头脚下 0.4m 的地面整片挡住（布袋、拖鞋、皮球就看不见了），
+    // 玻璃栏板虽然透光，但会把镜头与东头扫帚之间那一片染成绿色。线栏杆什么也挡不住，仍然一眼是“阳台”。
+    const railMat = material(WET_PAL.rail, { roughness: 0.5 });
+    const postMat = material(RGB.steel, { metalness: 0.3, roughness: 0.35 });
+    const railY = DECK_Y + 0.92;
+    const railX = hw - 0.03;
+    const railZ = hd - 0.03;
+    // 楼板边：6cm 高的挡水边，给“这里是楼板尽头”一条结实的线
+    box(root, hw * 2 - 0.02, 0.07, 0.04, 0.01, trimMat, 0, DECK_Y - 0.025, railZ, false);
+    box(root, 0.04, 0.07, hd * 2 - 0.02, 0.01, trimMat, railX, DECK_Y - 0.025, 0, false);
+    // 扶手：南侧一整根，东侧一整根，交在东南角
+    box(root, hw * 2 - 0.02, 0.042, 0.07, 0.012, railMat, 0, railY, railZ);
+    box(root, 0.07, 0.042, hd * 2 - 0.05, 0.012, railMat, railX, railY, 0.02);
+    // 下横杆：贴着楼板边，让孩子看出“扶手是连到地面的”
+    box(root, hw * 2 - 0.1, 0.026, 0.04, 0.008, railMat, 0, DECK_Y + 0.12, railZ, false);
+    box(root, 0.04, 0.026, hd * 2 - 0.12, 0.008, railMat, railX, DECK_Y + 0.12, 0.02, false);
+    // 立柱：东南角、南侧两根、东侧一根 —— 每根 3cm 粗，挡住的面积不到 1%
+    const postH = railY - DECK_Y;
+    [[railX, railZ], [-0.62, railZ], [0.62, railZ], [railX, -0.58]].forEach(([px, pz]) => {
+      cylinder(root, 0.018, 0.018, postH, 8, postMat, px, (DECK_Y + railY) / 2, pz);
+    });
+
+    // 北墙上的晾衣杆（不可点）：一根横杆 + 两个墙座，把“阳台是晾衣服的地方”补在空墙面上，
+    // 也让挂在杆上的衣架有了来处。
+    const rodMat = material(RGB.steel, { metalness: 0.35, roughness: 0.3 });
+    const rodY = 1.60;
+    const rodZ = -hd + 0.06;
+    const rod = cylinder(root, 0.017, 0.017, 2.5, 8, rodMat, 0.42, rodY, rodZ);
+    rod.rotation.z = Math.PI / 2;
+    [-0.72, 1.56].forEach((bx) => box(root, 0.05, 0.05, 0.09, 0.012, rodMat, bx, rodY, rodZ - 0.02, false));
+
+    // 1 洗衣机：西北角，机背贴北墙、机身贴西墙，圆门朝南（镜头方向）—— 阳台最认得出的大件
+    (function washingMachine() {
+      const g = objectGroup('washing_machine', -1.380, DECK_Y, -0.380, root);
+      objects.push(g);
+      box(g, 0.62, 0.84, 0.58, 0.05, material(RGB.appliance, { roughness: 0.4 }), 0, 0.42, 0);
+      box(g, 0.66, 0.04, 0.6, 0.02, material(RGB.white, { roughness: 0.35 }), 0, 0.86, 0);
+      // 圆门：外圈 + 深色玻璃 + 一条把手，是洗衣机最认得出的形状
+      const steel = material(RGB.steel, { metalness: 0.35 });
+      const ring = cylinder(g, 0.19, 0.19, 0.03, 20, steel, 0, 0.46, 0.29);
+      ring.rotation.x = Math.PI / 2;
+      const port = cylinder(g, 0.15, 0.15, 0.02, 20, material(RGB.glassDark, { roughness: 0.15 }), 0, 0.46, 0.305, false);
+      port.rotation.x = Math.PI / 2;
+      box(g, 0.22, 0.02, 0.02, 0.006, steel, 0, 0.6, 0.315, false);
+      [0.12, 0.06, 0.0].forEach((x, i) => box(g, 0.04, 0.02, 0.02, 0.006, material(i === 1 ? RGB.coral : RGB.teal), x, 0.78, 0.3, false));
+      const knob = cylinder(g, 0.035, 0.035, 0.03, 10, material(RGB.teal, { roughness: 0.4 }), -0.2, 0.78, 0.3);
+      knob.rotation.x = Math.PI / 2;
+      hit(g, 'washing_machine', 0.56, 0.9, 0.56, 0, 0.45, 0, hitboxes);
+    }());
+
+    // 2 布袋：洗衣机正前方、西南角；白色布袋鼓着肚子、两只提手立着 —— 洗衣机的“前搭档”
+    (function bag() {
+      const g = objectGroup('bag', -0.900, DECK_Y, 0.500, root);
+      objects.push(g);
+      addMesh(g, new THREE.CylinderGeometry(0.17, 0.15, 0.4, 10), material(RGB.white, { roughness: 0.9 }), [0, 0.2, 0]);
+      [-0.06, 0.06].forEach((dx) => {
+        box(g, 0.05, 0.1, 0.04, 0.01, material(RGB.white, { roughness: 0.9 }), dx, 0.44, 0, false);
+      });
+      // 软袋子：盒子只取袋身南半截（北半截让给浇水壶的壶把），与折叠椅只贴边
+      hit(g, 'bag', 0.36, 0.38, 0.30, 0, 0.17, 0.06, hitboxes);
+    }());
+
+    // 3 拖把桶：洗衣袋与折叠椅之间的空当；深色小桶，桶口架一块蓝色的拧水压板
+    (function mopBucket() {
+      const g = objectGroup('mop_bucket', -0.960, DECK_Y, -0.360, root);
+      objects.push(g);
+      cylinder(g, 0.17, 0.15, 0.34, 14, material(RGB.glassDark, { roughness: 0.4 }), 0, 0.17, 0);
+      cylinder(g, 0.18, 0.18, 0.03, 14, material(RGB.steel, { roughness: 0.4 }), 0, 0.34, 0, false);
+      box(g, 0.22, 0.18, 0.16, 0.03, material(RGB.teal), 0, 0.44, -0.04);
+      box(g, 0.18, 0.02, 0.14, 0.01, material(RGB.glassDark), 0, 0.35, -0.02, false);
+      hit(g, 'mop_bucket', 0.30, 0.56, 0.34, 0, 0.28, 0, hitboxes);
+    }());
+
+    // 4 拖把：靠西墙立着，杆上端往墙那边倒 —— 从镜头看是一根长杆压着一团浅蓝的布头
+    (function mop() {
+      const g = objectGroup('mop', -1.560, DECK_Y, 0.120, root);
+      objects.push(g);
+      const pole = cylinder(g, 0.016, 0.016, 1.24, 8, material(RGB.woodLight), 0, 0.68, 0);
+      pole.rotation.z = 0.12;
+      box(g, 0.13, 0.05, 0.1, 0.015, material(RGB.steel), -0.09, 0.07, 0);
+      box(g, 0.24, 0.1, 0.15, 0.035, material(RGB.sky, { roughness: 0.95 }), -0.1, 0.05, 0.01);
+      [-0.07, 0, 0.07].forEach((dz, i) => {
+        box(g, 0.2, 0.05, 0.03, 0.012, material(i % 2 ? RGB.cream : RGB.sky, { roughness: 0.95 }), -0.1, 0.015, dz, false);
+      });
+      hit(g, 'mop', 0.34, 1.3, 0.2, -0.06, 0.66, 0.01, hitboxes);
+    }());
+
+    // 5 浇水壶：西段、洗衣袋与折叠椅之间的空当，长嘴朝东 —— 大肚子 + 一根细长嘴 + 顶上一根提梁
+    (function wateringCan() {
+      const g = objectGroup('watering_can', -0.640, DECK_Y, 0.060, root);
+      objects.push(g);
+      const canMat = material(RGB.teal, { roughness: 0.6 });
+      cylinder(g, 0.13, 0.13, 0.3, 12, canMat, 0, 0.16, 0);
+      box(g, 0.24, 0.02, 0.24, 0.03, material(RGB.tealDark, { roughness: 0.6 }), 0, 0.31, 0, false);
+      const spout = cylinder(g, 0.035, 0.02, 0.3, 8, canMat, 0.19, 0.2, 0);
+      spout.rotation.z = -0.9;
+      const bar = cylinder(g, 0.014, 0.014, 0.14, 6, material(RGB.tealDark), 0, 0.42, 0);
+      bar.rotation.x = Math.PI / 2;
+      // 壶身（不含长嘴）：盒子里只放壶肚，长嘴算“视觉延伸”，点壶肚就够
+      hit(g, 'watering_can', 0.34, 0.36, 0.32, 0.02, 0.18, 0.02, hitboxes);
+    }());
+
+    // 6 折叠椅：西段靠北，椅背立着、椅面朝镜头；扶手是两根细木条，一眼能看出“能坐”
+    (function deckChair() {
+      const g = objectGroup('deck_chair', -0.940, DECK_Y, 0.190, root);
+      objects.push(g);
+      const frame = material(RGB.woodLight, { roughness: 0.7 });
+      const cloth = material(RGB.coral, { roughness: 0.9 });
+      box(g, 0.4, 0.05, 0.38, 0.02, cloth, 0, 0.34, 0.02);
+      box(g, 0.4, 0.4, 0.05, 0.02, cloth, 0, 0.55, -0.16);
+      [[-0.16, 0.14], [0.16, 0.14], [-0.16, -0.14], [0.16, -0.14]].forEach(([dx, dz]) => {
+        cylinder(g, 0.018, 0.02, 0.32, 6, frame, dx, 0.16, dz);
+      });
+      [-0.21, 0.21].forEach((dx) => box(g, 0.04, 0.03, 0.34, 0.01, frame, dx, 0.5, 0.0, false));
+      hit(g, 'deck_chair', 0.46, 0.8, 0.42, 0, 0.4, 0, hitboxes);
+    }());
+
+    // 7 小圆桌：折叠椅东北侧、偏北，桌面比椅面高 —— 从镜头看是一圈完整的圆桌面
+    (function sideTable() {
+      const g = objectGroup('side_table', 0.300, DECK_Y, -0.390, root);
+      objects.push(g);
+      const top = cylinder(g, 0.27, 0.27, 0.045, 16, material(RGB.woodLight, { roughness: 0.6 }), 0, 0.52, 0);
+      top.castShadow = true;
+      cylinder(g, 0.03, 0.04, 0.49, 10, material(RGB.wood), -0.04, 0.255, 0);
+      cylinder(g, 0.18, 0.2, 0.03, 12, material(RGB.wood), -0.04, 0.015, 0);
+      hit(g, 'side_table', 0.54, 0.57, 0.54, 0, 0.285, 0, hitboxes);
+    }());
+
+    // 8 拖鞋：椅子前面，一双并排摆在楼面上，鞋头朝镜头（出门/回家都要换的那一双）
+    (function slippers() {
+      const g = objectGroup('slippers', 0.270, DECK_Y, 0.520, root);
+      objects.push(g);
+      [-0.08, 0.08].forEach((dx) => {
+        box(g, 0.15, 0.05, 0.32, 0.04, material(RGB.coral, { roughness: 0.7 }), dx, 0.022, 0);
+        box(g, 0.15, 0.025, 0.1, 0.028, material(RGB.cream, { roughness: 0.8 }), dx, 0.055, -0.09, false);
+      });
+      // 盒子取鞋头 + 鞋面：鞋跟露在盒子北边（看得见、不用点），与椅子只贴边
+      hit(g, 'slippers', 0.34, 0.26, 0.26, 0, 0.13, 0.0, hitboxes);
+    }());
+
+    // 9 皮球：椅子与小圆桌之间的空地上，一只珊瑚色圆球 + 一圈奶油色条带（像沙滩球）
+    (function ball() {
+      const g = objectGroup('ball', 0.620, DECK_Y, 0.280, root);
+      objects.push(g);
+      addMesh(g, new THREE.IcosahedronGeometry(0.17, 1), material(RGB.coral, { roughness: 0.55, flatShading: true }), [0, 0.17, 0]);
+      const band = addMesh(g, new THREE.SphereGeometry(0.172, 14, 10), material(RGB.cream, { roughness: 0.55 }), [0, 0.17, 0], false);
+      band.scale.set(1, 0.16, 1);
+      hit(g, 'ball', 0.34, 0.34, 0.34, 0, 0.17, 0, hitboxes);
+    }());
+
+    // 10 花盆：东段靠北墙，陶盆 + 三团圆叶 —— 阳台的“绿”
+    (function flowerPot() {
+      const g = objectGroup('flower_pot', 1.170, DECK_Y, -0.480, root);
+      objects.push(g);
+      cylinder(g, 0.2, 0.15, 0.32, 12, material(RGB.coral, { roughness: 0.85 }), 0, 0.16, 0);
+      cylinder(g, 0.21, 0.21, 0.04, 12, material(RGB.coral, { roughness: 0.85 }), 0, 0.32, 0, false);
+      cylinder(g, 0.185, 0.185, 0.014, 12, material(WET_PAL.soil), 0, 0.333, 0, false);
+      const leaves = material(WET_PAL.leafLight, { roughness: 0.85 });
+      [[0, 0.46, 0, 0.19], [-0.1, 0.56, 0.02, 0.15], [0.09, 0.58, -0.03, 0.14]].forEach(([dx, y, dz, r]) => {
+        box(g, r * 2, r * 1.1, r * 2, r * 0.4, leaves, dx, y, dz);
+      });
+      hit(g, 'flower_pot', 0.42, 0.7, 0.42, 0, 0.35, 0, hitboxes);
+    }());
+
+    // 11 衣架：挂在北墙的小挂钩上，木三角 + 铁丝钩 —— 晾衣服的那一件，从镜头看是一个空心三角
+    (function hanger() {
+      const g = objectGroup('hanger', 1.300, 1.60, -0.620, root);
+      objects.push(g);
+      const wood = material(RGB.woodLight, { roughness: 0.65 });
+      const steel = material(RGB.steel, { metalness: 0.4, roughness: 0.3 });
+      // 钩子：一小段竖杆 + 一段搭到晾衣杆上的横杆（杆在 y=0，钩子顶端刚好绕上去）
+      slantedBar(g, steel, 0, 0.02, 0, -0.06, 0.008, 0);
+      slantedBar(g, steel, 0.0, 0.02, -0.04, 0.03, 0.008, 0);
+      // 三角：两条斜木条 + 一条底横梁
+      slantedBar(g, wood, 0, -0.01, -0.21, -0.19, 0.014, 0);
+      slantedBar(g, wood, 0, -0.01, 0.21, -0.19, 0.014, 0);
+      slantedBar(g, wood, -0.21, -0.19, 0.21, -0.19, 0.011, 0);
+      hit(g, 'hanger', 0.48, 0.34, 0.1, 0, -0.1, 0, hitboxes);
+    }());
+
+    // 12 扫帚：东段最东头，杆向北倾、帚面朝南伸出来一点 —— 从镜头看是“一根长杆压着一块黄色的头”
+    (function broom() {
+      const g = objectGroup('broom', 1.740, DECK_Y, 0.020, root);
+      objects.push(g);
+      const handle = cylinder(g, 0.016, 0.016, 1.3, 8, material(RGB.woodLight), 0, 0.72, -0.1);
+      handle.rotation.x = 0.12;
+      box(g, 0.1, 0.22, 0.07, 0.02, material(RGB.teal), 0, 0.13, 0.06);
+      box(g, 0.26, 0.2, 0.34, 0.04, material(RGB.mustard, { roughness: 0.9 }), 0, 0.1, 0.08);
+      hit(g, 'broom', 0.2, 1.34, 0.06, 0, 0.67, -0.04, hitboxes);
+      hit(g, 'broom', 0.3, 0.24, 0.36, 0, 0.11, 0.08, hitboxes);
+    }());
+
+    reorder(objects).forEach((o) => root.add(o));
+    if (objects.length !== 12) {
+      throw new Error('阳台应该有 12 件可点物品，实际 ' + objects.length);
+    }
+    return { objects, hitboxes: reorder(hitboxes) };
+  }
+
+  function buildWetRooms(bathroomRoot, balconyRoot) {
+    const bathroom = buildBathroom(bathroomRoot);
+    const balcony = buildBalcony(balconyRoot);
+    return {
+      objects: bathroom.objects.concat(balcony.objects),
+      hitboxes: bathroom.hitboxes.concat(balcony.hitboxes)
+    };
+  }
+
   function buildBedrooms(childRoot, masterRoot) {
     const child = buildChildRoom(childRoot);
     const master = buildMasterRoom(masterRoot);
@@ -1694,6 +2211,27 @@
       zoomMin: 2.9,
       panInsetX: 0.58,
       panInsetZ: 0.45
+    },
+    // 卫生间只有 2.4m 宽，取景半径比卧室更近一点；阳台是 3.6m × 1.4m 的窄长条，横向要留够，纵向留少些。
+    bathroom: {
+      bounds: { minX: -1.2, maxX: 1.2, minZ: -1.0, maxZ: 1.0, centerX: 0, halfWidth: 1.2, halfDepth: 1.0 },
+      target: { x: -0.10, y: 0.60, z: -0.16 },
+      fitMin: 4.9,
+      fitMax: 8,
+      fitScale: 1,
+      zoomMin: 2.4,
+      panInsetX: 0.42,
+      panInsetZ: 0.36
+    },
+    balcony: {
+      bounds: { minX: -1.8, maxX: 1.8, minZ: -0.7, maxZ: 0.7, centerX: 0, halfWidth: 1.8, halfDepth: 0.7 },
+      target: { x: 0.06, y: 0.78, z: -0.06 },
+      fitMin: 4.6,
+      fitMax: 9,
+      fitScale: 0.93,
+      zoomMin: 2.6,
+      panInsetX: 0.62,
+      panInsetZ: 0.26
     }
   };
 
@@ -1792,6 +2330,7 @@
   window.WordRoomModels = {
     buildRoom,
     buildBedrooms,
+    buildWetRooms,
     FLOOR_Y,
     rooms: ROOM_FRAMES,
     bounds: ROOM_FRAMES.main.bounds

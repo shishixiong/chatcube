@@ -773,8 +773,9 @@ a:focus-visible,
 }
 
 
-/* —— 房间切换标签：三间房各有自己的 3D 取景 —— */
-/* 房间切换：3D 舞台正上方，先选房间再看场景；滚动时吸顶 */
+/* —— 房间切换标签：五间房各有自己的 3D 取景 —— */
+/* 房间切换：3D 舞台正上方，先选房间再看场景；滚动时吸顶。
+   402px 上五个胶囊等分一行放得下；更窄的屏（<360px）退化成横向滚动，胶囊保住 56px 的点击宽度。 */
 .room-tabs {
   position: sticky;
   top: 0;
@@ -783,6 +784,11 @@ a:focus-visible,
   display: flex;
   gap: 4px;
   padding: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: oklch(100% 0 0 / 0.84);
@@ -791,9 +797,13 @@ a:focus-visible,
   -webkit-backdrop-filter: blur(12px);
 }
 
+.room-tabs::-webkit-scrollbar {
+  display: none;
+}
+
 .room-tab {
   flex: 1 1 0;
-  min-width: 0;
+  min-width: 56px;
   min-height: 32px;
   padding: 0 8px;
   border: 0;

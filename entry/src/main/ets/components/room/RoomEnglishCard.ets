@@ -1,10 +1,11 @@
 // entry/src/main/ets/components/room/RoomEnglishCard.ets
 /**
- * RoomEnglishCard - 客餐厅 3D 英语探索（room_english 工具，讲解型）
+ * RoomEnglishCard - 3D 五间房英语探索（room_english 工具，讲解型）
  *
  * 渲染层：Web 容器加载 rawfile/room3d/index.html（three.js 0.185 本地内置，离线可用）。
- * 原型来自 open-design 的 kids-room-3d-english + kids-3d-bedrooms-wing：三间低多边形房间
- * （11.8m × 6m 客餐厅 + 开放厨房、4.4m × 3.6m 儿童房、4.6m × 3.6m 主卧）、61 件可点击物品，
+ * 原型来自 open-design 的 kids-room-3d-english + kids-3d-bedrooms-wing + wet-room：五间低多边形房间
+ * （11.8m × 6m 客餐厅 + 开放厨房、4.4m × 3.6m 儿童房、4.6m × 3.6m 主卧、2.4m × 2.0m 卫生间、
+ * 3.6m × 1.4m 阳台）、85 件可点击物品，
  * 房卡顶部切换房间；单词卡（英文 / 音标 / 中文 / 儿童解释 / 例句）、英文标签、词汇表与进度点阵。
  *
  * 原生职责：
@@ -26,8 +27,8 @@ import { RoomEnglishValidationResult, validateRoomEnglishArgs } from '../../util
 // 页面内相对路径（assets/three.min.js 等）由 ArkWeb 按同源解析。
 const ROOM_ENGLISH_PAGE_URL: string = 'resource://rawfile/room3d/index.html'
 // 与 rawfile/room3d/assets/scene-data.js 的物品总数保持一致
-// （客厅 15 + 餐厅 10 + 厨房 12 + 儿童房 12 + 主卧 12）
-const ROOM_OBJECT_TOTAL: number = 61
+// （客厅 15 + 餐厅 10 + 厨房 12 + 儿童房 12 + 主卧 12 + 卫生间 12 + 阳台 12）
+const ROOM_OBJECT_TOTAL: number = 85
 
 /** 单词朗读语速：三个引擎（system/minimax/stepfun）通用范围 [0.5, 2]，0.8 略慢便于孩子跟读 */
 const ROOM_WORD_TTS_SPEED: number = 0.8
@@ -320,10 +321,13 @@ export struct RoomEnglishCard {
 
   // ====== Web 控制 ======
 
-  /** focus 落在某一间卧室时，直接把这间房打开（living / dining / kitchen 都在客餐厅里）。 */
+  /** focus 落在某个独立房间时，直接把这间房打开（living / dining / kitchen 都在客餐厅里）。 */
   private focusRoom(): string {
     const focus = this.argsView.focus
-    return (focus === 'child' || focus === 'master') ? focus : 'main'
+    if (focus === 'child' || focus === 'master' || focus === 'bathroom' || focus === 'balcony') {
+      return focus
+    }
+    return 'main'
   }
 
   /** 页面就绪后：先切到 focus 指定的房间，再把本次重点单词的第一件物品高亮出来（选中即自动朗读）。
@@ -390,7 +394,7 @@ export struct RoomEnglishCard {
           .fontColor($r('app.color.text_primary'))
         Text(this.exploredCount > 0
           ? `已收集 ${this.exploredCount} / ${ROOM_OBJECT_TOTAL} 个单词`
-          : '客餐厅、厨房、儿童房、主卧，点一点就知道它叫什么')
+          : '客餐厅、厨房、儿童房、主卧、卫生间、阳台，点一点就知道它叫什么')
           .fontSize(11)
           .fontColor($r('app.color.text_tertiary'))
       }

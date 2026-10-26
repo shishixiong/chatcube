@@ -130,20 +130,27 @@
       const mainGroup = createRoomGroup('main', 'ROOM_MAIN');
       const childGroup = createRoomGroup('child', 'ROOM_CHILD');
       const masterGroup = createRoomGroup('master', 'ROOM_MASTER');
+      const bathroomGroup = createRoomGroup('bathroom', 'ROOM_BATHROOM');
+      const balconyGroup = createRoomGroup('balcony', 'ROOM_BALCONY');
 
       const builtMain = models.buildRoom(mainGroup);
       const builtBeds = models.buildBedrooms(childGroup, masterGroup);
+      const builtWet = models.buildWetRooms(bathroomGroup, balconyGroup);
 
       this.roomObjects.main = builtMain.objects;
       this.roomObjects.child = builtBeds.objects.filter((group) => group.userData.room === 'child');
       this.roomObjects.master = builtBeds.objects.filter((group) => group.userData.room === 'master');
+      this.roomObjects.bathroom = builtWet.objects.filter((group) => group.userData.room === 'bathroom');
+      this.roomObjects.balcony = builtWet.objects.filter((group) => group.userData.room === 'balcony');
       // 拾取盒都挂在各自物品 Group 下，房间归属直接读 Group 的 userData.room
       this.roomHitboxes.main = builtMain.hitboxes;
       this.roomHitboxes.child = builtBeds.hitboxes.filter((mesh) => mesh.parent.userData.room === 'child');
       this.roomHitboxes.master = builtBeds.hitboxes.filter((mesh) => mesh.parent.userData.room === 'master');
+      this.roomHitboxes.bathroom = builtWet.hitboxes.filter((mesh) => mesh.parent.userData.room === 'bathroom');
+      this.roomHitboxes.balcony = builtWet.hitboxes.filter((mesh) => mesh.parent.userData.room === 'balcony');
 
       this.objects = this.roomObjects.main
-        .concat(this.roomObjects.child, this.roomObjects.master);
+        .concat(this.roomObjects.child, this.roomObjects.master, this.roomObjects.bathroom, this.roomObjects.balcony);
       this.hitboxes = this.roomHitboxes[this.activeRoom];
 
       this.prepareObjects();

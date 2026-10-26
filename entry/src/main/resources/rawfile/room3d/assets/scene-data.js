@@ -617,6 +617,250 @@
       category: 'master',
       labelBias: [50, -18]
     },
+
+    // —— 卫生间：2.4m × 2.0m，12 件可点物品 ——
+    {
+      id: 'towel',
+      word: 'towel',
+      phonetic: '/ˈtaʊəl/',
+      zh: '毛巾',
+      kidDefinition: '软软的布，擦干手和脸。',
+      example: 'Dry your hands with a towel.',
+      category: 'bathroom',
+      labelBias: [-34, 26]
+    },
+    {
+      id: 'toothbrush',
+      word: 'toothbrush',
+      phonetic: '/ˈtuːθbrʌʃ/',
+      zh: '牙刷',
+      kidDefinition: '插在杯子里，早晚刷一刷。',
+      example: 'Brush your teeth with a toothbrush.',
+      category: 'bathroom',
+      labelBias: [-44, -22]
+    },
+    {
+      id: 'soap',
+      word: 'soap',
+      phonetic: '/soʊp/',
+      zh: '肥皂',
+      kidDefinition: '滑溜溜的小方块，揉出泡泡。',
+      example: 'Wash your hands with soap.',
+      category: 'bathroom',
+      labelBias: [-6, -20]
+    },
+    {
+      id: 'shampoo',
+      word: 'shampoo',
+      phonetic: '/ʃæmˈpuː/',
+      zh: '洗发水',
+      kidDefinition: '按一按，香香的泡泡洗头发。',
+      example: 'Use shampoo when you wash your hair.',
+      category: 'bathroom',
+      labelBias: [30, -24]
+    },
+    {
+      id: 'toilet_paper',
+      word: 'toilet paper',
+      phonetic: '/ˈtɔɪlət ˌpeɪpər/',
+      zh: '卷纸',
+      kidDefinition: '软软的一卷纸，挂在架子上。',
+      example: 'We need more toilet paper.',
+      category: 'bathroom',
+      labelBias: [-38, 18]
+    },
+    {
+      id: 'bath_mat',
+      word: 'bath mat',
+      phonetic: '/ˈbɑːθ mæt/',
+      zh: '浴室地垫',
+      kidDefinition: '洗手台前的软垫，踩上去不冰。',
+      example: 'Step on the bath mat.',
+      category: 'bathroom',
+      labelBias: [-48, 30]
+    },
+    {
+      id: 'scale',
+      word: 'scale',
+      phonetic: '/skeɪl/',
+      zh: '体重秤',
+      kidDefinition: '站上去，数字就跳出来。',
+      example: 'Stand on the scale slowly.',
+      category: 'bathroom',
+      labelBias: [-30, 34]
+    },
+    {
+      id: 'mirror_bath',
+      word: 'mirror',
+      phonetic: '/ˈmɪrər/',
+      zh: '镜子',
+      kidDefinition: '挂在墙上，能看见自己的脸。',
+      example: 'Look in the mirror and smile.',
+      category: 'bathroom',
+      labelBias: [-46, -30]
+    },
+    {
+      id: 'shower',
+      word: 'shower',
+      phonetic: '/ˈʃaʊər/',
+      zh: '花洒',
+      kidDefinition: '墙边高高的喷头，一开就下小雨。',
+      example: 'I take a shower in the morning.',
+      category: 'bathroom',
+      labelBias: [40, -34]
+    },
+    {
+      id: 'toilet',
+      word: 'toilet',
+      phonetic: '/ˈtɔɪlət/',
+      zh: '马桶',
+      kidDefinition: '白色的坐便，用完要冲水。',
+      example: 'Flush the toilet after you use it.',
+      category: 'bathroom',
+      labelBias: [-40, 8]
+    },
+    {
+      id: 'washbasin',
+      word: 'washbasin',
+      phonetic: '/ˈwɒʃbeɪsn/',
+      zh: '洗手盆',
+      kidDefinition: '洗手洗脸的盆，龙头一拧出水。',
+      example: 'Wash your hands in the washbasin.',
+      category: 'bathroom',
+      labelBias: [-40, -26]
+    },
+    {
+      id: 'bathtub',
+      word: 'bathtub',
+      phonetic: '/ˈbɑːθtʌb/',
+      zh: '浴缸',
+      kidDefinition: '泡澡的大缸子，边上还有小黄鸭。',
+      example: 'I take a bath in the bathtub.',
+      category: 'bathroom',
+      labelBias: [26, 30]
+    },
+
+    // —— 阳台：3.6m × 1.4m，12 件可点物品 ——
+    {
+      id: 'washing_machine',
+      word: 'washing machine',
+      phonetic: '/ˈwɒʃɪŋ məˌʃiːn/',
+      zh: '洗衣机',
+      kidDefinition: '中间有圆门，衣服转一圈就干净。',
+      example: 'Put your clothes in the washing machine.',
+      category: 'balcony',
+      labelBias: [-46, -28]
+    },
+    {
+      id: 'bag',
+      word: 'bag',
+      phonetic: '/bæɡ/',
+      zh: '布袋',
+      kidDefinition: '鼓鼓的袋子，两只提手立着。',
+      example: 'Put the clothes in the bag.',
+      category: 'balcony',
+      labelBias: [-30, 30]
+    },
+    {
+      id: 'mop_bucket',
+      word: 'bucket',
+      phonetic: '/ˈbʌkɪt/',
+      zh: '水桶',
+      kidDefinition: '深色水桶，桶口有拧干板。',
+      example: 'Fill the bucket with water.',
+      category: 'balcony',
+      labelBias: [-14, -24]
+    },
+    {
+      id: 'mop',
+      word: 'mop',
+      phonetic: '/mɒp/',
+      zh: '拖把',
+      kidDefinition: '长杆子下面一团软毛，推着擦地。',
+      example: 'Mop the floor with water.',
+      category: 'balcony',
+      labelBias: [-40, -30]
+    },
+    {
+      id: 'watering_can',
+      word: 'watering can',
+      phonetic: '/ˈwɔːtərɪŋ kæn/',
+      zh: '浇水壶',
+      kidDefinition: '大肚子壶，长嘴洒出一条水线。',
+      example: 'Water the plants with the watering can.',
+      category: 'balcony',
+      labelBias: [18, -22]
+    },
+    {
+      id: 'deck_chair',
+      word: 'chair',
+      phonetic: '/tʃer/',
+      zh: '折叠椅',
+      kidDefinition: '有靠背的小椅子，坐着晒太阳。',
+      example: 'Sit on the chair and rest.',
+      category: 'balcony',
+      labelBias: [-30, -24]
+    },
+    {
+      id: 'side_table',
+      word: 'table',
+      phonetic: '/ˈteɪbl/',
+      zh: '小圆桌',
+      kidDefinition: '圆圆的小桌面，刚好放一杯水。',
+      example: 'The cup is on the table.',
+      category: 'balcony',
+      labelBias: [30, -20]
+    },
+    {
+      id: 'slippers',
+      word: 'slippers',
+      phonetic: '/ˈslɪpərz/',
+      zh: '拖鞋',
+      kidDefinition: '一双软软的鞋，并排摆在一起。',
+      example: 'Put on your slippers at the door.',
+      category: 'balcony',
+      labelBias: [34, 26]
+    },
+    {
+      id: 'flower_pot',
+      word: 'flower pot',
+      phonetic: '/ˈflaʊər pɒt/',
+      zh: '花盆',
+      kidDefinition: '陶土小盆，里面长着一丛绿叶。',
+      example: 'The flower pot is by the wall.',
+      category: 'balcony',
+      labelBias: [30, -28]
+    },
+    {
+      id: 'broom',
+      word: 'broom',
+      phonetic: '/bruːm/',
+      zh: '扫帚',
+      kidDefinition: '长柄，下面一排软毛，扫灰尘用。',
+      example: 'Sweep the floor with the broom.',
+      category: 'balcony',
+      labelBias: [40, -26]
+    },
+    {
+      id: 'hanger',
+      word: 'hanger',
+      phonetic: '/ˈhæŋər/',
+      zh: '衣架',
+      kidDefinition: '三角形的架子，挂衣服用。',
+      example: 'Hang your coat on the hanger.',
+      category: 'balcony',
+      labelBias: [26, -34]
+    },
+    {
+      id: 'ball',
+      word: 'ball',
+      phonetic: '/bɔːl/',
+      zh: '皮球',
+      kidDefinition: '圆圆的球，拍一下会跳起来。',
+      example: 'Bounce the ball with your hand.',
+      category: 'balcony',
+      labelBias: [34, 22]
+    },
   ].map((item) => ({ ...item, objectName: 'OBJ_' + item.id }));
 
   const ROOM_BY_CATEGORY = {
@@ -624,7 +868,9 @@
     dining: 'main',
     kitchen: 'main',
     child: 'child',
-    master: 'master'
+    master: 'master',
+    bathroom: 'bathroom',
+    balcony: 'balcony'
   };
 
   const countOf = (category) => objects.filter((item) => item.category === category).length;
@@ -635,8 +881,8 @@
   });
 
   window.WordRoomData = {
-    title: '客餐厅 · 厨房 · 儿童房 · 主卧英语探索',
-    // 一间房一份取景：主屋 11.8m × 6m 是原有场景，两间卧室是东翼扩建出来的。
+    title: '客餐厅 · 厨房 · 儿童房 · 主卧 · 卫生间 · 阳台英语探索',
+    // 一间房一份取景：主屋 11.8m × 6m 是原有场景，两间卧室是东翼扩建的，卫生间与阳台在另一侧。
     rooms: {
       main: {
         zh: '客餐厅',
@@ -661,15 +907,33 @@
         heading: '主卧英语探索',
         size: '4.6m × 3.6m',
         note: '双人床、衣柜和镜子，爸爸妈妈的房间也有 12 个单词。'
+      },
+      bathroom: {
+        zh: '卫生间',
+        tab: '卫生间',
+        eyebrow: '卫生间 · 3D 场景',
+        heading: '卫生间英语探索',
+        size: '2.4m × 2.0m',
+        note: '小房间里藏着洗手、洗澡、照镜子三件大事。'
+      },
+      balcony: {
+        zh: '阳台',
+        tab: '阳台',
+        eyebrow: '阳台 · 3D 场景',
+        heading: '阳台英语探索',
+        size: '3.6m × 1.4m',
+        note: '一半是家，一半是天空：洗衣机、花盆和扫帚都在这儿。'
       }
     },
-    roomOrder: ['main', 'child', 'master'],
+    roomOrder: ['main', 'child', 'master', 'bathroom', 'balcony'],
     categories: {
       living: { zh: '客厅', en: 'LIVING ROOM', count: countOf('living'), room: 'main' },
       dining: { zh: '餐厅', en: 'DINING ROOM', count: countOf('dining'), room: 'main' },
       kitchen: { zh: '厨房', en: 'KITCHEN', count: countOf('kitchen'), room: 'main' },
       child: { zh: '儿童房', en: 'KIDS ROOM', count: countOf('child'), room: 'child' },
-      master: { zh: '主卧', en: 'MASTER BEDROOM', count: countOf('master'), room: 'master' }
+      master: { zh: '主卧', en: 'MASTER BEDROOM', count: countOf('master'), room: 'master' },
+      bathroom: { zh: '卫生间', en: 'BATHROOM', count: countOf('bathroom'), room: 'bathroom' },
+      balcony: { zh: '阳台', en: 'BALCONY', count: countOf('balcony'), room: 'balcony' }
     },
     objects
   };

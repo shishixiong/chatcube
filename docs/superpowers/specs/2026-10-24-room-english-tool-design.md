@@ -362,3 +362,106 @@ headless Chromium（swiftshader 软渲染）在 402 × 874 下逐间截图 + DOM
 手机上的样子（402 × 874）：标签在舞台上方，下面依次是场景、单词面板；面板里不再有第二排标签。
 
 ![手机上房间标签在 3D 舞台上方](assets/room3d-room-tabs-top.png)
+
+---
+
+## 13. 卫生间 + 阳台扩建（2026-10-26）
+
+### 13.1 设计来源与取舍
+
+参考 open-design 输出 `.od/projects/2ab7c338-e4a6-4e47-9dbc-fb52f7099e38`：`wet-rooms-data.json` 是 24 件物品的权威数据（尺寸 / 高度 / 配色 / 儿童解释 / 例句），`room-wetroom-models.js` 是照着我们的 helper 签名写的 three.js 构建脚本（`box / cylinder / objectGroup / hit / material` 完全对得上，`wet-kit.js` 与本仓库 `room-models.js` 里的同名函数逐字节一致），`wet-rooms-design.html` 是版面与文案。
+
+沿用 §12 的架构：**每间房建在自己的局部坐标系里（原点在房间中心，北墙 z = -1、西墙 x = -1.2），同一时刻只显示一间**，切换只是 `group.visible`。新增两间：卫生间 2.4 × 2.0（4.8 ㎡）、阳台 3.6 × 1.4（5.04 ㎡），各 12 件可点物品，全屋 61 → 85。
+
+与设计稿的差异（都是「画出来才发现」的问题）：
+
+| 差异 | 原因 |
+| --- | --- |
+| 阳台南侧不砌 0.6m 实心矮墙，改 6cm 挡水边 + 细线栏杆（0.92m 扶手 / 0.12m 下横杆 / 4 根立柱） | 相机俯角 41°，0.6m 高的栏板会把镜头脚下 0.4m 的地面整片遮住：布袋（z 0.50）、拖鞋（z 0.52）、皮球（z 0.28）全部看不见。玻璃栏板虽然透光，但会把镜头到东头扫帚那一片染成绿色 |
+| 阳台物品重排，只留 1 把折叠椅、1 只水桶 | 设计稿 `deck_chair_2` 这个 id 用了两次（实际 3 把椅子、2 只桶），24 件里只有 11 个不重复单词。改为：椅子 1 把、水桶只留 `mop_bucket`，新增 `mop`（拖把）、`hanger`（挂在晾衣杆上的衣架）、`ball`（皮球） |
+| 卫生间补一块 0.56m 壁板（不可点）+ 两只钢支架；毛巾改挂到浴缸上方毛巾杆 | 设计稿的洗手台比我们宽，肥皂 / 洗发水 / 毛巾按它的坐标摆过来就成了「悬在半空」。壁板把这两件托住，毛巾贴到北墙 |
+| 洗手盆水面压到缸沿下 1cm | 原坐标下水面比盆沿高 1.2cm，放大看是一层浮在外面的青色圆片 |
+| 马桶东移 10cm、南移 31cm | 水箱按原坐标嵌进西墙 4cm；马桶与洗手台柜在 z 方向原本互相穿模 26cm（柜身到 z = -0.32，马桶从 z = -0.61 起）。挪到柜身以南、留 2cm 间隙后，两者屏幕拾取盒的重叠从 77% 降到 18% |
+| 卫生间北墙分两段：西段米白、东段浅蓝 | 设计稿的双色瓷砖墙。两块墙板错开 2mm，避免共面 |
+
+### 13.2 数据与代码改动
+
+| 文件 | 改动 |
+| --- | --- |
+| `assets/scene-data.js` | 新增 24 件物品（`category: bathroom / balcony`，`room` 同名字段）；`rooms` 补 `bathroom`（`卫生间 · 3D 场景` / `卫生间英语探索` / `2.4m × 2.0m` / `小房间里藏着洗手、洗澡、照镜子三件大事。`）与 `balcony`（`3.6m × 1.4m` / `一半是家，一半是天空：洗衣机、花盆和扫帚都在这儿。`）；`roomOrder` 补两间；`ROOM_BY_CATEGORY` / `categories` 同步 |
+| `assets/room-models.js` | 新增 `WET_PAL`（瓷砖 / 浴水 / 木纹地砖 / 栏杆 / 土壤 / 叶绿）、`WET_CEIL = 2.6`、`WET_PICK_PRIORITY`（24 个 id 的拾取优先序）、`tiledShell()`（双色瓷砖墙 + 踢脚线）、`slantedBar()`、`buildBathroom()` / `buildBalcony()`（各 12 件，数量不符直接 throw）、`buildWetRooms()`；`ROOM_FRAMES` 补两套取景参数，`exports` 补 `buildWetRooms` |
+| `assets/room-scene.js` | 新增 `ROOM_BATHROOM` / `ROOM_BALCONY` 两个 Group，`buildWetRooms()` 建进去，`roomObjects` / `roomHitboxes` 与 `this.objects` 一并追加 |
+| `index.html` | 标签补到 5 个；统计格补到 5 格；`data-total` 61 → 85、`#sceneCount` 37、品牌小字 `3D 五间房`、`<title>` / meta / canvas `aria-label` / 无障碍说明全部改成五间房；欢迎区背景大数字改由 `data-watermark` 提供（原来写死在 CSS `content: '61'`） |
+| `assets/room.css` | `.room-tabs` 允许横向滚动（`overflow-x: auto` + 隐藏滚动条 + `min-width: 56px` 兜底），402px 上五格仍等分一行（每格 71px），记不住位置的窄屏才退化成滑动 |
+| `assets/room-panel.css` | 统计格五等分（`.room-stats { grid-template-columns: repeat(5, …) }`），首格 26px、其余 22px，名称 10.5px 且不换行；`<360px` 再降一档（18px / 9.5px） |
+| `assets/room-app.js` | `CATEGORY_ORDER` / `ROOM_ORDER` 补两间；新增 `revealTab()`——切房间后把当前胶囊滚进视野（只动 `scrollLeft`，不整页滚）；`updateStaticCounts()` 同步 `data-watermark` |
+| `utils/RoomEnglishValidation.ets` | `ROOM_OBJECT_IDS` 补 24 个 id（85 条），`FOCUS_MODES` / `FOCUS_HINT` 补 `bathroom` / `balcony` |
+| `components/room/RoomEnglishCard.ets` | `ROOM_OBJECT_TOTAL` 61 → 85；`focusRoom()` 把 `bathroom` / `balcony` 也转成 `setRoom()` 注入 |
+| `config/BuiltinTools.ets` | schema `focus` 枚举补两个值，描述里的区域件数与 id 清单补齐；工具描述改「五间房 85 件」 |
+
+### 13.3 两间房的平面
+
+卫生间（北墙自西向东 = 洗手台 / 壁板 / 浴缸，西墙自北向南 = 镜子 / 马桶 / 卷纸架）：
+
+| 物品 | 位置 | 说明 |
+| --- | --- | --- |
+| `washbasin` | 西北角，台面 0.86m | 木柜 + 奶白台面 + 盆 + 龙头，台面西端留给牙刷杯 |
+| `mirror_bath` | 西墙，台面上方 14cm | 薄板 + 两盏镜前灯 |
+| `toothbrush` | 台面西端 | 青绿杯子 + 两支斜插的牙刷（一黄一珊瑚） |
+| `soap` / `shampoo` | 北墙壁板（0.88m 高） | 一只浅碟 + 一块方皂；方肩圆身压嘴瓶 + 腰封 |
+| `bathtub` | 北墙东段，缸沿 0.52m | 三块矮挡板围出缸体 + 水面 + 龙头 + 小黄鸭（不可点） |
+| `shower` | 浴缸东头，立杆 1.42m | 竖杆 + 横臂 + 莲蓬头 + 彩色手柄，房间里唯一的「竖线顶圆盘」 |
+| `towel` | 北墙、浴缸中段上方 1.16m | 毛巾杆 + 垂下的毛巾（近侧一条奶白折边） |
+| `toilet` / `toilet_paper` | 西墙中段 / 马桶前侧地面 | 水箱贴墙、盖板立起、坐圈里的水面是青蓝；纸卷架杆从卷芯穿过。都在洗手台柜以南，z 方向互不穿模 |
+| `bath_mat` / `scale` | 地面前部 | 两件都贴地，不挡任何东西 |
+
+阳台（北墙 = 建筑外墙，西墙 = 侧墙，南侧与东侧是栏杆）：
+
+| 物品 | 位置 | 说明 |
+| --- | --- | --- |
+| `washing_machine` | 西北角 | 圆窗 + 控制面板 + 滚筒里的青色，房间里唯一的大白箱 |
+| `mop_bucket` / `mop` / `broom` | 洗衣机前 / 西头 / 东头 | 桶 + 拧水篮；拖把斜靠西侧；扫帚靠东侧玻璃栏杆 |
+| `watering_can` | 北侧地面 | 提手 + 长嘴 |
+| `deck_chair` / `side_table` | 中段 | 珊瑚色折叠椅 + 木纹圆边桌 |
+| `flower_pot` | 东段 | 陶盆 + 三团叶簇 |
+| `hanger` | 北墙晾衣杆上（1.60m） | 木色三角衣架，钩子搭在钢杆上 |
+| `bag` / `slippers` / `ball` | 南侧地面 | 白布袋、珊瑚色拖鞋、珊瑚色皮球，三件都贴地 |
+
+拾取优先级（`WET_PICK_PRIORITY`）解决「小物件站在大物件前面」：**两个数组都按它排序**，`raycaster.intersectObjects` 等距时按数组顺序取第一个，所以小物件（肥皂 / 洗发水 / 皮球）不会被身后的浴缸 / 洗衣机抢走点击。
+
+### 13.4 取景
+
+| 房间 | `bounds` | `target` | `fitMin` | `fitScale` | 结果（402 × 874，画布 380 × 505） |
+| --- | --- | --- | --- | --- | --- |
+| 卫生间 | ±1.2 / ±1.0 | -0.10, 0.60, -0.16 | 4.9 | 1 | 物品包围盒 331 × 310px，最小的可点物品 44 × 37px（肥皂） |
+| 阳台 | ±1.8 / ±0.7 | 0.06, 0.78, -0.06 | 4.6 | 0.93 | 包围盒 317 × 291px，最小的 41 × 62px（水桶） |
+
+阳台的 `fitScale` 必须小于 1：3.6m 长边的对角线在画面里最占宽度，按 1.0 算出来的半径会把整间房缩到只占屏宽 78%。`target.y` 也比卧室低（0.78 对 0.78——卧室 2.8m 墙、阳台 2.6m 墙，压到 0.78 才让画面重心落在楼板和家具上）。
+
+### 13.5 验证
+
+headless Chromium（swiftshader 软渲染）+ Playwright，402 × 874 / 360 / 320 / 1024 × 760 四档：
+
+| 检查 | 结果 |
+| --- | --- |
+| 数据 | `scene-data.js` 85 条 id 互不重复；房内件数 37 / 12 / 12 / 12 / 12；`kidDefinition` 均 ≤ 20 字；房内单词无重复 |
+| 投影尺寸 | 卫生间 12 件全部 ≥ 44 × 37px，阳台 12 件全部 ≥ 41 × 52px（阈值 40 × 30） |
+| 标签 | 两间房各 12 个标签，两两不重叠，拖动/缩放后仍不重叠（沿用既有布局算法） |
+| 拾取重叠 | 屏幕包围盒重叠 > 18% 的只剩「一前一后贴着的件」（浴缸 ∩ 花洒 35%、洗衣机 ∩ 水桶 69%、镜子 ∩ 牙刷杯 55%、肥皂 ∩ 洗发水 50%），均按 `WET_PICK_PRIORITY` 指定归属；马桶 ∩ 洗手台从 77% 降到 18% |
+| 共面扫描 | 两间房 0 处「同向共面」；剩下的都是楼板边 ∩ 墙脚、物品贴地这类被遮挡的贴合面（与前四间房同类） |
+| 布局 | 402px：5 个胶囊各 71 × 36px、统计格各 68px、`document.scrollWidth === innerWidth`（无横向溢出）；320px：胶囊保底 56px、标签条可横向滚动、统计格降到 18px |
+| 构建 | `hvigorw assembleHap` BUILD SUCCESSFUL（无新增告警）；`BuiltinTools.ets` 27 段 `rawSchemaJson` 全部 `JSON.parse` 通过 |
+
+![卫生间 402×874](assets/room3d-bathroom.png)
+
+![阳台 402×874](assets/room3d-balcony.png)
+
+打开英文标签后（左：卫生间，右：阳台）：
+
+![卫生间英文标签](assets/room3d-bathroom-labels.png)
+
+![阳台英文标签](assets/room3d-balcony-labels.png)
+
+宽屏 1024 × 760（五格统计 + 五间房标签同排）：
+
+![五间房宽屏](assets/room3d-five-rooms-desktop.png)

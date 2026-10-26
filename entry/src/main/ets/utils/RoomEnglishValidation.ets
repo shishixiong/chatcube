@@ -8,9 +8,9 @@
  *
  * 校验规则（对照 config/BuiltinTools.ets 的 room_english schema）：
  *  - skill_key 必须恰为 english_vocab
- *  - focus 可选，枚举 living / dining / kitchen / child / master / all（默认 all）
- *    living / dining / kitchen 都是客餐厅这一间，child / master 会直接切到对应卧室
- *  - words 可选，最多 8 个，且必须命中三间房里的 61 个物品 id
+ *  - focus 可选，枚举 living / dining / kitchen / child / master / bathroom / balcony / all（默认 all）
+ *    living / dining / kitchen 都是客餐厅这一间；child / master / bathroom / balcony 会直接切到对应房间
+ *  - words 可选，最多 8 个，且必须命中五间房里的 85 个物品 id
  */
 
 export interface RoomEnglishValidationResult {
@@ -20,8 +20,8 @@ export interface RoomEnglishValidationResult {
   words: string[]
 }
 
-/** 三间房里 61 件可点击物品的 id，与 rawfile/room3d/assets/scene-data.js 一一对应
- *  （客厅 15 + 餐厅 10 + 厨房 12 + 儿童房 12 + 主卧 12）。 */
+/** 五间房里 85 件可点击物品的 id，与 rawfile/room3d/assets/scene-data.js 一一对应
+ *  （客厅 15 + 餐厅 10 + 厨房 12 + 儿童房 12 + 主卧 12 + 卫生间 12 + 阳台 12）。 */
 export const ROOM_OBJECT_IDS: string[] = [
   'sofa',
   'coffee_table',
@@ -85,11 +85,37 @@ export const ROOM_OBJECT_IDS: string[] = [
   'bench',
   'rug_master',
   'heater',
-  'photo_frame'
+  'photo_frame',
+  // 卫生间（12）
+  'bathtub',
+  'shower',
+  'toilet',
+  'washbasin',
+  'mirror_bath',
+  'towel',
+  'toothbrush',
+  'soap',
+  'shampoo',
+  'toilet_paper',
+  'bath_mat',
+  'scale',
+  // 阳台（12）
+  'washing_machine',
+  'mop_bucket',
+  'mop',
+  'broom',
+  'watering_can',
+  'deck_chair',
+  'side_table',
+  'flower_pot',
+  'hanger',
+  'bag',
+  'slippers',
+  'ball'
 ]
 
-const FOCUS_MODES: string[] = ['living', 'dining', 'kitchen', 'child', 'master', 'all']
-const FOCUS_HINT: string = 'living / dining / kitchen / child / master / all'
+const FOCUS_MODES: string[] = ['living', 'dining', 'kitchen', 'child', 'master', 'bathroom', 'balcony', 'all']
+const FOCUS_HINT: string = 'living / dining / kitchen / child / master / bathroom / balcony / all'
 const MAX_WORDS: number = 8
 
 function fail(msg: string): RoomEnglishValidationResult {
