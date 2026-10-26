@@ -373,15 +373,303 @@
       category: 'kitchen',
       labelBias: [6, 50]
     },
+
+    // —— 儿童房：4.4m × 3.6m，12 件可点物品 ——
+    {
+      id: 'bed',
+      word: 'bed',
+      phonetic: '/bed/',
+      zh: '床',
+      kidDefinition: '睡觉的大床，晚上整个人躺进去。',
+      example: 'My bed is soft.',
+      category: 'child',
+      labelBias: [24, -20]
+    },
+    {
+      id: 'desk',
+      word: 'desk',
+      phonetic: '/desk/',
+      zh: '书桌',
+      kidDefinition: '写作业、画画用的桌子。',
+      example: 'I do homework at my desk.',
+      category: 'child',
+      labelBias: [30, -22]
+    },
+    {
+      id: 'chair',
+      word: 'chair',
+      phonetic: '/tʃer/',
+      zh: '椅子',
+      kidDefinition: '有四条腿，坐上去写字。',
+      example: 'Sit on your chair.',
+      category: 'child',
+      labelBias: [34, 8]
+    },
+    {
+      id: 'wardrobe',
+      word: 'wardrobe',
+      phonetic: '/ˈwɔːrdroʊb/',
+      zh: '衣柜',
+      kidDefinition: '高高的柜子，衣服挂进去不皱。',
+      example: 'Open the wardrobe.',
+      category: 'child',
+      labelBias: [-40, -26]
+    },
+    {
+      id: 'toy_box',
+      word: 'toy box',
+      phonetic: '/tɔɪ bɑːks/',
+      zh: '玩具箱',
+      kidDefinition: '玩好的玩具都放进来。',
+      example: 'Put toys in the toy box.',
+      category: 'child',
+      labelBias: [-44, -12]
+    },
+    {
+      id: 'round_rug',
+      word: 'round rug',
+      phonetic: '/raʊnd rʌɡ/',
+      zh: '圆地毯',
+      kidDefinition: '地上圆圆的一块，踩着暖暖的。',
+      example: 'The rug is round.',
+      category: 'child',
+      labelBias: [-56, 18]
+    },
+    {
+      id: 'bookcase',
+      word: 'bookcase',
+      phonetic: '/ˈbʊkkeɪs/',
+      zh: '书柜',
+      kidDefinition: '一层层格子，书排得整齐。',
+      example: 'Books go on the bookcase.',
+      category: 'child',
+      labelBias: [46, 22]
+    },
+    {
+      id: 'shelf',
+      word: 'shelf',
+      phonetic: '/ʃelf/',
+      zh: '搁板',
+      kidDefinition: '一层小架子，放小车和积木。',
+      example: 'A car is on the shelf.',
+      category: 'child',
+      labelBias: [-46, 22]
+    },
+    {
+      id: 'basket',
+      word: 'basket',
+      phonetic: '/ˈbæskɪt/',
+      zh: '篮子',
+      kidDefinition: '装脏衣服和小玩具的筐。',
+      example: 'Throw it in the basket.',
+      category: 'child',
+      labelBias: [-30, 26]
+    },
+    {
+      id: 'poster',
+      word: 'poster',
+      phonetic: '/ˈpoʊstər/',
+      zh: '海报',
+      kidDefinition: '墙上的一张画，颜色很鲜艳。',
+      example: 'Look at my poster.',
+      category: 'child',
+      labelBias: [30, -34]
+    },
+    {
+      id: 'blanket',
+      word: 'blanket',
+      phonetic: '/ˈblæŋkɪt/',
+      zh: '毯子',
+      kidDefinition: '软软的一块，冷了搭在身上。',
+      example: 'I need a blanket.',
+      category: 'child',
+      labelBias: [-20, -30]
+    },
+    {
+      id: 'toy_car',
+      word: 'toy car',
+      phonetic: '/tɔɪ kɑːr/',
+      zh: '玩具车',
+      kidDefinition: '四个轮子跑得飞快的小车。',
+      example: 'The toy car is fast.',
+      category: 'child',
+      labelBias: [10, 30]
+    },
+
+    // —— 主卧：4.6m × 3.6m，12 件可点物品 ——
+    {
+      id: 'double_bed',
+      word: 'double bed',
+      phonetic: '/ˈdʌbəl bed/',
+      zh: '双人床',
+      kidDefinition: '大大的床，两个人睡也够。',
+      example: 'This is a double bed.',
+      category: 'master',
+      labelBias: [26, -18]
+    },
+    {
+      id: 'nightstand',
+      word: 'nightstand',
+      phonetic: '/ˈnaɪtstænd/',
+      zh: '床头柜',
+      kidDefinition: '床边的小柜子，放水杯和书。',
+      example: 'My glass is on the nightstand.',
+      category: 'master',
+      labelBias: [40, -6]
+    },
+    {
+      id: 'lamp',
+      word: 'lamp',
+      phonetic: '/læmp/',
+      zh: '台灯',
+      kidDefinition: '按一下亮起来，晚上看书用。',
+      example: 'Turn on the lamp.',
+      category: 'master',
+      labelBias: [46, -34]
+    },
+    {
+      id: 'pillow',
+      word: 'pillow',
+      phonetic: '/ˈpɪloʊ/',
+      zh: '枕头',
+      kidDefinition: '软软的，睡觉把头放上去。',
+      example: 'This pillow is too soft.',
+      category: 'master',
+      labelBias: [-12, -32]
+    },
+    {
+      id: 'closet',
+      word: 'closet',
+      phonetic: '/ˈklɑːzɪt/',
+      zh: '衣帽柜',
+      kidDefinition: '整面墙的大柜子，被子也能放。',
+      example: 'Put your coat in the closet.',
+      category: 'master',
+      labelBias: [-42, -26]
+    },
+    {
+      id: 'dresser',
+      word: 'dresser',
+      phonetic: '/ˈdresər/',
+      zh: '斗柜',
+      kidDefinition: '一层层抽屉，装裤子和小衣服。',
+      example: 'Socks are in the dresser.',
+      category: 'master',
+      labelBias: [54, 12]
+    },
+    {
+      id: 'mirror',
+      word: 'mirror',
+      phonetic: '/ˈmɪrər/',
+      zh: '镜子',
+      kidDefinition: '站在它前面，看见自己的脸。',
+      example: 'Look in the mirror.',
+      category: 'master',
+      labelBias: [56, -22]
+    },
+    {
+      id: 'stool_master',
+      word: 'stool',
+      phonetic: '/stuːl/',
+      zh: '凳子',
+      kidDefinition: '没有靠背，坐着照镜子最方便。',
+      example: 'Sit on the stool.',
+      category: 'master',
+      labelBias: [30, 26]
+    },
+    {
+      id: 'bench',
+      word: 'bench',
+      phonetic: '/bentʃ/',
+      zh: '长凳',
+      kidDefinition: '横在床尾的长凳子，先坐再脱鞋。',
+      example: 'Sit on the bench.',
+      category: 'master',
+      labelBias: [-30, 12]
+    },
+    {
+      id: 'rug_master',
+      word: 'rug',
+      phonetic: '/rʌɡ/',
+      zh: '地毯',
+      kidDefinition: '铺在床边，脚踩上去不冰。',
+      example: 'A rug is on the floor.',
+      category: 'master',
+      labelBias: [-34, 28]
+    },
+    {
+      id: 'heater',
+      word: 'heater',
+      phonetic: '/ˈhiːtər/',
+      zh: '暖气片',
+      kidDefinition: '冬天热热的，靠近就不冷。',
+      example: 'The heater is hot.',
+      category: 'master',
+      labelBias: [50, 34]
+    },
+    {
+      id: 'photo_frame',
+      word: 'photo frame',
+      phonetic: '/ˈfoʊtoʊ freɪm/',
+      zh: '相框',
+      kidDefinition: '把小画片夹在木框里立起来。',
+      example: 'Look at the photo frame.',
+      category: 'master',
+      labelBias: [50, -18]
+    },
   ].map((item) => ({ ...item, objectName: 'OBJ_' + item.id }));
 
+  const ROOM_BY_CATEGORY = {
+    living: 'main',
+    dining: 'main',
+    kitchen: 'main',
+    child: 'child',
+    master: 'master'
+  };
+
+  const countOf = (category) => objects.filter((item) => item.category === category).length;
+  const roomOf = (category) => ROOM_BY_CATEGORY[category];
+
+  objects.forEach((item) => {
+    item.room = roomOf(item.category);
+  });
+
   window.WordRoomData = {
-    title: '客餐厅 · 厨房英语探索',
-    roomSize: { width: 11.8, depth: 6, label: '11.8m × 6m' },
+    title: '客餐厅 · 厨房 · 儿童房 · 主卧英语探索',
+    // 一间房一份取景：主屋 11.8m × 6m 是原有场景，两间卧室是东翼扩建出来的。
+    rooms: {
+      main: {
+        zh: '客餐厅',
+        tab: '客餐厅',
+        eyebrow: '客餐厅 · 厨房 · 3D 场景',
+        heading: '客餐厅 · 厨房英语探索',
+        size: '11.8m × 6m',
+        note: '从沙发走到岛台，客厅、餐厅和厨房一共 37 件东西可以点。'
+      },
+      child: {
+        zh: '儿童房',
+        tab: '儿童房',
+        eyebrow: '儿童房 · 3D 场景',
+        heading: '儿童房英语探索',
+        size: '4.4m × 3.6m',
+        note: '床、书桌和玩具都在这间屋，点开看看它们的英文名字。'
+      },
+      master: {
+        zh: '主卧',
+        tab: '主卧',
+        eyebrow: '主卧 · 3D 场景',
+        heading: '主卧英语探索',
+        size: '4.6m × 3.6m',
+        note: '双人床、衣柜和镜子，爸爸妈妈的房间也有 12 个单词。'
+      }
+    },
+    roomOrder: ['main', 'child', 'master'],
     categories: {
-      living: { zh: '客厅', en: 'LIVING ROOM', count: objects.filter((item) => item.category === 'living').length },
-      dining: { zh: '餐厅', en: 'DINING ROOM', count: objects.filter((item) => item.category === 'dining').length },
-      kitchen: { zh: '厨房', en: 'KITCHEN', count: objects.filter((item) => item.category === 'kitchen').length }
+      living: { zh: '客厅', en: 'LIVING ROOM', count: countOf('living'), room: 'main' },
+      dining: { zh: '餐厅', en: 'DINING ROOM', count: countOf('dining'), room: 'main' },
+      kitchen: { zh: '厨房', en: 'KITCHEN', count: countOf('kitchen'), room: 'main' },
+      child: { zh: '儿童房', en: 'KIDS ROOM', count: countOf('child'), room: 'child' },
+      master: { zh: '主卧', en: 'MASTER BEDROOM', count: countOf('master'), room: 'master' }
     },
     objects
   };

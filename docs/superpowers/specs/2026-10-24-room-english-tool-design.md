@@ -1,10 +1,10 @@
-# room_english · 客餐厅 + 厨房 3D 英语探索 设计（2026-10-24，2026-10-25 扩建厨房）
+# room_english · 三间房 3D 英语探索 设计（2026-10-24，2026-10-25 扩建厨房，2026-10-26 扩建两间卧室）
 
 ## 1. 背景与目标
 
 小星英语老师需要一个「能把孩子带进房间」的词汇教学工具：不是看图选词，而是让孩子在可旋转的 3D 客餐厅里点家具、听英文发音、看单词卡，把单词和实物对应起来。
 
-原型来自 open-design（`kids-room-3d-english`，8m × 6m 低多边形客餐厅、25 件可点击物品、three.js 0.185 本地渲染）；2026-10-25 参考同系列厨房原型（`96a8ae19-…`，东北角开放厨房方案）向东扩出开放厨房，房间变成 11.8m × 6m、37 件可点击物品（客厅 15 + 餐厅 10 + 厨房 12，见 §11）。本设计把它落到鸿蒙原生壳里，作为一个内置工具 `room_english` 挂在 `ToolRegistry` 上，由小星英语老师在「呈现」环节调用。
+原型来自 open-design（`kids-room-3d-english`，8m × 6m 低多边形客餐厅、25 件可点击物品、three.js 0.185 本地渲染）；2026-10-25 参考同系列厨房原型（`96a8ae19-…`，东北角开放厨房方案）向东扩出开放厨房，房间变成 11.8m × 6m、37 件可点击物品（客厅 15 + 餐厅 10 + 厨房 12，见 §11）。2026-10-26 再参考 `kids-3d-bedrooms-wing`（`.od/projects/6fb4d3ef-…`）补上儿童房与主卧，可点物品 37 → 61，页面顶部多了房间切换标签（见 §12）。本设计把它落到鸿蒙原生壳里，作为一个内置工具 `room_english` 挂在 `ToolRegistry` 上，由小星英语老师在「呈现」环节调用。
 
 ## 2. 方案选型
 
@@ -16,11 +16,13 @@
 
 **边界**：ArkWeb 没有 `speechSynthesis`，发音改走原生 TTS 桥；原生标题栏接管「进度 + 我学会了」，页面切到 host 布局（隐藏自带品牌栏）。
 
-## 3. 数据：37 个物品
+## 3. 数据：61 个物品
 
 `sofa / coffee_table / tv / tv_stand / remote_control / rug / cushion / floor_lamp / bookshelf / book / plant / curtain / window / picture / clock`（客厅 15）+ `air_conditioner / trash_can / dining_table / dining_chair / plate / bowl / cup / spoon / fork / kettle`（餐厅 10）+ `fridge / stove / oven / sink / pot / pan / toaster / microwave / dishwasher / cabinet / knife / stool`（厨房 12）。
 
-每个物品带 `word / phonetic / zh / kidDefinition / example / category`，唯一数据源是 `rawfile/room3d/assets/scene-data.js`，工具侧校验白名单是 `utils/RoomEnglishValidation.ets` 的 `ROOM_OBJECT_IDS`。**两处必须同步**（单元测试断言 37 条）。
+儿童房 12：`bed / desk / chair / wardrobe / toy_box / round_rug / bookcase / shelf / basket / poster / blanket / toy_car`；主卧 12：`double_bed / nightstand / lamp / pillow / closet / dresser / mirror / stool_master / bench / rug_master / heater / photo_frame`（2026-10-26 新增，见 §12）。
+
+每个物品带 `word / phonetic / zh / kidDefinition / example / category / room`，唯一数据源是 `rawfile/room3d/assets/scene-data.js`，工具侧校验白名单是 `utils/RoomEnglishValidation.ets` 的 `ROOM_OBJECT_IDS`。**两处必须同步**（单元测试断言 61 条）。
 
 > 原型把空气调节器/垃圾桶归到餐厅（10 条），保持原分组不动。
 > 网页内的总数、分类计数、进度分母全部由 `scene-data.js` 派生（`data-total` / `OBJECTS.length` / `categories[x].count`），只有 `RoomEnglishCard` 的原生标题栏需要常量 `ROOM_OBJECT_TOTAL`。
@@ -32,7 +34,7 @@
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `skill_key` | string enum `english_vocab` | 是 | 画像维度固定为英语词汇 |
-| `focus` | string enum `living` / `dining` / `kitchen` / `all` | 否 | 默认 `all`，本次重点区域（当前只进 payload + 文案，不做场景裁剪） |
+| `focus` | string enum `living` / `dining` / `kitchen` / `child` / `master` / `all` | 否 | 默认 `all`；`child` / `master` 会让卡片直接切到那间卧室，其余值只进 payload + 文案 |
 | `words` | string[] | 否 | 本次重点词 id，最多 8 个；命中后自动选中第一个词（2026-10-24 起英文标签默认隐藏，由孩子点场景「显示英文标签」开关手动打开；选中物品即自动朗读） |
 
 ### 4.2 回执（`ToolResult.result`）
@@ -58,7 +60,7 @@
 
 ```
 Column
-├─ HeaderBar()            原生：标题 + 已收集 N/37 + 「我学会了」
+├─ HeaderBar()            原生：标题 + 已收集 N/61 + 「我学会了」
 └─ Stack
    ├─ Web(resource://rawfile/room3d/index.html)
    ├─ LoadingProgress     页面就绪前的「正在布置小房间…」
@@ -66,7 +68,7 @@ Column
 ```
 
 - `isAnswered` 模式下不加载 Web，只渲染收集到的单词 chips（时间线回看用；实际时间线由 MessageBubble 的 `RoomEnglishStepContent` 显示）。
-- 页面就绪（`onPageEnd`）后按 `words` 注入 `window.WordRoomApp.setLabels(true)` + `select(first)`。
+- 页面就绪（`onPageEnd`）后先按 `focus` 注入 `window.WordRoomApp.setRoom(room)`（卧室 focus 才切房间），再按 `words` 注入 `select(first)`。
 
 ### 5.1 桥协议（`RoomNativeBridge`，`javaScriptProxy` 注入）
 
@@ -254,3 +256,70 @@ Column
 | 点物品只读英文 | 桥只传了 `word`；且 Web 侧只有点「听发音」才发声 | 点开物品自动朗读；`speak(word, zh)` 由原生先念中文再念英文（`SystemTtsEngine` 单次 `speak` 无法混读两种语言，故串两次调用，中文失败也会继续念英文） |
 
 `resetView()` 同时修好：原来把 `target` 写死回 `(0, 0.86, 0.05)`、`phi` 写死 0.93，现在回到 `BOUNDS.centerX + 0.12` 与默认俯角 0.85。
+
+## 12. 两间卧室扩建（2026-10-26）
+
+### 12.1 设计来源与取舍
+
+参考 open-design 输出 `.od/projects/6fb4d3ef-301c-47f7-beb0-093a88f1a1e9`（`bedroom-data.json` 是物品权威数据，`part-sections.mjs` / `part-rooms.mjs` 是文案与等轴测约定，`bedroom-wing-design.html` 是版面）。取 Plan B 的叙事：儿童房 4.40 × 3.60（15.84 ㎡）、主卧 4.60 × 3.60（16.56 ㎡）、走廊 1.20 × 4.40（5.28 ㎡），6–8 岁高频词 24 个。
+
+**架构决定：两间卧室各建在自己的局部坐标系里（原点在房间中心、北墙 z = -1.8），同一时刻只显示一间，用房间标签切换。**
+
+| 备选 | 结论 | 理由 |
+| --- | --- | --- |
+| 在主屋东侧同一世界里接出 7.4m 长的翼楼 | 不采用 | 现有 11.8m 房在 402px 宽的手机上已经填满取景，再拉长 7.4m 家具会缩到 4px 左右；且平行光阴影相机 `±7` 覆盖不到远处的房间 |
+| **每间房独立坐标 + 单间可见（采用）** | 各自按房间尺寸取景，家具像素密度与主屋一致，灯光/阴影参数不用改 | 切换只是 `group.visible` 开关，几何一次性建好，瞬时完成 |
+
+设计稿的平面图内部自相矛盾（儿童房 z 3.6…7.2 与主屋 z 0…6 重叠、门上既开在北墙又开在南墙），所以**只取数据（24 件物品的尺寸/配色/deco），不照搬平面几何**。
+
+与设计稿的差异：
+
+| 差异 | 原因 |
+| --- | --- |
+| 不砌东墙，也不做门 | 相机在 +x/+z 一侧（θ 0.79、φ 0.85），砌东墙会把桌椅和床整片挡住；主屋同样是「北墙 + 西墙」两面墙。设计稿自己也把门列为不可点击的装饰件 |
+| `bookcase` 放西墙、`dresser` / `mirror` / `closet` 放西墙、`heater` 放北墙东端 | 同上，靠东墙的家具会被看到背面 |
+| `stool` / `rug` 两间房各出现一次（`stool_master` / `rug_master`） | 设计文案称 24 个词互不重复，但它自己的 reuse/swap 表与之矛盾；词汇表按房间分组后这组重复不可见。**如需完全去重，改用 `armchair` / `carpet`** |
+
+### 12.2 数据与代码改动
+
+| 文件 | 改动 |
+| --- | --- |
+| `assets/scene-data.js` | 新增 24 个物品（`room: 'child' / 'master'`）；新增 `rooms` 元数据（`zh / tab / eyebrow / heading / size / note`）、`roomOrder`；`categories` 各加 `room` 字段 |
+| `assets/room-models.js` | 新增 `bedroomShell()`（地板 + 木地板条 + 北墙带窗 + 西墙 + 踢脚线 + 窗帘 + 玻璃/窗框）与 `buildChildRoom()` / `buildMasterRoom()`（各 12 件，数量不符直接 throw）；`ROOM_FRAMES` 导出三套取景参数（`bounds / target / fitMin / fitMax / fitScale / zoomMin / panInsetX / panInsetZ`）；新增 `sageGrey / linen` 等 OKLCH 色板 |
+| `assets/room-scene.js` | `buildRoom` 与 `buildBedrooms` 分别建进 `ROOM_MAIN` / `ROOM_CHILD` / `ROOM_MASTER` 三个 Group；新增 `setRoom(id)`（切可见性、换 `frame`、重算 `fitRadius()`、清选中、复位相机）；`fitRadius()` / `zoomRange()` / `panByPixels()` / `resetView()` 全部改读 `this.frame`；`hitboxes` 与 `getLabelAnchors()` 只取当前房间 |
+| `index.html` / `assets/room.css` | 学习面板顶部新增 `role="tablist"` 的房间标签（客餐厅 / 儿童房 / 主卧）；标题卡、尺寸、件数、`data-total`（37 → 61）、统计格改为按房间（37 / 12 / 12） |
+| `assets/room-app.js` | `state.activeRoom` + `setActiveRoom()`；标签点击与左右方向键切换；词汇表分组按 `category.room` 打出 `data-room` 并把非当前房间压暗；单词卡序号与上/下一个改为**房间内循环**（`01 / 12`）；跨房间点词汇表行会先切房间；`WordRoomApp.setRoom()` 供宿主调用 |
+| `utils/RoomEnglishValidation.ets` | `ROOM_OBJECT_IDS` 补 24 个 id（61 条），`focus` 枚举补 `child` / `master` |
+| `components/room/RoomEnglishCard.ets` | `ROOM_OBJECT_TOTAL` 37 → 61；`focusRoom()` 把卧室 focus 转成 `setRoom()` 注入 |
+| `config/BuiltinTools.ets` | schema `focus` 枚举与 id 清单补齐；工具名「客餐厅 3D 英语探索」→「3D 房间英语探索」，描述改为三间房 61 件 |
+
+房间标签放在**学习面板**顶部（不是 3D 舞台里）：舞台高度只有 ~330px，标题卡里塞一排标签会让「安全区」吃掉四成标签空间；放进面板后既不挤压取景，也紧挨词表。
+
+### 12.3 验证
+
+headless Chromium（swiftshader 软渲染）在 402 × 874 下逐间截图 + DOM 断言：
+
+```
+61 ids / 61 dots / 5 组词表（15+10+12+12+12）
+儿童房：4.4m × 3.6m · 12 件，可见英文标签 12 个且全是 child id
+点主卧词表 double bed → 房间自动切到 master，卡片 01 / 12；下一个 → nightstand 02 / 12
+回主屋：11.8m × 6m · 37 件，选中态清空，欢迎视图恢复
+```
+
+儿童房（4.4m × 3.6m，12 件）：
+
+![儿童房：书柜、圆地毯、玩具箱、单人床、书桌和椅子](assets/room3d-child-room.png)
+
+打开英文标签，可见标签只投影当前房间的 12 件物品：
+
+![儿童房英文标签：12 个，全部是 child 物品](assets/room3d-child-labels.png)
+
+主卧（4.6m × 3.6m，12 件）：
+
+![主卧：衣帽柜、斗柜 + 镜子、双人床、床头柜台灯、长凳和地毯](assets/room3d-master-labels.png)
+
+桌面宽的宿主布局（1440 × 900）：房间标签在学习面板顶部，统计格按房间显示 37 / 12 / 12：
+
+![三间房桌面布局](assets/room3d-three-rooms.png)
+
+> 说明：截图里中文显示成方框是容器缺 CJK 字体的原因（chromium 未装 Noto Sans CJK），几何、配色、布局、英文标签都是真实渲染结果。

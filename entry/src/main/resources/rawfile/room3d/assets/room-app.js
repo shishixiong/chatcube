@@ -20,7 +20,9 @@
     loaderTimer: 0,
     toastTimer: 0,
     speechTimer: 0,
-    speechSeq: 0
+    speechSeq: 0,
+    activeRoom: 'main',
+    roomApplied: false
   };
 
   const el = (id) => document.getElementById(id);
@@ -50,6 +52,7 @@
     cacheDom();
     validateData();
     updateStaticCounts();
+    syncRoomChrome();
     buildLabelLayer();
     buildDotGrid();
     buildGlossary();
@@ -74,14 +77,18 @@
       'wordEnglish', 'wordPhonetic', 'wordZh', 'wordDefinition', 'wordExample',
       'pronounceButton', 'pronounceLabel', 'prevWord', 'nextWord', 'wordNavIndex',
       'dotGrid', 'welcomeCount', 'openGlossary', 'openGlossaryInline',
-      'glossaryModal', 'glossaryBody', 'closeGlossary', 'toast', 'liveRegion'
+      'glossaryModal', 'glossaryBody', 'closeGlossary', 'toast', 'liveRegion',
+      'roomTabs', 'sceneEyebrow', 'sceneHeading', 'sceneSize', 'sceneCount'
     ].forEach((id) => {
       dom[id] = el(id);
     });
   }
 
   const TOTAL = OBJECTS.length;
-  const CATEGORY_ORDER = ['living', 'dining', 'kitchen'];
+  const CATEGORY_ORDER = ['living', 'dining', 'kitchen', 'child', 'master'];
+  const ROOM_ORDER = DATA.roomOrder || ['main', 'child', 'master'];
+  const ROOM_META = DATA.rooms || {};
+  const objectsInRoom = (roomId) => OBJECTS.filter((item) => item.room === roomId);
 
   function validateData() {
     if (TOTAL < 1) throw new Error('场景没有单词数据');
@@ -94,6 +101,12 @@
       }
       if (item.kidDefinition.length > 20) {
         throw new Error('儿童解释超过 20 个字符: ' + item.id + ' (' + item.kidDefinition.length + ')');
+      }
+      if (ROOM_ORDER.indexOf(item.room) < 0) {
+        throw new Error('物品缺少房间归属: ' + item.id);
+      }
+      if (!ROOM_META[item.room]) {
+        throw new Error('缺少房间文案: ' + item.room);
       }
     });
     CATEGORY_ORDER.forEach((category) => {
@@ -109,10 +122,12 @@
   }
 
   function updateStaticCounts() {
-    const stats = document.querySelectorAll('.room-stat strong');
-    CATEGORY_ORDER.forEach((category, index) => {
-      const count = OBJECTS.filter((item) => item.category === category).length;
-      if (stats[index]) stats[index].textContent = String(count);
+    const stats = document.querySelectorAll('.room-stat');
+    ROOM_ORDER.forEach((roomId, index) => {
+      const cell = stats[index];
+      if (!cell) return;
+      const strong = cell.querySelector('strong');
+      if (strong) strong.textContent = String(objectsInRoom(roomId).length);
     });
     document.querySelectorAll('[data-total]').forEach((node) => {
       node.textContent = String(TOTAL);
@@ -153,6 +168,16 @@
       room = new window.RoomExperience(dom['scene-canvas'], {
         onReady: () => {
           state.ready = true;
+          // onReady 在构造函数里触发，此时模块级的 room 还没赋值，房间切换要挪到下一个 tick
+          window.setTimeout(() => {
+            if (!room) return;
+            room.setRoom(state.activeRoom);
+            state.roomApplied = true;
+            if (state.labelsVisible) {
+              measureLabels();
+              updateLabels();
+            }
+          }, 0);
           bridgeCall('onReady');
           dom['scene-canvas'].tabIndex = 0;
           dom.labelToggle.disabled = false;
@@ -405,6 +430,7 @@
       const section = document.createElement('section');
       section.className = 'word-group';
       section.dataset.category = category;
+      section.dataset.room = categoryById[category].room;
 
       const head = document.createElement('div');
       head.className = 'word-group-head';
@@ -449,6 +475,64 @@
     dom.glossaryBody.appendChild(frag);
   }
 
+  function syncRoomChrome() {
+    const meta = ROOM_META[state.activeRoom] || {};
+    if (dom.sceneEyebrow) dom.sceneEyebrow.textContent = meta.eyebrow || '3D 场景';
+    if (dom.sceneHeading) dom.sceneHeading.textContent = meta.heading || '房间英语探索';
+    if (dom.sceneSize) dom.sceneSize.textContent = meta.size || '';
+    if (dom.sceneCount) dom.sceneCount.textContent = String(objectsInRoom(state.activeRoom).length);
+    if (dom.roomTabs) {
+      dom.roomTabs.querySelectorAll('.room-tab').forEach((tab) => {
+        const active = tab.dataset.room === state.activeRoom;
+        tab.classList.toggle('is-active', active);
+        tab.setAttribute('aria-selected', String(active));
+        tab.tabIndex = active ? 0 : -1;
+        const roomMeta = ROOM_META[tab.dataset.room];
+        if (roomMeta && roomMeta.tab) tab.textContent = roomMeta.tab;
+      });
+    }
+    document.querySelectorAll('.word-group[data-room]').forEach((section) => {
+      section.classList.toggle('is-active-room', section.dataset.room === state.activeRoom);
+    });
+    document.querySelectorAll('.room-stat[data-room]').forEach((cell) => {
+      cell.classList.toggle('is-active', cell.dataset.room === state.activeRoom);
+    });
+    if (dom['scene-canvas']) {
+      dom['scene-canvas'].setAttribute('aria-label',
+        '可旋转的 3D ' + (meta.zh || '房间') + '。点击或触摸物品打开单词卡；也可以打开词汇表选择单词。');
+    }
+  }
+
+  function setActiveRoom(roomId) {
+    const next = ROOM_ORDER.indexOf(roomId) >= 0 ? roomId : ROOM_ORDER[0];
+    if (next === state.activeRoom && state.roomApplied) {
+      // 再点同一间房 = 把视角复位
+      if (room) room.resetView();
+      return state.activeRoom;
+    }
+    state.activeRoom = next;
+    state.roomApplied = true;
+    if (room && state.ready) room.setRoom(next);
+
+    // 换房间时把上一张单词卡收起，避免卡片停在小房间里
+    stopSpeech();
+    if (state.selectedId) {
+      state.selectedId = null;
+      closeWordView();
+      updateProgress();
+      updateSelectedLabel();
+    }
+    hideHoverChip();
+    syncRoomChrome();
+    if (state.labelsVisible) {
+      measureLabels();
+      updateLabels();
+    }
+    const meta = ROOM_META[next] || {};
+    announce('已切换到' + (meta.zh || '房间'));
+    return next;
+  }
+
   function setLabelsVisible(visible) {
     if (!state.ready) return;
     state.labelsVisible = !!visible;
@@ -473,6 +557,26 @@
     dom.resetView.addEventListener('click', () => {
       room?.resetView();
     });
+
+    if (dom.roomTabs) {
+      dom.roomTabs.addEventListener('click', (event) => {
+        const tab = event.target.closest('.room-tab');
+        if (!tab || !tab.dataset.room) return;
+        setActiveRoom(tab.dataset.room);
+      });
+      // role=tablist 的键盘惯例：左右方向键换房间
+      dom.roomTabs.addEventListener('keydown', (event) => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+        const tabs = Array.from(dom.roomTabs.querySelectorAll('.room-tab'));
+        const current = tabs.findIndex((tab) => tab.dataset.room === state.activeRoom);
+        if (current < 0) return;
+        event.preventDefault();
+        const step = event.key === 'ArrowRight' ? 1 : -1;
+        const target = tabs[(current + step + tabs.length) % tabs.length];
+        setActiveRoom(target.dataset.room);
+        target.focus({ preventScroll: true });
+      });
+    }
 
     dom.retryScene.addEventListener('click', () => {
       startScene();
@@ -552,6 +656,10 @@
 
   function chooseObject(id) {
     if (id && !byId.has(id)) return;
+    if (id) {
+      const meta = byId.get(id);
+      if (meta && meta.room && meta.room !== state.activeRoom) setActiveRoom(meta.room);
+    }
     if (!id) {
       if (!state.selectedId) {
         hideHoverChip();
@@ -600,8 +708,9 @@
   }
 
   function renderWordCard(meta) {
-    const index = OBJECTS.findIndex((item) => item.id === meta.id) + 1;
-    const total = OBJECTS.length;
+    const inRoom = objectsInRoom(meta.room);
+    const index = inRoom.findIndex((item) => item.id === meta.id) + 1;
+    const total = inRoom.length;
     const category = categoryById[meta.category];
 
     dom.wordCategory.textContent = category.zh;
@@ -641,10 +750,13 @@
 
   function moveWord(direction) {
     if (!state.selectedId) return;
-    const current = OBJECTS.findIndex((item) => item.id === state.selectedId);
+    const meta = byId.get(state.selectedId);
+    if (!meta) return;
+    const list = objectsInRoom(meta.room);
+    const current = list.findIndex((item) => item.id === state.selectedId);
     if (current < 0) return;
-    const next = (current + direction + OBJECTS.length) % OBJECTS.length;
-    chooseObject(OBJECTS[next].id);
+    const next = (current + direction + list.length) % list.length;
+    chooseObject(list[next].id);
   }
 
   function updateProgress() {
@@ -662,9 +774,10 @@
 
     const copy = dom.welcomeView.querySelector('.progress-copy p');
     if (copy) {
+      const note = ROOM_META[state.activeRoom] && ROOM_META[state.activeRoom].note;
       copy.textContent = count === TOTAL
-        ? TOTAL + ' 个单词全部点亮了，和这个房间说一声你真棒！'
-        : '每点开一个物品，就会点亮一格。试试从沙发开始？';
+        ? TOTAL + ' 个单词全部点亮了，和这三间房说一声你真棒！'
+        : '每点开一个物品，就会点亮一格。' + (note || '');
     }
     if (count === TOTAL && !state.celebrated) {
       state.celebrated = true;
@@ -858,6 +971,7 @@
   window.WordRoomApp = {
     select: function (id) { chooseObject(id || null); },
     setLabels: function (visible) { setLabelsVisible(!!visible); },
+    setRoom: function (roomId) { setActiveRoom(roomId); },
     ids: OBJECTS.map(function (item) { return item.id; })
   };
 

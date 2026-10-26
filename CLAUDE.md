@@ -126,7 +126,7 @@ MVVM 分层（`entry/src/main/ets/`）：
 | `AskUserCard` | `ask_user` | AI 反问收集偏好 |
 | `map/MapCard` | `map_card` | 中国地图小课堂（讲解型：34 省可点 + 资料卡 + focus 高亮；待答态横幅 → 全屏 sheet） |
 | `map/MapQuizCard` | `map_quiz` | 中国地图出题（3 mode：choice/locate/write；待答态横幅 → 全屏 sheet） |
-| `room/RoomEnglishCard` | `room_english` | 客餐厅 + 厨房 3D 英语探索（讲解型：Web 容器加载 `rawfile/room3d/` 的 three.js 场景，11.8m × 6m、37 件家具可点开单词卡；`RoomNativeBridge` 接原生 TTS，讲解型不授星） |
+| `room/RoomEnglishCard` | `room_english` | 三间房 3D 英语探索（讲解型：Web 容器加载 `rawfile/room3d/` 的 three.js 场景，客餐厅 + 厨房 11.8m × 6m / 儿童房 4.4m × 3.6m / 主卧 4.6m × 3.6m，共 61 件家具可点开单词卡，面板顶部切房间；`RoomNativeBridge` 接原生 TTS，讲解型不授星） |
 
 出题类工具（math_quiz / english_quiz / picture_vocab / listening_quiz / pinyin_quiz / matching_pairs / categorization / map_card / map_quiz）参数在渲染前经 `utils/*Validation.ets` 预校验，坏题以 `should_retry` 回传 LLM 自行修正。
 

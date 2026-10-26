@@ -8,8 +8,9 @@
  *
  * 校验规则（对照 config/BuiltinTools.ets 的 room_english schema）：
  *  - skill_key 必须恰为 english_vocab
- *  - focus 可选，枚举 living / dining / kitchen / all（默认 all）
- *  - words 可选，最多 8 个，且必须命中房间里的 37 个物品 id
+ *  - focus 可选，枚举 living / dining / kitchen / child / master / all（默认 all）
+ *    living / dining / kitchen 都是客餐厅这一间，child / master 会直接切到对应卧室
+ *  - words 可选，最多 8 个，且必须命中三间房里的 61 个物品 id
  */
 
 export interface RoomEnglishValidationResult {
@@ -19,7 +20,8 @@ export interface RoomEnglishValidationResult {
   words: string[]
 }
 
-/** 房间里 37 件可点击物品的 id，与 rawfile/room3d/assets/scene-data.js 一一对应（客厅 15 + 餐厅 10 + 厨房 12）。 */
+/** 三间房里 61 件可点击物品的 id，与 rawfile/room3d/assets/scene-data.js 一一对应
+ *  （客厅 15 + 餐厅 10 + 厨房 12 + 儿童房 12 + 主卧 12）。 */
 export const ROOM_OBJECT_IDS: string[] = [
   'sofa',
   'coffee_table',
@@ -57,10 +59,37 @@ export const ROOM_OBJECT_IDS: string[] = [
   'dishwasher',
   'cabinet',
   'knife',
-  'stool'
+  'stool',
+  // 儿童房（12）
+  'bed',
+  'desk',
+  'chair',
+  'wardrobe',
+  'toy_box',
+  'round_rug',
+  'bookcase',
+  'shelf',
+  'basket',
+  'poster',
+  'blanket',
+  'toy_car',
+  // 主卧（12）
+  'double_bed',
+  'nightstand',
+  'lamp',
+  'pillow',
+  'closet',
+  'dresser',
+  'mirror',
+  'stool_master',
+  'bench',
+  'rug_master',
+  'heater',
+  'photo_frame'
 ]
 
-const FOCUS_MODES: string[] = ['living', 'dining', 'kitchen', 'all']
+const FOCUS_MODES: string[] = ['living', 'dining', 'kitchen', 'child', 'master', 'all']
+const FOCUS_HINT: string = 'living / dining / kitchen / child / master / all'
 const MAX_WORDS: number = 8
 
 function fail(msg: string): RoomEnglishValidationResult {
@@ -85,11 +114,11 @@ export function validateRoomEnglishArgs(args: string): RoomEnglishValidationResu
   const focusRaw = parsed['focus']
   if (focusRaw !== undefined && focusRaw !== null) {
     if (typeof focusRaw !== 'string') {
-      return fail('room_english 的 focus 必须是字符串：living / dining / kitchen / all')
+      return fail(`room_english 的 focus 必须是字符串：${FOCUS_HINT}`)
     }
     focus = (focusRaw as string).trim()
     if (FOCUS_MODES.indexOf(focus) < 0) {
-      return fail(`room_english 的 focus「${focus}」无效，只能是 living / dining / kitchen / all`)
+      return fail(`room_english 的 focus「${focus}」无效，只能是 ${FOCUS_HINT}`)
     }
   }
 

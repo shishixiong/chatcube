@@ -74,8 +74,8 @@ export default function roomEnglishValidationTest() {
       expect(r.ok).assertFalse()
     })
 
-    it('covers 37 room objects', 0, () => {
-      expect(ROOM_OBJECT_IDS.length).assertEqual(37)
+    it('covers 61 room objects', 0, () => {
+      expect(ROOM_OBJECT_IDS.length).assertEqual(61)
     })
 
     it('includes every kitchen word', 0, () => {
@@ -84,6 +84,25 @@ export default function roomEnglishValidationTest() {
       for (let i = 0; i < kitchen.length; i++) {
         expect(ROOM_OBJECT_IDS.indexOf(kitchen[i]) >= 0).assertTrue()
       }
+    })
+
+    it('includes every bedroom word', 0, () => {
+      const bedrooms = ['bed', 'desk', 'chair', 'wardrobe', 'toy_box', 'round_rug',
+        'bookcase', 'shelf', 'basket', 'poster', 'blanket', 'toy_car',
+        'double_bed', 'nightstand', 'lamp', 'pillow', 'closet', 'dresser',
+        'mirror', 'stool_master', 'bench', 'rug_master', 'heater', 'photo_frame']
+      for (let i = 0; i < bedrooms.length; i++) {
+        expect(ROOM_OBJECT_IDS.indexOf(bedrooms[i]) >= 0).assertTrue()
+      }
+    })
+
+    it('accepts bedroom focus and switches room ids', 0, () => {
+      const child = validateRoomEnglishArgs('{"skill_key":"english_vocab","focus":"child","words":["bed","toy_box"]}')
+      expect(child.ok).assertTrue()
+      expect(child.focus).assertEqual('child')
+      const master = validateRoomEnglishArgs('{"skill_key":"english_vocab","focus":"master","words":["double_bed"]}')
+      expect(master.ok).assertTrue()
+      expect(master.focus).assertEqual('master')
     })
   })
 }

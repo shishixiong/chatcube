@@ -3,12 +3,23 @@
   'use strict';
 
   const THREE = window.THREE;
-  // 房间尺寸由模型层给出（客餐厅 8m + 厨房 3.8m），相机取景跟着走。
-  const BOUNDS = (window.WordRoomModels && window.WordRoomModels.bounds) || {
-    centerX: 0,
-    halfWidth: 4.35,
-    halfDepth: 3.2
+  // 每间房一份取景参数（主屋 11.8m × 6m 含开放厨房，东翼两间卧室各约 4.5m × 3.6m）。
+  // 三间房都建在原点附近，同一时刻只显示当前房间，取景和拾取都跟着 activeRoom 走。
+  const FALLBACK_FRAME = {
+    bounds: { minX: -4.35, maxX: 4.35, minZ: -3.2, maxZ: 3.2, centerX: 0, halfWidth: 4.35, halfDepth: 3.2 },
+    target: { x: 0.12, y: 0.86, z: 0.05 },
+    fitMin: 12.3,
+    fitMax: 34,
+    zoomMin: 5.4,
+    panInsetX: 1.7,
+    panInsetZ: 1.3
   };
+  const FRAMES = (window.WordRoomModels && window.WordRoomModels.rooms) || { main: FALLBACK_FRAME };
+  const DEFAULT_ROOM = 'main';
+
+  function frameOf(roomId) {
+    return FRAMES[roomId] || FRAMES[DEFAULT_ROOM] || FALLBACK_FRAME;
+  }
   const ACCENT = new THREE.Color('#2f9d80');
   const WARM = new THREE.Color('#f3b56a');
 
@@ -54,11 +65,17 @@
       this.lastFrame = performance.now();
       this.tmpVec = new THREE.Vector3();
 
+      this.activeRoom = DEFAULT_ROOM;
+      this.frame = frameOf(DEFAULT_ROOM);
+      this.roomGroups = {};
+      this.roomObjects = {};
+      this.roomHitboxes = {};
+      const start = this.frame.target;
       this.orbit = {
         theta: 0.79,
         phi: 0.85,
         radius: 15.5,
-        target: new THREE.Vector3(BOUNDS.centerX + 0.12, 0.86, 0.05)
+        target: new THREE.Vector3(start.x, start.y, start.z)
       };
       this.desired = {
         theta: this.orbit.theta,
@@ -99,9 +116,35 @@
       this.scene.add(root);
       this.root = root;
 
-      const built = window.WordRoomModels.buildRoom(root);
-      this.objects = built.objects;
-      this.hitboxes = built.hitboxes;
+      const models = window.WordRoomModels;
+      const createRoomGroup = (roomId, name) => {
+        const group = new THREE.Group();
+        group.name = name;
+        group.userData.room = roomId;
+        group.visible = roomId === DEFAULT_ROOM;
+        root.add(group);
+        this.roomGroups[roomId] = group;
+        return group;
+      };
+
+      const mainGroup = createRoomGroup('main', 'ROOM_MAIN');
+      const childGroup = createRoomGroup('child', 'ROOM_CHILD');
+      const masterGroup = createRoomGroup('master', 'ROOM_MASTER');
+
+      const builtMain = models.buildRoom(mainGroup);
+      const builtBeds = models.buildBedrooms(childGroup, masterGroup);
+
+      this.roomObjects.main = builtMain.objects;
+      this.roomObjects.child = builtBeds.objects.filter((group) => group.userData.room === 'child');
+      this.roomObjects.master = builtBeds.objects.filter((group) => group.userData.room === 'master');
+      // 拾取盒都挂在各自物品 Group 下，房间归属直接读 Group 的 userData.room
+      this.roomHitboxes.main = builtMain.hitboxes;
+      this.roomHitboxes.child = builtBeds.hitboxes.filter((mesh) => mesh.parent.userData.room === 'child');
+      this.roomHitboxes.master = builtBeds.hitboxes.filter((mesh) => mesh.parent.userData.room === 'master');
+
+      this.objects = this.roomObjects.main
+        .concat(this.roomObjects.child, this.roomObjects.master);
+      this.hitboxes = this.roomHitboxes[this.activeRoom];
 
       this.prepareObjects();
       this.resize();
@@ -265,18 +308,51 @@
 
     zoomRange() {
       const fit = this.fitRadius();
-      return { min: Math.max(5.4, fit * 0.36), max: fit * 1.14 };
+      return { min: Math.max(this.frame.zoomMin, fit * 0.36), max: fit * 1.14 };
     }
 
     fitRadius() {
       const fov = (this.camera.fov * Math.PI) / 180;
       const tan = Math.tan(fov / 2);
       const aspect = Math.max(0.5, this.camera.aspect || 1);
-      const halfWidth = BOUNDS.halfWidth || 4.35;
-      const halfDepth = BOUNDS.halfDepth || 3.2;
+      const halfWidth = this.frame.bounds.halfWidth || 4.35;
+      const halfDepth = this.frame.bounds.halfDepth || 3.2;
       const widthFit = halfWidth / (tan * aspect);
       const heightFit = (halfDepth * 1.2) / tan;
-      return clamp(Math.max(12.3, widthFit * 1.13, heightFit), 12.3, 34);
+      const scale = this.frame.fitScale || 1;
+      return clamp(
+        Math.max(this.frame.fitMin, widthFit * 1.13 * scale, heightFit * scale),
+        this.frame.fitMin,
+        this.frame.fitMax
+      );
+    }
+
+    // 换房间：只切可见性 + 重新取景，几何早就建好了，切换是瞬时的。
+    setRoom(roomId) {
+      const next = this.roomGroups[roomId] ? roomId : DEFAULT_ROOM;
+      if (next === this.activeRoom) {
+        this.resetView();
+        return this.activeRoom;
+      }
+      this.activeRoom = next;
+      this.frame = frameOf(next);
+      Object.keys(this.roomGroups).forEach((id) => {
+        this.roomGroups[id].visible = id === next;
+      });
+      this.hitboxes = this.roomHitboxes[next] || [];
+      this.desired.theta = 0.79;
+      this.desired.phi = 0.85;
+      this.desired.radius = this.fitRadius();
+      this.desired.target.set(this.frame.target.x, this.frame.target.y, this.frame.target.z);
+      this.autoFit = true;
+      this.clearOutline();
+      this.selected = null;
+      this.hovered = null;
+      return this.activeRoom;
+    }
+
+    getRoomObjects(roomId) {
+      return this.roomObjects[roomId || this.activeRoom] || [];
     }
 
     setPointer(event) {
@@ -615,8 +691,9 @@
       const nextX = this.desired.target.x - rightX * dx * worldPerPixel + upX * dy * worldPerPixel;
       const nextZ = this.desired.target.z - rightZ * dx * worldPerPixel + upZ * dy * worldPerPixel;
       // 留出一点内缩量，别让画面中心跑到墙外变成大片空白
-      this.desired.target.x = clamp(nextX, BOUNDS.minX + 1.7, BOUNDS.maxX - 1.7);
-      this.desired.target.z = clamp(nextZ, BOUNDS.minZ + 1.3, BOUNDS.maxZ - 1.3);
+      const b = this.frame.bounds;
+      this.desired.target.x = clamp(nextX, b.minX + this.frame.panInsetX, b.maxX - this.frame.panInsetX);
+      this.desired.target.z = clamp(nextZ, b.minZ + this.frame.panInsetZ, b.maxZ - this.frame.panInsetZ);
       this.autoFit = false;
     }
 
@@ -625,7 +702,7 @@
       this.desired.theta = 0.79;
       this.desired.phi = 0.85;
       this.desired.radius = this.fitRadius();
-      this.desired.target.set(BOUNDS.centerX + 0.12, 0.86, 0.05);
+      this.desired.target.set(this.frame.target.x, this.frame.target.y, this.frame.target.z);
     }
 
     getLabelAnchors() {
@@ -633,7 +710,7 @@
       const width = rect.width;
       const height = rect.height;
       const anchors = [];
-      this.objects.forEach((group) => {
+      this.getRoomObjects().forEach((group) => {
         const world = group.userData.labelAnchor;
         if (!world) return;
         const projected = this.tmpVec.copy(world).project(this.camera);

@@ -98,7 +98,7 @@
 }
 
 .welcome::after {
-  content: '37';
+  content: '61';
   position: absolute;
   z-index: -1;
   top: -34px;

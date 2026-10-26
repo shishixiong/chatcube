@@ -40,7 +40,11 @@
     appliance: [88, 0.004, 235],
     glassDark: [24, 0.012, 250],
     tile: [92, 0.007, 195],
-    brass: [72, 0.09, 78]
+    brass: [72, 0.09, 78],
+    sageGrey: [59, 0.028, 158],
+    sageGreyDark: [48, 0.026, 158],
+    linen: [96, 0.013, 84],
+    linenDust: [91, 0.017, 82]
   };
 
   // 房间从 8m × 6m 的客餐厅向东扩出 3.5m 的开放厨房。
@@ -1135,6 +1139,561 @@
     hit(g, 'sink', 0.7, 0.4, 0.54, 0, 0.16, 0, hitboxes);
   }
 
+  // ==================== 东翼扩建：儿童房 + 主卧 ====================
+  // 两间房各自建在自己的局部坐标里：房间中心 = (0, 0)，北墙在 z = -hd，东墙 +hw，西墙 -hw，南侧剖开。
+  // 场景层按房间切换显示，所以两间房都可以放在原点，取景各自独立，不会被 19m 外的大房间拖小。
+  const BEDROOM_CEIL = 2.8;
+
+  function bedroomShell(root, hw, hd, win) {
+    const base = box(root, hw * 2 + 0.34, 0.28, hd * 2 + 0.38, 0.09, material(RGB.trim), 0, -0.14, 0.02, false);
+    base.receiveShadow = true;
+
+    const planks = Math.max(4, Math.round((hw * 2) / 0.56));
+    const pw = (hw * 2) / planks;
+    for (let i = 0; i < planks; i += 1) {
+      const token = i % 3 === 0 ? RGB.floorA : i % 3 === 1 ? RGB.floorB : RGB.floorC;
+      const plank = addMesh(
+        root,
+        new THREE.BoxGeometry(pw - 0.012, 0.036, hd * 2 - 0.04),
+        material(token, { roughness: 0.86 }),
+        [-hw + pw / 2 + i * pw, FLOOR_Y - 0.018, 0],
+        false
+      );
+      plank.receiveShadow = true;
+    }
+
+    const wallMat = material(RGB.wall, { roughness: 0.9 });
+    const trimMat = material(RGB.trim, { roughness: 0.82 });
+    const plankMat = material(RGB.woodLight, { roughness: 0.82 });
+    const h = BEDROOM_CEIL;
+    const zWall = -hd - 0.08;
+    const outer = hw + 0.16;
+
+    // 北墙在窗洞处断开：左侧、右侧、窗下、窗上四块
+    box(root, win.x0 + outer, h, 0.16, 0.04, wallMat, (-outer + win.x0) / 2, h / 2, zWall, false);
+    box(root, outer - win.x1, h, 0.16, 0.04, wallMat, (win.x1 + outer) / 2, h / 2, zWall, false);
+    box(root, win.x1 - win.x0, win.y0, 0.16, 0.035, wallMat, (win.x0 + win.x1) / 2, win.y0 / 2, zWall, false);
+    box(root, win.x1 - win.x0, h - win.y1, 0.16, 0.035, wallMat, (win.x0 + win.x1) / 2, (win.y1 + h) / 2, zWall, false);
+
+    // 窗台、玻璃、竖梃
+    box(root, win.x1 - win.x0 + 0.1, 0.05, 0.2, 0.02, trimMat, (win.x0 + win.x1) / 2, win.y0 - 0.02, zWall + 0.03, false);
+    box(root, win.x1 - win.x0 - 0.03, win.y1 - win.y0 - 0.03, 0.02, 0.01,
+      material(RGB.glass, { roughness: 0.25, transparent: true, opacity: 0.5 }),
+      (win.x0 + win.x1) / 2, (win.y0 + win.y1) / 2, zWall + 0.05, false);
+    box(root, 0.05, win.y1 - win.y0, 0.06, 0.015, trimMat, (win.x0 + win.x1) / 2, (win.y0 + win.y1) / 2, zWall + 0.06, false);
+
+    // 只砌北墙和西墙：东侧和南侧剖开（相机就在 +x/+z 一侧，砌东墙会把整间房挡掉）
+    box(root, 0.16, h, hd * 2 + 0.16, 0.04, wallMat, -hw - 0.08, h / 2, 0, false);
+
+    // 踢脚线（北 / 西）
+    box(root, hw * 2, 0.09, 0.07, 0.025, plankMat, 0, 0.095, -hd + 0.04, false);
+    box(root, 0.07, 0.09, hd * 2, 0.025, plankMat, -hw + 0.04, 0.095, 0, false);
+
+    // 窗帘杆 + 两片布（装饰件，不参与点击）
+    const rodMat = material(RGB.woodDark, { roughness: 0.7 });
+    const rod = addMesh(root, new THREE.CylinderGeometry(0.018, 0.018, win.x1 - win.x0 + 0.62, 10), rodMat,
+      [(win.x0 + win.x1) / 2, win.y1 + 0.16, zWall + 0.11], false);
+    rod.rotation.z = Math.PI / 2;
+    const cloth = material(RGB.linen, { roughness: 0.92 });
+    [win.x0 - 0.18, win.x1 + 0.18].forEach((x, i) => {
+      const panel = box(root, 0.3, win.y1 - win.y0 + 0.34, 0.055, 0.02, cloth, x, (win.y0 + win.y1) / 2 + 0.06, zWall + 0.1, false);
+      panel.rotation.y = i === 0 ? -0.06 : 0.06;
+    });
+  }
+
+  // —— 通用件：柜体、抽屉、台面 ——
+  function cabinetBody(g, w, h, d, colorToken, doorColorToken, doors) {
+    const body = material(colorToken);
+    const doorMat = material(doorColorToken);
+    box(g, w, h, d, 0.03, body, 0, h / 2, 0);
+    box(g, w - 0.04, 0.05, d - 0.05, 0.015, material(RGB.cream), 0, 0.03, 0, false);
+    const n = doors || 2;
+    const seg = w / n;
+    for (let i = 0; i < n; i += 1) {
+      const cx = -w / 2 + seg / 2 + i * seg;
+      box(g, seg - 0.05, h - 0.1, 0.02, 0.012, doorMat, cx, h / 2, d / 2 + 0.01, false);
+      const handle = cylinder(g, 0.013, 0.013, 0.2, 8, material(RGB.brass, { metalness: 0.3, roughness: 0.4 }),
+        cx + (i === 0 ? seg * 0.32 : -seg * 0.32), h / 2, d / 2 + 0.035, false);
+      handle.rotation.x = 0;
+    }
+  }
+
+  function drawerFront(g, w, h, x, y, z) {
+    box(g, w, h, 0.025, 0.012, material(RGB.woodLight), x, y, z, false);
+    const knob = cylinder(g, 0.022, 0.022, 0.05, 10, material(RGB.brass, { metalness: 0.35, roughness: 0.38 }), x, y, z + 0.03, false);
+    knob.rotation.x = Math.PI / 2;
+  }
+
+  // —— 儿童房 12 件 ——
+  function buildChildRoom(root) {
+    const hw = 2.2;
+    const hd = 1.8;
+    const objects = [];
+    const hitboxes = [];
+    bedroomShell(root, hw, hd, { x0: -0.86, x1: -0.08, y0: 0.95, y1: 2.15 });
+
+    // 1 床：床头靠北墙，床尾朝南
+    (function childBed() {
+      const g = objectGroup('bed', 0.5, FLOOR_Y, -0.85, root);
+      objects.push(g);
+      const frame = material(RGB.wood);
+      const quilt = material(RGB.teal);
+      const sheet = material(RGB.cream);
+      const legMat = material(RGB.woodDark);
+      [-0.42, 0.42].forEach((x) => {
+        [-0.82, 0.82].forEach((z) => {
+          cylinder(g, 0.038, 0.042, 0.2, 8, legMat, x, 0.1, z);
+        });
+      });
+      box(g, 1.0, 0.2, 1.9, 0.05, frame, 0, 0.24, 0);
+      box(g, 0.94, 0.3, 1.8, 0.09, sheet, 0, 0.49, 0);
+      box(g, 0.98, 0.07, 1.02, 0.05, quilt, 0, 0.665, 0.34);
+      box(g, 0.98, 0.16, 0.1, 0.035, quilt, 0, 0.6, 0.83, false);
+      box(g, 1.0, 0.66, 0.07, 0.03, frame, 0, 0.5, -0.915);
+      const pillow = box(g, 0.54, 0.16, 0.34, 0.08, material(RGB.sky), 0, 0.7, -0.7);
+      pillow.rotation.x = -0.06;
+      hit(g, 'bed', 1.02, 0.42, 1.94, 0, 0.4, 0, hitboxes);
+      hit(g, 'bed', 1.0, 0.68, 0.12, 0, 0.5, -0.92, hitboxes);
+    }());
+
+    // 2 书桌：靠北墙东段，桌面朝南
+    (function childDesk() {
+      const g = objectGroup('desk', 1.6, FLOOR_Y, -1.15, root);
+      objects.push(g);
+      const wood = material(RGB.wood);
+      const woodDark = material(RGB.woodDark);
+      box(g, 1.2, 0.055, 0.5, 0.02, wood, 0, 0.72, 0);
+      [-0.56, 0.56].forEach((x) => {
+        box(g, 0.05, 0.7, 0.46, 0.015, woodDark, x, 0.35, 0);
+      });
+      box(g, 1.1, 0.06, 0.42, 0.015, woodDark, 0, 0.14, 0, false);
+      box(g, 0.46, 0.16, 0.44, 0.02, wood, 0.3, 0.6, 0);
+      drawerFront(g, 0.4, 0.12, 0.3, 0.6, 0.235);
+      // 桌上的书和笔筒
+      box(g, 0.26, 0.035, 0.2, 0.012, material(RGB.coral), -0.3, 0.765, 0.02, false);
+      box(g, 0.24, 0.03, 0.18, 0.01, material(RGB.mustard), -0.29, 0.797, 0.01, false);
+      cylinder(g, 0.045, 0.045, 0.12, 12, material(RGB.sky), 0.06, 0.81, -0.1, false);
+      hit(g, 'desk', 1.24, 0.78, 0.54, 0, 0.38, 0, hitboxes);
+    }());
+
+    // 3 椅子：面朝书桌
+    (function childChair() {
+      const g = objectGroup('chair', 1.725, FLOOR_Y, -0.6, root);
+      objects.push(g);
+      const body = material(RGB.mustard);
+      const legMat = material(RGB.woodDark);
+      box(g, 0.45, 0.055, 0.42, 0.04, body, 0, 0.44, 0);
+      const back = box(g, 0.42, 0.4, 0.05, 0.03, body, 0, 0.66, 0.185);
+      back.rotation.x = -0.08;
+      [-0.18, 0.18].forEach((x) => {
+        [-0.16, 0.16].forEach((z) => {
+          cylinder(g, 0.018, 0.02, 0.43, 8, legMat, x, 0.215, z);
+        });
+      });
+      hit(g, 'chair', 0.52, 0.9, 0.5, 0, 0.45, 0.02, hitboxes);
+    }());
+
+    // 4 衣柜：北墙西段，2m 高
+    (function childWardrobe() {
+      const g = objectGroup('wardrobe', -1.5, FLOOR_Y, -1.45, root);
+      objects.push(g);
+      cabinetBody(g, 1.2, 2.0, 0.55, RGB.woodDark, RGB.woodLight, 2);
+      box(g, 1.26, 0.05, 0.6, 0.02, material(RGB.woodDark), 0, 2.02, 0, false);
+      hit(g, 'wardrobe', 1.26, 2.02, 0.62, 0, 1.01, 0, hitboxes);
+    }());
+
+    // 5 玩具箱：箱体 + 掀盖
+    (function childToyBox() {
+      const g = objectGroup('toy_box', -0.61, FLOOR_Y, 0.34, root);
+      objects.push(g);
+      const body = material(RGB.coral);
+      const bodyDark = material(RGB.woodDark);
+      box(g, 0.5, 0.4, 0.35, 0.04, body, 0, 0.2, 0);
+      box(g, 0.44, 0.03, 0.29, 0.012, material(RGB.coral), 0, 0.05, 0, false);
+      const lid = box(g, 0.54, 0.05, 0.39, 0.03, bodyDark, 0, 0.44, -0.02);
+      lid.rotation.x = -0.16;
+      box(g, 0.07, 0.09, 0.02, 0.01, material(RGB.brass, { metalness: 0.3 }), 0, 0.36, 0.18, false);
+      // 露在外面的两个玩具
+      box(g, 0.1, 0.1, 0.1, 0.02, material(RGB.mustard), -0.12, 0.42, 0.02, false).rotation.y = 0.4;
+      box(g, 0.09, 0.09, 0.09, 0.02, material(RGB.sky), 0.1, 0.42, 0.0, false).rotation.y = -0.3;
+      hit(g, 'toy_box', 0.56, 0.52, 0.42, 0, 0.26, 0, hitboxes);
+    }());
+
+    // 6 圆地毯
+    (function childRoundRug() {
+      const g = objectGroup('round_rug', -1.35, FLOOR_Y, -0.35, root);
+      objects.push(g);
+      addMesh(g, new THREE.CylinderGeometry(0.75, 0.75, 0.024, 36), material(RGB.mustard), [0, 0.012, 0], false);
+      addMesh(g, new THREE.CylinderGeometry(0.62, 0.62, 0.026, 36), material(RGB.cream), [0, 0.014, 0], false);
+      addMesh(g, new THREE.CylinderGeometry(0.5, 0.5, 0.028, 36), material(RGB.mustard), [0, 0.016, 0], false);
+      hit(g, 'round_rug', 1.5, 0.16, 1.5, 0, 0.06, 0, hitboxes);
+    }());
+
+    // 7 书柜：西墙，开口朝东
+    (function childBookcase() {
+      const g = objectGroup('bookcase', -1.94, FLOOR_Y, 0.95, root);
+      objects.push(g);
+      const body = material(RGB.sky);
+      const bodyDark = material(RGB.sky, { roughness: 0.9 });
+      g.rotation.y = Math.PI / 2;
+      [-0.675, 0.675].forEach((x) => {
+        box(g, 0.05, 1.1, 0.45, 0.02, bodyDark, x, 0.55, 0);
+      });
+      box(g, 1.4, 0.05, 0.45, 0.02, bodyDark, 0, 1.075, 0);
+      box(g, 1.4, 0.05, 0.45, 0.02, bodyDark, 0, 0.025, 0);
+      box(g, 1.4, 1.1, 0.03, 0.015, material(RGB.sky, { roughness: 0.92 }), 0, 0.55, -0.21, false);
+      // 两层可用的层板
+      [0.39, 0.72].forEach((y) => {
+        box(g, 1.3, 0.04, 0.42, 0.012, body, 0, y, 0.01, false);
+      });
+      const bookTokens = [RGB.coral, RGB.mustard, RGB.teal, RGB.green, RGB.sky, RGB.wood];
+      let seed = 0;
+      [0.115, 0.445, 0.775].forEach((y, row) => {
+        for (let i = 0; i < 5; i += 1) {
+          seed += 1;
+          const w = 0.04 + ((seed * 7) % 5) * 0.008;
+          box(g, w, 0.24 - (row === 2 ? 0.06 : 0), 0.3, 0.006,
+            material(bookTokens[(seed + row) % bookTokens.length]),
+            -0.42 + i * 0.17, y + 0.145, 0.06, false);
+        }
+      });
+      hit(g, 'bookcase', 1.46, 1.14, 0.52, 0, 0.57, 0, hitboxes);
+    }());
+
+    // 8 搁板：矮架子，上面放小车
+    (function childShelf() {
+      const g = objectGroup('shelf', 1.28, FLOOR_Y, 1.34, root);
+      objects.push(g);
+      const body = material(RGB.cream);
+      box(g, 0.7, 0.05, 0.26, 0.02, body, 0, 0.175, 0);
+      [-0.33, 0.33].forEach((x) => {
+        box(g, 0.04, 0.15, 0.26, 0.012, body, x, 0.075, 0, false);
+      });
+      box(g, 0.62, 0.03, 0.22, 0.01, material(RGB.woodLight), 0, 0.02, 0, false);
+      // 架子上的小车和积木
+      box(g, 0.16, 0.06, 0.09, 0.02, material(RGB.coral), -0.16, 0.225, 0, false);
+      cylinder(g, 0.026, 0.026, 0.018, 10, material(RGB.ink), -0.22, 0.215, 0.04, false).rotation.z = Math.PI / 2;
+      box(g, 0.09, 0.09, 0.09, 0.015, material(RGB.mustard), 0.14, 0.24, 0, false);
+      box(g, 0.07, 0.07, 0.07, 0.012, material(RGB.teal), 0.24, 0.23, 0.01, false);
+      hit(g, 'shelf', 0.74, 0.28, 0.32, 0, 0.14, 0, hitboxes);
+    }());
+
+    // 9 篮子
+    (function childBasket() {
+      const g = objectGroup('basket', 1.86, FLOOR_Y, 0.34, root);
+      objects.push(g);
+      const weave = material(RGB.woodLight);
+      addMesh(g, new THREE.CylinderGeometry(0.17, 0.14, 0.28, 16), weave, [0, 0.14, 0], true);
+      addMesh(g, new THREE.CylinderGeometry(0.15, 0.15, 0.03, 16), material(RGB.linen), [0, 0.285, 0], false);
+      [-1, 1].forEach((dir) => {
+        const handle = addMesh(g, new THREE.TorusGeometry(0.09, 0.012, 6, 12, Math.PI), material(RGB.woodDark),
+          [dir * 0.15, 0.27, 0], false);
+        handle.rotation.y = Math.PI / 2;
+      });
+      hit(g, 'basket', 0.4, 0.36, 0.4, 0, 0.18, 0, hitboxes);
+    }());
+
+    // 10 海报：书桌上方的北墙
+    (function childPoster() {
+      const g = objectGroup('poster', 1.62, 1.62, -1.72, root);
+      objects.push(g);
+      box(g, 0.62, 0.92, 0.03, 0.012, material(RGB.coral), 0, 0, 0);
+      const art = addMesh(g, new THREE.PlaneGeometry(0.52, 0.82), new THREE.MeshStandardMaterial({
+        map: makePictureTexture(),
+        roughness: 0.92,
+        metalness: 0
+      }), [0, 0, 0.02], false);
+      art.receiveShadow = false;
+      hit(g, 'poster', 0.7, 1.0, 0.14, 0, 0, 0, hitboxes);
+    }());
+
+    // 11 毯子：叠好放在床尾
+    (function childBlanket() {
+      const g = objectGroup('blanket', 0.5, FLOOR_Y + 0.66, -0.25, root);
+      objects.push(g);
+      const cloth = material(RGB.mustard);
+      box(g, 0.45, 0.09, 0.35, 0.04, cloth, 0, 0.045, 0);
+      box(g, 0.44, 0.03, 0.11, 0.015, material(RGB.cream), 0, 0.1, -0.1, false);
+      hit(g, 'blanket', 0.5, 0.18, 0.4, 0, 0.09, 0, hitboxes);
+    }());
+
+    // 12 玩具车：地板上
+    (function childToyCar() {
+      const g = objectGroup('toy_car', 0.62, FLOOR_Y, 1.05, root);
+      objects.push(g);
+      g.rotation.y = -0.5;
+      const body = material(RGB.coral);
+      box(g, 0.12, 0.06, 0.22, 0.03, body, 0, 0.06, 0);
+      box(g, 0.1, 0.045, 0.1, 0.02, material(RGB.sky), 0, 0.1, -0.02);
+      const wheel = material(RGB.ink, { roughness: 0.6 });
+      [-0.065, 0.065].forEach((x) => {
+        [-0.07, 0.07].forEach((z) => {
+          const w = cylinder(g, 0.028, 0.028, 0.022, 10, wheel, x, 0.028, z, false);
+          w.rotation.z = Math.PI / 2;
+        });
+      });
+      hit(g, 'toy_car', 0.26, 0.2, 0.3, 0, 0.08, 0, hitboxes);
+    }());
+
+    if (objects.length !== 12) {
+      throw new Error('儿童房应该有 12 件可点物品，实际 ' + objects.length);
+    }
+    return { objects, hitboxes };
+  }
+
+  // —— 主卧 12 件 ——
+  // 相机从 +x/+z 方向看，所以靠东墙的家具只会露背面；衣柜、斗柜、镜子统一放在北墙和西墙。
+  function buildMasterRoom(root) {
+    const hw = 2.3;
+    const hd = 1.8;
+    const objects = [];
+    const hitboxes = [];
+    bedroomShell(root, hw, hd, { x0: -1.55, x1: -0.45, y0: 0.95, y1: 2.15 });
+
+    // 1 双人床
+    (function masterBed() {
+      const g = objectGroup('double_bed', 0.55, FLOOR_Y, -0.75, root);
+      objects.push(g);
+      const frame = material(RGB.wood);
+      const quilt = material(RGB.sageGrey);
+      const quiltDark = material(RGB.sageGreyDark);
+      const sheet = material(RGB.cream);
+      [-0.72, 0.72].forEach((x) => {
+        [-0.88, 0.88].forEach((z) => {
+          cylinder(g, 0.042, 0.046, 0.22, 8, material(RGB.woodDark), x, 0.11, z);
+        });
+      });
+      box(g, 1.7, 0.22, 2.0, 0.05, frame, 0, 0.22, 0);
+      box(g, 1.62, 0.32, 1.92, 0.1, sheet, 0, 0.5, 0);
+      box(g, 1.66, 0.08, 1.24, 0.06, quilt, 0, 0.7, 0.32);
+      box(g, 1.66, 0.2, 0.12, 0.04, quiltDark, 0, 0.62, 0.9, false);
+      const head = box(g, 1.7, 0.72, 0.08, 0.035, frame, 0, 0.5, -0.96);
+      head.rotation.x = -0.04;
+      // 靠床头的一只枕头是装饰件，可点的那只在东半边
+      const deco = box(g, 0.66, 0.17, 0.36, 0.09, material(RGB.linen), -0.4, 0.74, -0.72);
+      deco.rotation.x = -0.07;
+      hit(g, 'double_bed', 1.72, 0.46, 2.04, 0, 0.42, 0, hitboxes);
+      hit(g, 'double_bed', 1.7, 0.74, 0.14, 0, 0.5, -0.97, hitboxes);
+    }());
+
+    // 2 床头柜
+    (function masterNightstand() {
+      const g = objectGroup('nightstand', 1.48, FLOOR_Y, -1.5, root);
+      objects.push(g);
+      const wood = material(RGB.wood);
+      box(g, 0.5, 0.5, 0.45, 0.03, wood, 0, 0.29, 0);
+      [-0.19, 0.19].forEach((x) => {
+        [-0.16, 0.16].forEach((z) => {
+          cylinder(g, 0.018, 0.02, 0.08, 8, material(RGB.woodDark), x, 0.04, z);
+        });
+      });
+      drawerFront(g, 0.4, 0.16, 0, 0.34, 0.235);
+      box(g, 0.54, 0.03, 0.48, 0.012, material(RGB.woodDark), 0, 0.555, 0, false);
+      hit(g, 'nightstand', 0.56, 0.6, 0.5, 0, 0.3, 0, hitboxes);
+    }());
+
+    // 3 台灯：坐在床头柜上
+    (function masterLamp() {
+      const g = objectGroup('lamp', 1.48, FLOOR_Y + 0.57, -1.38, root);
+      objects.push(g);
+      const brass = material(RGB.brass, { metalness: 0.3, roughness: 0.42 });
+      cylinder(g, 0.085, 0.095, 0.03, 16, brass, 0, 0.015, 0);
+      cylinder(g, 0.013, 0.013, 0.22, 10, brass, 0, 0.13, 0);
+      const shade = addMesh(g, new THREE.CylinderGeometry(0.075, 0.135, 0.17, 8),
+        material(RGB.mustard, { roughness: 0.85, emissive: RGB.mustard, emissiveIntensity: 0.12 }), [0, 0.3, 0], true);
+      shade.rotation.y = 0.3;
+      hit(g, 'lamp', 0.32, 0.44, 0.32, 0, 0.22, 0, hitboxes);
+    }());
+
+    // 4 枕头：床上的另一只
+    (function masterPillow() {
+      const g = objectGroup('pillow', 0.9, FLOOR_Y + 0.66, -1.4, root);
+      objects.push(g);
+      const cloth = material(RGB.linen);
+      const p = box(g, 0.62, 0.17, 0.36, 0.09, cloth, 0, 0.085, 0);
+      p.rotation.x = -0.07;
+      box(g, 0.6, 0.02, 0.3, 0.03, material(RGB.linenDust), 0, 0.175, 0, false);
+      hit(g, 'pillow', 0.68, 0.26, 0.42, 0, 0.1, 0, hitboxes);
+    }());
+
+    // 5 衣帽柜：西墙，门朝东
+    (function masterCloset() {
+      const g = objectGroup('closet', -2.02, FLOOR_Y, -1.1, root);
+      objects.push(g);
+      g.rotation.y = Math.PI / 2;
+      cabinetBody(g, 1.2, 2.0, 0.55, RGB.wood, RGB.woodLight, 2);
+      box(g, 1.26, 0.05, 0.6, 0.02, material(RGB.woodDark), 0, 2.02, 0, false);
+      hit(g, 'closet', 1.26, 2.02, 0.6, 0, 1.01, 0, hitboxes);
+    }());
+
+    // 6 斗柜：西墙，三只抽屉朝东（梳妆台的位置）
+    (function masterDresser() {
+      const g = objectGroup('dresser', -2.05, FLOOR_Y, 0.45, root);
+      objects.push(g);
+      g.rotation.y = Math.PI / 2;
+      const wood = material(RGB.woodDark);
+      box(g, 0.7, 0.9, 0.5, 0.03, wood, 0, 0.5, 0);
+      box(g, 0.74, 0.04, 0.54, 0.015, material(RGB.wood), 0, 0.97, 0, false);
+      [0.2, 0.45, 0.7].forEach((y) => {
+        drawerFront(g, 0.62, 0.19, 0, y, 0.255);
+      });
+      [-0.3, 0.3].forEach((x) => {
+        [-0.2, 0.2].forEach((z) => {
+          cylinder(g, 0.02, 0.022, 0.1, 8, material(RGB.woodDark), x, 0.05, z);
+        });
+      });
+      hit(g, 'dresser', 0.76, 1.0, 0.56, 0, 0.5, 0, hitboxes);
+    }());
+
+    // 7 镜子：斗柜上方，镜面朝东
+    (function masterMirror() {
+      const g = objectGroup('mirror', -2.22, 1.55, 0.45, root);
+      objects.push(g);
+      g.rotation.y = Math.PI / 2;
+      box(g, 0.62, 0.82, 0.05, 0.09, material(RGB.woodLight), 0, 0, 0);
+      addMesh(g, new THREE.PlaneGeometry(0.5, 0.7),
+        new THREE.MeshStandardMaterial({
+          color: color(RGB.glass),
+          roughness: 0.12,
+          metalness: 0.62,
+          emissive: color(RGB.sky),
+          emissiveIntensity: 0.07
+        }), [0, 0, 0.028], false);
+      hit(g, 'mirror', 0.68, 0.9, 0.16, 0, 0, 0, hitboxes);
+    }());
+
+    // 8 凳子：镜子前面
+    (function masterStool() {
+      const g = objectGroup('stool_master', -1.42, FLOOR_Y, 0.45, root);
+      objects.push(g);
+      const seat = material(RGB.coral);
+      addMesh(g, new THREE.CylinderGeometry(0.18, 0.18, 0.06, 8), seat, [0, 0.42, 0], true);
+      addMesh(g, new THREE.CylinderGeometry(0.15, 0.15, 0.03, 8), material(RGB.coral, { roughness: 0.9 }), [0, 0.375, 0], false);
+      for (let i = 0; i < 3; i += 1) {
+        const angle = (i / 3) * Math.PI * 2 + 0.4;
+        const leg = cylinder(g, 0.016, 0.02, 0.4, 8, material(RGB.woodDark),
+          Math.sin(angle) * 0.11, 0.2, Math.cos(angle) * 0.11);
+        leg.rotation.x = Math.cos(angle) * -0.08;
+        leg.rotation.z = Math.sin(angle) * 0.08;
+      }
+      hit(g, 'stool_master', 0.4, 0.5, 0.4, 0, 0.25, 0, hitboxes);
+    }());
+
+    // 9 长凳：横在床尾
+    (function masterBench() {
+      const g = objectGroup('bench', 0.55, FLOOR_Y, 0.62, root);
+      objects.push(g);
+      const wood = material(RGB.woodDark);
+      box(g, 1.2, 0.07, 0.35, 0.03, wood, 0, 0.42, 0);
+      [-0.5, 0.5].forEach((x) => {
+        [-0.13, 0.13].forEach((z) => {
+          box(g, 0.055, 0.39, 0.055, 0.02, wood, x, 0.195, z);
+        });
+      });
+      box(g, 1.04, 0.04, 0.04, 0.015, wood, 0, 0.2, 0, false);
+      // 凳子上叠着一条薄毯
+      box(g, 0.34, 0.06, 0.28, 0.02, material(RGB.linen), -0.3, 0.485, 0, false);
+      hit(g, 'bench', 1.24, 0.5, 0.4, 0, 0.25, 0, hitboxes);
+    }());
+
+    // 10 地毯：床边
+    (function masterRug() {
+      const g = objectGroup('rug_master', 0.55, FLOOR_Y, 1.35, root);
+      objects.push(g);
+      addMesh(g, roundedPlaneGeometry(2.0, 0.75, 0.1), material(RGB.rug), [0, 0.014, 0], false);
+      addMesh(g, roundedRingGeometry(1.86, 0.62, 0.09, 0.03), material(RGB.sageGrey, { roughness: 0.88 }), [0, 0.019, 0], false);
+      hit(g, 'rug_master', 2.04, 0.14, 0.8, 0, 0.05, 0, hitboxes);
+    }());
+
+    // 11 暖气片：北墙东端
+    (function masterHeater() {
+      const g = objectGroup('heater', 2.02, FLOOR_Y, -1.68, root);
+      objects.push(g);
+      const metal = material(RGB.cream, { roughness: 0.55, metalness: 0.12 });
+      for (let i = 0; i < 9; i += 1) {
+        box(g, 0.035, 0.56, 0.15, 0.012, metal, -0.24 + i * 0.06, 0.34, 0, false);
+      }
+      box(g, 0.54, 0.045, 0.11, 0.015, metal, 0, 0.6, 0, false);
+      box(g, 0.54, 0.045, 0.11, 0.015, metal, 0, 0.09, 0, false);
+      [-0.16, 0.16].forEach((x) => {
+        cylinder(g, 0.022, 0.022, 0.06, 8, material(RGB.metal), x, 0.06, 0, false);
+      });
+      hit(g, 'heater', 0.62, 0.66, 0.24, 0, 0.33, 0, hitboxes);
+    }());
+
+    // 12 相框：立在斗柜台面上
+    (function masterPhotoFrame() {
+      const g = objectGroup('photo_frame', -2.0, FLOOR_Y + 0.99, 0.32, root);
+      objects.push(g);
+      g.rotation.y = Math.PI / 2 - 0.22;
+      box(g, 0.34, 0.27, 0.03, 0.015, material(RGB.wood), 0, 0.135, 0);
+      addMesh(g, new THREE.PlaneGeometry(0.26, 0.19), new THREE.MeshStandardMaterial({
+        map: makePictureTexture(),
+        roughness: 0.94,
+        metalness: 0
+      }), [0, 0.135, 0.018], false);
+      const stand = box(g, 0.1, 0.12, 0.015, 0.008, material(RGB.woodDark), 0, 0.07, -0.06, false);
+      stand.rotation.x = 0.5;
+      hit(g, 'photo_frame', 0.4, 0.34, 0.16, 0, 0.14, 0, hitboxes);
+    }());
+
+    if (objects.length !== 12) {
+      throw new Error('主卧应该有 12 件可点物品，实际 ' + objects.length);
+    }
+    return { objects, hitboxes };
+  }
+
+  function buildBedrooms(childRoot, masterRoot) {
+    const child = buildChildRoom(childRoot);
+    const master = buildMasterRoom(masterRoot);
+    return {
+      objects: child.objects.concat(master.objects),
+      hitboxes: child.hitboxes.concat(master.hitboxes)
+    };
+  }
+
+  // 每间房一份取景参数：bounds 供相机平移到边上时留内缩量，fit 系列供 fitRadius 用。
+  const ROOM_FRAMES = {
+    main: {
+      bounds: {
+        minX: ROOM.minX,
+        maxX: ROOM.maxX,
+        minZ: ROOM.minZ,
+        maxZ: ROOM.maxZ,
+        centerX: ROOM.centerX,
+        halfWidth: (ROOM.maxX - ROOM.minX) / 2,
+        halfDepth: (ROOM.maxZ - ROOM.minZ) / 2
+      },
+      target: { x: ROOM.centerX + 0.12, y: 0.86, z: 0.05 },
+      fitMin: 12.3,
+      fitMax: 34,
+      zoomMin: 5.4,
+      panInsetX: 1.7,
+      panInsetZ: 1.3,
+      fitScale: 1
+    },
+    child: {
+      bounds: { minX: -2.2, maxX: 2.2, minZ: -1.8, maxZ: 1.8, centerX: 0, halfWidth: 2.2, halfDepth: 1.8 },
+      target: { x: 0.05, y: 0.78, z: 0.02 },
+      fitMin: 5.4,
+      fitMax: 11,
+      fitScale: 0.92,
+      zoomMin: 2.9,
+      panInsetX: 0.55,
+      panInsetZ: 0.45
+    },
+    master: {
+      bounds: { minX: -2.3, maxX: 2.3, minZ: -1.8, maxZ: 1.8, centerX: 0, halfWidth: 2.3, halfDepth: 1.8 },
+      target: { x: 0.05, y: 0.78, z: 0.02 },
+      fitMin: 5.4,
+      fitMax: 11,
+      fitScale: 0.92,
+      zoomMin: 2.9,
+      panInsetX: 0.58,
+      panInsetZ: 0.45
+    }
+  };
+
   function objectMeta(id) {
     const meta = dataById.get(id);
     if (!meta) throw new Error('Unknown object: ' + id);
@@ -1148,6 +1707,7 @@
       kidDefinition: meta.kidDefinition,
       example: meta.example,
       category: meta.category,
+      room: meta.room,
       labelBias: meta.labelBias,
       interactive: true
     };
@@ -1178,8 +1738,7 @@
     materialCache.clear();
     const hitboxes = [];
     const objects = [];
-    buildRoomShell(root);
-    buildKitchenShell(root);
+    buildRoomShell(root);    buildKitchenShell(root);
     buildKitchenRun(root);
     buildIsland(root);
     buildHood(root);
@@ -1229,15 +1788,9 @@
 
   window.WordRoomModels = {
     buildRoom,
+    buildBedrooms,
     FLOOR_Y,
-    bounds: {
-      minX: ROOM.minX,
-      maxX: ROOM.maxX,
-      minZ: ROOM.minZ,
-      maxZ: ROOM.maxZ,
-      centerX: ROOM.centerX,
-      halfWidth: (ROOM.maxX - ROOM.minX) / 2,
-      halfDepth: (ROOM.maxZ - ROOM.minZ) / 2
-    }
+    rooms: ROOM_FRAMES,
+    bounds: ROOM_FRAMES.main.bounds
   };
 })();

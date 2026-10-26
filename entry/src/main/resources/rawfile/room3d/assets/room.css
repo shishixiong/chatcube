@@ -759,3 +759,78 @@ a:focus-visible,
   margin-top: 16px;
 }
 
+
+/* —— 房间切换标签：三间房各有自己的 3D 取景 —— */
+.room-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+  margin: 0 24px 12px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-alt);
+}
+
+.room-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.22s var(--ease), color 0.22s var(--ease), box-shadow 0.22s var(--ease);
+}
+
+.room-tab:hover {
+  color: var(--accent-deep);
+  background: oklch(100% 0 0 / 0.9);
+}
+
+.room-tab.is-active {
+  background: var(--accent);
+  color: oklch(99% 0.005 170);
+  box-shadow: 0 8px 18px -12px oklch(30% 0.08 170 / 0.9);
+}
+
+.room-tab:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+/* 词汇表里非当前房间的分组压暗一点，方便先看眼前这间 */
+.word-group[data-room]:not(.is-active-room) {
+  opacity: 0.62;
+  transition: opacity 0.25s var(--ease);
+}
+
+.word-group[data-room].is-active-room {
+  opacity: 1;
+}
+
+@media (max-width: 520px) {
+  .room-tabs {
+    margin: 0 16px 10px;
+  }
+
+  .room-tab {
+    font-size: 12px;
+  }
+}
+
+/* 统计格：当前房间高亮 */
+.room-stat.is-active {
+  background: var(--accent-soft);
+}
+
+.room-stat.is-active strong {
+  color: var(--accent-strong);
+}
