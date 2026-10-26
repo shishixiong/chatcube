@@ -287,13 +287,13 @@ Column
 | `assets/scene-data.js` | 新增 24 个物品（`room: 'child' / 'master'`）；新增 `rooms` 元数据（`zh / tab / eyebrow / heading / size / note`）、`roomOrder`；`categories` 各加 `room` 字段 |
 | `assets/room-models.js` | 新增 `bedroomShell()`（地板 + 木地板条 + 北墙带窗 + 西墙 + 踢脚线 + 窗帘 + 玻璃/窗框）与 `buildChildRoom()` / `buildMasterRoom()`（各 12 件，数量不符直接 throw）；`ROOM_FRAMES` 导出三套取景参数（`bounds / target / fitMin / fitMax / fitScale / zoomMin / panInsetX / panInsetZ`）；新增 `sageGrey / linen` 等 OKLCH 色板 |
 | `assets/room-scene.js` | `buildRoom` 与 `buildBedrooms` 分别建进 `ROOM_MAIN` / `ROOM_CHILD` / `ROOM_MASTER` 三个 Group；新增 `setRoom(id)`（切可见性、换 `frame`、重算 `fitRadius()`、清选中、复位相机）；`fitRadius()` / `zoomRange()` / `panByPixels()` / `resetView()` 全部改读 `this.frame`；`hitboxes` 与 `getLabelAnchors()` 只取当前房间 |
-| `index.html` / `assets/room.css` | 学习面板顶部新增 `role="tablist"` 的房间标签（客餐厅 / 儿童房 / 主卧）；标题卡、尺寸、件数、`data-total`（37 → 61）、统计格改为按房间（37 / 12 / 12） |
+| `index.html` / `assets/room.css` | 3D 舞台上方新增 `role="tablist"` 的房间标签（客餐厅 / 儿童房 / 主卧，吸顶）；标题卡、尺寸、件数、`data-total`（37 → 61）、统计格改为按房间（37 / 12 / 12） |
 | `assets/room-app.js` | `state.activeRoom` + `setActiveRoom()`；标签点击与左右方向键切换；词汇表分组按 `category.room` 打出 `data-room` 并把非当前房间压暗；单词卡序号与上/下一个改为**房间内循环**（`01 / 12`）；跨房间点词汇表行会先切房间；`WordRoomApp.setRoom()` 供宿主调用 |
 | `utils/RoomEnglishValidation.ets` | `ROOM_OBJECT_IDS` 补 24 个 id（61 条），`focus` 枚举补 `child` / `master` |
 | `components/room/RoomEnglishCard.ets` | `ROOM_OBJECT_TOTAL` 37 → 61；`focusRoom()` 把卧室 focus 转成 `setRoom()` 注入 |
 | `config/BuiltinTools.ets` | schema `focus` 枚举与 id 清单补齐；工具名「客餐厅 3D 英语探索」→「3D 房间英语探索」，描述改为三间房 61 件 |
 
-房间标签放在**学习面板**顶部（不是 3D 舞台里）：舞台高度只有 ~330px，标题卡里塞一排标签会让「安全区」吃掉四成标签空间；放进面板后既不挤压取景，也紧挨词表。
+房间标签放在 **3D 舞台正上方**（2026-10-26 真机反馈后调整，见 §12.5）：先选房间、再看场景，符合「切房间是看场景的第一步」的使用习惯。它**不叠在舞台里**（标题卡再塞一排标签会把标签安全区吃掉四成），而是作为舞台卡上面的独立一行：小屏上舞台是 `height: 58dvh` 的固定高度，多出来的一行只让页面整体变高，3D 取景尺寸不变；滚动时 `position: sticky; top: 0` 吸顶，切完房间往下看词表、再往上滑也不会找不到切换。
 
 ### 12.3 验证
 
@@ -318,9 +318,9 @@ headless Chromium（swiftshader 软渲染）在 402 × 874 下逐间截图 + DOM
 
 ![主卧：衣帽柜、斗柜 + 镜子、双人床、床头柜台灯、长凳和地毯](assets/room3d-master-labels.png)
 
-桌面宽的宿主布局（1440 × 900）：房间标签在学习面板顶部，统计格按房间显示 37 / 12 / 12：
+桌面宽的宿主布局（1440 × 900）：房间标签在 3D 舞台上方、宽屏收成 460px 工具栏，统计格按房间显示 37 / 12 / 12：
 
-![三间房桌面布局](assets/room3d-three-rooms.png)
+![三间房桌面布局：房间标签在舞台上方](assets/room3d-desktop.png)
 
 > 说明：截图里中文显示成方框是容器缺 CJK 字体的原因（chromium 未装 Noto Sans CJK），几何、配色、布局、英文标签都是真实渲染结果。
 
@@ -342,3 +342,23 @@ headless Chromium（swiftshader 软渲染）在 402 × 874 下逐间截图 + DOM
 ![修复后的床尾：折边抬起来一点，端面不再和床垫同平面](assets/room3d-master-bed-fixed.png)
 
 > 这类 bug 静态截图看不出来（同一帧里两个面片谁赢是确定的），但相机有阻尼微动，真机上就是一片闪烁。以后加家具时，让相接面**错开 1~2cm**、不要严丝合缝。
+
+### 12.5 房间标签移到 3D 舞台上方（2026-10-26 真机反馈）
+
+> 「客餐厅、儿童房、主卧是不是应该放到 3D 场景图的上面，比较符合使用习惯，方便切换」
+
+座次改了：标签从学习面板顶部搬到 3D 舞台正上方，成为舞台列的第一行。
+
+改动很小，因为当初担心的「挤占取景」在小屏上并不成立：`@media (max-width: 1000px)` 里舞台是 `height: 58dvh` 的**固定高度**（不是被兄弟元素挤出来的），所以在它上面加一行只会让整页高 58px，3D 画布和标签安全区一个像素都没少。宽屏则是 `.workspace` 定高网格，舞台用 `flex: 1` 吸收这 58px（1440×900 下舞台仍接近整屏高）。
+
+| 点 | 处理 |
+| --- | --- |
+| 结构 | `main.workspace` 第一列包一层 `.stage-col`（flex column），`.room-tabs` 在 `.stage-card` 之前；面板里删掉原来的标签行 |
+| 吸顶 | `.room-tabs { position: sticky; top: 0 }`——面板比一屏长，往下看词表时标签钉在原生标题栏下方，`stage-col` 到底才松手（实测滚动 300px 后 `tabsTop = 0`） |
+| 宽屏 | `@media (min-width: 701px) { max-width: 460px }`，不铺满整列，收成一段工具栏 |
+| 触控 | 小屏 `.room-tab` 高度 36px、字号 13px |
+| 状态 | JS 全部按 `#roomTabs` 取节点，搬迁零改动；DOM 断言（61 id/61 圆点、切房间、词汇表跳转）复跑全绿 |
+
+手机上的样子（402 × 874）：标签在舞台上方，下面依次是场景、单词面板；面板里不再有第二排标签。
+
+![手机上房间标签在 3D 舞台上方](assets/room3d-room-tabs-top.png)

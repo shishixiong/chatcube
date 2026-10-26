@@ -38,7 +38,14 @@
   </header>
 
   <main class="workspace" id="main">
-    <section class="stage-card" id="stage" data-od-id="scene-stage" aria-labelledby="sceneHeading">
+    <div class="stage-col">
+      <div class="room-tabs" id="roomTabs" role="tablist" aria-label="切换房间">
+        <button class="room-tab is-active" type="button" role="tab" aria-selected="true" data-room="main" data-od-id="room-tab-main">客餐厅</button>
+        <button class="room-tab" type="button" role="tab" aria-selected="false" data-room="child" data-od-id="room-tab-child">儿童房</button>
+        <button class="room-tab" type="button" role="tab" aria-selected="false" data-room="master" data-od-id="room-tab-master">主卧</button>
+      </div>
+
+      <section class="stage-card" id="stage" data-od-id="scene-stage" aria-labelledby="sceneHeading">
       <canvas
         id="scene-canvas"
         tabindex="-1"
@@ -109,7 +116,8 @@
       <div class="sr-only" id="sceneDescription">
         这个 3D 小房子里有三间房：客餐厅与厨房、儿童房、主卧，一共 61 个独立物品。用房间标签切换房间；使用鼠标拖动或单指滑动旋转视角，滚轮或双指缩放；放大之后拖动可以平移到房间的另一头。点击物品会打开单词卡并朗读中文意思和英文单词；点击空白处关闭卡片。键盘用户可以打开词汇表选择单词。
       </div>
-    </section>
+      </section>
+    </div>
 
     <aside class="panel" id="panel" data-od-id="word-panel" aria-labelledby="panelTitle">
       <div class="panel-head">
@@ -126,18 +134,6 @@
           </button>
         </div>
       </div>
-
-      <div class="room-tabs" id="roomTabs" role="tablist" aria-label="切换房间">
-            <button class="room-tab is-active" type="button" role="tab" aria-selected="true" data-room="main" data-od-id="room-tab-main">
-              客餐厅
-            </button>
-            <button class="room-tab" type="button" role="tab" aria-selected="false" data-room="child" data-od-id="room-tab-child">
-              儿童房
-            </button>
-            <button class="room-tab" type="button" role="tab" aria-selected="false" data-room="master" data-od-id="room-tab-master">
-              主卧
-            </button>
-          </div>
 
       <div class="panel-body" id="panelBody">
         <section class="welcome" id="welcomeView" data-od-id="welcome-view">
