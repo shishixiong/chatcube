@@ -47,6 +47,7 @@ import {
   CHINESE_QUIZ_TOOL_ID,
   MAP_CARD_TOOL_ID,
   MAP_QUIZ_TOOL_ID,
+  MAP_PUZZLE_TOOL_ID,
   ROOM_ENGLISH_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { getPinyinCharsJoined } from './PinyinData'
@@ -3749,6 +3750,94 @@ function createMapQuizToolConfig(): ToolConfig {
 }
 
 
+// ===== map_puzzle 工具 =====
+// 中国地图拼图（练习型）：一局 3-8 块省份碎片，拖拽或「点碎片再点地图」把省份拼回家。
+// mode=district 按大区自动取该区全部省份（华北 5 / 东北 3 / 华东 8 / 华中 3 / 华南 5 / 西南 5 / 西北 5）；
+// mode=custom 由 AI 指定 2-8 个省名。棋盘自动聚焦到本局省份的并集区域。
+// 交互由前端 MapPuzzleCard 组件处理，后台 ToolExecutionService.handleMapPuzzle 拦截。
+
+interface MapPuzzleArgs {
+  mode: string
+  region?: string
+  provinces?: string[]
+  skill_key: string
+}
+
+class MapPuzzleExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // map_puzzle 的交互由前端 MapPuzzleCard 组件处理。
+    // 后台由 ToolExecutionService.handleMapPuzzle 拦截处理。
+    try {
+      const params = JSON.parse(_args) as MapPuzzleArgs
+      return JSON.stringify({
+        answered: false,
+        mode: params.mode ?? '',
+        region: params.region ?? '',
+        provinces: params.provinces ?? [],
+        skill_key: 'general_social'
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`map_puzzle error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createMapPuzzleToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "mode": {
+        "type": "string",
+        "enum": ["district", "custom"],
+        "description": "district=按大区开一局（该区全部省份一起拼，块数自动）；custom=自己挑选 2-8 个省开一局（适合复习易错省或做小局）。"
+      },
+      "region": {
+        "type": "string",
+        "enum": ["华北", "东北", "华东", "华中", "华南", "西南", "西北"],
+        "description": "仅 mode=district 需要：华北 5 块 / 东北 3 块 / 华东 8 块 / 华中 3 块 / 华南 5 块 / 西南 5 块 / 西北 5 块。建议先拼华北、东北、华中（块少、单体大、好上手），再拼华东，西北和西南放最后（新疆、西藏很大，会把同区其他省压得很小）。"
+      },
+      "provinces": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "仅 mode=custom 需要：2-8 个省份常用名，如 [「山西」,「河北」]。不要重复；不要传不属于 34 个省级行政区的名字。"
+      },
+      "skill_key": {
+        "type": "string",
+        "enum": ["general_social"],
+        "description": "固定传 general_social。"
+      }
+    },
+    "required": ["mode", "skill_key"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    MAP_PUZZLE_TOOL_ID,
+    'Start a China map jigsaw (中国地图拼图): the child drags province pieces back onto a blank map, or taps a piece then taps the map. One round = one region (district) or 2-8 chosen provinces (custom). The board auto-zooms to the round\'s provinces. Every correct placement speaks the province name, abbreviation and capital, so this doubles as revision. Use this INSTEAD of asking the child to memorize the map in plain text. 一局结束后再开下一局，不要把同一大区连开两次。拼图不做题目文字描述——地图本身就是题面，严禁在回复里列出答案或省份位置。有效省份名列表：北京 天津 河北 山西 内蒙古 辽宁 吉林 黑龙江 上海 江苏 浙江 安徽 福建 江西 山东 河南 湖北 湖南 广东 广西 海南 重庆 四川 贵州 云南 西藏 陕西 甘肃 青海 宁夏 新疆 台湾 香港 澳门。',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createMapPuzzleToolConfig(): ToolConfig {
+  return new ToolConfig(
+    MAP_PUZZLE_TOOL_ID,
+    '中国地图拼图',
+    '拖动省份碎片拼回地图，按错误次数得 1-3 颗星，拼对时朗读省名/简称/省会。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    MAP_PUZZLE_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
 
 // ===== room_english 工具 =====
 // 3D 英语探索（讲解型）：可旋转的低多边形三间房——客餐厅 + 开放厨房、儿童房、主卧，
@@ -4178,6 +4267,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(MAP_PUZZLE_TOOL_ID)) {
+    const mapPuzzleTool = new RegisteredTool(
+      MAP_PUZZLE_TOOL_ID,
+      createMapPuzzleToolConfig(),
+      createMapPuzzleToolDefinition(),
+      new MapPuzzleExecutor()
+    )
+    registry.registerTool(mapPuzzleTool)
+    registeredNow += 1
+  }
+
   if (!registry.isToolRegistered(ROOM_ENGLISH_TOOL_ID)) {
     const roomEnglishTool = new RegisteredTool(
       ROOM_ENGLISH_TOOL_ID,
@@ -4197,5 +4297,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID, MAP_CARD_TOOL_ID, MAP_QUIZ_TOOL_ID, ROOM_ENGLISH_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID, MAP_CARD_TOOL_ID, MAP_QUIZ_TOOL_ID, MAP_PUZZLE_TOOL_ID, ROOM_ENGLISH_TOOL_ID]
 }

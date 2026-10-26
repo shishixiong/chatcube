@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@ohos/hypium'
-import { parseProvincePolygons, pointInProvince, provinceBBox } from '../../../../main/ets/utils/ChinaMapGeometry'
+import { parseProvincePolygons, pointInProvince, provinceBBox, provinceEdgeDistance } from '../../../../main/ets/utils/ChinaMapGeometry'
 import { BEIJING_PATH, HEBEI_PATH, SHANXI_PATH, GUANGDONG_PATH, ALL_PROVINCE_PATHS } from './ChinaMapFixture'
 
 /**
@@ -89,6 +89,37 @@ export default function chinaMapGeometryTest() {
       expect(b.minY).assertEqual(0)
       expect(b.maxX).assertEqual(0)
       expect(b.maxY).assertEqual(0)
+    })
+  })
+
+  describe('provinceEdgeDistance', () => {
+    const SQUARE10 = 'M0 0L10 0L10 10L0 10Z'
+
+    it('returns 0 for a point inside', 0, () => {
+      expect(provinceEdgeDistance(SQUARE10, 5, 5)).assertEqual(0)
+    })
+
+    it('measures the distance to the nearest edge', 0, () => {
+      expect(provinceEdgeDistance(SQUARE10, 15, 5)).assertEqual(5)
+      expect(provinceEdgeDistance(SQUARE10, 5, 20)).assertEqual(10)
+    })
+
+    it('handles a concave (L shaped) province', 0, () => {
+      // 凹口点：最近的边是 y=40 那一段，距离 10
+      const L = 'M0 0L40 0L40 40L100 40L100 100L0 100Z'
+      expect(provinceEdgeDistance(L, 70, 30)).assertEqual(10)
+    })
+
+    it('keeps a finger-width tolerance out of the neighbour province', 0, () => {
+      // 山西碎片丢到河北质心：距山西边界约 25.7（> 14vp 容差），必须判外行
+      expect(provinceEdgeDistance(SHANXI_PATH, 725.1, 345.4) > 20).assertTrue()
+      // 而山西质心自身在省内
+      expect(provinceEdgeDistance(SHANXI_PATH, 671.3, 391.5)).assertEqual(0)
+    })
+
+    it('works for a tiny province (Macau scale)', 0, () => {
+      const tiny = 'M0 0L2 0L2 2L0 2Z'
+      expect(provinceEdgeDistance(tiny, 10, 1)).assertEqual(8)
     })
   })
 

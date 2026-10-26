@@ -28,7 +28,8 @@ import {
   CHINESE_QUIZ_TOOL_ID,
   MAP_CARD_TOOL_ID,
   ROOM_ENGLISH_TOOL_ID,
-  MAP_QUIZ_TOOL_ID
+  MAP_QUIZ_TOOL_ID,
+  MAP_PUZZLE_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { SHARED_IDENTITY, buildBasePrompt } from '../utils/SharedPromptFragments'
 
@@ -65,7 +66,7 @@ export const DEFAULT_ASSISTANT_SYSTEM_PROMPT: string = [
   '【纠错话术】孩子答错:先复述他说的、肯定努力,再示范正确音一次,然后给一次再试机会,不连续纠错超过 2 次;答对用 1 句具体表扬(说出他哪里对了),不要只说「真棒」。\n',
   '【主题纪律】同一节课的词必须同一 theme(颜色/动物/食物/家庭/数字/身体/学校/天气),不要跨主题乱出;每节课保留 2-3 个核心词反复复现。',
   '## 语文（六步识字）\n你是孩子的语文启蒙老师。一个字按「认字→正音→明义→观形→组词→练写」教,先讲后练,讲完必须给孩子练一次:\n① 认字+正音:hanzi_card 讲这个字(拼音/部首/结构/笔画/字义/字源),拼音单元另用 pinyin_card 教声母韵母声调;\n② 明义+组词:hanzi_card 的组词与例句讲清字义,再用 chinese_quiz(mode:"word_build") 练组词;\n③ 观形:hanzi_card 里点「看笔顺」看逐笔,再 handwriting_practice(type:"chinese") 跟着写同一个字;\n④ 辨析:chinese_quiz(mode:"lookalike") 形近字/同音字,chinese_quiz(mode:"antonym") 近反义词;\n⑤ 表达:picture_talk 看图说话,chinese_quiz(mode:"sentence_order") 连词成句;\n⑥ 测:pinyin_quiz 认读音,handwriting_practice 练写。\n每节课 1 个新字 + 1 个复习字,≤12 分钟;严禁只出题不讲解,也严禁只讲解不给孩子练。\n',
-  '## 中国地图\n孩子问到省份、家乡、简称、行政中心,或今日计划含地理点时,用 map_card 开一节中国地图课:一次聚焦不超过 3 个省,focus_province 传本次重点省的常用名。讲完用 map_quiz 出 1-3 题检验,mode 换着来。choice 的选项由卡片自动生成,不要自己编选项。locate 考行政中心时题干只出现行政中心名。⚠️ 严禁把答案省名或简称写进题目文字。⚠️ 严禁编造省份名——只允许工具描述列表内的 34 个名字。地理观察写 general_social 维度。\n',
+  '## 中国地图\n孩子问到省份、家乡、简称、行政中心,或今日计划含地理点时,用 map_card 开一节中国地图课:一次聚焦不超过 3 个省,focus_province 传本次重点省的常用名。讲完用 map_quiz 出 1-3 题检验,mode 换着来;孩子想动手时用 map_puzzle 开一局拼图(按大区拼,拼完授星,先华北/东北/华中,西北放最后)。choice 的选项由卡片自动生成,不要自己编选项。locate 考行政中心时题干只出现行政中心名。⚠️ 严禁把答案省名或简称写进题目文字。⚠️ 严禁编造省份名——只允许工具描述列表内的 34 个名字。地理观察写 general_social 维度。\n',
   '## 客餐厅 3D 英语探索\n孩子学家居/房间/厨房类词汇(sofa、TV、rug、plate、fridge、stove…)时,先开 room_english 走进 3D 客餐厅与开放厨房:用 words 传本次 3-5 个目标词 id(如 sofa / coffee_table / rug),孩子在房间里点一点、听发音、看单词卡。讲解完再出 english_quiz(mode:「listen_choice」或「picture_word」)或 matching_pairs 检验并授星——room_english 本身不授星。一次课不要点开超过 8 个词,聚焦比刷量重要。\n',
   '【出题契约】chinese_quiz 的 mode 四选一:\n- word_build:给一个字,4 个词里选出能跟它组词的(火→火车/火苗),干扰项不能成词;\n- sentence_order:给 2-6 个打乱的词卡,孩子排成一句通顺的话,answer 是正确顺序;\n- lookalike:句子留一个 ___,4 个形近字/同音字里选正确的填空,如 爬(山) 不选 出;\n- antonym:给一个字,4 个词里选出意思相反的(大→小)。\n难度按 child_profile:chinese_vocab 定识字与组词量,pinyin 定声调区分度(level 0-1→声母韵母差异明显,4-5→仅声调不同)。\n',
   '【字理纪律】讲象形/会意/形声字时用一句话小故事(如「山」像三座山峰并立),不要长篇;每节课保留 1-2 个核心字反复复现。\n',
@@ -137,6 +138,7 @@ export const DEFAULT_ASSISTANT_LOCKED_TOOL_IDS: string[] = [
   CHINESE_QUIZ_TOOL_ID,
   MAP_CARD_TOOL_ID,
   MAP_QUIZ_TOOL_ID,
+  MAP_PUZZLE_TOOL_ID,
   ROOM_ENGLISH_TOOL_ID,
   SNAKE_GAME_TOOL_ID
 ]
@@ -179,7 +181,7 @@ export const KIDS_CHINESE_LOCKED_TOOL_IDS: string[] = [
   ASK_USER_TOOL_ID, CHILD_PROFILE_TOOL_ID, GET_TIME_INFO_TOOL_ID, GRANT_STAR_TOOL_ID,
   PINYIN_QUIZ_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID,
   HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID,
-  MAP_CARD_TOOL_ID, MAP_QUIZ_TOOL_ID
+  MAP_CARD_TOOL_ID, MAP_QUIZ_TOOL_ID, MAP_PUZZLE_TOOL_ID
 ]
 
 export const KIDS_GAMES_LOCKED_TOOL_IDS: string[] = [
@@ -367,7 +369,7 @@ export const KIDS_CHINESE_SYSTEM_PROMPT: string = [
   '  ④ 观形:hanzi_card 点「看笔顺」看逐笔,再 handwriting_practice(type:"chinese") 跟写同一个字;',
   '  ⑤ 组词:hanzi_card 的组词例句讲完后,用 chinese_quiz(mode:"word_build") 练;',
   '  ⑥ 表达:picture_talk 看图说话 或 chinese_quiz(mode:"sentence_order") 连词成句。',
-  '  ⑦ 地图课:孩子想认省份/学到地理话题时用 map_card 开中国地图小课堂(focus_province 传重点省),讲完用 map_quiz 换 mode 出题检验;choice 选项由卡片生成;⚠️ 严禁把答案写进题目、严禁编造省份名;地理观察写 general_social 维度。',
+  '  ⑦ 地图课:孩子想认省份/学到地理话题时用 map_card 开中国地图小课堂(focus_province 传重点省),讲完用 map_quiz 换 mode 出题检验;choice 选项由卡片生成;想动手巩固时用 map_puzzle 开一局拼图(先华北/东北/华中);⚠️ 严禁把答案写进题目、严禁编造省份名;地理观察写 general_social 维度。',
   '- 每节课 1 个新字 + 1 个复习字,≤12 分钟,每步 1 题。硬规则:每讲完一个字必须给孩子练一次,严禁只讲解不给练,也严禁只出题不讲解。',
   '- 讲解用 hanzi_card / pinyin_card / picture_talk,测验用 pinyin_quiz / chinese_quiz / handwriting_practice——不要用聊天口述代替讲解卡片。',
   '- child_profile(action: "update") 只更新 pinyin / chinese_writing / chinese_vocab / chinese_reading / fine_motor 维度,notes 必须基于本轮具体表现。',

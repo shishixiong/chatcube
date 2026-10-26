@@ -149,3 +149,48 @@ export function provinceBBox(path: string): MapBBox {
   const b: MapBBox = { minX: minX, minY: minY, maxX: maxX, maxY: maxY }
   return b
 }
+
+/**
+ * 点到省份边界的最短距离（地图单位）；点在省内返回 0。
+ *
+ * 拼图落点容差用它而不是「到质心的距离」：面积质心对甘肃这种月牙形省份会落到省外
+ * （2026-10-26 用真实数据验证：34 省里唯一一个质心在省外的就是甘肃，距自身边界 3.4），
+ * 容差圆会跑到邻省去。边界距离对所有形状都成立，且语义直白——「离省界多近」。
+ */
+export function provinceEdgeDistance(path: string, x: number, y: number): number {
+  if (pointInProvince(path, x, y)) {
+    return 0
+  }
+  const rings = parseProvincePolygons(path)
+  let best = Infinity
+  for (const ring of rings) {
+    const m = ring.length
+    for (let i = 0, j = m - 1; i < m; j = i++) {
+      const d = pointSegmentDistance(x, y, ring[j][0], ring[j][1], ring[i][0], ring[i][1])
+      if (d < best) {
+        best = d
+      }
+    }
+  }
+  return best
+}
+
+/** 点到线段的最短距离（provinceEdgeDistance 的内核） */
+function pointSegmentDistance(px: number, py: number,
+  x1: number, y1: number, x2: number, y2: number): number {
+  const dx = x2 - x1
+  const dy = y2 - y1
+  const lenSq = dx * dx + dy * dy
+  let t = 0
+  if (lenSq > 0) {
+    t = ((px - x1) * dx + (py - y1) * dy) / lenSq
+    if (t < 0) {
+      t = 0
+    } else if (t > 1) {
+      t = 1
+    }
+  }
+  const cx = x1 + t * dx
+  const cy = y1 + t * dy
+  return Math.hypot(px - cx, py - cy)
+}

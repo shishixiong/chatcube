@@ -44,7 +44,7 @@ const MATCHING_PAIRS_KEYWORDS: string[] = [
   'matching_pairs', 'match_pairs'
 ]
 const MAP_KEYWORDS: string[] = [
-  'map_card', 'map_quiz'
+  'map_card', 'map_quiz', 'map_puzzle'
 ]
 const ROOM_KEYWORDS: string[] = [
   'room_english'

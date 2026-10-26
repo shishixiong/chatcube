@@ -145,6 +145,7 @@ An 8th occurrence is a typo (e.g. `isXxxFunctionnName` misspelled) or a stale fr
 | "Replay the categorization commit diff" | Categorization fix commit `a391ead` is the *fix*, not the implementation. Replaying misses the 791-line card | Walk the 10-step recipe end-to-end |
 | "Skip `recordStarEvent` since persistence is v2" | `recordStarEvent` is the UI star trigger, not persistence. Skipping = no star on completion | Verify call in `handleXxx` |
 | "Drag/gesture works in dev" | Gestures that worked in isolation can conflict with parent List scrolling | Prototype gestures before committing; ship click-only v1 if uncertain |
+| "Added the `@Builder` — it compiled, done" | 用文本锚点插新 builder 时很容易**吃掉相邻 builder 的 `@Builder`**：被摘掉装饰器的方法会被当成普通方法，里面 `Foo({...})` 就是「class constructor cannot called without 'new'」，编译和 codelinter 都**不报**，装到真机上一点就崩 | 改完立刻跑 `for f in $(git diff --name-only); do grep -c "@Builder" $f; done` 对账，或逐个数 `XxxBuilder() {` 上一行是不是 `@Builder`；`bindSheet` 的 builder 被摘掉会让整个 ChatPage 首帧崩 |
 
 ## Quick Reference: 8 Required Files
 

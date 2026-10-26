@@ -11,6 +11,7 @@ import {
 import common from '@ohos.app.ability.common'
 import { ChinaMapData, ChinaProvince, loadChinaMapData } from '../utils/ChinaMapData'
 import { validateMapCardArgs, validateMapQuizArgs } from '../utils/MapToolValidation'
+import { validateMapPuzzleArgs } from '../utils/MapPuzzleValidation'
 import { validateRoomEnglishArgs } from '../utils/RoomEnglishValidation'
 import { getToolRegistry, RegisteredTool, ToolRegistry } from './ToolRegistry'
 import {
@@ -61,8 +62,10 @@ import {
   isMapCardFunctionName,
   isRoomEnglishFunctionName,
   isMapQuizFunctionName,
+  isMapPuzzleFunctionName,
   MAP_CARD_TOOL_ID,
   MAP_QUIZ_TOOL_ID,
+  MAP_PUZZLE_TOOL_ID,
   ROOM_ENGLISH_TOOL_ID,
   isScrapeWebFunctionName,
   isSearchWebFunctionName,
@@ -1720,6 +1723,102 @@ export class ToolExecutionService {
   }
 
 
+  // map_puzzle 特殊路径: 中国地图拼图（练习型）。
+  // 前端 MapPuzzleCard 拖拽/点击拼省份, 拼完自动 onAnswer; 后台这里负责预校验、挂起、授星。
+  private async handleMapPuzzle(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = MAP_PUZZLE_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '中国地图拼图'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 0. 地图数据就绪 + 预校验 (skill_key / mode 枚举 / region 合法 / custom 2-8 省去重)
+    const mapData = await this.loadMapProvinces()
+    const provinces: ChinaProvince[] | null = mapData !== null ? mapData.provinces : null
+    const puzzleValidation = validateMapPuzzleArgs(toolCall.arguments, provinces)
+    if (!puzzleValidation.ok) {
+      console.warn('ToolExecutionService', `map_puzzle validation failed: ${puzzleValidation.error}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: 'validation_failed',
+          message: puzzleValidation.error,
+          should_retry: true
+        }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    // 1. 立即设置 pending 状态, 让棋牌出现
+    toolCall.approvalState = 'pending'
+    this.recordLedgerServed('map_puzzle', toolCall, context)
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = MAP_PUZZLE_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `map_puzzle answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `map_puzzle 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'map_puzzle cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友还没拼完这一局' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `map_puzzle answered: ${toolCall.id}`)
+    // 中途关掉 sheet 的回执（cancelled:true）不记星事件：0 星也会落库，会把星星面板的局数算进去
+    if (!isCancelledPuzzlePayload(answerJson)) {
+      this.recordStarEvent('map_puzzle', toolCall, context, answerJson)
+    }
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
   // room_english 特殊路径: 客餐厅 3D 英语探索（讲解型）。
   // 前端 RoomEnglishCard 用 Web 容器承载 3D 场景, 收集孩子点开的单词; 点「我学会了」完成回执。
   // 讲解型工具: 不授星（与 map_card 一致）——星星由后续 english_quiz / matching_pairs 给。
@@ -3186,6 +3285,12 @@ export class ToolExecutionService {
       return await this.handleMapQuiz(toolCall, context)
     }
 
+    // === map_puzzle 特殊路径 ===
+    // 中国地图拼图, 由 MapPuzzleCard 拖拽/点击拼完省份后回执（含 stars）。
+    if (isMapPuzzleFunctionName(normalizedFunctionName)) {
+      return await this.handleMapPuzzle(toolCall, context)
+    }
+
     // === room_english 特殊路径 ===
     // 客餐厅 3D 英语探索讲解卡, 由 RoomEnglishCard 收集「我学会了」完成回执。
     if (isRoomEnglishFunctionName(normalizedFunctionName)) {
@@ -3332,4 +3437,14 @@ export class ToolExecutionService {
 // 导出单例实例获取方法
 export function getToolExecutionService(): ToolExecutionService {
   return ToolExecutionService.getInstance()
+}
+
+/** map_puzzle 回执是否为「中途取消」（不记星事件） */
+function isCancelledPuzzlePayload(answerJson: string): boolean {
+  try {
+    const payload = JSON.parse(answerJson) as Record<string, Object>
+    return payload['cancelled'] === true
+  } catch (_e) {
+    return false
+  }
 }

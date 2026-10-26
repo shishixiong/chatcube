@@ -33,6 +33,7 @@ import { PinyinCard } from './PinyinCard'
 import { PictureTalkCard } from './PictureTalkCard'
 import { ChineseQuizCard } from './chinese/ChineseQuizCard'
 import { MapCard } from './map/MapCard'
+import { MapPuzzleCard } from './map/MapPuzzleCard'
 import { MapQuizCard } from './map/MapQuizCard'
 import { HtmlPreviewCard } from './HtmlPreviewCard'
 import { MermaidPreviewCard } from './MermaidPreviewCard'
@@ -53,7 +54,7 @@ import {
   getMarkdownTitleSizes
 } from '../utils/MarkdownTypographyUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isMathTeachFunctionName, isEnglishQuizFunctionName, isHuarongdaoFunctionName, isNumberPuzzleFunctionName, isHandwritingPracticeFunctionName, isCategorizationFunctionName, isVerticalMathFunctionName, isMusicGenerationFunctionName, isMazeFunctionName, isSudokuFunctionName, isPictureVocabFunctionName, isListeningQuizFunctionName, isPinyinQuizFunctionName, isMatchingPairsFunctionName, isMemoryMatchFunctionName, isSnakeGameFunctionName, isHanziCardFunctionName, isPinyinCardFunctionName, isPictureTalkFunctionName, isChineseQuizFunctionName, isMapCardFunctionName, isMapQuizFunctionName, isRoomEnglishFunctionName } from '../utils/SearchToolIdentityUtils'
+import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isMathTeachFunctionName, isEnglishQuizFunctionName, isHuarongdaoFunctionName, isNumberPuzzleFunctionName, isHandwritingPracticeFunctionName, isCategorizationFunctionName, isVerticalMathFunctionName, isMusicGenerationFunctionName, isMazeFunctionName, isSudokuFunctionName, isPictureVocabFunctionName, isListeningQuizFunctionName, isPinyinQuizFunctionName, isMatchingPairsFunctionName, isMemoryMatchFunctionName, isSnakeGameFunctionName, isHanziCardFunctionName, isPinyinCardFunctionName, isPictureTalkFunctionName, isChineseQuizFunctionName, isMapCardFunctionName, isMapQuizFunctionName, isMapPuzzleFunctionName, isRoomEnglishFunctionName } from '../utils/SearchToolIdentityUtils'
 import { MessagePart, MessagePartKind, ToolPartStatus } from '../models/MessageParts'
 import {
   ensureMessageParts,
@@ -293,6 +294,7 @@ export struct MessageBubble {
   @Event onOpenMazeSheet: (toolCall: ToolCall) => void = () => {}
   // 中国地图课/题大屏 sheet 入口 (地图在气泡内太小, 参考 maze/handwriting 模式)
   @Event onOpenMapCardSheet: (toolCall: ToolCall) => void = () => {}
+  @Event onOpenMapPuzzleSheet: (toolCall: ToolCall) => void = () => {}
   @Event onOpenMapQuizSheet: (toolCall: ToolCall) => void = () => {}
   // 客餐厅 3D 英语探索 sheet 入口（3D 场景在气泡内太小，必须全屏）
   @Event onOpenRoomEnglishSheet: (toolCall: ToolCall) => void = () => {}
@@ -2294,6 +2296,59 @@ export struct MessageBubble {
                   }
                 }, (toolCall: ToolCall, index: number) => 'map_card_' + toolCall.id + '_' + index.toString())
               }
+              // map_puzzle 待答时显示横幅, 点击打开全屏 sheet (棋盘在气泡里放不下)
+              if (this.message.hasToolCalls()) {
+                ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
+                  if (this.shouldRenderMapPuzzleInteractionCard(toolCall, index)) {
+                    Row({ space: 11 }) {
+                      Column() {
+                        SymbolGlyph($r('sys.symbol.puzzle'))
+                          .fontSize(21)
+                          .fontColor([this.themePrimary])
+                      }
+                      .width(42)
+                      .height(42)
+                      .borderRadius(13)
+                      .backgroundColor(withColorAlpha(this.themePrimary, '1C'))
+                      .alignItems(HorizontalAlign.Center)
+                      .justifyContent(FlexAlign.Center)
+
+                      Column({ space: 3 }) {
+                        Text('中国地图拼图')
+                          .fontSize(14)
+                          .fontWeight(FontWeight.Bold)
+                          .fontColor($r('app.color.text_primary'))
+                        Text('拼图课 · 把省份拼回家')
+                          .fontSize(11)
+                          .fontColor($r('app.color.text_tertiary'))
+                      }
+                      .alignItems(HorizontalAlign.Start)
+                      .layoutWeight(1)
+
+                      Row({ space: 1 }) {
+                        Text('打开')
+                          .fontSize(11.5)
+                          .fontWeight(FontWeight.Medium)
+                          .fontColor(this.themePrimary)
+                        SymbolGlyph($r('sys.symbol.chevron_right'))
+                          .fontSize(13)
+                          .fontColor([this.themePrimary])
+                      }
+                      .alignItems(VerticalAlign.Center)
+                    }
+                    .width('100%')
+                    .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+                    .backgroundColor(this.themeAiBubble)
+                    .borderRadius(14)
+                    .border({ width: 1, color: $r('app.color.divider') })
+                    .margin({ bottom: 6 })
+                    .accessibilityText('打开中国地图拼图，拼图课')
+                    .onClick(() => {
+                      this.onOpenMapPuzzleSheet(toolCall)
+                    })
+                  }
+                }, (toolCall: ToolCall, index: number) => 'map_puzzle_' + toolCall.id + '_' + index.toString())
+              }
               // map_quiz 待答时显示紧凑横幅, 点击打开全屏 sheet
               if (this.message.hasToolCalls()) {
                 ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
@@ -3050,6 +3105,10 @@ export struct MessageBubble {
       // 中国地图出题: 已完成的可以展开回看答题结果
       return this.isSuccessfulToolStep(part)
     }
+    if (isMapPuzzleFunctionName(part.toolName)) {
+      // 中国地图拼图: 已完成的可以展开回看拼图结果
+      return this.isSuccessfulToolStep(part)
+    }
     if (isRoomEnglishFunctionName(part.toolName)) {
       // 客餐厅 3D 英语探索: 已完成的可以展开回看这次收集到的单词
       return this.isSuccessfulToolStep(part)
@@ -3350,6 +3409,13 @@ export struct MessageBubble {
 
   private shouldRenderMapCardInteractionCard(toolCall: ToolCall, index: number): boolean {
     if (!isMapCardFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
+      return false
+    }
+    return !this.isAskUserToolCallAnswered(toolCall, index)
+  }
+
+  private shouldRenderMapPuzzleInteractionCard(toolCall: ToolCall, index: number): boolean {
+    if (!isMapPuzzleFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
       return false
     }
     return !this.isAskUserToolCallAnswered(toolCall, index)
@@ -3807,6 +3873,11 @@ export struct MessageBubble {
     }
     // 中国地图出题: 展开/折叠回看答题结果
     if (isMapQuizFunctionName(part.toolName)) {
+      this.toggleToolStep(part)
+      return
+    }
+    // 中国地图拼图: 展开/折叠回看拼图结果
+    if (isMapPuzzleFunctionName(part.toolName)) {
       this.toggleToolStep(part)
       return
     }
@@ -4273,6 +4344,8 @@ export struct MessageBubble {
       this.MapCardStepContent(step)
     } else if (isMapQuizFunctionName(step.toolName)) {
       this.MapQuizStepContent(step)
+    } else if (isMapPuzzleFunctionName(step.toolName)) {
+      this.MapPuzzleStepContent(step)
     } else if (isRoomEnglishFunctionName(step.toolName)) {
       this.RoomEnglishStepContent(step)
     } else if (isImageGenerationFunctionName(step.toolName) && this.isToolStepClickable(step)) {
@@ -4961,6 +5034,61 @@ export struct MessageBubble {
 
       if (this.isToolStepExpanded(step) && step.toolResult !== '') {
         MapCard({
+          toolCall: this.buildToolCallFromStep(step),
+          isAnswered: true,
+          answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
+          onAnswer: (_toolCallId: string, _answerJson: string): void => {}
+        })
+        .margin({ top: 8 })
+      }
+    }
+    .width('100%')
+  }
+
+  // map_puzzle 工具步骤: 已完成的中国地图拼图, 在 timeline 中显示成绩, 可展开回看棋盘
+  @Builder
+  MapPuzzleStepContent(step: MessagePart) {
+    Column() {
+      Row({ space: 6 }) {
+        if (step.toolStatus === 'succeeded') {
+          SymbolGlyph($r('sys.symbol.checkmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_success')])
+        } else if (step.toolStatus === 'failed' || step.toolStatus === 'denied') {
+          SymbolGlyph($r('sys.symbol.xmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_error')])
+        } else {
+          Column()
+            .width(8)
+            .height(8)
+            .borderRadius(4)
+            .backgroundColor(this.themePrimary)
+        }
+
+        Text(this.buildToolStepTitle(step))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+
+        if (this.isToolStepClickable(step)) {
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(12)
+            .fontColor([$r('app.color.text_tertiary')])
+            .rotate({ angle: this.isToolStepExpanded(step) ? 0 : -90 })
+            .animation({ duration: 200, curve: Curve.EaseOut })
+        }
+      }
+      .width('100%')
+      .onClick(() => {
+        if (this.isToolStepClickable(step)) {
+          this.handleToolStepClick(step)
+        }
+      })
+
+      if (this.isToolStepExpanded(step) && step.toolResult !== '') {
+        MapPuzzleCard({
           toolCall: this.buildToolCallFromStep(step),
           isAnswered: true,
           answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),

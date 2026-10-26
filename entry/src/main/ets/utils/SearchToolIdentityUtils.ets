@@ -35,9 +35,11 @@ export const HANZI_CARD_TOOL_ID: string = 'hanzi_card'
 export const PINYIN_CARD_TOOL_ID: string = 'pinyin_card'
 export const PICTURE_TALK_TOOL_ID: string = 'picture_talk'
 export const CHINESE_QUIZ_TOOL_ID: string = 'chinese_quiz'
-// 中国地图教学工具（2026-10-21）：讲解型 map_card + 练习型 map_quiz（choice/locate/write 三 mode）。
+// 中国地图教学工具（2026-10-21）：讲解型 map_card + 练习型 map_quiz（choice/locate/write 三 mode）
+// + 拼图型 map_puzzle（2026-10-26：拖拽/点击把省份碎片拼回地图，按错误次数授星）。
 export const MAP_CARD_TOOL_ID: string = 'map_card'
 export const MAP_QUIZ_TOOL_ID: string = 'map_quiz'
+export const MAP_PUZZLE_TOOL_ID: string = 'map_puzzle'
 // 客餐厅 3D 英语探索（2026-10-24）：讲解型房间工具。37 件可点击物品（客厅 15 + 餐厅 10 + 厨房 12）
 // + 单词卡 + TTS 发音, 参考 open-design 原型 kid-room-3d-english（11.8m × 6m 低多边形客餐厅 + 开放厨房）。
 export const ROOM_ENGLISH_TOOL_ID: string = 'room_english'
@@ -188,6 +190,10 @@ export function isMapQuizFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === MAP_QUIZ_TOOL_ID
 }
 
+export function isMapPuzzleFunctionName(functionName: string): boolean {
+  return normalizeToolFunctionName(functionName) === MAP_PUZZLE_TOOL_ID
+}
+
 export function isRoomEnglishFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === ROOM_ENGLISH_TOOL_ID
 }
@@ -267,6 +273,7 @@ export function isInteractiveQuizFunctionName(functionName: string): boolean {
     isChineseQuizFunctionName(functionName) ||
     isMapCardFunctionName(functionName) ||
     isMapQuizFunctionName(functionName) ||
+    isMapPuzzleFunctionName(functionName) ||
     isRoomEnglishFunctionName(functionName)
 }
 

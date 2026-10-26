@@ -139,10 +139,12 @@ import {
   MEMORY_MATCH_TOOL_ID,
   SNAKE_GAME_TOOL_ID,
   MAP_CARD_TOOL_ID,
-  MAP_QUIZ_TOOL_ID
+  MAP_QUIZ_TOOL_ID,
+  MAP_PUZZLE_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { getCachedChinaMapData, findProvinceByRef } from '../utils/ChinaMapData'
 import { MapCard, MapCardResult } from '../components/map/MapCard'
+import { MapPuzzleCard, MapPuzzleResult } from '../components/map/MapPuzzleCard'
 import { RoomEnglishAnswerPayload, RoomEnglishCard } from '../components/room/RoomEnglishCard'
 import { MapQuizCard } from '../components/map/MapQuizCard'
 import { MapQuizAnswerPayload, parseMapQuizArgs } from '../components/map/MapQuizTypes'
@@ -323,6 +325,9 @@ export struct ChatPage {
   @Local showMapCardSheet: boolean = false
   @Local mapCardToolCall: ToolCall = new ToolCall()
   @Local mapCardAnswered: boolean = false
+  @Local showMapPuzzleSheet: boolean = false
+  @Local mapPuzzleToolCall: ToolCall = new ToolCall()
+  @Local mapPuzzleAnswered: boolean = false
   @Local showMapQuizSheet: boolean = false
   @Local mapQuizToolCall: ToolCall = new ToolCall()
   @Local mapQuizAnswered: boolean = false
@@ -2556,6 +2561,11 @@ export struct ChatPage {
             this.mapCardAnswered = false
             this.showMapCardSheet = true
           },
+          onOpenMapPuzzleSheet: (toolCall: ToolCall): void => {
+            this.mapPuzzleToolCall = toolCall
+            this.mapPuzzleAnswered = false
+            this.showMapPuzzleSheet = true
+          },
           onOpenMapQuizSheet: (toolCall: ToolCall): void => {
             this.mapQuizToolCall = toolCall
             this.mapQuizAnswered = false
@@ -2983,6 +2993,38 @@ export struct ChatPage {
                 this.handleAskUserAnswer(this.mapCardToolCall.id, JSON.stringify(cancelResult))
               }
               this.showMapCardSheet = false
+            }
+          })
+
+        Column()
+          .width(0)
+          .height(0)
+          .bindSheet($$this.showMapPuzzleSheet, this.MapPuzzleSheetBuilder(), {
+            height: SheetSize.LARGE,
+            dragBar: true,
+            showClose: true,
+            blurStyle: BlurStyle.Thick,
+            backgroundColor: this.themeBackground,
+            preferType: SheetType.BOTTOM,
+            onDisappear: () => {
+              if (this.showMapPuzzleSheet && !this.mapPuzzleAnswered) {
+                const cancelResult: MapPuzzleResult = {
+                  completed: false,
+                  mode: '',
+                  region: '',
+                  total: 0,
+                  placed: 0,
+                  mistakes: 0,
+                  hints: 0,
+                  time_seconds: 0,
+                  stars: 0,
+                  provinces: [],
+                  skill_key: 'general_social',
+                  cancelled: true
+                }
+                this.handleAskUserAnswer(this.mapPuzzleToolCall.id, JSON.stringify(cancelResult))
+              }
+              this.showMapPuzzleSheet = false
             }
           })
 
@@ -3557,6 +3599,24 @@ export struct ChatPage {
         this.handwritingAnswered = true
         this.handleAskUserAnswer(toolCallId, answerJson)
         this.showHandwritingSheet = false
+      }
+    })
+  }
+
+  @Builder
+  MapPuzzleSheetBuilder() {
+    MapPuzzleCard({
+      toolCall: this.mapPuzzleToolCall,
+      isAnswered: false,
+      answeredPayload: '',
+      largeSize: true,
+      onAnswer: (toolCallId: string, answerJson: string): void => {
+        this.mapPuzzleAnswered = true
+        this.handleAskUserAnswer(toolCallId, answerJson)
+        this.showMapPuzzleSheet = false
+      },
+      onRequestClose: (): void => {
+        this.showMapPuzzleSheet = false
       }
     })
   }
@@ -5009,6 +5069,7 @@ export struct ChatPage {
       interaction.toolId === MEMORY_MATCH_TOOL_ID ||
       interaction.toolId === SNAKE_GAME_TOOL_ID ||
       interaction.toolId === MAP_CARD_TOOL_ID ||
+      interaction.toolId === MAP_PUZZLE_TOOL_ID ||
       interaction.toolId === MAP_QUIZ_TOOL_ID
     if (!isAutoTtsTool) {
       return
@@ -5341,6 +5402,21 @@ export struct ChatPage {
           quizText = '我们来玩贪吃蛇，棋盘是 ' + gridSize + '。用方向键或滑动控制小蛇吃苹果吧。'
         } else {
           quizText = '我们来玩贪吃蛇。用方向键或滑动控制小蛇吃苹果吧。'
+        }
+      } else if (interaction.toolId === MAP_PUZZLE_TOOL_ID) {
+        // 中国地图拼图(练习型)：只读开局引导，不读省份清单（认出哪块是哪个省才是这局要练的）
+        const mode = ((parsed['mode'] as string) ?? 'district').trim()
+        const region = ((parsed['region'] as string) ?? '').trim()
+        if (mode === 'custom') {
+          const list = parsed['provinces']
+          const count = Array.isArray(list) ? (list as Object[]).length : 0
+          quizText = count > 0
+            ? ('我们来拼 ' + count + ' 个地方的拼图吧。')
+            : '我们来玩中国地图拼图吧。'
+        } else {
+          quizText = region !== ''
+            ? ('我们来拼' + region + '的地图吧。')
+            : '我们来玩中国地图拼图吧。'
         }
       } else if (interaction.toolId === MAP_CARD_TOOL_ID) {
         // 中国地图小课堂(讲解型)：focus 有值读「X 的地图课」;无 focus 读通用探索引导。

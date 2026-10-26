@@ -7,7 +7,7 @@
  * - 读取: ChatPage 标题栏菜单项 / TodayStarDetailSheet
  */
 
-export type StarActivityType = 'math_quiz' | 'english_quiz' | 'number_puzzle' | 'handwriting_practice' | 'categorization' | 'maze' | 'sudoku' | 'picture_vocab' | 'listening_quiz' | 'pinyin_quiz' | 'matching_pairs' | 'memory_match' | 'snake_game' | 'chat_correct' | 'hanzi_card' | 'pinyin_card' | 'picture_talk' | 'chinese_quiz' | 'map_card' | 'map_quiz' | 'vertical_math'
+export type StarActivityType = 'math_quiz' | 'english_quiz' | 'number_puzzle' | 'handwriting_practice' | 'categorization' | 'maze' | 'sudoku' | 'picture_vocab' | 'listening_quiz' | 'pinyin_quiz' | 'matching_pairs' | 'memory_match' | 'snake_game' | 'chat_correct' | 'hanzi_card' | 'pinyin_card' | 'picture_talk' | 'chinese_quiz' | 'map_card' | 'map_quiz' | 'map_puzzle' | 'vertical_math'
 
 export interface StarEventInsert {
   createdAt: number
@@ -56,6 +56,7 @@ export interface TodayStarSummaryByType {
   chinese_quiz: StarTypeBucket
   map_card: StarTypeBucket
   map_quiz: StarTypeBucket
+  map_puzzle: StarTypeBucket
   vertical_math: StarTypeBucket
 }
 
@@ -100,6 +101,7 @@ export function createEmptyTodayStarSummary(): TodayStarSummary {
     chinese_quiz: createEmptyBucket(),
     map_card: createEmptyBucket(),
     map_quiz: createEmptyBucket(),
+    map_puzzle: createEmptyBucket(),
     vertical_math: createEmptyBucket()
   }
   return { total: 0, byType: byType }
@@ -134,6 +136,7 @@ export interface StarActivityMetaMap {
   chinese_quiz: StarActivityMeta
   map_card: StarActivityMeta
   map_quiz: StarActivityMeta
+  map_puzzle: StarActivityMeta
   vertical_math: StarActivityMeta
 }
 
@@ -277,6 +280,13 @@ const META_MAP_QUIZ: StarActivityMeta = {
   grantedHint: '地图题答对',
   unit: '题'
 }
+const META_MAP_PUZZLE: StarActivityMeta = {
+  emoji: '🧩',
+  shortLabel: '拼图',
+  longLabel: '中国地图拼图',
+  grantedHint: '拼完地图',
+  unit: '局'
+}
 const META_VERTICAL_MATH: StarActivityMeta = {
   emoji: '📐',
   shortLabel: '竖式',
@@ -306,11 +316,12 @@ const metaRecord: StarActivityMetaMap = {
   chinese_quiz: META_CHINESE_QUIZ,
   map_card: META_MAP_CARD,
   map_quiz: META_MAP_QUIZ,
+  map_puzzle: META_MAP_PUZZLE,
   vertical_math: META_VERTICAL_MATH
 }
 export const STAR_ACTIVITY_META: StarActivityMetaMap = metaRecord
 
-const activityTypes: StarActivityType[] = ['math_quiz', 'english_quiz', 'number_puzzle', 'handwriting_practice', 'categorization', 'maze', 'sudoku', 'picture_vocab', 'listening_quiz', 'pinyin_quiz', 'matching_pairs', 'memory_match', 'snake_game', 'chat_correct', 'hanzi_card', 'pinyin_card', 'picture_talk', 'chinese_quiz', 'map_card', 'map_quiz', 'vertical_math']
+const activityTypes: StarActivityType[] = ['math_quiz', 'english_quiz', 'number_puzzle', 'handwriting_practice', 'categorization', 'maze', 'sudoku', 'picture_vocab', 'listening_quiz', 'pinyin_quiz', 'matching_pairs', 'memory_match', 'snake_game', 'chat_correct', 'hanzi_card', 'pinyin_card', 'picture_talk', 'chinese_quiz', 'map_card', 'map_quiz', 'map_puzzle', 'vertical_math']
 export const STAR_ACTIVITY_TYPES: StarActivityType[] = activityTypes
 
 export function getBucketFromSummary(summary: TodayStarSummary, type: StarActivityType): StarTypeBucket {
@@ -371,6 +382,9 @@ export function getBucketFromSummary(summary: TodayStarSummary, type: StarActivi
   }
   if (type === 'map_quiz') {
     return byType.map_quiz
+  }
+  if (type === 'map_puzzle') {
+    return byType.map_puzzle
   }
   if (type === 'vertical_math') {
     return byType.vertical_math
@@ -435,6 +449,9 @@ export function getActivityMeta(type: StarActivityType): StarActivityMeta {
   }
   if (type === 'map_quiz') {
     return META_MAP_QUIZ
+  }
+  if (type === 'map_puzzle') {
+    return META_MAP_PUZZLE
   }
   if (type === 'vertical_math') {
     return META_VERTICAL_MATH
@@ -503,6 +520,9 @@ export function getActivitySymbol(type: StarActivityType): Resource {
   }
   if (type === 'map_quiz') {
     return $r('sys.symbol.map')
+  }
+  if (type === 'map_puzzle') {
+    return $r('sys.symbol.puzzle')
   }
   if (type === 'vertical_math') {
     return $r('sys.symbol.plus_circle')

@@ -234,6 +234,15 @@ export class StarRewardService {
       const correct = payload['correct']
       return correct === true ? 1 : 0
     }
+    if (activityType === 'map_puzzle') {
+      // 中国地图拼图 (练习型): 没拼完 0; 拼完按错误次数 3/2/1（卡片已算好放 payload.stars）
+      const completed = payload['completed']
+      if (completed !== true) {
+        return 0
+      }
+      const stars = (payload['stars'] as number) ?? 1
+      return Math.min(3, Math.max(1, Math.floor(stars)))
+    }
     if (activityType === 'vertical_math') {
       // 竖式练习 (练习型): 按答对题数授星, 1 题对 1 星, 封顶 5 (一卡最多 10 题, 防刷星)
       const correctCount = (payload['correct_count'] as number) ?? 0

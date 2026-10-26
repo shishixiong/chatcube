@@ -57,6 +57,7 @@ export struct ChatMessageListSection {
   @Event onOpenHandwritingSheet: (toolCall: ToolCall) => void = (_toolCall: ToolCall): void => {}
   @Event onOpenMazeSheet: (toolCall: ToolCall) => void = (_toolCall: ToolCall): void => {}
   @Event onOpenMapCardSheet: (toolCall: ToolCall) => void = (_toolCall: ToolCall): void => {}
+  @Event onOpenMapPuzzleSheet: (toolCall: ToolCall) => void = (_toolCall: ToolCall): void => {}
   @Event onOpenRoomEnglishSheet: (toolCall: ToolCall) => void = (_toolCall: ToolCall): void => {}
   @Event onOpenMapQuizSheet: (toolCall: ToolCall) => void = (_toolCall: ToolCall): void => {}
   @Event onListAppear: () => void = (): void => {}
@@ -507,6 +508,9 @@ export struct ChatMessageListSection {
                     },
                     onOpenMapCardSheet: (toolCall: ToolCall): void => {
                       this.onOpenMapCardSheet(toolCall)
+                    },
+                    onOpenMapPuzzleSheet: (toolCall: ToolCall): void => {
+                      this.onOpenMapPuzzleSheet(toolCall)
                     },
                     onOpenMapQuizSheet: (toolCall: ToolCall): void => {
                       this.onOpenMapQuizSheet(toolCall)
