@@ -18,6 +18,7 @@ import lessonPlannerValidationTest from './utils/LessonPlannerValidation.test';
 import lessonPlanSubjectUtilsTest from './utils/LessonPlanSubjectUtils.test';
 import vocabRepeatValidationTest from './utils/VocabRepeatValidation.test';
 import vocabLedgerSectionTest from './utils/VocabLedgerSection.test';
+import geoLedgerSectionTest from './utils/GeoLedgerSection.test';
 import stepAnswerPayloadTest from './utils/StepAnswerPayload.test';
 import stepFunTtsTextUtilsTest from './utils/StepFunTtsTextUtils.test';
 import mathColumnPaperLayoutTest from './utils/MathColumnPaperLayout.test';
@@ -45,6 +46,7 @@ export default function testsuite() {
   lessonPlanSubjectUtilsTest();
   vocabRepeatValidationTest();
   vocabLedgerSectionTest();
+  geoLedgerSectionTest();
   stepAnswerPayloadTest();
   stepFunTtsTextUtilsTest();
   mathColumnPaperLayoutTest();

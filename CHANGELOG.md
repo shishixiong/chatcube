@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased · 地理进学习台账
+
+地图三件套（讲解 / 出题 / 拼图）从「玩完就散」接进学习台账：哪个省认得出、哪个省还得换玩法练，老师和家长都看得见。
+
+### 新增
+
+- 台账新增 `geo` 科目：一行一个省（`geo:place:河北`），认名（`map_quiz.choice` / `.write`）、认位置（`map_quiz.locate`）、拼图（`map_puzzle.district` / `.custom`）共用同一行掌握度，靠 `mode` 区分题型，不会互相误伤冷却
+- 出题曝光（served）：`map_quiz` 取 `province`（名称/简称/id 三口径统一解析成简称）；`map_puzzle` 的 `district` 把大区展开成该区全部省份，`custom` 取 `provinces[]` 去重；`map_card` 只记 `focus_province`，泛泛浏览不入账
+- 作答对账（answered）：`map_quiz` 按 `correct` 记对错；`map_puzzle` 按 `payload.provinces` 逐省对账，`wrong_provinces` 里的省记错，中途关掉（`completed:false`）整体不推进掌握度；`map_card` 讲解型恒不推进
+- 小星老师 prompt 新增【地理台账】段（今日新省 / 待复习 / 已认识 / 冷却中 + 换玩法复习规则），四名单全空时整段省略，不给 prompt 加噪音
+- 拼图回执新增 `wrong_provinces`（错放过的省份简称，去重）：这是「一局多省」能逐省对账的前提
+
+### 说明
+
+- 省份解析器由 `ToolExecutionService.geoLedgerResolver()` 用已缓存的地图数据注入，`LedgerExtractUtils` 仍是纯函数、可 hypium 直测；地图数据未就绪时退化为「不记账」，宁可少记也不写脏 key
+- 重复度硬门禁（`runVocabRepeatGate`）暂不接地理：一局多省直接进门禁会把「同一个大区连拼两次」判成 block，需要单独设计「同省换玩法」的放行规则
+
 ## Unreleased · 中国地图拼图（map_puzzle）
 
 把「认识省份」从看图变成动手：拖省份碎片回地图，拼完授星。

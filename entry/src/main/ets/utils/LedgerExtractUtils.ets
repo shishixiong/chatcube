@@ -8,9 +8,30 @@
  *   completed=false 跳过; 讲解型 (hanzi_card/pinyin_card/picture_talk) 恒返回 []
  * - mode 命名: compositeMode = toolId (无内部 mode) 或 `${toolId}.${modeValue}`,
  *   保证跨工具不同题型不互相误伤冷却
+ * - 地理 (2026-10-27): subject=geo / itemType=place / key=`geo:place:<省简称>`,
+ *   三个地图工具共用同一行 (认名、认位置、拼图都是「这个省」的掌握度);
+ *   大区 → 省份展开靠调用方注入 GeoLedgerResolver (本文件仍不碰地图数据, 保持纯函数)
  */
-import { LedgerAnswerItem, LedgerItemSeed, LedgerToolItem } from '../models/LearningLedgerModels'
+import {
+  LEDGER_ITEM_TYPE_PLACE,
+  LEDGER_SKILL_GEO_PLACE,
+  LEDGER_SUBJECT_GEO,
+  LedgerAnswerItem,
+  LedgerItemSeed,
+  LedgerToolItem
+} from '../models/LearningLedgerModels'
 import { LessonPlan } from '../models/LessonPlanModels'
+
+/**
+ * 地理台账的省份解析器。地图数据由调用方注入 (ToolExecutionService 用缓存数据构造,
+ * 单测注入假表), 提取函数本身不加载 rawfile, 因此仍是纯函数、可 hypium 直测。
+ */
+export interface GeoLedgerResolver {
+  /** 名称/简称/id → 规范简称; 解析不到返回 '' */
+  resolveProvince: (ref: string) => string
+  /** 大区名 (华北/东北/…) → 该区全部省份简称 */
+  provincesInRegion: (region: string) => string[]
+}
 
 /** 声调映射: 带调字母 → 基字母+调号 (spec §3.1, ü→v) */
 const TONE_MAP: Record<string, string> = {
@@ -71,6 +92,10 @@ export function isCJKText(value: string): boolean {
  */
 export function normalizeItemKey(subject: string, itemType: string, display: string): string {
   const raw = display.trim()
+  if (subject === LEDGER_SUBJECT_GEO) {
+    // 省级行政区: 一行一个省, 名称/位置/拼图三种玩法共用 (itemType 固定 place)
+    return `geo:place:${raw}`
+  }
   if (subject === 'en') {
     if (itemType === 'sentence') {
       const words = raw.toLowerCase().split(/[^a-z0-9']+/)
@@ -151,7 +176,8 @@ function singleOf(item: LedgerToolItem): LedgerToolItem[] {
  *   lookalike→answer zh:char; antonym→character zh:char
  * - matching_pairs: pairs[].left 逐项分类; handwriting_practice: character+type (number 跳过)
  */
-export function extractLedgerItemsFromTool(toolId: string, argsJson: string): LedgerToolItem[] {
+export function extractLedgerItemsFromTool(toolId: string, argsJson: string,
+  geo: GeoLedgerResolver | null = null): LedgerToolItem[] {
   let parsed: Record<string, Object>
   try {
     parsed = JSON.parse(argsJson) as Record<string, Object>
@@ -276,7 +302,85 @@ export function extractLedgerItemsFromTool(toolId: string, argsJson: string): Le
     }
     return singleOf(classifyMixedItem(character, compositeMode(toolId, '')))
   }
+  if (toolId === 'map_quiz') {
+    // 一题一个省: province 是名称/简称/id 三口径的 ref, 统一解析成简称
+    const short = resolveGeoProvince(argString(parsed, 'province'), geo)
+    if (short === '') {
+      return emptyItems()
+    }
+    return singleOf(geoItem(short, compositeMode(toolId, argString(parsed, 'mode'))))
+  }
+  if (toolId === 'map_card') {
+    // 讲解型: 只有点名 focus_province 时记曝光; 泛泛浏览不入账 (没有可枚举的目标)
+    const short = resolveGeoProvince(argString(parsed, 'focus_province'), geo)
+    if (short === '') {
+      return emptyItems()
+    }
+    return singleOf(geoItem(short, compositeMode(toolId, '')))
+  }
+  if (toolId === 'map_puzzle') {
+    const names = puzzleProvinceNames(parsed, geo)
+    const items: LedgerToolItem[] = []
+    const modeTag = compositeMode(toolId, argString(parsed, 'mode'))
+    for (let i = 0; i < names.length; i++) {
+      items.push(geoItem(names[i], modeTag))
+    }
+    return items
+  }
   return emptyItems()
+}
+
+/** 省级行政区台账项: subject=geo, itemType=place, skillKey=geo_place */
+function geoItem(shortName: string, mode: string): LedgerToolItem {
+  return toolItem(LEDGER_SUBJECT_GEO, LEDGER_ITEM_TYPE_PLACE, shortName, mode, LEDGER_SKILL_GEO_PLACE)
+}
+
+function resolveGeoProvince(ref: string, geo: GeoLedgerResolver | null): string {
+  if (geo === null || ref === '') {
+    return ''
+  }
+  return geo.resolveProvince(ref)
+}
+
+/**
+ * 拼图本局省份: custom → args.provinces 逐个解析; district → 大区展开成该区全部省份。
+ * 解析器缺失 (地图数据未就绪) 时返回 [], 宁可不记账也不写脏 key。
+ */
+function puzzleProvinceNames(parsed: Record<string, Object>,
+  geo: GeoLedgerResolver | null): string[] {
+  const names: string[] = []
+  if (geo === null) {
+    return names
+  }
+  if (argString(parsed, 'mode') === 'custom') {
+    const raw = parsed['provinces']
+    if (!Array.isArray(raw)) {
+      return names
+    }
+    const arr = raw as Object[]
+    for (let i = 0; i < arr.length; i++) {
+      const value = arr[i]
+      if (typeof value !== 'string') {
+        continue
+      }
+      const short = geo.resolveProvince(value as string)
+      if (short !== '' && names.indexOf(short) < 0) {
+        names.push(short)
+      }
+    }
+    return names
+  }
+  const region = argString(parsed, 'region')
+  if (region === '') {
+    return names
+  }
+  const listed = geo.provincesInRegion(region)
+  for (let i = 0; i < listed.length; i++) {
+    if (names.indexOf(listed[i]) < 0) {
+      names.push(listed[i])
+    }
+  }
+  return names
 }
 
 /**
@@ -288,8 +392,8 @@ export function extractLedgerItemsFromTool(toolId: string, argsJson: string): Le
  * - answerJson 非法 JSON → []
  */
 export function extractLedgerAnswerItems(toolId: string, argsJson: string,
-  answerJson: string): LedgerAnswerItem[] {
-  const served = extractLedgerItemsFromTool(toolId, argsJson)
+  answerJson: string, geo: GeoLedgerResolver | null = null): LedgerAnswerItem[] {
+  const served = extractLedgerItemsFromTool(toolId, argsJson, geo)
   const answers: LedgerAnswerItem[] = []
   if (served.length === 0) {
     return answers
@@ -300,7 +404,26 @@ export function extractLedgerAnswerItems(toolId: string, argsJson: string,
   } catch (_e) {
     return answers
   }
-  if (toolId === 'hanzi_card' || toolId === 'pinyin_card' || toolId === 'picture_talk') {
+  if (toolId === 'hanzi_card' || toolId === 'pinyin_card' || toolId === 'picture_talk' ||
+    toolId === 'map_card') {
+    // 讲解型: 曝光已记, 掌握度不因「看了」推进
+    return answers
+  }
+  if (toolId === 'map_puzzle') {
+    // 拼图: 一局多省, 对账要按省分开——payload.provinces 是本局省份简称,
+    // wrong_provinces 是错放过的省份; 中途关掉 (completed!==true) 不推进掌握度
+    if (parsed['completed'] !== true) {
+      return answers
+    }
+    const names = stringArrayOf(parsed, 'provinces')
+    const wrong = stringArrayOf(parsed, 'wrong_provinces')
+    for (let i = 0; i < names.length; i++) {
+      const answer: LedgerAnswerItem = {
+        itemKey: normalizeItemKey(LEDGER_SUBJECT_GEO, LEDGER_ITEM_TYPE_PLACE, names[i]),
+        isCorrect: wrong.indexOf(names[i]) < 0
+      }
+      answers.push(answer)
+    }
     return answers
   }
   let isCorrect = false
@@ -392,4 +515,21 @@ function pushSeed(seeds: LedgerItemSeed[], seen: string[], subject: string, item
     skillKey: skillKey
   }
   seeds.push(seed)
+}
+
+/** 取 JSON 里的字符串数组 (非数组/非字符串项一律跳过) */
+function stringArrayOf(parsed: Record<string, Object>, key: string): string[] {
+  const out: string[] = []
+  const raw = parsed[key]
+  if (!Array.isArray(raw)) {
+    return out
+  }
+  const arr = raw as Object[]
+  for (let i = 0; i < arr.length; i++) {
+    const value = arr[i]
+    if (typeof value === 'string' && (value as string).trim() !== '') {
+      out.push((value as string).trim())
+    }
+  }
+  return out
 }

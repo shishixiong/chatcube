@@ -46,6 +46,8 @@ export interface MapPuzzleResult {
   time_seconds: number
   stars: number
   provinces: string[]
+  /** 错放过的省份简称（去重）：台账按省对账，拼图一局多省必须分开记 */
+  wrong_provinces: string[]
   skill_key: string
   cancelled?: boolean
 }
@@ -95,6 +97,8 @@ export struct MapPuzzleCard {
   private dragProvince: ChinaProvince | null = null
   /** 长按提示计时器（600ms 未移动 = 想看这块在哪儿） */
   private hintTimerId: number = -1
+  /** 错放过的省份（简称，去重）：进回执 wrong_provinces */
+  private wrongShorts: string[] = []
   private grabX: number = 0
   private grabY: number = 0
   private dragStartX: number = 0
@@ -312,6 +316,9 @@ export struct MapPuzzleCard {
 
   private registerMistake(province: ChinaProvince): void {
     this.mistakes += 1
+    if (this.wrongShorts.indexOf(province.short) < 0) {
+      this.wrongShorts.push(province.short)
+    }
     this.statusText = `再找找，「${province.short}」不在那儿`
     this.speak(`再找找看，${province.short}在哪儿呢？`)
     this.playShake()
@@ -361,6 +368,7 @@ export struct MapPuzzleCard {
       time_seconds: this.elapsed,
       stars: completed ? this.stars : 0,
       provinces: names,
+      wrong_provinces: this.wrongShorts,
       skill_key: this.argsView.skillKey
     }
     return result
@@ -371,6 +379,7 @@ export struct MapPuzzleCard {
     this.selectedId = ''
     this.hintId = ''
     this.cancelHintTimer()
+    this.wrongShorts = []
     this.mistakes = 0
     this.hints = 0
     this.elapsed = 0

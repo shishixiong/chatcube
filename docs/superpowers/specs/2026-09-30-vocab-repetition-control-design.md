@@ -508,6 +508,32 @@ TOP_REPEATED_WINDOW_DAYS= 7
 
 ## 附录 C：变更记录
 
+**v1.2（2026-10-27）** — 新增「地理」科目（`subject = geo`），把 `map_card` / `map_quiz` / `map_puzzle` 接进台账：
+
+| 项 | 取值 | 说明 |
+|---|---|---|
+| `subject` | `geo` | 与 `en` / `zh` 并列的第三个科目 |
+| `itemType` | `place` | 省级行政区（目前唯一的条目类型） |
+| `itemKey` | `geo:place:<省简称>` | 例如 `geo:place:河北`；`normalizeItemKey` 里 subject=geo 直接走这条分支 |
+| `skillKey` | `geo_place` | 「认得这个省」单一维度；认名 / 认位置 / 拼图共用一行掌握度 |
+| `mode` | `map_quiz.choice` / `map_quiz.locate` / `map_quiz.write` / `map_card` / `map_puzzle.district` / `map_puzzle.custom` | 沿用 `compositeMode`，三种玩法互不误伤冷却 |
+
+写入规则：
+
+- **served**（`extractLedgerItemsFromTool`）：`map_quiz` 取 `province`（名称/简称/id 三口径，统一解析成简称）；
+  `map_card` 只取 `focus_province`（泛泛浏览没有可枚举目标，不记）；`map_puzzle` 的 `custom` 取 `provinces[]` 去重解析，
+  `district` 把 `region` 展开成该区全部省份。
+- **解析器注入**：地图数据不进 `LedgerExtractUtils`（它要保持纯函数可 hypium 直测），改由 `ToolExecutionService.geoLedgerResolver()`
+  用 `getCachedChinaMapData()` 构造 `GeoLedgerResolver` 注入；数据未就绪时返回 `null`，提取侧退化为「不记账」——**宁可不记，也不写脏 key**。
+- **answered**（`extractLedgerAnswerItems`）：`map_card` 恒 `[]`（讲解不推进掌握度）；`map_puzzle` 按
+  `payload.provinces` 逐省对账，`wrong_provinces` 里的省记错，`completed !== true`（中途关掉）整体 `[]`；
+  `map_quiz` 走通用分支（`payload.correct`）。
+- **prompt**：新段 `renderGeoLedgerSection`（【地理台账】，四名单 + 换玩法复习规则），`ChatViewModel` 在词汇台账之后注入，
+  摘要为空时整段省略。
+- **暂不接入**：重复度硬门禁 `runVocabRepeatGate`（现在只覆盖 5 个语言类工具）。地理一局多省，直接进门禁会把
+  「同一个大区连拼两次」这类合理重复判成 block，需要单独设计「同省内换玩法」的放行规则再做。
+
+
 **v1.1（2026-09-30）** — 对照 `entry/src/main/ets` 只读代码逐条核对，修正 §6.2 目标项字段提取规则（此前为推测，与实际校验器不符）：
 
 - `english_quiz`：`sentence_fill` 的目标词实际字段是 `correct_answer`（不是 `answer`）；`word` 是 legacy `question_type` 取值，不是字段名。六 mode 目标统一取 `correct_answer`，音源字段为 `tts_text` / `target_text`。来源：`utils/EnglishQuizValidation.ets:94-350`。

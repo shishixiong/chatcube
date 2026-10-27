@@ -9,7 +9,7 @@ import {
   ToolSourceType
 } from '../models/ChatModels'
 import common from '@ohos.app.ability.common'
-import { ChinaMapData, ChinaProvince, loadChinaMapData } from '../utils/ChinaMapData'
+import { ChinaMapData, ChinaProvince, findProvinceByRef, getCachedChinaMapData, loadChinaMapData } from '../utils/ChinaMapData'
 import { validateMapCardArgs, validateMapQuizArgs } from '../utils/MapToolValidation'
 import { validateMapPuzzleArgs } from '../utils/MapPuzzleValidation'
 import { validateRoomEnglishArgs } from '../utils/RoomEnglishValidation'
@@ -100,7 +100,12 @@ import { getStarRewardService } from './StarRewardService'
 import { getChildProfileService } from './ChildProfileService'
 import { StarActivityType } from '../models/StarEventModels'
 import { getLearningLedgerService } from './LearningLedgerService'
-import { extractLedgerItemsFromTool, extractLedgerAnswerItems, normalizeItemKey } from '../utils/LedgerExtractUtils'
+import {
+  extractLedgerItemsFromTool,
+  extractLedgerAnswerItems,
+  normalizeItemKey,
+  GeoLedgerResolver
+} from '../utils/LedgerExtractUtils'
 import { LedgerRecord } from '../models/LearningLedgerModels'
 import { parsePurpose, buildRepeatBlockedMessage } from '../utils/VocabRepeatValidation'
 
@@ -490,7 +495,7 @@ export class ToolExecutionService {
    * 静默失败——台账任何异常不影响出题。
    */
   private recordLedgerServed(toolId: string, toolCall: ToolCall, context: ToolExecutionContext): void {
-    const items = extractLedgerItemsFromTool(toolId, toolCall.arguments)
+    const items = extractLedgerItemsFromTool(toolId, toolCall.arguments, this.geoLedgerResolver())
     if (items.length === 0) {
       return
     }
@@ -520,7 +525,8 @@ export class ToolExecutionService {
    */
   private recordLedgerAnswered(toolId: string, toolCall: ToolCall, context: ToolExecutionContext,
     answerJson: string): void {
-    const answers = extractLedgerAnswerItems(toolId, toolCall.arguments, answerJson)
+    const answers = extractLedgerAnswerItems(toolId, toolCall.arguments, answerJson,
+      this.geoLedgerResolver())
     if (answers.length === 0) {
       return
     }
@@ -1912,6 +1918,35 @@ export class ToolExecutionService {
 
   // 地图数据加载: 缓存优先, miss 时经 EntryAbility 注入的 context 读 rawfile。
   // 失败返回 null → 校验层按「数据未就绪」硬拒, AI should_retry。
+  /**
+   * 地理台账的省份解析器 (2026-10-27): 用已缓存的地图数据把 args 里的
+   * 名称/简称/id 统一成简称, 并把大区展开成省份列表。
+   * 地图数据未就绪时返回 null——提取侧会退化成「不记账」, 绝不写脏 key。
+   */
+  private geoLedgerResolver(): GeoLedgerResolver | null {
+    const data = getCachedChinaMapData()
+    if (data === null || data.provinces.length === 0) {
+      return null
+    }
+    const provinces = data.provinces
+    const resolver: GeoLedgerResolver = {
+      resolveProvince: (ref: string): string => {
+        const hit = findProvinceByRef(provinces, ref)
+        return hit !== null ? hit.short : ''
+      },
+      provincesInRegion: (region: string): string[] => {
+        const names: string[] = []
+        for (let i = 0; i < provinces.length; i++) {
+          if (provinces[i].region === region) {
+            names.push(provinces[i].short)
+          }
+        }
+        return names
+      }
+    }
+    return resolver
+  }
+
   private async loadMapProvinces(): Promise<ChinaMapData | null> {
     if (this.appContext === null) {
       console.error('ToolExecutionService', 'map tools: UIAbilityContext not injected')

@@ -27,6 +27,13 @@ export const EVENT_RETENTION_MS: number = 90 * LEDGER_DAY_MS
 /** 内存 session 环形缓冲最多保留的 session 数 */
 export const RECENT_SESSION_PRUNE_MAX: number = 24
 
+/** 科目代号: 地理 (map_card / map_quiz / map_puzzle 写入) */
+export const LEDGER_SUBJECT_GEO: string = 'geo'
+/** 条目类型: 省级行政区 */
+export const LEDGER_ITEM_TYPE_PLACE: string = 'place'
+/** 技能键: 认得这个省 (名称 / 位置 / 轮廓) */
+export const LEDGER_SKILL_GEO_PLACE: string = 'geo_place'
+
 /** 重复检查原因码 */
 export const REPEAT_REASON_SESSION_GAP: string = 'session_gap'
 export const REPEAT_REASON_SAME_MODE_COOLDOWN: string = 'same_mode_cooldown'

@@ -5,7 +5,8 @@ import {
   isCJKText,
   extractLedgerItemsFromTool,
   extractLedgerAnswerItems,
-  extractLedgerSeeds
+  extractLedgerSeeds,
+  GeoLedgerResolver
 } from '../../../../main/ets/utils/LedgerExtractUtils'
 import { LessonPlan, LessonPlanChineseItem, LessonPlanVocabItem, LessonPlanWritingItem } from '../../../../main/ets/models/LessonPlanModels'
 
@@ -251,5 +252,116 @@ export default function ledgerExtractUtilsTest(): void {
       expect(keys.indexOf('zh:char:水') >= 0).assertTrue()
       expect(keys.length).assertEqual(1)
     })
+
+    // ===== 地理 (2026-10-27) =====
+
+    it('normalizeItemKey_geo_place', 0, () => {
+      expect(normalizeItemKey('geo', 'place', ' 山西 ')).assertEqual('geo:place:山西')
+      expect(normalizeItemKey('geo', 'place', '内蒙古')).assertEqual('geo:place:内蒙古')
+    })
+
+    it('map_quiz_served_uses_resolved_short_name_and_mode_tag', 0, () => {
+      const args = '{"mode":"locate","province":"140000","skill_key":"general_social"}'
+      const items = extractLedgerItemsFromTool('map_quiz', args, FAKE_GEO)
+      expect(items.length).assertEqual(1)
+      expect(items[0].subject).assertEqual('geo')
+      expect(items[0].itemType).assertEqual('place')
+      expect(items[0].display).assertEqual('山西')
+      expect(items[0].mode).assertEqual('map_quiz.locate')
+      expect(items[0].skillKey).assertEqual('geo_place')
+    })
+
+    it('map_card_without_focus_records_nothing', 0, () => {
+      expect(extractLedgerItemsFromTool('map_card', '{"skill_key":"general_social"}', FAKE_GEO).length)
+        .assertEqual(0)
+      const focused = extractLedgerItemsFromTool('map_card', '{"focus_province":"山西省"}', FAKE_GEO)
+      expect(focused.length).assertEqual(1)
+      expect(focused[0].display).assertEqual('山西')
+      expect(focused[0].mode).assertEqual('map_card')
+    })
+
+    it('map_puzzle_district_expands_region_to_provinces', 0, () => {
+      const args = '{"mode":"district","region":"华北","skill_key":"general_social"}'
+      const items = extractLedgerItemsFromTool('map_puzzle', args, FAKE_GEO)
+      expect(items.length).assertEqual(5)
+      expect(items[0].display).assertEqual('北京')
+      expect(items[0].mode).assertEqual('map_puzzle.district')
+    })
+
+    it('map_puzzle_custom_resolves_each_ref_without_duplicates', 0, () => {
+      const args = '{"mode":"custom","provinces":["山西","140000","河北"],"skill_key":"general_social"}'
+      const items = extractLedgerItemsFromTool('map_puzzle', args, FAKE_GEO)
+      expect(items.length).assertEqual(2)
+      expect(items[0].display).assertEqual('山西')
+      expect(items[1].display).assertEqual('河北')
+    })
+
+    it('geo_extraction_without_resolver_records_nothing', 0, () => {
+      expect(extractLedgerItemsFromTool('map_quiz', '{"mode":"choice","province":"山西"}').length)
+        .assertEqual(0)
+      expect(extractLedgerItemsFromTool('map_puzzle',
+        '{"mode":"district","region":"华北"}').length).assertEqual(0)
+    })
+
+    it('map_quiz_answer_marks_correct_and_wrong', 0, () => {
+      const args = '{"mode":"choice","province":"山西"}'
+      const right = extractLedgerAnswerItems('map_quiz', args, '{"correct":true}', FAKE_GEO)
+      expect(right.length).assertEqual(1)
+      expect(right[0].itemKey).assertEqual('geo:place:山西')
+      expect(right[0].isCorrect).assertTrue()
+      const wrong = extractLedgerAnswerItems('map_quiz', args, '{"correct":false}', FAKE_GEO)
+      expect(wrong[0].isCorrect).assertFalse()
+    })
+
+    it('map_puzzle_answer_reconciles_per_province', 0, () => {
+      const args = '{"mode":"district","region":"华北"}'
+      const answer = '{"completed":true,"provinces":["北京","天津","河北","山西","内蒙古"],' +
+        '"wrong_provinces":["河北"]}'
+      const answers = extractLedgerAnswerItems('map_puzzle', args, answer, FAKE_GEO)
+      expect(answers.length).assertEqual(5)
+      let hebeiCorrect = true
+      let shanxiCorrect = false
+      for (let i = 0; i < answers.length; i++) {
+        if (answers[i].itemKey === 'geo:place:河北') {
+          hebeiCorrect = answers[i].isCorrect
+        }
+        if (answers[i].itemKey === 'geo:place:山西') {
+          shanxiCorrect = answers[i].isCorrect
+        }
+      }
+      expect(hebeiCorrect).assertFalse()
+      expect(shanxiCorrect).assertTrue()
+    })
+
+    it('map_puzzle_abandoned_round_does_not_move_mastery', 0, () => {
+      const args = '{"mode":"district","region":"华北"}'
+      const answer = '{"completed":false,"cancelled":true,"provinces":["北京"],"wrong_provinces":[]}'
+      expect(extractLedgerAnswerItems('map_puzzle', args, answer, FAKE_GEO).length).assertEqual(0)
+    })
+
+    it('map_card_answer_never_moves_mastery', 0, () => {
+      const args = '{"focus_province":"山西"}'
+      expect(extractLedgerAnswerItems('map_card', args, '{"completed":true}', FAKE_GEO).length)
+        .assertEqual(0)
+    })
   })
+}
+
+/** 假的地图数据解析器：只认三个省 + 华北 5 省，模拟 ToolExecutionService 注入的真实解析器 */
+const FAKE_GEO: GeoLedgerResolver = {
+  resolveProvince: (ref: string): string => {
+    if (ref === '140000' || ref === '山西' || ref === '山西省') {
+      return '山西'
+    }
+    if (ref === '河北' || ref === '130000') {
+      return '河北'
+    }
+    if (ref === '北京' || ref === '110000') {
+      return '北京'
+    }
+    return ''
+  },
+  provincesInRegion: (region: string): string[] => {
+    return region === '华北' ? ['北京', '天津', '河北', '山西', '内蒙古'] : []
+  }
 }

@@ -161,6 +161,7 @@
 ```ts
 // MapPuzzleCard 内计算，写入 payload.stars（镜像 MazeCard）
 stars = completed ? (mistakes <= 1 ? 3 : mistakes <= 3 ? 2 : 1) : 0
+// 另回传 wrong_provinces: 错放过的省份简称（去重），供学习台账逐省对账
 // StarRewardService.computeStars 读取并 clamp 1..3
 ```
 
@@ -343,7 +344,7 @@ if (activityType === 'map_puzzle') {
 
 **取消回执由 ChatPage 发**（卡片在 sheet 里拿不到「被关掉」的时机）：`onDisappear` 且未答时回
 `{ completed:false, cancelled:true, mode:'', region:'', total:0, placed:0, mistakes:0, hints:0,
-time_seconds:0, stars:0, provinces:[], skill_key:'general_social' }`。
+time_seconds:0, stars:0, provinces:[], wrong_provinces:[], skill_key:'general_social' }`。
 内联复原把 `cancelled===true` 渲染成「这一局没拼完」灰态卡，不显示成绩与星星。
 
 ### 9.4 气泡横幅

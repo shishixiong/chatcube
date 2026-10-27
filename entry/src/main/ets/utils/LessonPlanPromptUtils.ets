@@ -608,6 +608,23 @@ function appendLedgerSubjectLines(lines: string[], label: string, summary: Ledge
  * 小星老师 prompt 的【词汇台账】段 (spec §8.1)。
  * 两科摘要都为 null 或四名单全空时返回 '' (调用方整段省略, 避免 prompt 出现空节)。
  */
+/**
+ * 小星老师 prompt 的【地理台账】段 (2026-10-27)。
+ * 与词汇台账同构但独立成节：地理是按「省」记账的单科，混进【词汇台账】会破坏那段的出题规则。
+ * 四名单全空时返回 '' (调用方整段省略)。
+ */
+export function renderGeoLedgerSection(geo: LedgerSummary | null): string {
+  if (geo === null || !ledgerSectionHasContent(geo)) {
+    return ''
+  }
+  const lines: string[] = []
+  lines.push('【地理台账】')
+  appendLedgerSubjectLines(lines, '地理', geo)
+  lines.push('出题规则: 待复习的省份必须换一种玩法(认名 map_quiz.choice/write ↔ 认位置 map_quiz.locate ' +
+    '↔ 拼图 map_puzzle); 已认识的省份不必再考; 新省份一次最多带 5 个, 优先把同一个大区拼完。')
+  return lines.join('\n')
+}
+
 export function renderVocabLedgerSection(en: LedgerSummary | null, zh: LedgerSummary | null): string {
   if (en === null && zh === null) {
     return ''

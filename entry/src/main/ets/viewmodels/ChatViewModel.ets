@@ -24,12 +24,14 @@ import { getAssistantService, AssistantService, AssistantRuntimeConfig } from '.
 import { DEFAULT_ASSISTANT_ID } from '../models/AssistantModels'
 import { getLessonPlanningService } from '../services/LessonPlanningService'
 import { getLearningLedgerService } from '../services/LearningLedgerService'
+import { LEDGER_SUBJECT_GEO } from '../models/LearningLedgerModels'
 import { getTeachingStyleAdjustmentService } from '../services/TeachingStyleAdjustmentService'
 import {
   renderDailyPlanSection,
   renderDailyPlanSectionForSubject,
   renderYesterdaySummarySection,
-  renderVocabLedgerSection
+  renderVocabLedgerSection,
+  renderGeoLedgerSection
 } from '../utils/LessonPlanPromptUtils'
 import { planSubjectForAssistant, PlanSubject } from '../utils/LessonPlanSubjectUtils'
 import { ChatMessage, ChatSession, MessageRole, ProviderType, ApiStyle, MessageAttachment, AttachmentType, ReasoningLevel, ToolDefinition, ToolCall, ToolResult, SearchReference, OpenAITransport, ToolSourceType, ToolPermissionLevel } from '../models/ChatModels'
@@ -416,6 +418,12 @@ export class ChatViewModel {
         const ledgerSection = renderVocabLedgerSection(ledgerEn, ledgerZh)
         if (ledgerSection !== '') {
           composed = this.assistantService.combineSystemPrompts(composed, ledgerSection)
+        }
+        // 地理台账 (2026-10-27): 省名/位置/拼图三类掌握度, 让老师知道哪些省该换玩法复习
+        const ledgerGeo = await getLearningLedgerService().buildSummary(LEDGER_SUBJECT_GEO, nowMs)
+        const geoSection = renderGeoLedgerSection(ledgerGeo)
+        if (geoSection !== '') {
+          composed = this.assistantService.combineSystemPrompts(composed, geoSection)
         }
       } catch (ledgerError) {
         console.warn('ChatViewModel', `vocab ledger section skipped: ${String(ledgerError)}`)

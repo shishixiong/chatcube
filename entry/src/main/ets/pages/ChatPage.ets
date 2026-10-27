@@ -3019,6 +3019,7 @@ export struct ChatPage {
                   time_seconds: 0,
                   stars: 0,
                   provinces: [],
+                  wrong_provinces: [],
                   skill_key: 'general_social',
                   cancelled: true
                 }
