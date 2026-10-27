@@ -3700,17 +3700,26 @@ function createMapQuizToolDefinition(): ToolDefinition {
     "properties": {
       "mode": {
         "type": "string",
-        "enum": ["choice", "locate", "write"],
-        "description": "题型：choice=看高亮省份选名称（4 个选项，由卡片自动生成，不要自己传选项）；locate=按名称或行政中心在地图上点出该省；write=把高亮省份的名字手写下来（孩子自评）。"
+        "enum": ["choice", "locate", "write", "shape", "compare"],
+        "description": "题型：choice=看高亮省份选名称（4 个选项，由卡片自动生成，不要自己传选项）；locate=按名称或行政中心在地图上点出该省；write=把高亮省份的名字手写下来（孩子自评）；shape=只给省份轮廓、不给名字，猜是哪个省（练形状记忆）；compare=两省比较（compare 参数决定比面积还是比方位）。"
       },
       "province": {
         "type": "string",
-        "description": "目标省份常用名，如「黑龙江」，必须在有效省份列表内。"
+        "description": "目标省份常用名，如「黑龙江」，必须在有效省份列表内。compare 模式下是被比较的第一个省。"
+      },
+      "province_b": {
+        "type": "string",
+        "description": "仅 compare 有效：对比的另一个省份常用名，必须与 province 不同。面积题请挑大小差别明显的两个省（卡片会拒绝面积比不到 1.25 的一对），方位题请挑大致正南正北正东正西的相对关系（斜向会被拒绝）。"
+      },
+      "compare": {
+        "type": "string",
+        "enum": ["area", "direction"],
+        "description": "仅 compare 有效：area=比面积（问「哪个更大」）；direction=比方位（问「X 在 Y 的哪一边」，答案是东南西北之一）。"
       },
       "clue": {
         "type": "string",
         "enum": ["name", "capital"],
-        "description": "仅 locate 有效：name=按省名找位置；capital=给行政中心找省份（如「行政中心是哈尔滨的是哪个省」）。choice/write 不要传。"
+        "description": "仅 locate 有效：name=按省名找位置；capital=给行政中心找省份（如「行政中心是哈尔滨的是哪个省」）。其他模式不要传。"
       },
       "skill_key": {
         "type": "string",
@@ -3726,7 +3735,7 @@ function createMapQuizToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     MAP_QUIZ_TOOL_ID,
-    'Present one China map question (中国地图出题): three modes — choice (pick the highlighted province\'s name from 4 card-generated options), locate (tap the province by name or capital on the map), write (handwrite the province name, child self-judges). Use this INSTEAD of asking map questions in plain text. 每次调用只出一道题，由你在对话节奏中选择 mode。choice 的选项由卡片自动生成——严禁在参数中传选项数组。同一省份避免连续重复出同一 mode。严禁把答案直接写在题目文字里（locate+capital 模式题干只出现行政中心名）。有效省份名列表：北京 天津 河北 山西 内蒙古 辽宁 吉林 黑龙江 上海 江苏 浙江 安徽 福建 江西 山东 河南 湖北 湖南 广东 广西 海南 重庆 四川 贵州 云南 西藏 陕西 甘肃 青海 宁夏 新疆 台湾 香港 澳门。',
+    'Present one China map question (中国地图出题): five modes — choice (pick the highlighted province\'s name from 4 card-generated options), locate (tap the province by name or capital on the map), write (handwrite the province name, child self-judges), shape (guess which province from its bare outline, no name shown), compare (two provinces: compare which is larger, or which side one is on). Use this INSTEAD of asking map questions in plain text. 每次调用只出一道题，由你在对话节奏中选择 mode。choice 的选项由卡片自动生成——严禁在参数中传选项数组。同一省份避免连续重复出同一 mode。compare 需要额外传 province_b 与 compare（area=比面积、direction=比方位）：面积要挑大小差别明显的两个省，方位要挑大致正南正北正东正西的关系，否则卡片会回 should_retry 让你换一对。严禁把答案直接写在题目文字里（locate+capital 模式题干只出现行政中心名）。有效省份名列表：北京 天津 河北 山西 内蒙古 辽宁 吉林 黑龙江 上海 江苏 浙江 安徽 福建 江西 山东 河南 湖北 湖南 广东 广西 海南 重庆 四川 贵州 云南 西藏 陕西 甘肃 青海 宁夏 新疆 台湾 香港 澳门。',
     parameters
   )
 

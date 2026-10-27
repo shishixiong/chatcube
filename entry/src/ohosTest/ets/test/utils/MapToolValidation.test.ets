@@ -35,6 +35,31 @@ function makeFixture(): ChinaProvince[] {
   ]
 }
 
+
+/** compare 用例专用：真实几何路径（正方形），面积/中心点都可手算 */
+function makeGeoProvince(id: string, short: string, path: string): ChinaProvince {
+  const p: ChinaProvince = {
+    id: id, name: short, short: short, abbr: 'X', capital: short + '市', region: '华北', path: path
+  }
+  return p
+}
+
+/**
+ * big  100×100 = 10000，中心 (50,50)
+ * small 20×20 = 400，中心 (210,10)      → big/small 面积比 25，方位：big 看 small 是「东」
+ * near 9.6×10 = 96 / near2 10×10 = 100 → 面积比 1.04，面积题应被拒
+ * diag 10×10，中心 (155,155)            → 与 big 夹角 45°，方位题应被拒
+ */
+function makeCompareFixture(): ChinaProvince[] {
+  return [
+    makeGeoProvince('900001', '大省', 'M0 0L100 0L100 100L0 100Z'),
+    makeGeoProvince('900002', '小省', 'M200 0L220 0L220 20L200 20Z'),
+    makeGeoProvince('900003', '近省', 'M300 0L309.6 0L309.6 10L300 10Z'),
+    makeGeoProvince('900004', '近省二', 'M400 0L410 0L410 10L400 10Z'),
+    makeGeoProvince('900005', '斜省', 'M150 150L160 150L160 160L150 160Z')
+  ]
+}
+
 export default function mapToolValidationTest() {
   describe('validateMapCardArgs', () => {
     it('accepts minimal valid args', 0, () => {
@@ -159,6 +184,68 @@ export default function mapToolValidationTest() {
       ]
       const r = validateMapQuizArgs('{"mode":"locate","province":"北京","clue":"capital","skill_key":"general_social"}', real)
       expect(r.error.indexOf('name') >= 0).assertTrue()
+    })
+  })
+
+  describe('validateMapQuizArgs_shape_compare', () => {
+    const fixture = makeCompareFixture()
+
+    it('accepts shape mode', 0, () => {
+      const args = '{"mode":"shape","province":"大省","skill_key":"general_social"}'
+      expect(validateMapQuizArgs(args, fixture).ok).assertTrue()
+    })
+
+    it('shape mode rejects clue', 0, () => {
+      const args = '{"mode":"shape","province":"大省","clue":"name","skill_key":"general_social"}'
+      const result = validateMapQuizArgs(args, fixture)
+      expect(result.ok).assertFalse()
+      expect(result.error.indexOf('clue') >= 0).assertTrue()
+    })
+
+    it('compare requires province_b', 0, () => {
+      const args = '{"mode":"compare","compare":"area","province":"大省","skill_key":"general_social"}'
+      const result = validateMapQuizArgs(args, fixture)
+      expect(result.ok).assertFalse()
+      expect(result.error.indexOf('province_b') >= 0).assertTrue()
+    })
+
+    it('compare requires compare kind', 0, () => {
+      const args = '{"mode":"compare","province":"大省","province_b":"小省","skill_key":"general_social"}'
+      const result = validateMapQuizArgs(args, fixture)
+      expect(result.ok).assertFalse()
+      expect(result.error.indexOf('compare') >= 0).assertTrue()
+    })
+
+    it('compare rejects same province twice', 0, () => {
+      const args = '{"mode":"compare","compare":"area","province":"大省","province_b":"大省","skill_key":"general_social"}'
+      const result = validateMapQuizArgs(args, fixture)
+      expect(result.ok).assertFalse()
+      expect(result.error.indexOf('不能是同一个省') >= 0).assertTrue()
+    })
+
+    it('compare area accepts a clearly different pair', 0, () => {
+      const args = '{"mode":"compare","compare":"area","province":"大省","province_b":"小省","skill_key":"general_social"}'
+      const result = validateMapQuizArgs(args, fixture)
+      expect(result.ok).assertTrue()
+    })
+
+    it('compare area rejects a near-tie pair', 0, () => {
+      const args = '{"mode":"compare","compare":"area","province":"近省","province_b":"近省二","skill_key":"general_social"}'
+      const result = validateMapQuizArgs(args, fixture)
+      expect(result.ok).assertFalse()
+      expect(result.error.indexOf('面积太接近') >= 0).assertTrue()
+    })
+
+    it('compare direction accepts a clean east relation', 0, () => {
+      const args = '{"mode":"compare","compare":"direction","province":"大省","province_b":"小省","skill_key":"general_social"}'
+      expect(validateMapQuizArgs(args, fixture).ok).assertTrue()
+    })
+
+    it('compare direction rejects a diagonal relation', 0, () => {
+      const args = '{"mode":"compare","compare":"direction","province":"大省","province_b":"斜省","skill_key":"general_social"}'
+      const result = validateMapQuizArgs(args, fixture)
+      expect(result.ok).assertFalse()
+      expect(result.error.indexOf('正南正北正东正西') >= 0).assertTrue()
     })
   })
 }

@@ -3047,6 +3047,8 @@ export struct ChatPage {
                   mode: argsView.mode,
                   province: argsView.valid ? argsView.province : '',
                   province_id: '',
+                  province_b: argsView.provinceB,
+                  compare: argsView.compare,
                   clue: '',
                   child_answer: '',
                   correct: false,
@@ -5442,6 +5444,19 @@ export struct ChatPage {
           }
         } else if (mode === 'write') {
           quizText = '看地图上高亮的省份，把它的名字写下来。'
+        } else if (mode === 'shape') {
+          quizText = '只看这个轮廓，猜猜它是哪个省？'
+        } else if (mode === 'compare') {
+          const compareKind = ((parsed['compare'] as string) ?? 'area').trim()
+          const data = getCachedChinaMapData()
+          const first = data !== null ? findProvinceByRef(data.provinces, provinceRef) : null
+          const secondRef = ((parsed['province_b'] as string) ?? '').trim()
+          const second = data !== null ? findProvinceByRef(data.provinces, secondRef) : null
+          if (compareKind === 'direction' && first !== null && second !== null) {
+            quizText = '「' + first.short + '」在「' + second.short + '」的哪一边？'
+          } else {
+            quizText = '这两个省，哪个更大？'
+          }
         } else {
           quizText = '看地图上金色的省份，选一选它的名字。'
         }

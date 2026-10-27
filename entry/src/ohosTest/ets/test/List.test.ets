@@ -7,6 +7,7 @@ import mapAtlasCopyTest from './utils/MapAtlasCopy.test';
 import chinaMapTransformTest from './utils/ChinaMapTransform.test';
 import mapPuzzleLayoutTest from './utils/MapPuzzleLayout.test';
 import mapPuzzleValidationTest from './utils/MapPuzzleValidation.test';
+import chinaMapMetricsTest from './utils/ChinaMapMetrics.test';
 import roomEnglishValidationTest from './utils/RoomEnglishValidation.test';
 import kidsSubjectUtilsTest from './utils/KidsSubjectUtils.test';
 import learningLedgerModelsTest from './utils/LearningLedgerModels.test';
@@ -35,6 +36,7 @@ export default function testsuite() {
   chinaMapTransformTest();
   mapPuzzleLayoutTest();
   mapPuzzleValidationTest();
+  chinaMapMetricsTest();
   roomEnglishValidationTest();
   kidsSubjectUtilsTest();
   learningLedgerModelsTest();

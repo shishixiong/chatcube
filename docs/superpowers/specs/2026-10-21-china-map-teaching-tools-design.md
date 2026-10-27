@@ -330,3 +330,70 @@ map_card 卡内资料卡 TTS（§9.2）与上述自动朗读共存时，用 Hanz
 | `chinese-character-strokes` CDN 拉不到 → label 占位 | 人工核对 101 字 label；该 CDN 只影响笔画名不影响 path 数据源 |
 | 触摸命中在 inset 缩放区误判 | inset 区不参与命中（原型 inset aria-hidden 同款）；pointInProvince 只查 34 省 path |
 | AI 编造省份名/把答案写进题干 | schema 描述列全 34 名 + ⚠️ 负例 + validateMapQuizArgs 硬校验 should_retry 兜底 |
+
+## 17. 扩展：形状猜省 + 面积/方位比较（2026-10-27）
+
+给 `map_quiz` 加两个题型，不加新工具：`mode=shape` 与 `mode=compare`。理由是
+出题工具的整条管道（预校验 / should_retry / pending / 横幅 / sheet / 授星 / 台账）
+已经就绪，加 mode 只动 4 处判别点；新开工具要付 10 处 StarEventModels 漂移税。
+
+### 17.1 shape（形状猜省）
+
+| 项 | 内容 |
+|---|---|
+| 参数 | `{ mode:'shape', province, skill_key }`，不接受 `clue` |
+| 题面 | 只画该省轮廓（`MapSilhouette` single 排版：无底图、无相邻省、无名字） |
+| 选项 | 复用 `pickMapChoiceOptions`（同大区偏好 + 洗牌），AI 不传选项 |
+| 揭晓 | 「对啦，这是「山西」的轮廓。」/「这是「山西」的轮廓，记住它的样子。」 |
+| 回执 | `mode:'shape'`，其余字段与 choice 同构 |
+
+与 choice 的差别只在题面来源：choice 练「名字↔位置」，shape 练「名字↔形状」。
+
+### 17.2 compare（面积 / 方位比较）
+
+参数 `{ mode:'compare', compare:'area'|'direction', province, province_b, skill_key }`。
+
+| 维度 | 题面 | 选项 | 答案来源 |
+|---|---|---|---|
+| area | 两省剪影各铺满一格，问「哪个更大？」 | 两个省名（顺序随机） | `largerProvince`：投影面积大者 |
+| direction | 纯文字「「山东」在「山西」的哪一边？」 | 东 / 南 / 西 / 北 | `dominantDirection`：中心点向量主轴 |
+
+面积题的揭晓会把两块剪影切成**同一个比例尺**重画（`MapSilhouette` shared 排版），
+让「大」这件事看得见；方位题的揭晓是文字「「山东」在「山西」的东边」。
+
+### 17.3 什么时候不许出题（预校验硬拒，回 should_retry）
+
+| 规则 | 阈值 | 依据（2026-10-27 实测，34 省真实 path） |
+|---|---|---|
+| 面积比 | `AREA_MIN_RATIO = 1.25` | 官方面积比值 ≥1.25 的 **485 对**里，投影面积排序与真实大小 **100% 一致**；1.10 阈值下 530 对也零错误，但 1.25 能挡掉「差不多大」的无意义题 |
+| 方位主轴 | `DIRECTION_MIN_DOMINANCE = 1.6` | 1122 个有序对里 73% 有干净的四方位；剩下 27% 是斜向或中心点几乎重合（如 广东→香港），出题会变成猜 |
+| 同省 | — | `province === province_b` 直接拒 |
+| 缺参数 | — | `compare` 或 `province_b` 缺失即拒 |
+
+投影失真的已知边界（写进代码注释，避免以后被当成 bug）：大省偏差 ±3% 内
+（黑龙江 -3%、青海 -2%），小省失真明显（上海 +28%、澳门 +41%、宁夏 -21%）——
+所以一律不做「多少平方公里」的绝对值题，只做大小比较。
+
+### 17.4 实现与验证
+
+| 文件 | 作用 |
+|---|---|
+| `utils/ChinaMapMetrics.ets`（新） | `provinceArea` / `provinceCenter` / `dominantDirection` / `areaRatio` / `largerProvince` + 两个阈值常量，全是纯函数 |
+| `components/map/MapSilhouette.ets`（新） | 剪影渲染器，三种排版 `single` / `cells`（等格不等尺）/ `shared`（同尺并排） |
+| `bodies/MapShapeBody.ets`、`bodies/MapCompareBody.ets`（新） | 两个题型卡片 |
+| `MapQuizTypes` / `MapQuizCard` / `MapToolValidation` / `BuiltinTools` / `ChatPage`（TTS） | 判别点 4 处 + 文案 |
+
+验证：
+- `ChinaMapMetrics.test.ets`（7 例，手算正方形）+ `MapToolValidation.test.ets` 新增 9 例；
+- node 直跑真实 `china_provinces.json`：485 对面积排序零错误、10 组方位样例全对、
+  校验层 9 条放行/拒绝用例全对、参数解析 4 例全对、台账 compare 记两省 7 例全对；
+- 与 2026-10-27 独立脚本算出的北京中心 (728,330) 一致。
+- 未验证：真机渲染（剪影 Canvas 排版、同尺重画的观感）、语音朗读实际效果。
+
+### 17.5 台账口径
+
+`compare` 一题涉及两省，`extractLedgerItemsFromTool` 会把 `province` 与
+`province_b` 各记一行（`geo:place:*`，mode 统一为 `map_quiz.compare`）；
+对错按整题记到两省（`payload.correct`）。这是刻意的简化：一次比较里孩子答错，
+说明至少一个省没记牢，两省同时降一档比漏记更接近真实。
+

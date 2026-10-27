@@ -9,7 +9,9 @@
  * 校验规则（对照 config/BuiltinTools.ets 的 map_card / map_quiz schema）：
  *  - 两工具: skill_key 必须恰为 general_social
  *  - map_card: focus_province 可选；存在时必须命中省份表（short/name/id 三口径）
- *  - map_quiz: mode 枚举 choice/locate/write；province 必填且命中省份表；
+ *  - map_quiz: mode 枚举 choice/locate/write/shape/compare；province 必填且命中省份表；
+ *    compare 还需 province_b（与 province 不同）与 compare 枚举 area/direction，
+ *    且面积比不足 AREA_MIN_RATIO / 方位主轴不够明确时硬拒（换个省对，不给孩子出争议题）；
  *    clue 仅 locate 可传且枚举 name/capital；
  *    locate + clue:capital 且省的 capital === short（北京/天津/上海/重庆/香港/澳门
  *    这类自答省）→ 硬拒，提示改用 clue:name（原型 capitalQuestion 守卫移植）
@@ -18,13 +20,21 @@
  */
 
 import { ChinaProvince, findProvinceByRef } from './ChinaMapData'
+import {
+  AREA_MIN_RATIO,
+  areaRatio,
+  dominantDirection,
+  largerProvince,
+  provinceArea
+} from './ChinaMapMetrics'
 
 export interface MapToolValidationResult {
   ok: boolean
   error: string
 }
 
-const QUIZ_MODES: string[] = ['choice', 'locate', 'write']
+const QUIZ_MODES: string[] = ['choice', 'locate', 'write', 'shape', 'compare']
+const COMPARE_KINDS: string[] = ['area', 'direction']
 const CLUES: string[] = ['name', 'capital']
 
 function fail(msg: string): MapToolValidationResult {
@@ -92,7 +102,7 @@ export function validateMapQuizArgs(args: string, provinces: ChinaProvince[] | n
 
   const mode = ((parsed['mode'] as string) ?? '').trim()
   if (QUIZ_MODES.indexOf(mode) < 0) {
-    return fail(`map_quiz 的 mode「${mode}」不在枚举内, 只能是: choice / locate / write`)
+    return fail(`map_quiz 的 mode「${mode}」不在枚举内, 只能是: choice / locate / write / shape / compare`)
   }
 
   const provinceRef = ((parsed['province'] as string) ?? '').trim()
@@ -102,6 +112,13 @@ export function validateMapQuizArgs(args: string, provinces: ChinaProvince[] | n
   const province = findProvinceByRef(provinces, provinceRef)
   if (province === null) {
     return fail(`map_quiz 的 province「${provinceRef}」不是有效省份名, 请从以下列表选择: 北京 天津 河北 山西 内蒙古 辽宁 吉林 黑龙江 上海 江苏 浙江 安徽 福建 江西 山东 河南 湖北 湖南 广东 广西 海南 重庆 四川 贵州 云南 西藏 陕西 甘肃 青海 宁夏 新疆 台湾 香港 澳门`)
+  }
+
+  if (mode === 'compare') {
+    const compareResult = checkCompareArgs(parsed, provinces, province)
+    if (compareResult !== null) {
+      return compareResult
+    }
   }
 
   const clueRaw = parsed['clue']
@@ -121,4 +138,41 @@ export function validateMapQuizArgs(args: string, provinces: ChinaProvince[] | n
     }
   }
   return pass()
+}
+
+/**
+ * compare 题型的专属校验：两个不同的省 + 明确的比较维度。
+ * 面积题只放行「一眼能看出大小」的对（投影面积比 ≥ AREA_MIN_RATIO，实测零反例）；
+ * 方位题只放行主轴优势 ≥ 1.6 的对（如广东→香港中心点几乎重叠，拒绝出题）。
+ */
+function checkCompareArgs(parsed: Record<string, Object>, provinces: ChinaProvince[],
+  province: ChinaProvince): MapToolValidationResult | null {
+  const kindRaw = parsed['compare']
+  if (typeof kindRaw !== 'string' || COMPARE_KINDS.indexOf((kindRaw as string).trim()) < 0) {
+    return fail('map_quiz 的 compare 模式必须传 compare: "area"（比面积）或 "direction"（比方位）')
+  }
+  const kind = (kindRaw as string).trim()
+  const provinceBRef = ((parsed['province_b'] as string) ?? '').trim()
+  if (provinceBRef === '') {
+    return fail('map_quiz 的 compare 模式需要 province_b（对比的另一个省份常用名）')
+  }
+  const provinceB = findProvinceByRef(provinces, provinceBRef)
+  if (provinceB === null) {
+    return fail(`map_quiz 的 province_b「${provinceBRef}」不是有效省份名, 请从以下列表选择: 北京 天津 河北 山西 内蒙古 辽宁 吉林 黑龙江 上海 江苏 浙江 安徽 福建 江西 山东 河南 湖北 湖南 广东 广西 海南 重庆 四川 贵州 云南 西藏 陕西 甘肃 青海 宁夏 新疆 台湾 香港 澳门`)
+  }
+  if (provinceB.id === province.id) {
+    return fail(`map_quiz 的 province 与 province_b 不能是同一个省（都是「${province.short}」）, 请换一对`)
+  }
+  if (kind === 'area') {
+    const ratio = areaRatio(province, provinceB)
+    if (largerProvince(province, provinceB) === null || ratio < AREA_MIN_RATIO) {
+      return fail(`map_quiz 的「${province.short}」和「${provinceB.short}」面积太接近（地图投影面积只差 ${ratio.toFixed(2)} 倍, 需要 ≥ ${AREA_MIN_RATIO}）, 孩子看不出差别, 请换一对大小明显的省份`)
+    }
+    return null
+  }
+  const direction = dominantDirection(province, provinceB)
+  if (direction === '') {
+    return fail(`map_quiz 的「${province.short}」相对「${provinceB.short}」不在正南正北正东正西的方向上（斜向或几乎重叠）, 孩子分不清, 请换一对或改成 area 比较`)
+  }
+  return null
 }

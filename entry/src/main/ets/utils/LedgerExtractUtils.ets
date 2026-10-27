@@ -303,12 +303,22 @@ export function extractLedgerItemsFromTool(toolId: string, argsJson: string,
     return singleOf(classifyMixedItem(character, compositeMode(toolId, '')))
   }
   if (toolId === 'map_quiz') {
-    // 一题一个省: province 是名称/简称/id 三口径的 ref, 统一解析成简称
+    // 一题一个省: province 是名称/简称/id 三口径的 ref, 统一解析成简称。
+    // compare 题型一次比两个省, 两个省都算「被考过」(对错按整题记, 见 extractLedgerAnswerItems)
+    const mode = argString(parsed, 'mode')
+    const modeTag = compositeMode(toolId, mode)
     const short = resolveGeoProvince(argString(parsed, 'province'), geo)
     if (short === '') {
       return emptyItems()
     }
-    return singleOf(geoItem(short, compositeMode(toolId, argString(parsed, 'mode'))))
+    const items: LedgerToolItem[] = [geoItem(short, modeTag)]
+    if (mode === 'compare') {
+      const other = resolveGeoProvince(argString(parsed, 'province_b'), geo)
+      if (other !== '' && other !== short && items.length < 2) {
+        items.push(geoItem(other, modeTag))
+      }
+    }
+    return items
   }
   if (toolId === 'map_card') {
     // 讲解型: 只有点名 focus_province 时记曝光; 泛泛浏览不入账 (没有可枚举的目标)
