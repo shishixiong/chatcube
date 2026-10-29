@@ -773,7 +773,7 @@ a:focus-visible,
 }
 
 
-/* —— 房间切换标签：三间房各有自己的 3D 取景 —— */
+/* —— 房间切换标签：全屋 + 四间房各有自己的 3D 取景 —— */
 /* 房间切换：3D 舞台正上方，先选房间再看场景；滚动时吸顶 */
 .room-tabs {
   position: sticky;
@@ -783,12 +783,18 @@ a:focus-visible,
   display: flex;
   gap: 4px;
   padding: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: oklch(100% 0 0 / 0.84);
   box-shadow: 0 16px 34px -28px oklch(30% 0.04 185 / 0.95);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+}
+
+.room-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .room-tab {
@@ -804,6 +810,7 @@ a:focus-visible,
   font-size: 12.5px;
   font-weight: 600;
   line-height: 1;
+  white-space: nowrap;
   white-space: nowrap;
   cursor: pointer;
   transition: background 0.22s var(--ease), color 0.22s var(--ease), box-shadow 0.22s var(--ease);
@@ -821,6 +828,59 @@ a:focus-visible,
 }
 
 .room-tab:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+/* 客餐厅分区镜头：只在客餐厅标签下出现，点一下把镜头中心移到客厅/餐厅/厨房 */
+.area-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 4px;
+}
+
+.area-tabs[hidden] {
+  display: none;
+}
+
+.area-label {
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.area-tab {
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: oklch(100% 0 0 / 0.8);
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  transition: color 0.18s var(--ease), background 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+
+.area-tab:hover {
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+}
+
+.area-tab.is-active {
+  border-color: var(--accent-strong);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.area-tab:focus-visible {
   outline: 2px solid var(--accent-strong);
   outline-offset: 2px;
 }
@@ -843,9 +903,26 @@ a:focus-visible,
 }
 
 @media (max-width: 520px) {
+  .room-tabs {
+    gap: 3px;
+    padding: 3px;
+  }
+
   .room-tab {
-    min-height: 36px;
-    font-size: 13px;
+    min-height: 34px;
+    padding: 0 5px;
+    font-size: 12px;
+  }
+
+  .area-tabs {
+    gap: 4px;
+    padding: 0 2px;
+  }
+
+  .area-tab {
+    min-height: 30px;
+    padding: 0 10px;
+    font-size: 11.5px;
   }
 }
 

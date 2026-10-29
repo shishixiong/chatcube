@@ -1,8 +1,8 @@
 import { describe, it, expect } from '@ohos/hypium'
-import { ROOM_OBJECT_IDS, validateRoomEnglishArgs } from '../../../../main/ets/utils/RoomEnglishValidation'
+import { ROOM_OBJECT_IDS, resolveRoomEnglishArea, resolveRoomEnglishView, validateRoomEnglishArgs } from '../../../../main/ets/utils/RoomEnglishValidation'
 
 /**
- * RoomEnglishValidation 单元测试（room_english 客餐厅 + 厨房 3D 英语探索, spec 2026-10-24 §5）
+ * RoomEnglishValidation 单元测试（room_english 全屋 + 四间房 3D 英语探索, spec 2026-10-29 §5）
  *
  * 校验纯逻辑层不依赖 rawfile / Web 容器，可直接跑。
  *
@@ -38,7 +38,7 @@ export default function roomEnglishValidationTest() {
     })
 
     it('rejects unknown focus', 0, () => {
-      const r = validateRoomEnglishArgs('{"skill_key":"english_vocab","focus":"balcony"}')
+      const r = validateRoomEnglishArgs('{"skill_key":"english_vocab","focus":"garden"}')
       expect(r.ok).assertFalse()
     })
 
@@ -74,8 +74,24 @@ export default function roomEnglishValidationTest() {
       expect(r.ok).assertFalse()
     })
 
-    it('covers 61 room objects', 0, () => {
-      expect(ROOM_OBJECT_IDS.length).assertEqual(61)
+    it('covers 76 room objects', 0, () => {
+      expect(ROOM_OBJECT_IDS.length).assertEqual(76)
+    })
+
+    it('includes every balcony word', 0, () => {
+      const balcony = ['washing_machine', 'dryer', 'laundry_basket', 'drying_rack', 'clothespin',
+        'laundry_sink', 'storage_cabinet', 'broom', 'mop', 'bucket',
+        'balcony_plant', 'flower_pot', 'watering_can', 'railing', 'folding_stool']
+      for (let i = 0; i < balcony.length; i++) {
+        expect(ROOM_OBJECT_IDS.indexOf(balcony[i]) >= 0).assertTrue()
+      }
+    })
+
+    it('accepts balcony focus', 0, () => {
+      const r = validateRoomEnglishArgs('{"skill_key":"english_vocab","focus":"balcony","words":["washing_machine","railing"]}')
+      expect(r.ok).assertTrue()
+      expect(r.focus).assertEqual('balcony')
+      expect(r.words.length).assertEqual(2)
     })
 
     it('includes every kitchen word', 0, () => {
@@ -103,6 +119,42 @@ export default function roomEnglishValidationTest() {
       const master = validateRoomEnglishArgs('{"skill_key":"english_vocab","focus":"master","words":["double_bed"]}')
       expect(master.ok).assertTrue()
       expect(master.focus).assertEqual('master')
+    })
+  })
+
+  describe('resolveRoomEnglishView', () => {
+    it('maps living areas to the main room', 0, () => {
+      expect(resolveRoomEnglishView('living')).assertEqual('main')
+      expect(resolveRoomEnglishView('dining')).assertEqual('main')
+      expect(resolveRoomEnglishView('kitchen')).assertEqual('main')
+    })
+
+    it('keeps dedicated rooms as-is', 0, () => {
+      expect(resolveRoomEnglishView('child')).assertEqual('child')
+      expect(resolveRoomEnglishView('master')).assertEqual('master')
+      expect(resolveRoomEnglishView('balcony')).assertEqual('balcony')
+    })
+
+    it('falls back to the whole-home overview', 0, () => {
+      expect(resolveRoomEnglishView('all')).assertEqual('overview')
+      expect(resolveRoomEnglishView('')).assertEqual('overview')
+    })
+  })
+
+  describe('resolveRoomEnglishArea', () => {
+    it('maps the three living areas to their camera center', 0, () => {
+      expect(resolveRoomEnglishArea('living')).assertEqual('living')
+      expect(resolveRoomEnglishArea('dining')).assertEqual('dining')
+      expect(resolveRoomEnglishArea('kitchen')).assertEqual('kitchen')
+      expect(resolveRoomEnglishArea('  kitchen  ')).assertEqual('kitchen')
+    })
+
+    it('returns empty for dedicated rooms and all', 0, () => {
+      expect(resolveRoomEnglishArea('child')).assertEqual('')
+      expect(resolveRoomEnglishArea('master')).assertEqual('')
+      expect(resolveRoomEnglishArea('balcony')).assertEqual('')
+      expect(resolveRoomEnglishArea('all')).assertEqual('')
+      expect(resolveRoomEnglishArea('')).assertEqual('')
     })
   })
 }

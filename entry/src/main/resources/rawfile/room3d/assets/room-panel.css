@@ -98,7 +98,7 @@
 }
 
 .welcome::after {
-  content: '61';
+  content: '76';
   position: absolute;
   z-index: -1;
   top: -34px;
@@ -200,7 +200,7 @@
 
 .room-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-top: 20px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -210,6 +210,20 @@
 .room-stat {
   padding: 13px 15px 14px;
   background: oklch(99% 0.004 240);
+}
+
+@media (max-width: 520px) {
+  .room-stat {
+    padding: 10px 8px 11px;
+  }
+
+  .room-stat strong {
+    font-size: 22px;
+  }
+
+  .room-stat span {
+    font-size: 10.5px;
+  }
 }
 
 .room-stat + .room-stat {

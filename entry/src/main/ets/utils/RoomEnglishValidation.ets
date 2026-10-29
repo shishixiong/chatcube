@@ -8,9 +8,10 @@
  *
  * 校验规则（对照 config/BuiltinTools.ets 的 room_english schema）：
  *  - skill_key 必须恰为 english_vocab
- *  - focus 可选，枚举 living / dining / kitchen / child / master / all（默认 all）
- *    living / dining / kitchen 都是客餐厅这一间，child / master 会直接切到对应卧室
- *  - words 可选，最多 8 个，且必须命中三间房里的 61 个物品 id
+ *  - focus 可选，枚举 living / dining / kitchen / child / master / balcony / all（默认 all）
+ *    living / dining / kitchen 都是客餐厅这一间，页面还会把镜头对准对应分区；
+ *    child / master / balcony 会直接切到对应房间
+ *  - words 可选，最多 8 个，且必须命中四间房里的 76 个物品 id
  */
 
 export interface RoomEnglishValidationResult {
@@ -20,8 +21,8 @@ export interface RoomEnglishValidationResult {
   words: string[]
 }
 
-/** 三间房里 61 件可点击物品的 id，与 rawfile/room3d/assets/scene-data.js 一一对应
- *  （客厅 15 + 餐厅 10 + 厨房 12 + 儿童房 12 + 主卧 12）。 */
+/** 四间房里 76 件可点击物品的 id，与 rawfile/room3d/assets/scene-data.js 一一对应
+ *  （客厅 15 + 餐厅 10 + 厨房 12 + 儿童房 12 + 主卧 12 + 阳台 15）。 */
 export const ROOM_OBJECT_IDS: string[] = [
   'sofa',
   'coffee_table',
@@ -85,12 +86,49 @@ export const ROOM_OBJECT_IDS: string[] = [
   'bench',
   'rug_master',
   'heater',
-  'photo_frame'
+  'photo_frame',
+  // 阳台（15）
+  'washing_machine',
+  'dryer',
+  'laundry_basket',
+  'drying_rack',
+  'clothespin',
+  'laundry_sink',
+  'storage_cabinet',
+  'broom',
+  'mop',
+  'bucket',
+  'balcony_plant',
+  'flower_pot',
+  'watering_can',
+  'railing',
+  'folding_stool'
 ]
 
-const FOCUS_MODES: string[] = ['living', 'dining', 'kitchen', 'child', 'master', 'all']
-const FOCUS_HINT: string = 'living / dining / kitchen / child / master / all'
+const FOCUS_MODES: string[] = ['living', 'dining', 'kitchen', 'child', 'master', 'balcony', 'all']
+const FOCUS_HINT: string = 'living / dining / kitchen / child / master / balcony / all'
 const MAX_WORDS: number = 8
+
+/** focus → 页面视图：三科区域归主屋，三间房各自打开，all/缺省打开全屋。 */
+export function resolveRoomEnglishView(focus: string): string {
+  const value: string = focus ? focus.trim() : ''
+  if (value === 'child' || value === 'master' || value === 'balcony') {
+    return value
+  }
+  if (value === 'living' || value === 'dining' || value === 'kitchen') {
+    return 'main'
+  }
+  return 'overview'
+}
+
+/** focus → 客餐厅内部分区镜头（客厅 / 餐厅 / 厨房），其余 focus 返回空串表示不移动中心。 */
+export function resolveRoomEnglishArea(focus: string): string {
+  const value: string = focus ? focus.trim() : ''
+  if (value === 'living' || value === 'dining' || value === 'kitchen') {
+    return value
+  }
+  return ''
+}
 
 function fail(msg: string): RoomEnglishValidationResult {
   const r: RoomEnglishValidationResult = { ok: false, error: msg, focus: 'all', words: [] }

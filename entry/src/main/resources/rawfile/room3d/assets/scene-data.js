@@ -617,6 +617,156 @@
       category: 'master',
       labelBias: [50, -18]
     },
+    {
+      id: 'washing_machine',
+      word: 'washing machine',
+      phonetic: '/ˈwɔːʃɪŋ məˌʃiːn/',
+      zh: '洗衣机',
+      kidDefinition: '洗衣服的大机器，转一转就干净。',
+      example: 'The washing machine is spinning.',
+      category: 'balcony',
+      labelBias: [58, -20]
+    },
+    {
+      id: 'dryer',
+      word: 'dryer',
+      phonetic: '/ˈdraɪər/',
+      zh: '烘干机',
+      kidDefinition: '把湿衣服吹干的机器。',
+      example: 'The dryer makes clothes warm.',
+      category: 'balcony',
+      labelBias: [58, -26]
+    },
+    {
+      id: 'laundry_basket',
+      word: 'laundry basket',
+      phonetic: '/ˈlɔːndri ˌbæskɪt/',
+      zh: '洗衣篮',
+      kidDefinition: '装脏衣服的篮子。',
+      example: 'Put the clothes in the basket.',
+      category: 'balcony',
+      labelBias: [40, 18]
+    },
+    {
+      id: 'drying_rack',
+      word: 'drying rack',
+      phonetic: '/ˈdraɪɪŋ ræk/',
+      zh: '晾衣架',
+      kidDefinition: '挂湿衣服晾干的架子。',
+      example: 'The shirt is on the rack.',
+      category: 'balcony',
+      labelBias: [-20, -24]
+    },
+    {
+      id: 'clothespin',
+      word: 'clothespin',
+      phonetic: '/ˈkloʊðz pɪn/',
+      zh: '晾衣夹',
+      kidDefinition: '夹住衣服的小夹子。',
+      example: 'Use a clothespin to hold it.',
+      category: 'balcony',
+      labelBias: [24, 20]
+    },
+    {
+      id: 'laundry_sink',
+      word: 'laundry sink',
+      phonetic: '/ˈlɔːndri sɪŋk/',
+      zh: '洗衣池',
+      kidDefinition: '洗小件衣物的水池。',
+      example: 'Wash the socks in the sink.',
+      category: 'balcony',
+      labelBias: [62, 16]
+    },
+    {
+      id: 'storage_cabinet',
+      word: 'storage cabinet',
+      phonetic: '/ˈstɔːrɪdʒ ˈkæbɪnət/',
+      zh: '收纳柜',
+      kidDefinition: '放洗衣液和工具的柜子。',
+      example: 'The soap is in the cabinet.',
+      category: 'balcony',
+      labelBias: [70, -10]
+    },
+    {
+      id: 'broom',
+      word: 'broom',
+      phonetic: '/bruːm/',
+      zh: '扫帚',
+      kidDefinition: '扫地用的长把刷子。',
+      example: 'Sweep the floor with a broom.',
+      category: 'balcony',
+      labelBias: [-64, -22]
+    },
+    {
+      id: 'mop',
+      word: 'mop',
+      phonetic: '/mɑːp/',
+      zh: '拖把',
+      kidDefinition: '拖地用的湿湿的布头。',
+      example: 'Mop the floor with water.',
+      category: 'balcony',
+      labelBias: [-52, -16]
+    },
+    {
+      id: 'bucket',
+      word: 'bucket',
+      phonetic: '/ˈbʌkɪt/',
+      zh: '水桶',
+      kidDefinition: '提水用的小桶。',
+      example: 'Fill the bucket with water.',
+      category: 'balcony',
+      labelBias: [-40, 18]
+    },
+    {
+      id: 'balcony_plant',
+      word: 'plant',
+      phonetic: '/plænt/',
+      zh: '绿植',
+      kidDefinition: '阳台上晒太阳的绿色朋友。',
+      example: 'The plant likes the sun.',
+      category: 'balcony',
+      labelBias: [-60, 22]
+    },
+    {
+      id: 'flower_pot',
+      word: 'flower pot',
+      phonetic: '/ˈflaʊər pɑːt/',
+      zh: '花盆',
+      kidDefinition: '装泥土种花的小盆。',
+      example: 'The flower grows in a pot.',
+      category: 'balcony',
+      labelBias: [-28, 22]
+    },
+    {
+      id: 'watering_can',
+      word: 'watering can',
+      phonetic: '/ˈwɔːtərɪŋ kæn/',
+      zh: '浇水壶',
+      kidDefinition: '给花浇水的壶。',
+      example: 'Water the flowers with it.',
+      category: 'balcony',
+      labelBias: [8, 22]
+    },
+    {
+      id: 'railing',
+      word: 'railing',
+      phonetic: '/ˈreɪlɪŋ/',
+      zh: '栏杆',
+      kidDefinition: '阳台边上的扶手，很安全。',
+      example: 'Hold the railing.',
+      category: 'balcony',
+      labelBias: [0, 26]
+    },
+    {
+      id: 'folding_stool',
+      word: 'folding stool',
+      phonetic: '/ˈfoʊldɪŋ stuːl/',
+      zh: '折叠凳',
+      kidDefinition: '折起来就能收好的小凳子。',
+      example: 'I sit on the folding stool.',
+      category: 'balcony',
+      labelBias: [-14, 20]
+    },
   ].map((item) => ({ ...item, objectName: 'OBJ_' + item.id }));
 
   const ROOM_BY_CATEGORY = {
@@ -624,7 +774,8 @@
     dining: 'main',
     kitchen: 'main',
     child: 'child',
-    master: 'master'
+    master: 'master',
+    balcony: 'balcony'
   };
 
   const countOf = (category) => objects.filter((item) => item.category === category).length;
@@ -635,9 +786,17 @@
   });
 
   window.WordRoomData = {
-    title: '客餐厅 · 厨房 · 儿童房 · 主卧英语探索',
-    // 一间房一份取景：主屋 11.8m × 6m 是原有场景，两间卧室是东翼扩建出来的。
+    title: '全屋 · 客餐厅 · 厨房 · 儿童房 · 主卧 · 阳台英语探索',
+    // 一间房一份取景：主屋 11.8m × 6m 是原有场景，两间卧室是东翼扩建出来的，阳台在客厅南侧。
     rooms: {
+      overview: {
+        zh: '全屋',
+        tab: '全屋',
+        eyebrow: '我的家 · 3D 户型',
+        heading: '全屋 3D 探索',
+        size: '16.8m × 8.9m',
+        note: '四间房加一个生活阳台，先看看整个家的样子。'
+      },
       main: {
         zh: '客餐厅',
         tab: '客餐厅',
@@ -661,15 +820,24 @@
         heading: '主卧英语探索',
         size: '4.6m × 3.6m',
         note: '双人床、衣柜和镜子，爸爸妈妈的房间也有 12 个单词。'
+      },
+      balcony: {
+        zh: '阳台',
+        tab: '阳台',
+        eyebrow: '阳台 · 3D 场景',
+        heading: '生活阳台英语探索',
+        size: '6.6m × 2.4m',
+        note: '洗衣机、晾衣架和清洁工具都在阳台，一共 15 件东西可以点。'
       }
     },
-    roomOrder: ['main', 'child', 'master'],
+    roomOrder: ['main', 'child', 'master', 'balcony'],
     categories: {
       living: { zh: '客厅', en: 'LIVING ROOM', count: countOf('living'), room: 'main' },
       dining: { zh: '餐厅', en: 'DINING ROOM', count: countOf('dining'), room: 'main' },
       kitchen: { zh: '厨房', en: 'KITCHEN', count: countOf('kitchen'), room: 'main' },
       child: { zh: '儿童房', en: 'KIDS ROOM', count: countOf('child'), room: 'child' },
-      master: { zh: '主卧', en: 'MASTER BEDROOM', count: countOf('master'), room: 'master' }
+      master: { zh: '主卧', en: 'MASTER BEDROOM', count: countOf('master'), room: 'master' },
+      balcony: { zh: '阳台', en: 'BALCONY', count: countOf('balcony'), room: 'balcony' }
     },
     objects
   };

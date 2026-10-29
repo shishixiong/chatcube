@@ -3,8 +3,9 @@
   'use strict';
 
   const THREE = window.THREE;
-  // 每间房一份取景参数（主屋 11.8m × 6m 含开放厨房，东翼两间卧室各约 4.5m × 3.6m）。
-  // 三间房都建在原点附近，同一时刻只显示当前房间，取景和拾取都跟着 activeRoom 走。
+  // 每间房一份取景参数（全屋 16.8m × 8.9m；主屋 11.8m × 6m 含开放厨房，
+  // 东翼两间卧室各约 4.5m × 3.6m，南侧生活阳台 6.6m × 2.4m）。
+  // 四间房摆在同一套世界坐标里，overview 全部显示，单间模式只显示当前房间。
   const FALLBACK_FRAME = {
     bounds: { minX: -4.35, maxX: 4.35, minZ: -3.2, maxZ: 3.2, centerX: 0, halfWidth: 4.35, halfDepth: 3.2 },
     target: { x: 0.12, y: 0.86, z: 0.05 },
@@ -15,7 +16,17 @@
     panInsetZ: 1.3
   };
   const FRAMES = (window.WordRoomModels && window.WordRoomModels.rooms) || { main: FALLBACK_FRAME };
-  const DEFAULT_ROOM = 'main';
+  const DEFAULT_ROOM = 'overview';
+  const PHI_MIN = 0.38;
+  const PHI_MAX = 1.22;
+
+  function wrapAngle(angle) {
+    return Math.atan2(Math.sin(angle), Math.cos(angle));
+  }
+
+  function shortestAngle(delta) {
+    return Math.atan2(Math.sin(delta), Math.cos(delta));
+  }
 
   function frameOf(roomId) {
     return FRAMES[roomId] || FRAMES[DEFAULT_ROOM] || FALLBACK_FRAME;
@@ -66,6 +77,7 @@
       this.tmpVec = new THREE.Vector3();
 
       this.activeRoom = DEFAULT_ROOM;
+      this.activeArea = null;
       this.frame = frameOf(DEFAULT_ROOM);
       this.roomGroups = {};
       this.roomObjects = {};
@@ -83,7 +95,8 @@
         radius: this.orbit.radius,
         target: this.orbit.target.clone()
       };
-      this.currentTarget = this.orbit.target.clone();
+      this.spinTheta = 0;
+      this.spinPhi = 0;
       this.lastLabelFrame = 0;
 
       this.init();
@@ -98,7 +111,7 @@
         powerPreference: 'high-performance'
       });
       this.renderer.setClearColor(0x000000, 0);
-      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, window.innerWidth < 760 ? 1.65 : 2));
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, window.innerWidth < 760 ? 1.4 : 2));
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
       // ACES 会把这种高亮柔和的场景压成灰白，Neutral 保留彩度。
       this.renderer.toneMapping = THREE.NeutralToneMapping;
@@ -107,7 +120,7 @@
       this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
       this.scene = new THREE.Scene();
-      this.camera = new THREE.PerspectiveCamera(38, 1, 0.1, 60);
+      this.camera = new THREE.PerspectiveCamera(38, 1, 0.1, 120);
 
       this.addLights();
 
@@ -121,7 +134,7 @@
         const group = new THREE.Group();
         group.name = name;
         group.userData.room = roomId;
-        group.visible = roomId === DEFAULT_ROOM;
+        group.visible = true;
         root.add(group);
         this.roomGroups[roomId] = group;
         return group;
@@ -130,25 +143,39 @@
       const mainGroup = createRoomGroup('main', 'ROOM_MAIN');
       const childGroup = createRoomGroup('child', 'ROOM_CHILD');
       const masterGroup = createRoomGroup('master', 'ROOM_MASTER');
+      const balconyGroup = createRoomGroup('balcony', 'ROOM_BALCONY');
 
       const builtMain = models.buildRoom(mainGroup);
       const builtBeds = models.buildBedrooms(childGroup, masterGroup);
+      const builtBalcony = models.buildBalcony(balconyGroup);
+
+      Object.keys(models.offsets).forEach((id) => {
+        const off = models.offsets[id];
+        this.roomGroups[id].position.set(off.x, 0, off.z);
+      });
 
       this.roomObjects.main = builtMain.objects;
       this.roomObjects.child = builtBeds.objects.filter((group) => group.userData.room === 'child');
       this.roomObjects.master = builtBeds.objects.filter((group) => group.userData.room === 'master');
+      this.roomObjects.balcony = builtBalcony.objects;
+      this.roomObjects.overview = this.roomObjects.main
+        .concat(this.roomObjects.child, this.roomObjects.master, this.roomObjects.balcony);
       // 拾取盒都挂在各自物品 Group 下，房间归属直接读 Group 的 userData.room
       this.roomHitboxes.main = builtMain.hitboxes;
       this.roomHitboxes.child = builtBeds.hitboxes.filter((mesh) => mesh.parent.userData.room === 'child');
       this.roomHitboxes.master = builtBeds.hitboxes.filter((mesh) => mesh.parent.userData.room === 'master');
+      this.roomHitboxes.balcony = builtBalcony.hitboxes;
+      this.roomHitboxes.overview = this.roomHitboxes.main
+        .concat(this.roomHitboxes.child, this.roomHitboxes.master, this.roomHitboxes.balcony);
 
-      this.objects = this.roomObjects.main
-        .concat(this.roomObjects.child, this.roomObjects.master);
-      this.hitboxes = this.roomHitboxes[this.activeRoom];
+      this.objects = this.roomObjects.overview;
+      this.hitboxes = this.roomHitboxes.overview;
 
       this.prepareObjects();
+      this.collectWalls();
       this.resize();
       this.snapCamera();
+      this.updateShadowFrustum();
       this.bindEvents();
       this.startAnimation();
       this.options.onReady?.();
@@ -180,6 +207,7 @@
       key.target.position.set(0, 0.8, 0);
       this.scene.add(key);
       this.scene.add(key.target);
+      this.keyLight = key;
 
       const fill = new THREE.DirectionalLight(
         new THREE.Color().setRGB(0.78, 0.9, 1.0, THREE.LinearSRGBColorSpace),
@@ -246,6 +274,7 @@
       this.onWheel = this.handleWheel.bind(this);
       this.onPointerLeave = this.handlePointerLeave.bind(this);
       this.onKeyDown = this.handleKeyDown.bind(this);
+      this.onContextMenu = (event) => event.preventDefault();
 
       this.canvas.addEventListener('pointerdown', this.onPointerDown);
       this.canvas.addEventListener('pointermove', this.onPointerMove);
@@ -254,6 +283,7 @@
       this.canvas.addEventListener('pointerleave', this.onPointerLeave);
       this.canvas.addEventListener('wheel', this.onWheel, { passive: false });
       this.canvas.addEventListener('keydown', this.onKeyDown);
+      this.canvas.addEventListener('contextmenu', this.onContextMenu);
 
       if ('ResizeObserver' in window) {
         this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -280,14 +310,13 @@
       this.orbit.radius = this.desired.radius;
       this.orbit.theta = this.desired.theta;
       this.orbit.phi = this.desired.phi;
-      this.currentTarget.copy(this.orbit.target);
       const sinPhi = Math.sin(this.orbit.phi);
       this.camera.position.set(
         this.orbit.target.x + this.orbit.radius * sinPhi * Math.sin(this.orbit.theta),
         this.orbit.target.y + this.orbit.radius * Math.cos(this.orbit.phi),
         this.orbit.target.z + this.orbit.radius * sinPhi * Math.cos(this.orbit.theta)
       );
-      this.camera.lookAt(this.currentTarget);
+      this.camera.lookAt(this.orbit.target);
     }
 
     resize() {
@@ -327,17 +356,90 @@
       );
     }
 
+    // 阴影相机跟着当前取景走：全屋比单间大很多，固定 14m 的盒子会裁掉东翼和阳台。
+    updateShadowFrustum() {
+      const key = this.keyLight;
+      if (!key) return;
+      const b = this.frame.bounds;
+      const target = this.frame.target;
+      key.position.set(target.x + 6.5, 0.8 + 8.7, target.z + 7.5);
+      key.target.position.set(target.x, 0.8, target.z);
+      key.target.updateMatrixWorld();
+      const half = Math.max(b.maxX - b.minX, b.maxZ - b.minZ) / 2 + 2;
+      key.shadow.camera.left = -half;
+      key.shadow.camera.right = half;
+      key.shadow.camera.top = half;
+      key.shadow.camera.bottom = -half;
+      key.shadow.camera.near = 0.5;
+      key.shadow.camera.far = half * 2 + 30;
+      key.shadow.camera.updateProjectionMatrix();
+    }
+
+    // 每帧按世界中心 + 迟滞更新显隐
+    updateWalls() {
+      const cam = this.camera.position;
+      Object.keys(this.roomGroups).forEach((roomId) => {
+        const b = frameOf(roomId).bounds;
+        const state = this.wallHidden[roomId];
+        if (!state) return;
+        const centerZ = b.centerZ ?? (b.minZ + b.maxZ) / 2;
+        const centerX = b.centerX ?? (b.minX + b.maxX) / 2;
+        state.north = window.WordRoomWalls.nextWallHidden(cam.z, centerZ, state.north);
+        state.west = window.WordRoomWalls.nextWallHidden(cam.x, centerX, state.west);
+
+        const selected = this.selected;
+        const forceNorth =
+          Boolean(selected) && selected.userData.wallSide === 'north' && selected.userData.room === roomId;
+        const forceWest =
+          Boolean(selected) && selected.userData.wallSide === 'west' && selected.userData.room === roomId;
+
+        this.roomWalls[roomId].north.forEach((mesh) => {
+          mesh.visible = !state.north || forceNorth;
+        });
+        this.roomWalls[roomId].west.forEach((mesh) => {
+          mesh.visible = !state.west || forceWest;
+        });
+        this.wallObjects[roomId].forEach((entry) => {
+          entry.group.visible =
+            entry.side === 'north' ? !state.north || forceNorth : !state.west || forceWest;
+        });
+      });
+    }
+
+    collectWalls() {
+      this.roomWalls = {};
+      this.wallObjects = {};
+      this.wallHidden = {};
+      Object.keys(this.roomGroups).forEach((roomId) => {
+        const walls = { north: new Set(), west: new Set() };
+        const objects = [];
+        this.roomGroups[roomId].traverse((node) => {
+          const side = node.userData && node.userData.wallSide;
+          if (!side || !walls[side]) return;
+          if (node.userData.interactive && node.userData.objectId) {
+            objects.push({ group: node, side });
+          } else if (node.isMesh) {
+            walls[side].add(node);
+          }
+        });
+        this.roomWalls[roomId] = { north: Array.from(walls.north), west: Array.from(walls.west) };
+        this.wallObjects[roomId] = objects;
+        this.wallHidden[roomId] = { north: false, west: false };
+      });
+    }
+
     // 换房间：只切可见性 + 重新取景，几何早就建好了，切换是瞬时的。
     setRoom(roomId) {
-      const next = this.roomGroups[roomId] ? roomId : DEFAULT_ROOM;
+      const next = roomId === 'overview' || this.roomGroups[roomId] ? roomId : 'overview';
       if (next === this.activeRoom) {
         this.resetView();
         return this.activeRoom;
       }
       this.activeRoom = next;
+      this.activeArea = null;
       this.frame = frameOf(next);
       Object.keys(this.roomGroups).forEach((id) => {
-        this.roomGroups[id].visible = id === next;
+        this.roomGroups[id].visible = next === 'overview' || id === next;
       });
       this.hitboxes = this.roomHitboxes[next] || [];
       this.desired.theta = 0.79;
@@ -345,8 +447,12 @@
       this.desired.radius = this.fitRadius();
       this.desired.target.set(this.frame.target.x, this.frame.target.y, this.frame.target.z);
       this.autoFit = true;
+      this.spinTheta = 0;
+      this.spinPhi = 0;
+      this.updateShadowFrustum();
       this.clearOutline();
       this.selected = null;
+      this.updateWalls();
       this.hovered = null;
       return this.activeRoom;
     }
@@ -368,6 +474,7 @@
       this.raycaster.setFromCamera(this.pointerNdc, this.camera);
       const intersects = this.raycaster.intersectObjects(this.hitboxes, false);
       for (let i = 0; i < intersects.length; i += 1) {
+        if (!intersects[i].object.parent || intersects[i].object.parent.visible === false) continue;
         const id = intersects[i].object.userData.objectId;
         if (id && this.byId.has(id)) return id;
       }
@@ -375,7 +482,9 @@
     }
 
     handlePointerDown(event) {
-      if (event.button !== undefined && event.button !== 0 && event.pointerType === 'mouse') return;
+      const isMouse = event.pointerType === 'mouse';
+      if (isMouse && event.button !== 0 && event.button !== 2) return;
+      const panIntent = isMouse && (event.button === 2 || (event.button === 0 && event.shiftKey));
       this.pointers.set(event.pointerId, {
         x: event.clientX,
         y: event.clientY,
@@ -384,6 +493,8 @@
       });
       this.canvas.setPointerCapture?.(event.pointerId);
       this.gestureMoved = false;
+      this.spinTheta = 0;
+      this.spinPhi = 0;
       this.canvas.classList.add('is-dragging');
 
       if (this.pointers.size === 1) {
@@ -391,12 +502,13 @@
           id: event.pointerId,
           lastX: event.clientX,
           lastY: event.clientY,
+          lastMoveTime: performance.now(),
           startX: event.clientX,
           startY: event.clientY,
           startTime: performance.now(),
           moved: 0,
-          // 放大之后单指改成「拖着房间走」，否则只转视角永远看不到两头的客厅/厨房
-          pan: this.desired.radius < this.fitRadius() * 0.85
+          // 左键/单指旋转；右键或 Shift+左键/双指平移
+          pan: panIntent
         };
         this.pinch = null;
       } else if (this.pointers.size === 2) {
@@ -456,9 +568,14 @@
           this.setHovered(null);
           return;
         }
-        this.desired.theta = clamp(this.desired.theta - dx * 0.005, 0.18, 1.4);
+        const now = performance.now();
+        const moveDt = Math.max(0.008, (now - this.drag.lastMoveTime) / 1000);
+        this.drag.lastMoveTime = now;
+        this.desired.theta = wrapAngle(this.desired.theta - dx * 0.005);
         // 手指上滑 = 视角抬高（原来写反了：上滑会俯视下去）
-        this.desired.phi = clamp(this.desired.phi - dy * 0.0028, 0.64, 1.24);
+        this.desired.phi = clamp(this.desired.phi - dy * 0.0028, PHI_MIN, PHI_MAX);
+        this.spinTheta = clamp((-dx * 0.005) / moveDt, -3.5, 3.5);
+        this.spinPhi = clamp((-dy * 0.0028) / moveDt, -2, 2);
         this.canvas.classList.add('is-dragging');
         this.setHovered(null);
         return;
@@ -479,6 +596,17 @@
         performance.now() - this.drag.startTime < 800 &&
         !this.gestureMoved;
 
+      if (wasDragging) {
+        const recent = performance.now() - this.drag.lastMoveTime < 80;
+        if (this.drag.moved > 4 && recent) {
+          this.spinTheta *= 0.55;
+          this.spinPhi *= 0.55;
+        } else {
+          this.spinTheta = 0;
+          this.spinPhi = 0;
+        }
+      }
+
       if (pointer) {
         this.canvas.releasePointerCapture?.(event.pointerId);
         this.pointers.delete(event.pointerId);
@@ -495,10 +623,12 @@
           id: remaining[0],
           lastX: remaining[1].x,
           lastY: remaining[1].y,
+          lastMoveTime: performance.now(),
           startX: remaining[1].startX,
           startY: remaining[1].startY,
           startTime: performance.now(),
-          moved: 99
+          moved: 99,
+          pan: false
         };
         this.pinch = null;
       } else if (this.pointers.size === 0) {
@@ -512,6 +642,8 @@
       this.pointers.delete(event.pointerId);
       this.drag = null;
       this.pinch = null;
+      this.spinTheta = 0;
+      this.spinPhi = 0;
       this.canvas.classList.remove('is-dragging');
     }
 
@@ -534,10 +666,10 @@
     handleKeyDown(event) {
       const step = 0.07;
       let handled = true;
-      if (event.key === 'ArrowLeft') this.desired.theta = clamp(this.desired.theta - step, 0.18, 1.4);
-      else if (event.key === 'ArrowRight') this.desired.theta = clamp(this.desired.theta + step, 0.18, 1.4);
-      else if (event.key === 'ArrowUp') this.desired.phi = clamp(this.desired.phi - step, 0.64, 1.24);
-      else if (event.key === 'ArrowDown') this.desired.phi = clamp(this.desired.phi + step, 0.64, 1.24);
+      if (event.key === 'ArrowLeft') this.desired.theta = wrapAngle(this.desired.theta - step);
+      else if (event.key === 'ArrowRight') this.desired.theta = wrapAngle(this.desired.theta + step);
+      else if (event.key === 'ArrowUp') this.desired.phi = clamp(this.desired.phi - step, PHI_MIN, PHI_MAX);
+      else if (event.key === 'ArrowDown') this.desired.phi = clamp(this.desired.phi + step, PHI_MIN, PHI_MAX);
       else if (event.key === '+' || event.key === '=') {
         const zoom = this.zoomRange();
         this.desired.radius = clamp(this.desired.radius * 0.94, zoom.min, zoom.max);
@@ -590,6 +722,7 @@
       if (this.selected) this.applyGlow(this.selected, 'base');
       this.clearOutline();
       this.selected = group || null;
+      this.updateWalls();
 
       if (this.selected) {
         this.applyGlow(this.selected, 'selected');
@@ -699,10 +832,28 @@
 
     resetView() {
       this.autoFit = true;
+      this.spinTheta = 0;
+      this.spinPhi = 0;
       this.desired.theta = 0.79;
       this.desired.phi = 0.85;
       this.desired.radius = this.fitRadius();
       this.desired.target.set(this.frame.target.x, this.frame.target.y, this.frame.target.z);
+      this.activeArea = null;
+    }
+
+    // 客餐厅分区取景（客厅 / 餐厅 / 厨房）：只换环绕中心与距离，保留当前旋转角度。
+    // 半径会被 zoomRange() 夹紧，避免和缩放边界打架；autoFit 置 false，窗口 resize 不再抢回全屋取景。
+    focusArea(areaId) {
+      const areas = this.frame.areas;
+      if (!areas || typeof areas !== 'object' || !areas[areaId]) return false;
+      const area = areas[areaId];
+      if (!area.target) return false;
+      const zoom = this.zoomRange();
+      this.desired.target.set(area.target.x, area.target.y, area.target.z);
+      this.desired.radius = clamp(area.radius, zoom.min, zoom.max);
+      this.autoFit = false;
+      this.activeArea = areaId;
+      return true;
     }
 
     getLabelAnchors() {
@@ -711,6 +862,7 @@
       const height = rect.height;
       const anchors = [];
       this.getRoomObjects().forEach((group) => {
+        if (!group.visible) return;
         const world = group.userData.labelAnchor;
         if (!world) return;
         const projected = this.tmpVec.copy(world).project(this.camera);
@@ -737,23 +889,33 @@
       const now = performance.now();
       const dt = Math.min(0.05, Math.max(0, (now - this.lastFrame) / 1000));
       this.lastFrame = now;
-      const ease = this.reducedMotion ? 1 : 1 - Math.exp(-dt * 8.5);
 
-      this.orbit.theta += (this.desired.theta - this.orbit.theta) * ease;
-      this.orbit.phi += (this.desired.phi - this.orbit.phi) * ease;
-      this.orbit.radius += (this.desired.radius - this.orbit.radius) * ease;
-      this.orbit.target.lerp(this.desired.target, ease);
-      this.currentTarget.lerp(this.orbit.target, ease);
+      if (!this.pointers.size && (this.spinTheta || this.spinPhi) && !this.reducedMotion) {
+        this.desired.theta = wrapAngle(this.desired.theta + this.spinTheta * dt);
+        this.desired.phi = clamp(this.desired.phi + this.spinPhi * dt, PHI_MIN, PHI_MAX);
+        const decay = Math.exp(-dt * 3.2);
+        this.spinTheta *= decay;
+        this.spinPhi *= decay;
+        if (Math.abs(this.spinTheta) < 0.01 && Math.abs(this.spinPhi) < 0.01) {
+          this.spinTheta = 0;
+          this.spinPhi = 0;
+        }
+      }
+
+      const dragging = Boolean(this.drag || this.pinch);
+      const rate = this.reducedMotion ? 1 : 1 - Math.exp(-dt * (dragging ? 18 : 6));
+      this.orbit.theta = wrapAngle(this.orbit.theta + shortestAngle(this.desired.theta - this.orbit.theta) * rate);
+      this.orbit.phi += (this.desired.phi - this.orbit.phi) * rate;
+      this.orbit.radius += (this.desired.radius - this.orbit.radius) * rate;
+      this.orbit.target.lerp(this.desired.target, rate);
 
       const sinPhi = Math.sin(this.orbit.phi);
-      const targetPosition = this.tmpVec.set(
+      this.camera.position.set(
         this.orbit.target.x + this.orbit.radius * sinPhi * Math.sin(this.orbit.theta),
         this.orbit.target.y + this.orbit.radius * Math.cos(this.orbit.phi),
         this.orbit.target.z + this.orbit.radius * sinPhi * Math.cos(this.orbit.theta)
       );
-
-      this.camera.position.lerp(targetPosition, this.reducedMotion ? 1 : 1 - Math.exp(-dt * 9));
-      this.camera.lookAt(this.currentTarget);
+      this.camera.lookAt(this.orbit.target);
 
       if (this.outlineRing) {
         if (this.reducedMotion) {
@@ -767,8 +929,16 @@
         }
       }
 
+      const moving =
+        Math.abs(shortestAngle(this.desired.theta - this.orbit.theta)) > 1e-4 ||
+        Math.abs(this.desired.phi - this.orbit.phi) > 1e-4 ||
+        Math.abs(this.desired.radius - this.orbit.radius) > 1e-4 ||
+        this.orbit.target.distanceToSquared(this.desired.target) > 1e-6 ||
+        Boolean(this.spinTheta || this.spinPhi);
+
+      this.updateWalls();
       this.renderer.render(this.scene, this.camera);
-      this.options.onFrame?.();
+      this.options.onFrame?.(moving);
     }
 
     destroy() {
@@ -784,6 +954,7 @@
       this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
       this.canvas.removeEventListener('wheel', this.onWheel);
       this.canvas.removeEventListener('keydown', this.onKeyDown);
+      this.canvas.removeEventListener('contextmenu', this.onContextMenu);
       this.canvas.classList.remove('is-dragging', 'is-hovering');
       this.clearOutline();
       this.scene.traverse((node) => {

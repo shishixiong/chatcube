@@ -144,6 +144,7 @@
 | `chinese_quiz` | `chinese/ChineseQuizCard.ets` | ✓ | 语文小练习 4 mode（word_build/sentence_order/lookalike/antonym），预校验 |
 | `map_card` | `map/MapCard.ets` | ✓ | 中国地图小课堂（讲解型）：34 省可点地图 + 省份资料卡（简称/行政中心；**点省即读 TTS**，🔊 重播）+ focus_province 高亮，预校验；待答态入口横幅 → 全屏 sheet；不授星 |
 | `map_quiz` | `map/MapQuizCard.ets` | ✓ | 中国地图出题 3 mode（choice 程序生成选项/locate 点图即判/write 手写自评），预校验；待答态入口横幅 → 全屏 sheet |
+| `room_english` | `room/RoomEnglishCard.ets` | ✓ | 全屋 3D 英语探索（讲解型，不授星）：three.js 全屋户型默认视图 + 「全屋/客餐厅/儿童房/主卧/阳台」5 标签，76 件家具可点开单词卡（英文/音标/中文/儿童解释/例句/原生 TTS），360° 环绕 + 近侧墙自动隐藏；focus 映射 `living/dining/kitchen → main`、`child/master/balcony → 同名`、`all/缺省 → overview`（`resolveRoomEnglishView`）；预校验 |
 
 **讲解/练习二分（2026-09-30 语文套件）**：`hanzi_card` / `pinyin_card` / `picture_talk` 为**讲解型**——无对错判定，`feedbackSuppressed = true` 永久抑制反馈横幅，孩子完成交互门槛后点「我学会了 · 继续」提交回执，`computeStars` 走 `completed === true → 1 星`（MathTeachCard 同款范式）；`chinese_quiz` 为**练习型**——即判即交，`correct === true → 1 星`。2026-10-21 地图套件沿用：`map_card` 讲解型（探索 ≥1 省后提交；**2026-10-22 起不授星**——讲解课不是题，`recordStarEvent` 调用已移除，StarEventModels/computeStars 的 map_card 分支保留供历史行显示）；`map_quiz` 练习型（choice/locate 即判、write 自评，`correct === true → 1 星`）。
 

@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#f4f8f5" />
-  <meta name="description" content="可旋转、可点击的低多边形 3D 房间：客餐厅与开放厨房、儿童房、主卧，共 61 个独立物品、儿童友好单词卡和英文发音。" />
-  <title>小词屋 · 3D 客餐厅 + 厨房 + 儿童房 + 主卧</title>
+  <meta name="description" content="可旋转、可点击的低多边形 3D 房间：客餐厅与开放厨房、儿童房、主卧和生活阳台，共 76 个独立物品、儿童友好单词卡和英文发音。" />
+  <title>小词屋 · 3D 全屋 + 生活阳台</title>
   <link rel="stylesheet" href="assets/room.css" />
   <link rel="stylesheet" href="assets/room-panel.css" />
   <link rel="stylesheet" href="assets/room-dialogs.css" />
@@ -20,11 +20,11 @@
       <span class="brand-mark" aria-hidden="true">Aa</span>
       <span class="brand-text">
         <strong>小词屋</strong>
-        <small>WORD ROOM · 3D 三间房</small>
+        <small>WORD ROOM · 3D 全屋 · 生活阳台</small>
       </span>
     </div>
     <div class="topbar-actions">
-      <span class="topic-pill"><span class="dot" aria-hidden="true"></span>3 间房 · <span data-total>61</span> 个单词</span>
+      <span class="topic-pill"><span class="dot" aria-hidden="true"></span>4 间房 · 1 阳台 · <span data-total>76</span> 个单词</span>
       <button class="btn btn-ghost" type="button" id="openGlossary" data-od-id="open-glossary" aria-haspopup="dialog" aria-expanded="false" aria-controls="glossaryModal">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <rect x="4" y="4" width="6" height="6" rx="1.5"></rect>
@@ -40,16 +40,25 @@
   <main class="workspace" id="main">
     <div class="stage-col">
       <div class="room-tabs" id="roomTabs" role="tablist" aria-label="切换房间">
-        <button class="room-tab is-active" type="button" role="tab" aria-selected="true" data-room="main" data-od-id="room-tab-main">客餐厅</button>
+        <button class="room-tab is-active" type="button" role="tab" aria-selected="true" data-room="overview" data-od-id="room-tab-overview">全屋</button>
+        <button class="room-tab" type="button" role="tab" aria-selected="false" data-room="main" data-od-id="room-tab-main">客餐厅</button>
         <button class="room-tab" type="button" role="tab" aria-selected="false" data-room="child" data-od-id="room-tab-child">儿童房</button>
         <button class="room-tab" type="button" role="tab" aria-selected="false" data-room="master" data-od-id="room-tab-master">主卧</button>
+        <button class="room-tab" type="button" role="tab" aria-selected="false" data-room="balcony" data-od-id="room-tab-balcony">阳台</button>
+      </div>
+
+      <div class="area-tabs" id="areaTabs" role="group" aria-label="客餐厅镜头中心" hidden>
+        <span class="area-label" aria-hidden="true">镜头</span>
+        <button class="area-tab" type="button" data-area="living" aria-pressed="false" data-od-id="area-living">客厅</button>
+        <button class="area-tab" type="button" data-area="dining" aria-pressed="false" data-od-id="area-dining">餐厅</button>
+        <button class="area-tab" type="button" data-area="kitchen" aria-pressed="false" data-od-id="area-kitchen">厨房</button>
       </div>
 
       <section class="stage-card" id="stage" data-od-id="scene-stage" aria-labelledby="sceneHeading">
       <canvas
         id="scene-canvas"
         tabindex="-1"
-        aria-label="可旋转的 3D 房间，可在客餐厅、儿童房和主卧之间切换。点击或触摸物品打开单词卡；也可以打开词汇表选择单词。" aria-describedby="sceneDescription"
+        aria-label="可旋转的 3D 全屋户型，包含客餐厅、儿童房、主卧和生活阳台。点击或触摸物品打开单词卡；也可以打开词汇表选择单词。" aria-describedby="sceneDescription"
       ></canvas>
 
       <div class="label-layer" id="label-layer" aria-hidden="true" hidden>
@@ -59,9 +68,9 @@
 
       <div class="stage-top">
         <div class="scene-title">
-          <p class="eyebrow" id="sceneEyebrow">客餐厅 · 厨房 · 3D 场景</p>
-          <h1 id="sceneHeading">客餐厅 · 厨房英语探索</h1>
-          <p class="scene-meta"><span id="sceneSize">11.8m × 6m</span> <span>·</span> <span id="sceneCount">37</span> 件可点击物品</p>
+          <p class="eyebrow" id="sceneEyebrow">我的家 · 3D 户型</p>
+          <h1 id="sceneHeading">全屋 3D 探索</h1>
+          <p class="scene-meta"><span id="sceneSize">16.8m × 8.9m</span> <span>·</span> <span id="sceneCount">76</span> 件可点击物品</p>
         </div>
         <button
           class="label-toggle"
@@ -88,7 +97,7 @@
             <path d="M20 4v4h-4"></path>
           </svg>
           <span class="desktop-only">拖动旋转 · 滚轮缩放 · 放大后可拖动平移</span>
-          <span class="touch-only">单指旋转 · 双指缩放 · 放大后拖动可平移</span>
+          <span class="touch-only">单指拖动旋转 · 双指缩放/平移</span>
         </div>
         <button class="icon-btn" type="button" id="resetView" data-od-id="reset-view" aria-label="重置 3D 视角" title="重置视角" disabled>
           <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -109,12 +118,12 @@
 
       <div class="scene-error" id="sceneError" role="alert" hidden>
         <h2>3D 房间没有打开</h2>
-        <p>请确认浏览器已开启硬件加速，然后刷新页面再试一次。你仍然可以打开词汇表查看全部 <span data-total>61</span> 个单词。</p>
+        <p>请确认浏览器已开启硬件加速，然后刷新页面再试一次。你仍然可以打开词汇表查看全部 <span data-total>76</span> 个单词。</p>
         <button class="btn btn-primary" type="button" id="retryScene">重新加载</button>
       </div>
 
       <div class="sr-only" id="sceneDescription">
-        这个 3D 小房子里有三间房：客餐厅与厨房、儿童房、主卧，一共 61 个独立物品。用房间标签切换房间；使用鼠标拖动或单指滑动旋转视角，滚轮或双指缩放；放大之后拖动可以平移到房间的另一头。点击物品会打开单词卡并朗读中文意思和英文单词；点击空白处关闭卡片。键盘用户可以打开词汇表选择单词。
+        这个 3D 小房子打开时是整个家的户型图：客餐厅与厨房、儿童房、主卧，还有一个生活阳台，一共 76 个独立物品。点房间标签可以凑近看一间房，点「全屋」回到整个家；在客餐厅里还可以用「客厅 / 餐厅 / 厨房」按钮把镜头对准对应区域。用鼠标拖动或单指滑动旋转视角，滚轮或双指缩放；放大之后拖动可以平移到房间的另一头。点击物品会打开单词卡并朗读中文意思和英文单词；点击空白处关闭卡片。键盘用户可以打开词汇表选择单词。
       </div>
       </section>
     </div>
@@ -126,7 +135,7 @@
           <h2 id="panelTitle">发现单词</h2>
         </div>
         <div class="panel-head-right">
-          <span class="progress-chip" id="progressChip" data-od-id="collection-progress"><span id="progressCount">0</span><small>/ <span data-total>61</span></small></span>
+          <span class="progress-chip" id="progressChip" data-od-id="collection-progress"><span id="progressCount">0</span><small>/ <span data-total>76</span></small></span>
           <button class="icon-btn" type="button" id="closeWord" data-od-id="close-word" aria-label="关闭单词卡" title="关闭单词卡" hidden>
             <svg viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
               <path d="M6 6l12 12M18 6L6 18"></path>
@@ -139,12 +148,12 @@
         <section class="welcome" id="welcomeView" data-od-id="welcome-view">
           <p class="eyebrow">开始探索</p>
           <h2>点一点，<br />把房间变成单词书。</h2>
-          <p class="lede">客餐厅、厨房、儿童房和主卧里都藏着单词，切换房间找一找，点开每件物品就能听发音、看解释，把它收进你的单词口袋。</p>
+          <p class="lede">先看看整个家的户型，再点房间标签凑近看看：客餐厅、厨房、儿童房、主卧和生活阳台里都藏着单词。点开每件物品就能听发音、看解释，把它收进你的单词口袋。</p>
 
           <div class="progress-board">
             <div class="dot-grid" id="dotGrid" aria-hidden="true"></div>
             <div class="progress-copy">
-              <span class="big"><span id="welcomeCount">0</span><small>/ <span data-total>61</span></small></span>
+              <span class="big"><span id="welcomeCount">0</span><small>/ <span data-total>76</span></small></span>
               <p>每点开一个物品，就会点亮一格。试试从沙发开始？</p>
             </div>
           </div>
@@ -152,7 +161,7 @@
           <div class="room-stats" aria-label="每个房间的单词数量">
             <div class="room-stat" data-room="main">
               <strong>37</strong>
-              <span>客餐厅 · 厨房</span>
+              <span>客餐厅</span>
             </div>
             <div class="room-stat" data-room="child">
               <strong>12</strong>
@@ -161,6 +170,10 @@
             <div class="room-stat" data-room="master">
               <strong>12</strong>
               <span>主卧</span>
+            </div>
+            <div class="room-stat" data-room="balcony">
+              <strong>15</strong>
+              <span>阳台</span>
             </div>
           </div>
 
@@ -180,13 +193,13 @@
             <li>
               <div>
                 <h3>找一找</h3>
-                <p>打开英文标签，把单词和房间里的东西对起来。</p>
+                <p>进到一间房里打开英文标签，把单词和房间里的东西对起来。</p>
               </div>
             </li>
           </ol>
 
           <button class="text-link" type="button" id="openGlossaryInline" data-od-id="open-glossary-inline" aria-haspopup="dialog" aria-expanded="false" aria-controls="glossaryModal">
-            先看看全部 <span data-total>61</span> 个单词
+            先看看全部 <span data-total>76</span> 个单词
             <svg viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M5 12h13M13 6l6 6-6 6"></path>
             </svg>
@@ -196,7 +209,7 @@
         <article class="word-view" id="wordView" data-od-id="word-card" hidden>
           <div class="word-topline">
             <span class="word-category" id="wordCategory" data-category="living">客厅</span>
-            <span id="wordIndex">01 / 61</span>
+            <span id="wordIndex">01 / 76</span>
           </div>
 
           <h2 class="word-en" id="wordEnglish" lang="en">sofa</h2>
@@ -234,7 +247,7 @@
               </svg>
               上一个
             </button>
-            <span class="word-nav-index" id="wordNavIndex">01 / 61</span>
+            <span class="word-nav-index" id="wordNavIndex">01 / 76</span>
             <button class="nav-btn" type="button" id="nextWord" data-od-id="next-word">
               下一个
               <svg viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -251,7 +264,7 @@
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="glossaryTitle">
       <div class="modal-head">
         <div>
-          <p class="eyebrow">全部 <span data-total>61</span> 个单词</p>
+          <p class="eyebrow">全部 <span data-total>76</span> 个单词</p>
           <h2 id="glossaryTitle">词汇表</h2>
           <p>点一个单词，场景里对应的物品会亮起来，并打开单词卡。</p>
         </div>
@@ -277,7 +290,9 @@
 
   <script src="assets/vendor/three.min.js"></script>
   <script src="assets/scene-data.js"></script>
+  <script src="assets/room-layout.js"></script>
   <script src="assets/room-models.js"></script>
+  <script src="assets/wall-culling.js"></script>
   <script src="assets/room-scene.js"></script>
   <script src="assets/room-app.js"></script>
 </body>
