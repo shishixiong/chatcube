@@ -43,6 +43,10 @@ export const MAP_PUZZLE_TOOL_ID: string = 'map_puzzle'
 // 客餐厅 3D 英语探索（2026-10-24）：讲解型房间工具。37 件可点击物品（客厅 15 + 餐厅 10 + 厨房 12）
 // + 单词卡 + TTS 发音, 参考 open-design 原型 kid-room-3d-english（11.8m × 6m 低多边形客餐厅 + 开放厨房）。
 export const ROOM_ENGLISH_TOOL_ID: string = 'room_english'
+// 3D 身体英语课（2026-10-31）：讲解型身体部位工具。25 个可点击部位 + 单词卡 + TTS,
+// 参考 open-design 原型 xiaoxing-body-class（three.js 程序化小星 + 部位图）。
+// 兼容外部模型的别名 3d_body / body3d。
+export const BODY_3D_TOOL_ID: string = 'body_3d'
 
 
 export function normalizeToolFunctionName(raw: string): string {
@@ -198,6 +202,14 @@ export function isRoomEnglishFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === ROOM_ENGLISH_TOOL_ID
 }
 
+export function isBody3DFunctionName(functionName: string): boolean {
+  const normalized = normalizeToolFunctionName(functionName)
+  return normalized === BODY_3D_TOOL_ID ||
+    normalized === '3d_body' ||
+    normalized === 'body3d' ||
+    normalized === 'body_english'
+}
+
 export function isHuarongdaoFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === HUARONGDAO_TOOL_ID
 }
@@ -274,7 +286,8 @@ export function isInteractiveQuizFunctionName(functionName: string): boolean {
     isMapCardFunctionName(functionName) ||
     isMapQuizFunctionName(functionName) ||
     isMapPuzzleFunctionName(functionName) ||
-    isRoomEnglishFunctionName(functionName)
+    isRoomEnglishFunctionName(functionName) ||
+    isBody3DFunctionName(functionName)
 }
 
 

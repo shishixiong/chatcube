@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased · 3D 身体英语课
+
+新增讲解型工具 `body_3d`，把 open-design 原型「小星英语 · 3D 身体课」搬进对话。
+
+### 新增
+
+- `body_3d`：Web 容器加载 `rawfile/body3d/` 的 three.js 场景（three.js r185 本地内置，离线可用），程序化低多边形小星可 360° 旋转、挥手、眨眼、说话口型；25 个身体部位（Head 8 / Body 10 / Legs 4 / Whole 3）可点开单词卡，含英文 / 音标 / 中文 / 儿童解释 / 单复数提示 / 原生 TTS 发音
+- 部位图 14 个 pin + 分组单词表 + 「已学会 x/25」进度；`localStorage` 记住已学会与当前选中部位
+- 参数 `focus`（head / body / legs / whole / all）+ `words`（≤8 个部位 id，首个自动选中朗读）；完成回执带 `words` / `labels`，时间线可展开回看
+- 原生桥 `BodyNativeBridge`：`speak / stopSpeak / onReady / onSelect / onProgress`，TTS 结束回调 `BodyClassApp.speechEnded()` 复位播放态
+- 默认助手与小星英语老师工具白名单加入 `body_3d`；提示词要求「先用 body_3d 呈现身体词，再出 english_quiz / matching_pairs 检验并授星」
+- `utils/Body3DValidation.ets` 参数预校验（skill_key / focus 枚举 / words 命中 25 个 id / ≤8 词 / 去重）+ hypium 单元测试
+- 移动端单词卡排在 3D 舞台下方，不再遮住小星的头；专注某一分组时不再自动滚页把 3D 顶出屏幕
+
+### 不授星
+
+`body_3d` 与 `room_english` / `map_card` 一致：讲解型工具本身不授星，星星由后续 `english_quiz` / `matching_pairs` 给。
+
 ## Unreleased · 地图出题新增「形状猜省」与「面积/方位比较」
 
 `map_quiz` 从三题型扩到五题型。没有新工具、没有新数据——两个新题型的答案全从现有的省份 path 算出来。

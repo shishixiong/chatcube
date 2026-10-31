@@ -128,6 +128,7 @@ MVVM 分层（`entry/src/main/ets/`）：
 | `map/MapQuizCard` | `map_quiz` | 中国地图出题（3 mode：choice/locate/write；待答态横幅 → 全屏 sheet） |
 | `map/MapPuzzleCard` | `map_puzzle` | 中国地图拼图（3-8 省拖拽/点选拼回地图，棋盘按本局省份自动聚焦；拼对朗读省名/简称/省会，长按 600ms 提示；按错误次数授 1-3 星；待答态横幅 → 全屏 sheet） |
 | `room/RoomEnglishCard` | `room_english` | 全屋 3D 英语探索（讲解型：Web 容器加载 `rawfile/room3d/` 的 three.js 场景，客餐厅 + 厨房 11.8m × 6m / 儿童房 4.4m × 3.6m / 主卧 4.6m × 3.6m / 生活阳台 6.6m × 2.4m，共 76 件家具可点开单词卡；默认打开全屋户型，面板顶部「全屋 / 四间房」5 标签切换，360° 环绕 + 近侧墙自动隐藏；`RoomNativeBridge` 接原生 TTS，讲解型不授星） |
+| `body/Body3DCard` | `body_3d` | 3D 身体英语课（讲解型：Web 容器加载 `rawfile/body3d/` 的 three.js 场景，程序化低多边形小星 + 25 个可点身体部位（head / hair / eyes / nose / mouth / hands / arms / knees / feet / belly 等），单词卡含英文 / 音标 / 中文 / 儿童解释 / 单复数提示 / 原生 TTS；focus 分 head / body / legs / whole / all，words 最多 8 个；部位图 14 pin + 分组单词表 + localStorage 进度；`BodyNativeBridge` 接原生 TTS，讲解型不授星） |
 
 出题类工具（math_quiz / english_quiz / picture_vocab / listening_quiz / pinyin_quiz / matching_pairs / categorization / map_card / map_quiz / map_puzzle）参数在渲染前经 `utils/*Validation.ets` 预校验，坏题以 `should_retry` 回传 LLM 自行修正。
 
@@ -158,4 +159,4 @@ MVVM 分层（`entry/src/main/ets/`）：
 - **`sys.symbol.*` 命名空间 ≠ iOS SF Symbols**：`stop_fill` / `doc_on_clipboard` 等不存在，可用 `pause_fill` / `doc` 等。
 - **`Row.alignItems` 用 `VerticalAlign`、`Column.alignItems` 用 `HorizontalAlign`**——互相翻转时易错。
 - **`@Trace` 字段必须在子 Builder 的形参里**才能被识别为响应式依赖；直接读 `this.xxx` 在 `@Builder` 内部有效，**但传字符串快照会断响应式**。
-- **rawfile 里的本地网页**用 `resource://rawfile/<dir>/index.html` 加载（`mermaid/`、`document-parser/`、`room3d/` 都是），页面内 `./assets/x.js` 这类相对路径由 ArkWeb 同源解析，无需 `fileAccess`。ArkWeb 没有 `speechSynthesis`，发音要走 `javaScriptProxy` 注入的桥接对象转原生 `TTSService`。
+- **rawfile 里的本地网页**用 `resource://rawfile/<dir>/index.html` 加载（`mermaid/`、`document-parser/`、`room3d/`、`body3d/` 都是），页面内 `./assets/x.js` 这类相对路径由 ArkWeb 同源解析，无需 `fileAccess`。ArkWeb 没有 `speechSynthesis`，发音要走 `javaScriptProxy` 注入的桥接对象转原生 `TTSService`。

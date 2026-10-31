@@ -146,6 +146,7 @@ import { getCachedChinaMapData, findProvinceByRef } from '../utils/ChinaMapData'
 import { MapCard, MapCardResult } from '../components/map/MapCard'
 import { MapPuzzleCard, MapPuzzleResult } from '../components/map/MapPuzzleCard'
 import { RoomEnglishAnswerPayload, RoomEnglishCard } from '../components/room/RoomEnglishCard'
+import { Body3DAnswerPayload, Body3DCard } from '../components/body/Body3DCard'
 import { MapQuizCard } from '../components/map/MapQuizCard'
 import { MapQuizAnswerPayload, parseMapQuizArgs } from '../components/map/MapQuizTypes'
 import { MessagePartKind } from '../models/MessageParts'
@@ -334,6 +335,9 @@ export struct ChatPage {
   @Local showRoomEnglishSheet: boolean = false
   @Local roomEnglishToolCall: ToolCall = new ToolCall()
   @Local roomEnglishAnswered: boolean = false
+  @Local showBody3DSheet: boolean = false
+  @Local body3DToolCall: ToolCall = new ToolCall()
+  @Local body3DAnswered: boolean = false
   @Local toolExecutionApprovalName: string = ''
   @Local showStarSheet: boolean = false
   // 星星浮层触发信号: 每次 onStarEarnedTickChanged 自增, StarBurstOverlay 通过 @Monitor 监听
@@ -2576,6 +2580,11 @@ export struct ChatPage {
             this.roomEnglishAnswered = false
             this.showRoomEnglishSheet = true
           },
+          onOpenBody3DSheet: (toolCall: ToolCall): void => {
+            this.body3DToolCall = toolCall
+            this.body3DAnswered = false
+            this.showBody3DSheet = true
+          },
           onReachStart: (): void => {
             this.handleMessageListReachStart()
           },
@@ -3084,6 +3093,33 @@ export struct ChatPage {
                 this.handleAskUserAnswer(this.roomEnglishToolCall.id, JSON.stringify(cancelResult))
               }
               this.showRoomEnglishSheet = false
+            }
+          })
+
+        Column()
+          .width(0)
+          .height(0)
+          .bindSheet($$this.showBody3DSheet, this.Body3DSheetBuilder(), {
+            height: SheetSize.LARGE,
+            dragBar: true,
+            showClose: true,
+            blurStyle: BlurStyle.Thick,
+            backgroundColor: this.themeBackground,
+            preferType: SheetType.BOTTOM,
+            onDisappear: () => {
+              if (this.showBody3DSheet && !this.body3DAnswered) {
+                const cancelResult: Body3DAnswerPayload = {
+                  completed: false,
+                  explored_count: 0,
+                  words: [],
+                  labels: [],
+                  focus: 'all',
+                  skill_key: 'english_vocab',
+                  cancelled: true
+                }
+                this.handleAskUserAnswer(this.body3DToolCall.id, JSON.stringify(cancelResult))
+              }
+              this.showBody3DSheet = false
             }
           })
 
@@ -3657,6 +3693,24 @@ export struct ChatPage {
       },
       onRequestClose: (): void => {
         this.showRoomEnglishSheet = false
+      }
+    })
+  }
+
+  @Builder
+  Body3DSheetBuilder() {
+    Body3DCard({
+      toolCall: this.body3DToolCall,
+      isAnswered: false,
+      answeredPayload: '',
+      largeSize: true,
+      onAnswer: (toolCallId: string, answerJson: string): void => {
+        this.body3DAnswered = true
+        this.handleAskUserAnswer(toolCallId, answerJson)
+        this.showBody3DSheet = false
+      },
+      onRequestClose: (): void => {
+        this.showBody3DSheet = false
       }
     })
   }

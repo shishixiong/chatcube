@@ -70,7 +70,7 @@ export const KIDS_SUBJECTS: KidsSubjectItem[] = [
     countUnit: '题',
     dailyLimit: 10,
     startPrompt: '我想学英语：听音选词、看图识词、认字母、学单词都可以，请换着花样给我出题吧',
-    activityTypes: ['english_quiz', 'picture_vocab', 'listening_quiz', 'room_english']
+    activityTypes: ['english_quiz', 'picture_vocab', 'listening_quiz', 'room_english', 'body_3d']
   },
   {
     id: 'chinese',

@@ -54,7 +54,7 @@ import {
   getMarkdownTitleSizes
 } from '../utils/MarkdownTypographyUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isMathTeachFunctionName, isEnglishQuizFunctionName, isHuarongdaoFunctionName, isNumberPuzzleFunctionName, isHandwritingPracticeFunctionName, isCategorizationFunctionName, isVerticalMathFunctionName, isMusicGenerationFunctionName, isMazeFunctionName, isSudokuFunctionName, isPictureVocabFunctionName, isListeningQuizFunctionName, isPinyinQuizFunctionName, isMatchingPairsFunctionName, isMemoryMatchFunctionName, isSnakeGameFunctionName, isHanziCardFunctionName, isPinyinCardFunctionName, isPictureTalkFunctionName, isChineseQuizFunctionName, isMapCardFunctionName, isMapQuizFunctionName, isMapPuzzleFunctionName, isRoomEnglishFunctionName } from '../utils/SearchToolIdentityUtils'
+import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isMathTeachFunctionName, isEnglishQuizFunctionName, isHuarongdaoFunctionName, isNumberPuzzleFunctionName, isHandwritingPracticeFunctionName, isCategorizationFunctionName, isVerticalMathFunctionName, isMusicGenerationFunctionName, isMazeFunctionName, isSudokuFunctionName, isPictureVocabFunctionName, isListeningQuizFunctionName, isPinyinQuizFunctionName, isMatchingPairsFunctionName, isMemoryMatchFunctionName, isSnakeGameFunctionName, isHanziCardFunctionName, isPinyinCardFunctionName, isPictureTalkFunctionName, isChineseQuizFunctionName, isMapCardFunctionName, isMapQuizFunctionName, isMapPuzzleFunctionName, isRoomEnglishFunctionName, isBody3DFunctionName } from '../utils/SearchToolIdentityUtils'
 import { MessagePart, MessagePartKind, ToolPartStatus } from '../models/MessageParts'
 import {
   ensureMessageParts,
@@ -95,6 +95,32 @@ function readRoomEnglishWords(payload: string): string[] {
     return words
   }
   return words
+}
+
+/** body_3d 回执里的 labels（英文部位名），用于时间线回看这次点开了哪些部位。 */
+function readBody3DLabels(payload: string): string[] {
+  const labels: string[] = []
+  if (payload === '') {
+    return labels
+  }
+  try {
+    const parsed = JSON.parse(payload) as Record<string, Object>
+    const list = parsed['labels'] as Object[]
+    if (list !== undefined && list !== null && Array.isArray(list)) {
+      for (let i = 0; i < list.length; i++) {
+        const item = list[i]
+        if (typeof item === 'string' && item !== '') {
+          labels.push(item as string)
+        }
+      }
+    }
+    if (labels.length === 0) {
+      return readRoomEnglishWords(payload)
+    }
+  } catch (_e) {
+    return readRoomEnglishWords(payload)
+  }
+  return labels
 }
 
 // 翻译目标语言配置
@@ -298,6 +324,8 @@ export struct MessageBubble {
   @Event onOpenMapQuizSheet: (toolCall: ToolCall) => void = () => {}
   // 客餐厅 3D 英语探索 sheet 入口（3D 场景在气泡内太小，必须全屏）
   @Event onOpenRoomEnglishSheet: (toolCall: ToolCall) => void = () => {}
+  // 3D 身体英语课 sheet 入口（3D 场景在气泡内太小，必须全屏）
+  @Event onOpenBody3DSheet: (toolCall: ToolCall) => void = () => {}
 
   // 支持的翻译语言列表
   private translateLanguages: TranslateLanguage[] = [
@@ -2442,6 +2470,53 @@ export struct MessageBubble {
                 }, (toolCall: ToolCall, index: number) => 'room_english_' + toolCall.id + '_' + index.toString())
               }
 
+              // body_3d 待答时显示紧凑横幅, 点击打开全屏 3D 身体课
+              if (this.message.hasToolCalls()) {
+                ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
+                  if (this.shouldRenderBody3DInteractionCard(toolCall, index)) {
+                    Row() {
+                      Column() {
+                        SymbolGlyph($r('sys.symbol.person_2'))
+                          .fontSize(15)
+                          .fontColor([this.themePrimary])
+                      }
+                      .width(32)
+                      .height(32)
+                      .borderRadius(16)
+                      .backgroundColor(withColorAlpha(this.themePrimary, '18'))
+                      .alignItems(HorizontalAlign.Center)
+                      .justifyContent(FlexAlign.Center)
+
+                      Column({ space: 2 }) {
+                        Text('3D 身体英语课')
+                          .fontSize(13)
+                          .fontWeight(FontWeight.Medium)
+                          .fontColor($r('app.color.text_primary'))
+                        Text('点击和小星一起认识身体')
+                          .fontSize(11)
+                          .fontColor($r('app.color.text_tertiary'))
+                      }
+                      .alignItems(HorizontalAlign.Start)
+                      .margin({ left: 8 })
+                      .layoutWeight(1)
+
+                      Text('>')
+                        .fontSize(14)
+                        .fontColor($r('app.color.text_tertiary'))
+                    }
+                    .width('100%')
+                    .padding(12)
+                    .backgroundColor(this.themeAiBubble)
+                    .borderRadius(12)
+                    .border({ width: 1, color: $r('app.color.divider') })
+                    .margin({ bottom: 6 })
+                    .onClick(() => {
+                      this.onOpenBody3DSheet(toolCall)
+                    })
+                  }
+                }, (toolCall: ToolCall, index: number) => 'body_3d_' + toolCall.id + '_' + index.toString())
+              }
+
               // sudoku 待答时显示独立互动卡片;提交后收缩到 timeline step 内。
               if (this.message.hasToolCalls()) {
                 ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
@@ -3113,6 +3188,10 @@ export struct MessageBubble {
       // 客餐厅 3D 英语探索: 已完成的可以展开回看这次收集到的单词
       return this.isSuccessfulToolStep(part)
     }
+    if (isBody3DFunctionName(part.toolName)) {
+      // 3D 身体英语课: 已完成的可以展开回看这次点开的部位
+      return this.isSuccessfulToolStep(part)
+    }
     if (isMatchingPairsFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
@@ -3177,7 +3256,7 @@ export struct MessageBubble {
       return true
     }
     // 默认行为: 图片生成/数学游戏/英语看图说话 成功后默认展开查看结果
-    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isMathTeachFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isListeningQuizFunctionName(part.toolName) || isPinyinQuizFunctionName(part.toolName) || isMatchingPairsFunctionName(part.toolName) || isMemoryMatchFunctionName(part.toolName) || isSnakeGameFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName) || isHanziCardFunctionName(part.toolName) || isPinyinCardFunctionName(part.toolName) || isPictureTalkFunctionName(part.toolName) || isChineseQuizFunctionName(part.toolName) || isMapCardFunctionName(part.toolName) || isMapQuizFunctionName(part.toolName) || isRoomEnglishFunctionName(part.toolName)) {
+    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isMathTeachFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isListeningQuizFunctionName(part.toolName) || isPinyinQuizFunctionName(part.toolName) || isMatchingPairsFunctionName(part.toolName) || isMemoryMatchFunctionName(part.toolName) || isSnakeGameFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName) || isHanziCardFunctionName(part.toolName) || isPinyinCardFunctionName(part.toolName) || isPictureTalkFunctionName(part.toolName) || isChineseQuizFunctionName(part.toolName) || isMapCardFunctionName(part.toolName) || isMapQuizFunctionName(part.toolName) || isRoomEnglishFunctionName(part.toolName) || isBody3DFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
     return false
@@ -3187,7 +3266,7 @@ export struct MessageBubble {
     const key = this.getToolStepKey(part)
     // 默认展开的工具类型: 图片生成、数学游戏、英语看图说话、数字华容道、迷宫等
     const isDefaultExpanded = this.isSuccessfulToolStep(part) &&
-      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isMathTeachFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isListeningQuizFunctionName(part.toolName) || isPinyinQuizFunctionName(part.toolName) || isMatchingPairsFunctionName(part.toolName) || isMemoryMatchFunctionName(part.toolName) || isSnakeGameFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName) || isHanziCardFunctionName(part.toolName) || isPinyinCardFunctionName(part.toolName) || isPictureTalkFunctionName(part.toolName) || isChineseQuizFunctionName(part.toolName) || isMapCardFunctionName(part.toolName) || isMapQuizFunctionName(part.toolName) || isRoomEnglishFunctionName(part.toolName))
+      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isMathTeachFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isListeningQuizFunctionName(part.toolName) || isPinyinQuizFunctionName(part.toolName) || isMatchingPairsFunctionName(part.toolName) || isMemoryMatchFunctionName(part.toolName) || isSnakeGameFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName) || isHanziCardFunctionName(part.toolName) || isPinyinCardFunctionName(part.toolName) || isPictureTalkFunctionName(part.toolName) || isChineseQuizFunctionName(part.toolName) || isMapCardFunctionName(part.toolName) || isMapQuizFunctionName(part.toolName) || isRoomEnglishFunctionName(part.toolName) || isBody3DFunctionName(part.toolName))
     const next: string[] = []
     let found = false
     let foundCollapsed = false
@@ -3430,6 +3509,13 @@ export struct MessageBubble {
 
   private shouldRenderRoomEnglishInteractionCard(toolCall: ToolCall, index: number): boolean {
     if (!isRoomEnglishFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
+      return false
+    }
+    return !this.isAskUserToolCallAnswered(toolCall, index)
+  }
+
+  private shouldRenderBody3DInteractionCard(toolCall: ToolCall, index: number): boolean {
+    if (!isBody3DFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
       return false
     }
     return !this.isAskUserToolCallAnswered(toolCall, index)
@@ -3882,6 +3968,10 @@ export struct MessageBubble {
       return
     }
     if (isRoomEnglishFunctionName(part.toolName)) {
+      this.toggleToolStep(part)
+      return
+    }
+    if (isBody3DFunctionName(part.toolName)) {
       this.toggleToolStep(part)
       return
     }
@@ -4348,6 +4438,8 @@ export struct MessageBubble {
       this.MapPuzzleStepContent(step)
     } else if (isRoomEnglishFunctionName(step.toolName)) {
       this.RoomEnglishStepContent(step)
+    } else if (isBody3DFunctionName(step.toolName)) {
+      this.Body3DStepContent(step)
     } else if (isImageGenerationFunctionName(step.toolName) && this.isToolStepClickable(step)) {
       // 图片生成: 折叠/展开, 在下方直接展示生成结果缩略图
       Column() {
@@ -4985,6 +5077,73 @@ export struct MessageBubble {
           .padding({ left: 8, right: 8, top: 3, bottom: 3 })
           .margin({ right: 6, bottom: 6 })
       }, (word: string) => 'room_step_word_' + word)
+    }
+    .width('100%')
+    .margin({ top: 8 })
+  }
+
+
+  // body_3d 工具步骤: 已完成的 3D 身体课, 在 timeline 中显示这次点开的部位
+  @Builder
+  Body3DStepContent(step: MessagePart) {
+    Column() {
+      Row({ space: 6 }) {
+        if (step.toolStatus === 'succeeded') {
+          SymbolGlyph($r('sys.symbol.checkmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_success')])
+        } else if (step.toolStatus === 'failed' || step.toolStatus === 'denied') {
+          SymbolGlyph($r('sys.symbol.xmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_error')])
+        } else {
+          Column()
+            .width(8)
+            .height(8)
+            .borderRadius(4)
+            .backgroundColor(this.themePrimary)
+        }
+
+        Text(this.buildToolStepTitle(step))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+
+        if (this.isToolStepClickable(step)) {
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(12)
+            .fontColor([$r('app.color.text_tertiary')])
+            .rotate({ angle: this.isToolStepExpanded(step) ? 0 : -90 })
+            .animation({ duration: 200, curve: Curve.EaseOut })
+        }
+      }
+      .width('100%')
+      .onClick(() => {
+        if (this.isToolStepClickable(step)) {
+          this.handleToolStepClick(step)
+        }
+      })
+
+      if (this.isToolStepExpanded(step) && step.toolResult !== '') {
+        this.Body3DStepSummary(step)
+      }
+    }
+    .width('100%')
+  }
+
+  @Builder
+  Body3DStepSummary(step: MessagePart) {
+    Flex({ wrap: FlexWrap.Wrap }) {
+      ForEach(readBody3DLabels(resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason)), (word: string) => {
+        Text(word)
+          .fontSize(12)
+          .fontColor(this.themePrimary)
+          .backgroundColor(withColorAlpha(this.themePrimary, '14'))
+          .borderRadius(10)
+          .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+          .margin({ right: 6, bottom: 6 })
+      }, (word: string) => 'body_step_word_' + word)
     }
     .width('100%')
     .margin({ top: 8 })

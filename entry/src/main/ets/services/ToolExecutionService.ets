@@ -13,6 +13,7 @@ import { ChinaMapData, ChinaProvince, findProvinceByRef, getCachedChinaMapData, 
 import { validateMapCardArgs, validateMapQuizArgs } from '../utils/MapToolValidation'
 import { validateMapPuzzleArgs } from '../utils/MapPuzzleValidation'
 import { validateRoomEnglishArgs } from '../utils/RoomEnglishValidation'
+import { validateBody3DArgs } from '../utils/Body3DValidation'
 import { getToolRegistry, RegisteredTool, ToolRegistry } from './ToolRegistry'
 import {
   ASK_USER_TOOL_ID,
@@ -67,6 +68,8 @@ import {
   MAP_QUIZ_TOOL_ID,
   MAP_PUZZLE_TOOL_ID,
   ROOM_ENGLISH_TOOL_ID,
+  BODY_3D_TOOL_ID,
+  isBody3DFunctionName,
   isScrapeWebFunctionName,
   isSearchWebFunctionName,
   isGrantStarFunctionName
@@ -1916,6 +1919,98 @@ export class ToolExecutionService {
     )
   }
 
+
+  // body_3d 特殊路径: 3D 身体英语课（讲解型）。
+  // 前端 Body3DCard 用 Web 容器承载 3D 小星, 收集孩子点开的部位; 点「我学会了」完成回执。
+  // 讲解型工具: 不授星——星星由后续 english_quiz / matching_pairs 给。
+  private async handleBody3D(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = BODY_3D_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '3D 身体英语课'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 0. 预校验: skill_key / focus 枚举 / words 必须命中 25 个身体部位 id
+    const cardValidation = validateBody3DArgs(toolCall.arguments)
+    if (!cardValidation.ok) {
+      console.warn('ToolExecutionService', `body_3d validation failed: ${cardValidation.error}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: 'validation_failed',
+          message: cardValidation.error,
+          should_retry: true
+        }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    // 1. 立即设置 pending 状态, 让卡片立即出现
+    toolCall.approvalState = 'pending'
+    this.recordLedgerServed('body_3d', toolCall, context)
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = BODY_3D_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `body_3d answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `body_3d 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'body_3d cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未完成本课学习' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `body_3d answered: ${toolCall.id}`)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
   // 地图数据加载: 缓存优先, miss 时经 EntryAbility 注入的 context 读 rawfile。
   // 失败返回 null → 校验层按「数据未就绪」硬拒, AI should_retry。
   /**
@@ -3330,6 +3425,12 @@ export class ToolExecutionService {
     // 客餐厅 3D 英语探索讲解卡, 由 RoomEnglishCard 收集「我学会了」完成回执。
     if (isRoomEnglishFunctionName(normalizedFunctionName)) {
       return await this.handleRoomEnglish(toolCall, context)
+    }
+
+    // === body_3d 特殊路径 ===
+    // 3D 身体英语课讲解卡, 由 Body3DCard 收集「我学会了」完成回执。
+    if (isBody3DFunctionName(normalizedFunctionName)) {
+      return await this.handleBody3D(toolCall, context)
     }
 
     // 通过函数名获取工具 ID

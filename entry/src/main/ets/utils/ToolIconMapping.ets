@@ -49,6 +49,9 @@ const MAP_KEYWORDS: string[] = [
 const ROOM_KEYWORDS: string[] = [
   'room_english'
 ]
+const BODY_KEYWORDS: string[] = [
+  'body_3d', '3d_body', 'body3d', 'body_english'
+]
 
 function matchesAny(name: string, keywords: string[]): boolean {
   for (let i = 0; i < keywords.length; i++) {
@@ -122,6 +125,9 @@ export function resolveToolSymbol(functionName: string): Resource {
   }
   if (matchesAny(name, ROOM_KEYWORDS)) {
     return $r('sys.symbol.house')
+  }
+  if (matchesAny(name, BODY_KEYWORDS)) {
+    return $r('sys.symbol.person_2')
   }
   return $r('sys.symbol.wrench_and_screwdriver')
 }

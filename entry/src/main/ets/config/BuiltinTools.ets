@@ -48,7 +48,8 @@ import {
   MAP_CARD_TOOL_ID,
   MAP_QUIZ_TOOL_ID,
   MAP_PUZZLE_TOOL_ID,
-  ROOM_ENGLISH_TOOL_ID
+  ROOM_ENGLISH_TOOL_ID,
+  BODY_3D_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { getPinyinCharsJoined } from './PinyinData'
 import { getStrokeOrderCharsJoined } from './StrokeOrderData'
@@ -3930,6 +3931,88 @@ function createRoomEnglishToolConfig(): ToolConfig {
 }
 
 
+// ===== body_3d 工具 =====
+// 3D 身体英语课（讲解型）：可旋转的程序化小星，25 个身体部位可点开单词卡
+// （英文 / 音标 / 中文 / 儿童解释 / 单复数提示 / 原生 TTS 发音）。
+// 参考 open-design 原型 xiaoxing-body-class。
+// 交互由前端 Body3DCard（Web 容器）处理，后台 ToolExecutionService.handleBody3D 拦截。
+
+interface Body3DArgs {
+  focus?: string
+  words?: string[]
+  skill_key: string
+}
+
+class Body3DExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // body_3d 的交互由前端 Body3DCard 组件处理。
+    // 后台由 ToolExecutionService.handleBody3D 拦截处理。
+    try {
+      const params = JSON.parse(_args) as Body3DArgs
+      return JSON.stringify({
+        opened: true,
+        focus: params.focus ?? 'all',
+        words: params.words ?? [],
+        skill_key: 'english_vocab'
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`body_3d error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createBody3DToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "focus": {
+        "type": "string",
+        "enum": ["head", "body", "legs", "whole", "all"],
+        "description": "可选。本次重点学习的部位分组：head=头部（head / hair / face / ears / eyes / nose / mouth / teeth 共 8 个），body=身体（neck / shoulders / arms / elbows / hands / fingers / thumb / chest / belly / back 共 10 个），legs=下肢（legs / knees / feet / toes 共 4 个），whole=整体（body / skin / belly button 共 3 个），all=25 个部位都能点。默认 all。"
+      },
+      "words": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "可选。本次想重点教的部位 id，最多 8 个，传了会立刻选中第一个词并朗读、在单词表里标出重点词。id 一律用单数（eye 不是 eyes，knee 不是 knees），且必须属于 focus 分组。合法 id：head hair face ear eye nose mouth teeth neck shoulder arm elbow hand finger thumb chest belly back leg knee foot toe body skin tummy。"
+      },
+      "skill_key": {
+        "type": "string",
+        "enum": ["english_vocab"],
+        "description": "固定传 english_vocab（英语词汇）。"
+      }
+    },
+    "required": ["skill_key"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    BODY_3D_TOOL_ID,
+    'Open the 3D body class (3D 身体英语课): a cute rotatable low-poly kid with 25 tappable body parts. Tapping a part opens a kid-friendly word card with the English word, phonetic, Chinese meaning, a one-line kid definition, a singular/plural hint and a TTS pronunciation button. A body map and a grouped word list let the child jump to any part. Teach body vocabulary (head, hair, face, ears, eyes, nose, mouth, teeth, neck, shoulders, arms, elbows, hands, fingers, thumb, chest, belly, back, legs, knees, feet, toes, body, skin, belly button) with this INSTEAD of describing body parts in plain text. Pass focus (head, body, legs, whole or all) to choose the group of this lesson, and words (max 8 ids) to highlight the target words. After exploring, follow up with english_quiz or matching_pairs to check the words and award stars.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createBody3DToolConfig(): ToolConfig {
+  return new ToolConfig(
+    BODY_3D_TOOL_ID,
+    '3D 身体英语课',
+    '点一点小星身上的 25 个部位，听英文发音、看单词卡，学会 head、eyes、knees 这些身体单词。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    BODY_3D_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
 // 注册所有内置工具
 export function registerBuiltinTools(): void {
   const registry = getToolRegistry()
@@ -4298,6 +4381,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(BODY_3D_TOOL_ID)) {
+    const body3dTool = new RegisteredTool(
+      BODY_3D_TOOL_ID,
+      createBody3DToolConfig(),
+      createBody3DToolDefinition(),
+      new Body3DExecutor()
+    )
+    registry.registerTool(body3dTool)
+    registeredNow += 1
+  }
+
   console.info(
     'BuiltinTools',
     `Builtin tools ready: total=${registry.getToolCount()}, newlyRegistered=${registeredNow}`
@@ -4306,5 +4400,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID, MAP_CARD_TOOL_ID, MAP_QUIZ_TOOL_ID, MAP_PUZZLE_TOOL_ID, ROOM_ENGLISH_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID, MAP_CARD_TOOL_ID, MAP_QUIZ_TOOL_ID, MAP_PUZZLE_TOOL_ID, ROOM_ENGLISH_TOOL_ID, BODY_3D_TOOL_ID]
 }

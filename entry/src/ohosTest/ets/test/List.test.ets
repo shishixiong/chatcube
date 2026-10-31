@@ -9,6 +9,7 @@ import mapPuzzleLayoutTest from './utils/MapPuzzleLayout.test';
 import mapPuzzleValidationTest from './utils/MapPuzzleValidation.test';
 import chinaMapMetricsTest from './utils/ChinaMapMetrics.test';
 import roomEnglishValidationTest from './utils/RoomEnglishValidation.test';
+import body3DValidationTest from './utils/Body3DValidation.test';
 import kidsSubjectUtilsTest from './utils/KidsSubjectUtils.test';
 import learningLedgerModelsTest from './utils/LearningLedgerModels.test';
 import ledgerExtractUtilsTest from './utils/LedgerExtractUtils.test';
@@ -38,6 +39,7 @@ export default function testsuite() {
   mapPuzzleValidationTest();
   chinaMapMetricsTest();
   roomEnglishValidationTest();
+  body3DValidationTest();
   kidsSubjectUtilsTest();
   learningLedgerModelsTest();
   ledgerExtractUtilsTest();
