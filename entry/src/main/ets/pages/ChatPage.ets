@@ -3079,7 +3079,8 @@ export struct ChatPage {
                   words: [],
                   focus: 'all',
                   skill_key: 'english_vocab',
-                  cancelled: true
+                  cancelled: true,
+                  lesson: null
                 }
                 this.handleAskUserAnswer(this.roomEnglishToolCall.id, JSON.stringify(cancelResult))
               }

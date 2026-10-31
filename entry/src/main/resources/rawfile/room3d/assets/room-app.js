@@ -12,6 +12,7 @@
     selectedId: null,
     discovered: new Set(),
     labelsVisible: false,
+    autoSpeak: true,
     modalOpen: false,
     ready: false,
     celebrated: false,
@@ -612,6 +613,14 @@
     }
   }
 
+  function setLessonMode(enabled) {
+    const on = !!enabled;
+    dom.stage.classList.toggle('lesson-mode', on);
+    if (on && state.labelsVisible) {
+      setLabelsVisible(false);
+    }
+  }
+
   function bindUI() {
     dom.labelToggle.addEventListener('click', () => {
       if (!state.ready) return;
@@ -747,13 +756,32 @@
     if (room) {
       const current = room.selected?.userData?.objectId || null;
       if (current === id) {
-        if (state.selectedId !== id) syncSelection(id);
+        if (state.selectedId !== id) {
+          syncSelection(id);
+        } else {
+          // 重复点同一件物品：只补一次选中回调（引导课「再试一次」需要），
+          // 不重渲染、不重发音，自由探索的可见行为不变。
+          const meta = byId.get(id);
+          bridgeCall('onSelect', id, meta ? meta.word : '');
+        }
       } else {
         room.select(id);
       }
     } else {
       syncSelection(id);
     }
+  }
+
+  // 引导课「找一找」准备：切到目标物品所在房间/分区并收起单词卡，但不选中、不发音。
+  function prepareFind(id) {
+    const meta = byId.get(id);
+    if (!meta) return false;
+    setActiveRoom(meta.room);
+    if (meta.room === 'main' && hasArea(meta.category)) {
+      setActiveArea(meta.category);
+    }
+    chooseObject(null);
+    return true;
   }
 
   function syncSelection(id) {
@@ -770,7 +798,7 @@
       hideHoverChip();
       announce(meta.word + '，' + meta.zh + '。' + meta.kidDefinition);
       // 点开就念：先中文意思，再英文单词（小朋友先听懂，再记发音）
-      speakCurrentWord();
+      if (state.autoSpeak) speakCurrentWord();
     } else {
       stopSpeech();
       closeWordView();
@@ -1049,6 +1077,9 @@
     setLabels: function (visible) { setLabelsVisible(!!visible); },
     setRoom: function (roomId) { setActiveRoom(roomId); },
     setArea: function (areaId) { return setActiveArea(areaId || ''); },
+    setAutoSpeak: function (enabled) { state.autoSpeak = !!enabled; },
+    setLessonMode: function (enabled) { setLessonMode(!!enabled); },
+    prepareFind: function (id) { return prepareFind(id); },
     ids: OBJECTS.map(function (item) { return item.id; })
   };
 

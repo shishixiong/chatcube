@@ -412,6 +412,11 @@ a:focus-visible,
   pointer-events: auto;
 }
 
+/* 引导式小课由原生卡片提供标题与进度，顶部悬浮块会遮挡 3D 物品、挡住点选，lesson 模式整体隐藏。 */
+.stage-card.lesson-mode .stage-top {
+  display: none;
+}
+
 .scene-title {
   min-width: 0;
   padding: 12px 15px 13px;

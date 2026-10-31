@@ -21,7 +21,28 @@ import { ToolCall } from '../../models/ChatModels'
 import { ServiceRegistry } from '../../services/ServiceRegistry'
 import { getAppUiState } from '../../state/AppUiState'
 import { withColorAlpha } from '../../utils/ColorAlphaUtils'
-import { RoomEnglishValidationResult, resolveRoomEnglishArea, resolveRoomEnglishView, validateRoomEnglishArgs } from '../../utils/RoomEnglishValidation'
+import {
+  RoomEnglishLessonPlan,
+  RoomEnglishValidationResult,
+  RoomLessonStep,
+  resolveRoomEnglishArea,
+  resolveRoomEnglishView,
+  validateRoomEnglishArgs
+} from '../../utils/RoomEnglishValidation'
+import {
+  RoomLessonTaskState,
+  RoomTaskTapResult,
+  advanceTask,
+  buildRevealPrompt,
+  buildSuccessPrompt,
+  buildTaskPrompt,
+  buildWrongPrompt,
+  createTaskState,
+  currentTargetId,
+  isTaskComplete,
+  judgeTaskTap,
+  nextTourIndex
+} from '../../utils/RoomEnglishLesson'
 
 // 与 mermaid / document-parser 同法：rawfile 里的本地页面用 resource:// 加载，
 // 页面内相对路径（assets/three.min.js 等）由 ArkWeb 按同源解析。
@@ -33,6 +54,20 @@ const ROOM_OBJECT_TOTAL: number = 76
 /** 单词朗读语速：三个引擎（system/minimax/stepfun）通用范围 [0.5, 2]，0.8 略慢便于孩子跟读 */
 const ROOM_WORD_TTS_SPEED: number = 0.8
 
+/** 引导式课程回执（spec 2026-10-30）：带逛 + 听词找物的课堂统计。 */
+export interface RoomEnglishLessonResult {
+  tour_completed: boolean
+  tour_words: string[]
+  task_type: string
+  task_targets: string[]
+  task_correct: number
+  task_first_try: number
+  task_revealed: number
+  task_total: number
+  task_attempts: number
+  task_completed: boolean
+}
+
 /** 完成回执：写进 toolCall.approvalReason，随 ToolResult 回给 AI。 */
 export interface RoomEnglishAnswerPayload {
   completed: boolean
@@ -41,16 +76,43 @@ export interface RoomEnglishAnswerPayload {
   focus: string
   skill_key: string
   cancelled: boolean
+  lesson: RoomEnglishLessonResult | null
 }
 
 export interface RoomEnglishArgsView {
   valid: boolean
   focus: string
   words: string[]
+  lesson: RoomEnglishLessonPlan | null
+}
+
+/** 卡片本地 UI 阶段：free = 自由探索（无 lesson），其余为引导式课程。 */
+type RoomLessonMode = 'free' | 'tour' | 'task' | 'summary' | 'answered'
+
+function readStringArray(value: Object): string[] {
+  const out: string[] = []
+  if (value === undefined || value === null || !Array.isArray(value)) {
+    return out
+  }
+  const list = value as Object[]
+  for (let i = 0; i < list.length; i++) {
+    const item = list[i]
+    if (typeof item === 'string') {
+      out.push(item as string)
+    }
+  }
+  return out
+}
+
+function readNumber(value: Object): number {
+  if (typeof value === 'number') {
+    return value as number
+  }
+  return 0
 }
 
 function createArgsView(): RoomEnglishArgsView {
-  const view: RoomEnglishArgsView = { valid: false, focus: 'all', words: [] }
+  const view: RoomEnglishArgsView = { valid: false, focus: 'all', words: [], lesson: null }
   return view
 }
 
@@ -60,6 +122,7 @@ export function parseRoomEnglishArgs(raw: string): RoomEnglishArgsView {
   view.valid = result.ok
   view.focus = result.focus
   view.words = result.words
+  view.lesson = result.lesson
   return view
 }
 
@@ -119,6 +182,19 @@ export struct RoomEnglishCard {
   @Local speaking: boolean = false
   @Local hasCompleted: boolean = false
 
+  // 引导式课程状态（lesson 为空时保持自由探索行为）
+  @Local lessonMode: RoomLessonMode = 'free'
+  @Local tourIndex: number = 0
+  @Local tourCompleted: boolean = false
+  @Local taskState: RoomLessonTaskState = createTaskState([])
+  @Local bubbleText: string = ''
+  @Local bubbleTextZh: string = ''
+  @Local answeredLesson: RoomEnglishLessonResult | null = null
+
+  private lesson: RoomEnglishLessonPlan | null = null
+  private suppressSelectUntil: number = 0
+  private advanceTimer: number = -1
+
   private controller: webview.WebviewController = new webview.WebviewController()
   private bridge: RoomNativeBridge = new RoomNativeBridge()
   private submitted: boolean = false
@@ -141,6 +217,7 @@ export struct RoomEnglishCard {
   aboutToAppear(): void {
     this.uiContext = this.getUIContext()
     this.argsView = parseRoomEnglishArgs(this.toolCall.arguments)
+    this.lesson = this.argsView.lesson
     this.bridge.speakHandler = (text: string, zh: string): boolean => this.speakWord(text, zh)
     this.bridge.stopHandler = (): void => this.stopSpeak()
     this.bridge.readyHandler = (): void => {
@@ -150,20 +227,44 @@ export struct RoomEnglishCard {
     }
     this.bridge.selectHandler = (id: string, word: string): void => {
       this.runOnUi((): void => {
+        if (Date.now() < this.suppressSelectUntil) {
+          return
+        }
+        if (this.lessonMode === 'task') {
+          this.handleTaskTap(id, word)
+          return
+        }
         this.noteSelected(id, word)
       })
     }
     this.bridge.progressHandler = (idsJson: string): void => {
       this.runOnUi((): void => {
+        // 课程模式只统计孩子亲手点开的物品：Web 的 discovered 含程序化带逛/出题选中。
+        if (this.lesson !== null) {
+          return
+        }
         this.applyProgress(idsJson)
       })
     }
     if (this.isAnswered) {
       this.readAnsweredPayload()
+      this.lessonMode = 'answered'
+    } else if (this.lesson !== null) {
+      this.lessonMode = 'tour'
+      this.taskState = createTaskState(this.lesson.task.targets)
+      // 3D 场景加载期间先显示第一步讲解，避免空气泡空等
+      if (this.lesson.steps.length > 0) {
+        this.bubbleText = this.lesson.steps[0].say
+        this.bubbleTextZh = this.lesson.steps[0].sayZh !== '' ? this.lesson.steps[0].sayZh : this.lesson.steps[0].zh
+      }
     }
   }
 
   aboutToDisappear(): void {
+    if (this.advanceTimer >= 0) {
+      clearTimeout(this.advanceTimer)
+      this.advanceTimer = -1
+    }
     this.stopSpeak()
   }
 
@@ -314,9 +415,33 @@ export struct RoomEnglishCard {
         this.exploredIds = next
         this.exploredWords = next
       }
+      const lessonRaw = prev['lesson']
+      if (lessonRaw !== undefined && lessonRaw !== null && typeof lessonRaw === 'object' && !Array.isArray(lessonRaw)) {
+        this.answeredLesson = this.parseLessonResult(lessonRaw as Record<string, Object>)
+      } else {
+        this.answeredLesson = null
+      }
     } catch (_e) {
       this.hasCompleted = false
+      this.answeredLesson = null
     }
+  }
+
+  /** 回看态：宽松解析 lesson 统计，字段缺失时按 0 / false 兜底，不抛错。 */
+  private parseLessonResult(raw: Record<string, Object>): RoomEnglishLessonResult {
+    const result: RoomEnglishLessonResult = {
+      tour_completed: raw['tour_completed'] === true,
+      tour_words: readStringArray(raw['tour_words']),
+      task_type: typeof raw['task_type'] === 'string' ? (raw['task_type'] as string) : '',
+      task_targets: readStringArray(raw['task_targets']),
+      task_correct: readNumber(raw['task_correct']),
+      task_first_try: readNumber(raw['task_first_try']),
+      task_revealed: readNumber(raw['task_revealed']),
+      task_total: readNumber(raw['task_total']),
+      task_attempts: readNumber(raw['task_attempts']),
+      task_completed: raw['task_completed'] === true
+    }
+    return result
   }
 
   // ====== Web 控制 ======
@@ -355,9 +480,287 @@ export struct RoomEnglishCard {
     }
   }
 
+  private runWeb(script: string): Promise<string> {
+    try {
+      return this.controller.runJavaScript(script)
+    } catch (e) {
+      return Promise.reject(e)
+    }
+  }
+
+  // ====== 引导式课程（spec 2026-10-30） ======
+
+  private get lessonTargets(): string[] {
+    return this.lesson !== null ? this.lesson.task.targets : []
+  }
+
+  private get tourStepCount(): number {
+    return this.lesson !== null ? this.lesson.steps.length : 0
+  }
+
+  private stepForId(id: string): RoomLessonStep | null {
+    if (this.lesson === null) {
+      return null
+    }
+    for (let i = 0; i < this.lesson.steps.length; i++) {
+      if (this.lesson.steps[i].id === id) {
+        return this.lesson.steps[i]
+      }
+    }
+    return null
+  }
+
+  /** id → 英文单词；不是本课步骤时退回 id。 */
+  private wordForId(id: string): string {
+    const step = this.stepForId(id)
+    return step !== null ? step.word : id
+  }
+
+  /** Web 页面每次加载都会把 autoSpeak 重置为 true，所以每次 onPageEnd 都要重新关掉自动朗读。 */
+  private startOrResumeLesson(): void {
+    if (this.lesson === null) {
+      return
+    }
+    this.runWeb('(function(){try{var app=window.WordRoomApp;if(app){app.setAutoSpeak(false);app.setLessonMode(true);}}catch(e){}})();')
+      .catch((e: Error): void => {
+        console.error('RoomEnglishCard', 'set auto speak failed: ' + e.message)
+      })
+    if (this.lessonMode === 'tour') {
+      this.presentStep(this.tourIndex)
+    } else if (this.lessonMode === 'task') {
+      this.presentTaskStep()
+    }
+  }
+
+  private presentStep(index: number): void {
+    const lesson = this.lesson
+    if (lesson === null || index < 0 || index >= lesson.steps.length) {
+      this.tourCompleted = true
+      this.startTask()
+      return
+    }
+    const step = lesson.steps[index]
+    this.tourIndex = index
+    this.bubbleText = step.say
+    // AI 省略 say_zh 时用单词中文兜底，气泡与 TTS 都要带中文
+    const zh: string = step.sayZh !== '' ? step.sayZh : step.zh
+    this.bubbleTextZh = zh
+    const view = resolveRoomEnglishView(this.argsView.focus)
+    const area = resolveRoomEnglishArea(this.argsView.focus)
+    let script = '(function(){try{var app=window.WordRoomApp;if(!app){return;}app.setAutoSpeak(false);app.setRoom(\'' + view + '\');'
+    if (area !== '') {
+      script += 'app.setArea(\'' + area + '\');'
+    }
+    script += 'app.select(\'' + step.id + '\');}catch(e){}})();'
+    this.suppressSelectUntil = Date.now() + 1000
+    // select 会触发 Web 端 syncSelection → stopSpeak，必须等脚本执行完再朗读，否则刚开口就被打断
+    this.runWeb(script).then((): void => {
+      if (this.submitted || this.isAnswered) {
+        return
+      }
+      this.speakWord(step.say, zh)
+    }).catch((e: Error): void => {
+      console.error('RoomEnglishCard', `present step failed: ${e.message}`)
+      if (this.submitted || this.isAnswered) {
+        return
+      }
+      this.speakWord(step.say, zh)
+    })
+  }
+
+  private nextTourStep(): void {
+    const next = nextTourIndex(this.tourIndex, this.tourStepCount)
+    if (next < 0) {
+      this.tourCompleted = true
+      this.startTask()
+    } else {
+      this.presentStep(next)
+    }
+  }
+
+  private skipTour(): void {
+    this.tourCompleted = false
+    this.startTask()
+  }
+
+  private startTask(): void {
+    if (this.lesson === null) {
+      return
+    }
+    // 带逛的程序化选中会开启 1s 抑制窗；进入任务阶段必须先清掉，否则首个目标点击会被丢弃
+    this.suppressSelectUntil = 0
+    this.lessonMode = 'task'
+    this.taskState = createTaskState(this.lessonTargets)
+    this.presentTaskStep()
+  }
+
+  private presentTaskStep(): void {
+    const targets = this.lessonTargets
+    if (targets.length === 0 || isTaskComplete(this.taskState, targets)) {
+      this.finishTask()
+      return
+    }
+    const targetId = currentTargetId(this.taskState, targets)
+    const step = this.stepForId(targetId)
+    if (step === null) {
+      this.finishTask()
+      return
+    }
+    this.bubbleText = buildTaskPrompt(step.word)
+    this.bubbleTextZh = ''
+    this.runWeb('(function(){try{var app=window.WordRoomApp;if(!app){return false;}app.setAutoSpeak(false);return app.prepareFind(\'' + step.id + '\');}catch(e){return false;}})();')
+      .then((_result: string): void => {
+        if (this.submitted || this.isAnswered) {
+          return
+        }
+        this.speakBubble()
+      })
+      .catch((e: Error): void => {
+        console.error('RoomEnglishCard', 'prepareFind failed: ' + e.message)
+      })
+  }
+
+  private handleTaskTap(id: string, word: string): void {
+    const targets = this.lessonTargets
+    if (targets.length === 0) {
+      return
+    }
+    const maxAttempts = this.lesson !== null ? this.lesson.task.maxAttempts : 2
+    const result: RoomTaskTapResult = judgeTaskTap(this.taskState, targets, id, maxAttempts)
+    if (result.verdict === 'ignore') {
+      return
+    }
+    this.taskState = result.state
+    this.noteSelected(id, word)
+    const targetWord = this.wordForId(result.targetId)
+    const step = this.stepForId(id)
+    let tappedWord = id
+    if (step !== null) {
+      tappedWord = step.word
+    } else if (word !== '') {
+      tappedWord = word
+    }
+    if (result.verdict === 'correct') {
+      this.bubbleText = buildSuccessPrompt(targetWord)
+      this.bubbleTextZh = ''
+      this.speakBubble()
+      this.scheduleAdvance(1200)
+    } else if (result.verdict === 'wrong') {
+      this.bubbleText = buildWrongPrompt(tappedWord)
+      this.bubbleTextZh = ''
+      this.speakBubble()
+    } else if (result.verdict === 'repeat_wrong') {
+      this.speakBubble()
+    } else if (result.verdict === 'reveal') {
+      this.bubbleText = buildRevealPrompt(targetWord)
+      this.bubbleTextZh = ''
+      this.suppressSelectUntil = Date.now() + 1000
+      this.runWeb('(function(){try{var app=window.WordRoomApp;if(!app){return;}app.setAutoSpeak(false);app.select(\'' + result.targetId + '\');}catch(e){}})();')
+        .then((): void => {
+          this.afterRevealSelect()
+        })
+        .catch((e: Error): void => {
+          console.error('RoomEnglishCard', 'reveal select failed: ' + e.message)
+          this.afterRevealSelect()
+        })
+    }
+  }
+
+  /** 高亮脚本结束后再朗读并推进，避免 Web 端 select 回声的 stopSpeak 打断 TTS；失败也推进，任务不会卡住。 */
+  private afterRevealSelect(): void {
+    if (this.submitted || this.isAnswered) {
+      return
+    }
+    this.speakBubble()
+    this.scheduleAdvance(1500)
+  }
+
+  private scheduleAdvance(delayMs: number): void {
+    if (this.advanceTimer >= 0) {
+      clearTimeout(this.advanceTimer)
+    }
+    this.advanceTimer = setTimeout((): void => {
+      this.advanceTimer = -1
+      this.advanceTaskStep()
+    }, delayMs)
+  }
+
+  private advanceTaskStep(): void {
+    const targets = this.lessonTargets
+    this.taskState = advanceTask(this.taskState, targets)
+    if (this.taskState.completed) {
+      this.finishTask()
+    } else {
+      this.presentTaskStep()
+    }
+  }
+
+  private finishTask(): void {
+    this.lessonMode = 'summary'
+    this.bubbleText = '太棒了！'
+    this.bubbleTextZh = ''
+    this.stopSpeak()
+  }
+
+  private speakBubble(): void {
+    this.speakWord(this.bubbleText, this.bubbleTextZh)
+  }
+
   // ====== 提交 ======
 
+  private clearAdvanceTimer(): void {
+    if (this.advanceTimer >= 0) {
+      clearTimeout(this.advanceTimer)
+      this.advanceTimer = -1
+    }
+  }
+
+  private buildLessonResult(): RoomEnglishLessonResult | null {
+    const lesson = this.lesson
+    if (lesson === null) {
+      return null
+    }
+    const tourWords: string[] = []
+    for (let i = 0; i < lesson.steps.length; i++) {
+      tourWords.push(lesson.steps[i].id)
+    }
+    const targets = this.lessonTargets
+    const taskTargets: string[] = []
+    for (let i = 0; i < targets.length; i++) {
+      taskTargets.push(targets[i])
+    }
+    const result: RoomEnglishLessonResult = {
+      tour_completed: this.tourCompleted,
+      tour_words: tourWords,
+      task_type: lesson.task.type,
+      task_targets: taskTargets,
+      task_correct: this.taskState.correct,
+      task_first_try: this.taskState.firstTry,
+      task_revealed: this.taskState.revealed,
+      task_total: taskTargets.length,
+      task_attempts: this.taskState.attempts,
+      task_completed: this.taskState.completed
+    }
+    return result
+  }
+
+  private buildPayload(completed: boolean, cancelled: boolean): RoomEnglishAnswerPayload {
+    const payload: RoomEnglishAnswerPayload = {
+      completed: completed,
+      explored_count: this.exploredCount,
+      words: this.exploredIds,
+      focus: this.argsView.focus,
+      skill_key: 'english_vocab',
+      cancelled: cancelled,
+      lesson: this.buildLessonResult()
+    }
+    return payload
+  }
+
   private canSubmit(): boolean {
+    if (this.lesson !== null) {
+      return this.lessonMode === 'summary' && this.taskState.completed && !this.isAnswered
+    }
     return this.exploredCount > 0
   }
 
@@ -366,31 +769,138 @@ export struct RoomEnglishCard {
       return
     }
     this.submitted = true
-    const payload: RoomEnglishAnswerPayload = {
-      completed: true,
-      explored_count: this.exploredCount,
-      words: this.exploredIds,
-      focus: this.argsView.focus,
-      skill_key: 'english_vocab',
-      cancelled: false
-    }
+    this.clearAdvanceTimer()
+    const completed: boolean = this.lesson !== null ? this.taskState.completed : true
+    const payload: RoomEnglishAnswerPayload = this.buildPayload(completed, false)
     this.stopSpeak()
+    this.onAnswer(this.toolCall.id, JSON.stringify(payload))
+  }
+
+  /** 卡片右上角动作：带逛中「跳过带逛」，任务/小结中「退出本课」。 */
+  private cancelLesson(): void {
+    if (this.submitted || this.isAnswered) {
+      return
+    }
+    this.submitted = true
+    this.clearAdvanceTimer()
+    this.stopSpeak()
+    // 课程已结束时退出，completed 仍为 true（任务完成事实不变）；课程中途退出才是 false。
+    const completed: boolean = this.lesson !== null ? this.taskState.completed : false
+    const payload: RoomEnglishAnswerPayload = this.buildPayload(completed, true)
     this.onAnswer(this.toolCall.id, JSON.stringify(payload))
   }
 
   // ====== UI ======
 
+  private get headerTitle(): string {
+    return this.lessonMode === 'free' ? '3D 房间英语探索' : '3D 房间英语课'
+  }
+
+  private get headerSubtitle(): string {
+    if (this.lessonMode === 'tour') {
+      return `第 ${this.tourIndex + 1} / ${this.tourStepCount} 个词`
+    }
+    if (this.lessonMode === 'task') {
+      return `任务 ${this.taskState.targetIndex + 1} / ${this.lessonTargets.length}`
+    }
+    if (this.lessonMode === 'summary' || this.lessonMode === 'answered') {
+      return '本课完成'
+    }
+    return this.exploredCount > 0
+      ? `已收集 ${this.exploredCount} / ${ROOM_OBJECT_TOTAL} 个单词`
+      : '全屋、客餐厅、儿童房、主卧、阳台，点一点就知道它叫什么'
+  }
+
+  private get headerActionLabel(): string {
+    if (this.lessonMode === 'tour') {
+      return '跳过带逛'
+    }
+    if (this.lessonMode === 'task' || this.lessonMode === 'summary') {
+      return '退出本课'
+    }
+    return this.exploredCount > 0 ? '我学会了' : '先探索一下'
+  }
+
+  private get headerActionEnabled(): boolean {
+    if (this.submitted || this.isAnswered) {
+      return false
+    }
+    if (this.lessonMode !== 'free') {
+      return true
+    }
+    return this.canSubmit()
+  }
+
+  private get bubbleTitle(): string {
+    if (this.lessonMode === 'task') {
+      return '找一找'
+    }
+    if (this.lessonMode === 'summary') {
+      return '本课小结'
+    }
+    return '小星老师'
+  }
+
+  private get summaryLine(): string {
+    return `任务答对 ${this.taskState.correct} / ${this.lessonTargets.length}`
+  }
+
+  private get summarySubline(): string {
+    let line = `第一次就找到 ${this.taskState.firstTry} 个`
+    if (this.taskState.revealed > 0) {
+      line += ` · 老师指了 ${this.taskState.revealed} 个`
+    }
+    return line
+  }
+
+  /** 回看态：把课程步骤 id 映射成英文单词，缺步骤时退回 id。 */
+  private get tourWordsLabel(): string {
+    const answered = this.answeredLesson
+    if (answered === null) {
+      return ''
+    }
+    const words: string[] = []
+    for (let i = 0; i < answered.tour_words.length; i++) {
+      const id = answered.tour_words[i]
+      const step = this.stepForId(id)
+      words.push(step !== null ? step.word : id)
+    }
+    return words.join(' / ')
+  }
+
+  private get answeredLessonSummary(): string {
+    const answered = this.answeredLesson
+    if (answered === null) {
+      return ''
+    }
+    let line = `听词找物：答对 ${answered.task_correct} / ${answered.task_total} · 第一次就找到 ${answered.task_first_try}`
+    if (answered.task_revealed > 0) {
+      line += ` · 老师指了 ${answered.task_revealed} 个`
+    }
+    return line
+  }
+
+  private handleHeaderAction(): void {
+    if (this.lessonMode === 'tour') {
+      this.skipTour()
+      return
+    }
+    if (this.lessonMode === 'task' || this.lessonMode === 'summary') {
+      this.cancelLesson()
+      return
+    }
+    this.submit()
+  }
+
   @Builder
   HeaderBar() {
     Row({ space: 10 }) {
       Column({ space: 2 }) {
-        Text('3D 房间英语探索')
+        Text(this.headerTitle)
           .fontSize(15)
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.text_primary'))
-        Text(this.exploredCount > 0
-          ? `已收集 ${this.exploredCount} / ${ROOM_OBJECT_TOTAL} 个单词`
-          : '全屋、客餐厅、儿童房、主卧、阳台，点一点就知道它叫什么')
+        Text(this.headerSubtitle)
           .fontSize(11)
           .fontColor($r('app.color.text_tertiary'))
       }
@@ -398,21 +908,128 @@ export struct RoomEnglishCard {
       .layoutWeight(1)
 
       Button({ type: ButtonType.Capsule }) {
-        Text(this.exploredCount > 0 ? '我学会了' : '先探索一下')
+        Text(this.headerActionLabel)
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.canSubmit() ? Color.White : $r('app.color.text_tertiary'))
+          .fontColor(this.headerActionEnabled ? Color.White : $r('app.color.text_tertiary'))
       }
       .height(32)
       .padding({ left: 14, right: 14 })
-      .backgroundColor(this.canSubmit() ? this.themePrimary : withColorAlpha(this.themePrimary, '14'))
-      .enabled(this.canSubmit() && !this.isAnswered)
+      .backgroundColor(this.headerActionEnabled ? this.themePrimary : withColorAlpha(this.themePrimary, '14'))
+      .enabled(this.headerActionEnabled)
       .onClick(() => {
-        this.submit()
+        this.handleHeaderAction()
       })
     }
     .width('100%')
     .padding({ left: 16, right: 44, top: 8, bottom: 8 })
+  }
+
+  @Builder
+  LessonBubble() {
+    Column() {
+      Column({ space: 10 }) {
+        Row({ space: 10 }) {
+          Column() {
+            Text('英')
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.themePrimary)
+          }
+          .width(30)
+          .height(30)
+          .borderRadius(15)
+          .backgroundColor(withColorAlpha(this.themePrimary, '18'))
+          .alignItems(HorizontalAlign.Center)
+          .justifyContent(FlexAlign.Center)
+
+          Column({ space: 4 }) {
+            Text(this.bubbleTitle)
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.text_secondary'))
+            if (this.bubbleText !== '') {
+              Text(this.bubbleText)
+                .fontSize(15)
+                .fontColor($r('app.color.text_primary'))
+            }
+            if (this.bubbleTextZh !== '') {
+              Text(this.bubbleTextZh)
+                .fontSize(12)
+                .fontColor($r('app.color.text_secondary'))
+            }
+            if (this.lessonMode === 'summary') {
+              Text(this.summaryLine)
+                .fontSize(14)
+                .fontColor($r('app.color.text_primary'))
+              Text(this.summarySubline)
+                .fontSize(12)
+                .fontColor($r('app.color.text_secondary'))
+            }
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Top)
+
+        Row({ space: 8 }) {
+          Button({ type: ButtonType.Capsule }) {
+            Text('🔊 再听一次')
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.themePrimary)
+          }
+          .height(30)
+          .padding({ left: 12, right: 12 })
+          .backgroundColor(withColorAlpha(this.themePrimary, '14'))
+          .onClick(() => {
+            this.speakBubble()
+          })
+
+          if (this.lessonMode === 'tour') {
+            Button({ type: ButtonType.Capsule }) {
+              Text('下一个 ›')
+                .fontSize(13)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(Color.White)
+            }
+            .height(30)
+            .padding({ left: 12, right: 12 })
+            .backgroundColor(this.themePrimary)
+            .onClick(() => {
+              this.nextTourStep()
+            })
+          }
+
+          if (this.lessonMode === 'summary') {
+            Button({ type: ButtonType.Capsule }) {
+              Text('去答题，赢星星 ›')
+                .fontSize(13)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(Color.White)
+            }
+            .height(30)
+            .padding({ left: 12, right: 12 })
+            .backgroundColor(this.themePrimary)
+            .enabled(this.canSubmit())
+            .onClick(() => {
+              this.submit()
+            })
+          }
+        }
+        .width('100%')
+        .justifyContent(FlexAlign.Start)
+      }
+      .width('100%')
+      .padding(14)
+      .borderRadius(16)
+      .backgroundColor($r('app.color.surface'))
+      .border({ width: 1, color: $r('app.color.divider') })
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('100%')
+    .padding({ left: 12, right: 12, top: 8, bottom: 12 })
   }
 
   @Builder
@@ -422,9 +1039,18 @@ export struct RoomEnglishCard {
         .fontSize(18)
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.text_primary'))
-      Text(`一共点开了 ${this.exploredCount} 个物品`)
-        .fontSize(13)
-        .fontColor($r('app.color.text_secondary'))
+      if (this.answeredLesson !== null) {
+        Text(`本课带逛：${this.tourWordsLabel}`)
+          .fontSize(13)
+          .fontColor($r('app.color.text_secondary'))
+        Text(this.answeredLessonSummary)
+          .fontSize(13)
+          .fontColor($r('app.color.text_secondary'))
+      } else {
+        Text(`一共点开了 ${this.exploredCount} 个物品`)
+          .fontSize(13)
+          .fontColor($r('app.color.text_secondary'))
+      }
       if (this.exploredWords.length > 0) {
         Flex({ wrap: FlexWrap.Wrap }) {
           ForEach(this.exploredWords, (word: string) => {
@@ -471,7 +1097,11 @@ export struct RoomEnglishCard {
             .onPageEnd(() => {
               this.pageReady = true
               this.sceneFailed = false
-              this.applyFocusWords()
+              if (this.lesson !== null && !this.isAnswered) {
+                this.startOrResumeLesson()
+              } else {
+                this.applyFocusWords()
+              }
             })
             .onErrorReceive(() => {
               this.sceneFailed = true
@@ -517,6 +1147,10 @@ export struct RoomEnglishCard {
         }
         .layoutWeight(1)
         .width('100%')
+
+        if (this.lessonMode !== 'free') {
+          this.LessonBubble()
+        }
       }
     }
     .width('100%')

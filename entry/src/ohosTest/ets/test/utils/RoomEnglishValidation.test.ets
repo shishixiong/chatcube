@@ -10,6 +10,12 @@ import { ROOM_OBJECT_IDS, resolveRoomEnglishArea, resolveRoomEnglishView, valida
  */
 
 export default function roomEnglishValidationTest() {
+  const VALID_LESSON = '{"skill_key":"english_vocab","lesson":{"steps":[' +
+    '{"id":"sofa","word":"sofa","zh":"沙发","say":"Look! This is a sofa.","say_zh":"看，这是沙发。"},' +
+    '{"id":"rug","word":"rug","zh":"地毯"},' +
+    '{"id":"tv","word":"TV","zh":"电视"}],' +
+    '"task":{"type":"listen_find","targets":["sofa","rug","tv"]}}}'
+
   describe('validateRoomEnglishArgs', () => {
     it('accepts minimal valid args', 0, () => {
       const r = validateRoomEnglishArgs('{"skill_key":"english_vocab"}')
@@ -119,6 +125,129 @@ export default function roomEnglishValidationTest() {
       const master = validateRoomEnglishArgs('{"skill_key":"english_vocab","focus":"master","words":["double_bed"]}')
       expect(master.ok).assertTrue()
       expect(master.focus).assertEqual('master')
+    })
+
+    it('accepts a valid lesson and normalizes it', 0, () => {
+      const r = validateRoomEnglishArgs(VALID_LESSON)
+      expect(r.ok).assertTrue()
+      expect(r.lesson !== null).assertTrue()
+      expect(r.lesson!.steps.length).assertEqual(3)
+      expect(r.lesson!.steps[1].say).assertEqual('Look! This is a rug.')
+      expect(r.lesson!.steps[1].sayZh).assertEqual('')
+      expect(r.lesson!.task.maxAttempts).assertEqual(2)
+      expect(r.words.length).assertEqual(3)
+      expect(r.words[2]).assertEqual('tv')
+    })
+
+    it('defaults say with the correct indefinite article', 0, () => {
+      const r = validateRoomEnglishArgs('{"skill_key":"english_vocab","lesson":{"steps":[' +
+        '{"id":"oven","word":"oven","zh":"烤箱"},' +
+        '{"id":"rug","word":"rug","zh":"地毯"},' +
+        '{"id":"tv","word":"TV","zh":"电视"}],' +
+        '"task":{"type":"listen_find","targets":["oven","rug","tv"]}}}')
+      expect(r.ok).assertTrue()
+      expect(r.lesson !== null).assertTrue()
+      expect(r.lesson!.steps[0].say).assertEqual('Look! This is an oven.')
+    })
+
+    it('rejects a lesson with only two steps', 0, () => {
+      const r = validateRoomEnglishArgs('{"skill_key":"english_vocab","lesson":{"steps":[' +
+        '{"id":"sofa","word":"sofa","zh":"沙发"},{"id":"rug","word":"rug","zh":"地毯"}],' +
+        '"task":{"type":"listen_find","targets":["sofa","rug"]}}}')
+      expect(r.ok).assertFalse()
+    })
+
+    it('rejects a step id outside the 76 room ids', 0, () => {
+      const r = validateRoomEnglishArgs('{"skill_key":"english_vocab","lesson":{"steps":[' +
+        '{"id":"sofa","word":"sofa","zh":"沙发"},{"id":"bathtub","word":"bathtub","zh":"浴缸"},' +
+        '{"id":"rug","word":"rug","zh":"地毯"}],' +
+        '"task":{"type":"listen_find","targets":["sofa","rug","bathtub"]}}}')
+      expect(r.ok).assertFalse()
+      expect(r.error.indexOf('bathtub') >= 0).assertTrue()
+    })
+
+    it('rejects duplicate step ids', 0, () => {
+      const r = validateRoomEnglishArgs('{"skill_key":"english_vocab","lesson":{"steps":[' +
+        '{"id":"sofa","word":"sofa","zh":"沙发"},{"id":"sofa","word":"sofa","zh":"沙发"},' +
+        '{"id":"rug","word":"rug","zh":"地毯"},{"id":"tv","word":"TV","zh":"电视"}],' +
+        '"task":{"type":"listen_find","targets":["sofa","rug","tv"]}}}')
+      expect(r.ok).assertFalse()
+    })
+
+    it('rejects targets outside the step ids', 0, () => {
+      const r = validateRoomEnglishArgs('{"skill_key":"english_vocab","lesson":{"steps":[' +
+        '{"id":"sofa","word":"sofa","zh":"沙发"},{"id":"rug","word":"rug","zh":"地毯"},' +
+        '{"id":"tv","word":"TV","zh":"电视"}],' +
+        '"task":{"type":"listen_find","targets":["sofa","rug","bed"]}}}')
+      expect(r.ok).assertFalse()
+    })
+
+    it('rejects max_attempts outside 1-2', 0, () => {
+      const r = validateRoomEnglishArgs('{"skill_key":"english_vocab","lesson":{"steps":[' +
+        '{"id":"sofa","word":"sofa","zh":"沙发"},{"id":"rug","word":"rug","zh":"地毯"},' +
+        '{"id":"tv","word":"TV","zh":"电视"}],' +
+        '"task":{"type":"listen_find","targets":["sofa","rug","tv"],"max_attempts":3}}}')
+      expect(r.ok).assertFalse()
+    })
+
+    it('rejects words that disagree with the lesson steps', 0, () => {
+      const r = validateRoomEnglishArgs('{"skill_key":"english_vocab","words":["sofa","rug"],"lesson":{"steps":[' +
+        '{"id":"sofa","word":"sofa","zh":"沙发"},{"id":"rug","word":"rug","zh":"地毯"},' +
+        '{"id":"tv","word":"TV","zh":"电视"}],' +
+        '"task":{"type":"listen_find","targets":["sofa","rug","tv"]}}}')
+      expect(r.ok).assertFalse()
+    })
+
+    it('rejects an unknown task type', 0, () => {
+      const r = validateRoomEnglishArgs('{"skill_key":"english_vocab","lesson":{"steps":[' +
+        '{"id":"sofa","word":"sofa","zh":"沙发"},{"id":"rug","word":"rug","zh":"地毯"},' +
+        '{"id":"tv","word":"TV","zh":"电视"}],' +
+        '"task":{"type":"color_find","targets":["sofa","rug","tv"]}}}')
+      expect(r.ok).assertFalse()
+    })
+
+    it('rejects a non-object lesson', 0, () => {
+      const r = validateRoomEnglishArgs('{"skill_key":"english_vocab","lesson":"sofa"}')
+      expect(r.ok).assertFalse()
+    })
+
+    it('rejects the remaining invalid lesson shapes', 0, () => {
+      const sixSteps = '[' +
+        '{"id":"sofa","word":"sofa","zh":"沙发"},{"id":"rug","word":"rug","zh":"地毯"},' +
+        '{"id":"tv","word":"TV","zh":"电视"},{"id":"bed","word":"bed","zh":"床"},' +
+        '{"id":"desk","word":"desk","zh":"书桌"},{"id":"chair","word":"chair","zh":"椅子"}]'
+      const threeSteps = '[{"id":"sofa","word":"sofa","zh":"沙发"},' +
+        '{"id":"rug","word":"rug","zh":"地毯"},{"id":"tv","word":"TV","zh":"电视"}]'
+      const bad: string[] = [
+        '{"skill_key":"english_vocab","lesson":{"steps":' + sixSteps +
+          ',"task":{"type":"listen_find","targets":["sofa","rug","tv"]}}}',
+        '{"skill_key":"english_vocab","lesson":{"steps":[{"id":"sofa","word":"","zh":"沙发"},' +
+          '{"id":"rug","word":"rug","zh":"地毯"},{"id":"tv","word":"TV","zh":"电视"}],' +
+          '"task":{"type":"listen_find","targets":["sofa","rug","tv"]}}}',
+        '{"skill_key":"english_vocab","lesson":{"steps":[{"id":"sofa","word":"' + 'w'.repeat(33) + '","zh":"沙发"},' +
+          '{"id":"rug","word":"rug","zh":"地毯"},{"id":"tv","word":"TV","zh":"电视"}],' +
+          '"task":{"type":"listen_find","targets":["sofa","rug","tv"]}}}',
+        '{"skill_key":"english_vocab","lesson":{"steps":[{"id":"sofa","word":"sofa","zh":"' + '中'.repeat(17) + '"},' +
+          '{"id":"rug","word":"rug","zh":"地毯"},{"id":"tv","word":"TV","zh":"电视"}],' +
+          '"task":{"type":"listen_find","targets":["sofa","rug","tv"]}}}',
+        '{"skill_key":"english_vocab","lesson":{"steps":[{"id":"sofa","word":"sofa","zh":"沙发",' +
+          '"say":"' + 'a'.repeat(121) + '"},{"id":"rug","word":"rug","zh":"地毯"},' +
+          '{"id":"tv","word":"TV","zh":"电视"}],' +
+          '"task":{"type":"listen_find","targets":["sofa","rug","tv"]}}}',
+        '{"skill_key":"english_vocab","lesson":{"steps":[{"id":"sofa","word":"sofa","zh":"沙发",' +
+          '"say_zh":"' + '中'.repeat(121) + '"},{"id":"rug","word":"rug","zh":"地毯"},' +
+          '{"id":"tv","word":"TV","zh":"电视"}],' +
+          '"task":{"type":"listen_find","targets":["sofa","rug","tv"]}}}',
+        '{"skill_key":"english_vocab","lesson":{"steps":' + threeSteps +
+          ',"task":{"type":"listen_find","targets":["sofa","sofa","rug"]}}}',
+        '{"skill_key":"english_vocab","lesson":{"steps":' + threeSteps +
+          ',"task":{"type":"listen_find","targets":["sofa","rug"]}}}',
+        '{"skill_key":"english_vocab","lesson":{"steps":' + threeSteps +
+          ',"task":{"type":"listen_find","targets":["sofa","rug","tv"],"max_attempts":0}}}'
+      ]
+      for (let i = 0; i < bad.length; i++) {
+        expect(validateRoomEnglishArgs(bad[i]).ok).assertFalse()
+      }
     })
   })
 

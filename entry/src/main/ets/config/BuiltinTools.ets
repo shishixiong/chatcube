@@ -3890,7 +3890,46 @@ function createRoomEnglishToolDefinition(): ToolDefinition {
       "words": {
         "type": "array",
         "items": { "type": "string" },
-        "description": "可选。本次想重点教的单词 id，最多 8 个，传了会在房间里自动高亮并打开第一个词的单词卡。合法 id：客厅 sofa coffee_table tv tv_stand remote_control rug cushion floor_lamp bookshelf book plant curtain window picture clock air_conditioner trash_can；餐厅 dining_table dining_chair plate bowl cup spoon fork kettle；厨房 fridge stove oven sink pot pan toaster microwave dishwasher cabinet knife stool；儿童房 bed desk chair wardrobe toy_box round_rug bookcase shelf basket poster blanket toy_car；主卧 double_bed nightstand lamp pillow closet dresser mirror stool_master bench rug_master heater photo_frame；阳台 washing_machine dryer laundry_basket drying_rack clothespin laundry_sink storage_cabinet broom mop bucket balcony_plant flower_pot watering_can railing folding_stool。"
+        "description": "可选。自由探索时本次想重点教的单词 id，最多 8 个，传了会在房间里自动高亮并打开第一个词的单词卡；传 lesson 时必须省略，或与 steps[].id 的集合完全一致（顺序可不同）。合法 id：客厅 sofa coffee_table tv tv_stand remote_control rug cushion floor_lamp bookshelf book plant curtain window picture clock air_conditioner trash_can；餐厅 dining_table dining_chair plate bowl cup spoon fork kettle；厨房 fridge stove oven sink pot pan toaster microwave dishwasher cabinet knife stool；儿童房 bed desk chair wardrobe toy_box round_rug bookcase shelf basket poster blanket toy_car；主卧 double_bed nightstand lamp pillow closet dresser mirror stool_master bench rug_master heater photo_frame；阳台 washing_machine dryer laundry_basket drying_rack clothespin laundry_sink storage_cabinet broom mop bucket balcony_plant flower_pot watering_can railing folding_stool。"
+      },
+      "lesson": {
+        "type": "object",
+        "description": "可选。引导式小课脚本：先带逛 3-5 个词，再出一个听词找物任务。不传时保持自由探索。",
+        "properties": {
+          "steps": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 5,
+            "description": "3-5 个带逛步骤，顺序即带逛顺序。",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string", "description": "房间物品 id，必须与 words 使用同一套 76 个 id。" },
+                "word": { "type": "string", "description": "英文词，非空，最多 32 字，如 sofa / coffee table。" },
+                "zh": { "type": "string", "description": "中文，非空，最多 16 字，如 沙发。" },
+                "say": { "type": "string", "description": "英文引导句，最多 120 字；缺省用 Look! This is a/an {word}." },
+                "say_zh": { "type": "string", "description": "中文引导句，最多 120 字；有则先读中文再读英文。" }
+              },
+              "required": ["id", "word", "zh"]
+            }
+          },
+          "task": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "enum": ["listen_find"], "description": "任务类型，v1 只支持听词找物。" },
+              "targets": {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 3,
+                "maxItems": 5,
+                "description": "3-5 个目标物品 id，必须是 steps 的子集。"
+              },
+              "max_attempts": { "type": "integer", "minimum": 1, "maximum": 2, "description": "每个目标允许点错的次数，默认 2。" }
+            },
+            "required": ["type", "targets"]
+          }
+        },
+        "required": ["steps", "task"]
       },
       "skill_key": {
         "type": "string",
@@ -3906,7 +3945,7 @@ function createRoomEnglishToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     ROOM_ENGLISH_TOOL_ID,
-    'Open the 3D word home (3D 全屋英语探索): four rotatable low-poly rooms with 76 tappable objects in total — the living room + dining room + open kitchen (37), the kids bedroom (12), the master bedroom (12) and the utility balcony (15), with an all-home overview tab that opens by default and one tab per room. Tapping an object opens a kid-friendly word card with the English word, phonetic, Chinese meaning, a one-line kid definition, an example sentence and a TTS pronunciation button. Use this INSTEAD of describing furniture in plain text when teaching home/room/bedroom/balcony vocabulary. Pass words (max 8 ids) to highlight the words of this lesson; pass focus (living, dining, kitchen, child, master, balcony or all) to choose which room or area the scene opens on, or to teach one single room. After exploring, follow up with english_quiz or matching_pairs to check the words and award stars.',
+    'Open the 3D word home (3D 全屋英语探索): four rotatable low-poly rooms with 76 tappable objects in total — the living room + dining room + open kitchen (37), the kids bedroom (12), the master bedroom (12) and the utility balcony (15), with an all-home overview tab that opens by default and one tab per room. Tapping an object opens a kid-friendly word card with the English word, phonetic, Chinese meaning, a one-line kid definition, an example sentence and a TTS pronunciation button. Use this INSTEAD of describing furniture in plain text when teaching home/room/bedroom/balcony vocabulary. Pass words (max 8 ids) for free exploration; when using lesson, omit words or make them exactly the step ids. Pass focus (living, dining, kitchen, child, master, balcony or all) to choose which room or area the scene opens on, or to teach one single room. Use lesson for a guided mini-lesson (3-5 words + listen_find task); after the receipt, follow up with english_quiz read_aloud to check and award stars.',
     parameters
   )
 

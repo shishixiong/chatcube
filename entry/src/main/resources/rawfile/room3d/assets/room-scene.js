@@ -11,7 +11,7 @@
     target: { x: 0.12, y: 0.86, z: 0.05 },
     fitMin: 12.3,
     fitMax: 34,
-    zoomMin: 5.4,
+    zoomMin: 2.2,
     panInsetX: 1.7,
     panInsetZ: 1.3
   };
@@ -337,7 +337,8 @@
 
     zoomRange() {
       const fit = this.fitRadius();
-      return { min: Math.max(this.frame.zoomMin, fit * 0.36), max: fit * 1.14 };
+      // 0.36 只够看整间房，小物件（杯子、遥控器）要能看到桌面，允许再拉近到全屋取景的约 1/8。
+      return { min: Math.max(this.frame.zoomMin, fit * 0.12), max: fit * 1.14 };
     }
 
     fitRadius() {
@@ -772,7 +773,15 @@
         this.outlineMeshes.push(outlineMesh);
       });
 
-      if (box.min.y < 0.55 && Math.max(size.x, size.z) < 4.2) {
+      if (box.min.y <= 1.2 && Math.max(size.x, size.z) < 4.2) {
+        // 圆环要贴着物品所在的台面：桌面/床面小物不能画到地板（会被桌子挡住，看起来像选中了桌子）。
+        // 高处挂件（空调、海报、镜子等）没有可贴的台面，只保留网格描边。
+        let ringY = 0.062;
+        if (box.max.y < 0.18) {
+          ringY = box.max.y + 0.012;
+        } else if (box.min.y > 0.18) {
+          ringY = box.min.y + 0.012;
+        }
         const radius = Math.max(0.32, Math.max(size.x, size.z) * 0.6);
         const ringGeo = new THREE.RingGeometry(Math.max(0.2, radius - 0.035), radius, 48);
         const ringMat = new THREE.MeshBasicMaterial({
@@ -785,7 +794,6 @@
         });
         const ring = new THREE.Mesh(ringGeo, ringMat);
         ring.rotation.x = -Math.PI / 2;
-        const ringY = box.max.y < 0.18 ? box.max.y + 0.012 : 0.062;
         ring.position.set(center.x, ringY, center.z);
         ring.renderOrder = 2;
         outlineGroup.add(ring);

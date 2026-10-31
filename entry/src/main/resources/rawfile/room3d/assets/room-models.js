@@ -1970,7 +1970,7 @@
       target: { x: ROOM.centerX + 0.12, y: 0.86, z: 0.05 },
       fitMin: 12.3,
       fitMax: 34,
-      zoomMin: 5.4,
+      zoomMin: 2.2,
       // 内缩量收窄（原 1.7 / 1.3 会把镜头锁在客餐厅中部，放大后到不了东侧厨房）
       panInsetX: 0.6,
       panInsetZ: 0.5,
@@ -1984,7 +1984,7 @@
       fitMin: 7.6,
       fitMax: 11,
       fitScale: 0.92,
-      zoomMin: 2.9,
+      zoomMin: 1.8,
       panInsetX: 0.55,
       panInsetZ: 0.45
     },
@@ -1994,7 +1994,7 @@
       fitMin: 7.6,
       fitMax: 11,
       fitScale: 0.92,
-      zoomMin: 2.9,
+      zoomMin: 1.8,
       panInsetX: 0.58,
       panInsetZ: 0.45
     },
@@ -2003,7 +2003,7 @@
       target: { x: -0.89, y: 0.8, z: 4.39 },
       fitMin: 4.5,
       fitMax: 13.5,
-      zoomMin: 2.4,
+      zoomMin: 1.8,
       panInsetX: 0.9,
       panInsetZ: 0.45,
       fitScale: 1
