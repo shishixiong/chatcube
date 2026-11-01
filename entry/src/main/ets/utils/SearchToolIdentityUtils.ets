@@ -43,6 +43,9 @@ export const MAP_PUZZLE_TOOL_ID: string = 'map_puzzle'
 // 客餐厅 3D 英语探索（2026-10-24）：讲解型房间工具。37 件可点击物品（客厅 15 + 餐厅 10 + 厨房 12）
 // + 单词卡 + TTS 发音, 参考 open-design 原型 kid-room-3d-english（11.8m × 6m 低多边形客餐厅 + 开放厨房）。
 export const ROOM_ENGLISH_TOOL_ID: string = 'room_english'
+// 小词城 3D 英语探索（2026-11-01）：讲解型城市工具。50 个可点击单词（地点/交通/街道/人物/自然/动物）
+// + 5 个分区镜头 + 单词卡 + TTS 发音，参考 open-design 原型 word-city（120m × 90m 低多边形城市）。
+export const CITY_ENGLISH_TOOL_ID: string = 'city_english'
 
 
 export function normalizeToolFunctionName(raw: string): string {
@@ -198,6 +201,10 @@ export function isRoomEnglishFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === ROOM_ENGLISH_TOOL_ID
 }
 
+export function isCityEnglishFunctionName(functionName: string): boolean {
+  return normalizeToolFunctionName(functionName) === CITY_ENGLISH_TOOL_ID
+}
+
 export function isHuarongdaoFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === HUARONGDAO_TOOL_ID
 }
@@ -274,7 +281,8 @@ export function isInteractiveQuizFunctionName(functionName: string): boolean {
     isMapCardFunctionName(functionName) ||
     isMapQuizFunctionName(functionName) ||
     isMapPuzzleFunctionName(functionName) ||
-    isRoomEnglishFunctionName(functionName)
+    isRoomEnglishFunctionName(functionName) ||
+    isCityEnglishFunctionName(functionName)
 }
 
 

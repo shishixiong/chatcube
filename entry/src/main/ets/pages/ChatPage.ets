@@ -146,6 +146,7 @@ import { getCachedChinaMapData, findProvinceByRef } from '../utils/ChinaMapData'
 import { MapCard, MapCardResult } from '../components/map/MapCard'
 import { MapPuzzleCard, MapPuzzleResult } from '../components/map/MapPuzzleCard'
 import { RoomEnglishAnswerPayload, RoomEnglishCard } from '../components/room/RoomEnglishCard'
+import { CityEnglishAnswerPayload, CityEnglishCard } from '../components/city/CityEnglishCard'
 import { MapQuizCard } from '../components/map/MapQuizCard'
 import { MapQuizAnswerPayload, parseMapQuizArgs } from '../components/map/MapQuizTypes'
 import { MessagePartKind } from '../models/MessageParts'
@@ -334,6 +335,9 @@ export struct ChatPage {
   @Local showRoomEnglishSheet: boolean = false
   @Local roomEnglishToolCall: ToolCall = new ToolCall()
   @Local roomEnglishAnswered: boolean = false
+  @Local showCityEnglishSheet: boolean = false
+  @Local cityEnglishToolCall: ToolCall = new ToolCall()
+  @Local cityEnglishAnswered: boolean = false
   @Local toolExecutionApprovalName: string = ''
   @Local showStarSheet: boolean = false
   // 星星浮层触发信号: 每次 onStarEarnedTickChanged 自增, StarBurstOverlay 通过 @Monitor 监听
@@ -2576,6 +2580,11 @@ export struct ChatPage {
             this.roomEnglishAnswered = false
             this.showRoomEnglishSheet = true
           },
+          onOpenCityEnglishSheet: (toolCall: ToolCall): void => {
+            this.cityEnglishToolCall = toolCall
+            this.cityEnglishAnswered = false
+            this.showCityEnglishSheet = true
+          },
           onReachStart: (): void => {
             this.handleMessageListReachStart()
           },
@@ -3085,6 +3094,32 @@ export struct ChatPage {
                 this.handleAskUserAnswer(this.roomEnglishToolCall.id, JSON.stringify(cancelResult))
               }
               this.showRoomEnglishSheet = false
+            }
+          })
+
+        Column()
+          .width(0)
+          .height(0)
+          .bindSheet($$this.showCityEnglishSheet, this.CityEnglishSheetBuilder(), {
+            height: SheetSize.LARGE,
+            dragBar: true,
+            showClose: true,
+            blurStyle: BlurStyle.Thick,
+            backgroundColor: this.themeBackground,
+            preferType: SheetType.BOTTOM,
+            onDisappear: () => {
+              if (this.showCityEnglishSheet && !this.cityEnglishAnswered) {
+                const cancelResult: CityEnglishAnswerPayload = {
+                  completed: false,
+                  explored_count: 0,
+                  words: [],
+                  focus: 'overview',
+                  skill_key: 'english_vocab',
+                  cancelled: true
+                }
+                this.handleAskUserAnswer(this.cityEnglishToolCall.id, JSON.stringify(cancelResult))
+              }
+              this.showCityEnglishSheet = false
             }
           })
 
@@ -3658,6 +3693,24 @@ export struct ChatPage {
       },
       onRequestClose: (): void => {
         this.showRoomEnglishSheet = false
+      }
+    })
+  }
+
+  @Builder
+  CityEnglishSheetBuilder() {
+    CityEnglishCard({
+      toolCall: this.cityEnglishToolCall,
+      isAnswered: false,
+      answeredPayload: '',
+      largeSize: true,
+      onAnswer: (toolCallId: string, answerJson: string): void => {
+        this.cityEnglishAnswered = true
+        this.handleAskUserAnswer(toolCallId, answerJson)
+        this.showCityEnglishSheet = false
+      },
+      onRequestClose: (): void => {
+        this.showCityEnglishSheet = false
       }
     })
   }

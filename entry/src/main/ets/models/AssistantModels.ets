@@ -29,7 +29,8 @@ import {
   MAP_CARD_TOOL_ID,
   ROOM_ENGLISH_TOOL_ID,
   MAP_QUIZ_TOOL_ID,
-  MAP_PUZZLE_TOOL_ID
+  MAP_PUZZLE_TOOL_ID,
+  CITY_ENGLISH_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { SHARED_IDENTITY, buildBasePrompt } from '../utils/SharedPromptFragments'
 
@@ -68,6 +69,7 @@ export const DEFAULT_ASSISTANT_SYSTEM_PROMPT: string = [
   '## 语文（六步识字）\n你是孩子的语文启蒙老师。一个字按「认字→正音→明义→观形→组词→练写」教,先讲后练,讲完必须给孩子练一次:\n① 认字+正音:hanzi_card 讲这个字(拼音/部首/结构/笔画/字义/字源),拼音单元另用 pinyin_card 教声母韵母声调;\n② 明义+组词:hanzi_card 的组词与例句讲清字义,再用 chinese_quiz(mode:"word_build") 练组词;\n③ 观形:hanzi_card 里点「看笔顺」看逐笔,再 handwriting_practice(type:"chinese") 跟着写同一个字;\n④ 辨析:chinese_quiz(mode:"lookalike") 形近字/同音字,chinese_quiz(mode:"antonym") 近反义词;\n⑤ 表达:picture_talk 看图说话,chinese_quiz(mode:"sentence_order") 连词成句;\n⑥ 测:pinyin_quiz 认读音,handwriting_practice 练写。\n每节课 1 个新字 + 1 个复习字,≤12 分钟;严禁只出题不讲解,也严禁只讲解不给孩子练。\n',
   '## 中国地图\n孩子问到省份、家乡、简称、行政中心,或今日计划含地理点时,用 map_card 开一节中国地图课:一次聚焦不超过 3 个省,focus_province 传本次重点省的常用名。讲完用 map_quiz 出 1-3 题检验,mode 换着来;孩子想动手时用 map_puzzle 开一局拼图(按大区拼,拼完授星,先华北/东北/华中,西北放最后)。choice 的选项由卡片自动生成,不要自己编选项。locate 考行政中心时题干只出现行政中心名。⚠️ 严禁把答案省名或简称写进题目文字。⚠️ 严禁编造省份名——只允许工具描述列表内的 34 个名字。地理观察写 general_social 维度。\n',
   '## 全屋 3D 英语探索\n孩子学家居/房间/厨房/阳台类词汇(sofa、TV、rug、plate、fridge、stove、washing_machine、railing…)时,先开 room_english 走进 3D 全屋:用 lesson 传 3-5 个词的带逛脚本(steps 含 id/word/zh/say/say_zh)和一个 listen_find 任务(targets 3-5 个,必须是 steps 的子集),卡片会自动「讲解→听词找物」;也可只用 words 传目标词做自由探索。回执带 task_correct / task_first_try / task_revealed;讲解完立刻用 english_quiz(mode:「read_aloud」)复测 2-3 个目标词并授星(房间词不要用 picture_word,本地没有对应图片)——room_english 本身不授星。一次课不要点开超过 8 个词,聚焦比刷量重要。\n',
+  '## 小词城 3D 英语探索\n孩子学城市/街道/交通/职业/社区类词汇(hospital、school、park、bus、traffic_light、doctor、tree、duck…)时,先开 city_english 走进 3D 小城市:用 words 传 3-8 个目标词,卡片会自动高亮并打开第一个词的单词卡;可用 focus 指定 overview / main_street / school_zone / park_zone / hospital_zone 打开对应街区。城市里有行驶的公交车、汽车、自行车和行人,路口有红绿灯,孩子可以一边逛一边听发音、看解释。回执带 explored_count 与 words;讲解完立刻用 english_quiz(mode:「read_aloud」)复测 2-3 个目标词并授星(城市词不要用 picture_word,本地没有对应图片)——city_english 本身不授星。一次课不要点开超过 8 个词,聚焦比刷量重要。\n',
   '【出题契约】chinese_quiz 的 mode 四选一:\n- word_build:给一个字,4 个词里选出能跟它组词的(火→火车/火苗),干扰项不能成词;\n- sentence_order:给 2-6 个打乱的词卡,孩子排成一句通顺的话,answer 是正确顺序;\n- lookalike:句子留一个 ___,4 个形近字/同音字里选正确的填空,如 爬(山) 不选 出;\n- antonym:给一个字,4 个词里选出意思相反的(大→小)。\n难度按 child_profile:chinese_vocab 定识字与组词量,pinyin 定声调区分度(level 0-1→声母韵母差异明显,4-5→仅声调不同)。\n',
   '【字理纪律】讲象形/会意/形声字时用一句话小故事(如「山」像三座山峰并立),不要长篇;每节课保留 1-2 个核心字反复复现。\n',
   '【连一连】observation 观察配对练习。用 matching_pairs 工具:左列右列各 4-5 项,孩子先点左边再点右边配对(字↔拼音、动物↔它的家、图↔字)。pairs 是 4-5 个 {left, right, left_emoji?, right_emoji?},left 之间、right 之间不能重复(重复使配对歧义)。全对 0 失误按难度 1/2/3 星,有失误 1 星,放弃 0 星。',
@@ -140,6 +142,7 @@ export const DEFAULT_ASSISTANT_LOCKED_TOOL_IDS: string[] = [
   MAP_QUIZ_TOOL_ID,
   MAP_PUZZLE_TOOL_ID,
   ROOM_ENGLISH_TOOL_ID,
+  CITY_ENGLISH_TOOL_ID,
   SNAKE_GAME_TOOL_ID
 ]
 
@@ -174,7 +177,8 @@ export const KIDS_MATH_LOCKED_TOOL_IDS: string[] = [
 
 export const KIDS_ENGLISH_LOCKED_TOOL_IDS: string[] = [
   ASK_USER_TOOL_ID, CHILD_PROFILE_TOOL_ID, GET_TIME_INFO_TOOL_ID, GRANT_STAR_TOOL_ID,
-  ENGLISH_QUIZ_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, ROOM_ENGLISH_TOOL_ID
+  ENGLISH_QUIZ_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, ROOM_ENGLISH_TOOL_ID,
+  CITY_ENGLISH_TOOL_ID
 ]
 
 export const KIDS_CHINESE_LOCKED_TOOL_IDS: string[] = [
@@ -330,6 +334,7 @@ export const KIDS_ENGLISH_SYSTEM_PROMPT: string = [
   '  ① 热身:english_quiz(mode:"listen_choice") 听音选词,先复习旧词;',
   '  ② 呈现:picture_vocab(mode:"en") 看图选词(卡片自动出图),再用 english_quiz(mode:"read_aloud") 跟读;学房间/家居/厨房/阳台词汇时改用 room_english 传 lesson:steps 3-5 个 {id, word, zh, say, say_zh},task{type:"listen_find", targets 3-5 个}(可用 focus 指定 living / dining / kitchen / child / master / balcony),卡片自动带逛并出「听词找物」任务;',
   '  ②-1 检验:收到 room_english 回执后,用 english_quiz(mode:"read_aloud") 复测 2-3 个目标词并授星;以回执的 task_correct / task_first_try / task_revealed 为准(不要用 words 判分);task_revealed > 0 或 task_first_try < task_correct 时先重讲错词。房间/家居词不要用 picture_word(本地词库没有对应图片)。',
+  '  ②-2 城市词汇:学城市/街道/交通/职业/社区词汇时改用 city_english,用 words 传 3-8 个目标词,focus 可选 overview / main_street / school_zone / park_zone / hospital_zone;卡片会高亮并打开第一个单词卡,孩子点「我学会了」回执带 explored_count 与 words;随后用 english_quiz(mode:"read_aloud") 复测 2-3 个词并授星。城市词不要用 picture_word(本地词库没有对应图片)。',
   '  ③ 操练:english_quiz(mode:"phonics_blend") 拼读拼词(必须给 phonics_rule),listening_quiz 辨音;',
   '  ④ 输出:english_quiz(mode:"sentence_fill") 句型操练,再 read_aloud 说整句;',
   '  ⑤ 复习:english_quiz(mode:"listen_choice" 或 "picture_word") 换个形式重考本课核心词(房间/家居词改用 read_aloud,本地词库没有对应图片);',

@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#fffdf8" />
+  <link rel="icon" href="data:," />
+  <meta name="format-detection" content="telephone=no" />
+  <title>小词城 Word City · 3D 英语探索</title>
+  <link rel="stylesheet" href="assets/city.css" />
+  <link rel="stylesheet" href="assets/city-panel.css" />
+  <link rel="stylesheet" href="assets/city-dialogs.css" />
+  <link rel="stylesheet" href="assets/city-host.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 20h18" />
+            <path d="M5 20V11l3-2v11" />
+            <path d="M9.5 20V6.5L14 4v16" />
+            <path d="M14.5 20V10l4 2.5V20" />
+            <path d="M10 9h1.2M10 12h1.2M10 15h1.2" />
+          </svg>
+        </span>
+        <span class="brand-text">
+          <span class="brand-title">小词城</span>
+          <span class="brand-sub">Word City</span>
+        </span>
+      </div>
+      <div class="topbar-meta"><strong>5</strong> 个区域 · <strong>50</strong> 个单词</div>
+      <span class="topbar-spacer"></span>
+      <button id="btnNight" class="btn btn-ghost" type="button" aria-pressed="false" aria-label="打开黄昏光照与夜间路灯" title="黄昏光照 · 夜间路灯">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20 14.6A7.6 7.6 0 0 1 9.4 4a7.6 7.6 0 1 0 10.6 10.6Z" />
+        </svg>
+        <span class="btn-label">黄昏夜灯</span>
+      </button>
+      <button id="btnVocab" class="btn btn-primary" type="button" aria-haspopup="dialog" aria-controls="vocabModal">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5V5.5Z" />
+          <path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H20" />
+        </svg>
+        词汇表
+      </button>
+    </header>
+
+    <main class="stage-wrap">
+      <div class="view" id="view">
+        <div class="map-labels" id="labels" aria-hidden="true"></div>
+
+        <div class="zone-tabs" id="zoneTabs" role="tablist" aria-label="城市分区"></div>
+
+        <div class="view-tools">
+          <button id="btnLabels" class="btn btn-ghost" type="button" aria-pressed="true">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 7h16" />
+              <path d="M7 12h10" />
+              <path d="M10 17h4" />
+            </svg>
+            英文标签
+          </button>
+          <button id="btnReset" class="btn btn-ghost" type="button">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 4v5h5" />
+              <path d="M4.6 13a8 8 0 1 0 2.1-8.3L4 9" />
+            </svg>
+            重置视角
+          </button>
+        </div>
+
+        <div class="hint-chip" id="hintChip">拖动旋转 · 双指缩放 · 点一点小城</div>
+
+        <div class="loading-screen" id="loading">
+          <div class="loading-card">
+            <div class="loading-city" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+            <div class="loading-text">正在搭建小词城…</div>
+            <div class="loading-sub">街道、车子和小动物马上就到</div>
+            <div class="spinner" aria-hidden="true"></div>
+          </div>
+        </div>
+
+        <div class="webgl-error" id="webglError" hidden>
+          <div class="error-card">
+            <h2>小词城的 3D 场景没能搭起来</h2>
+            <p>这台设备暂时无法启动 3D 渲染。你仍然可以打开词汇表，查看全部 50 个单词、中文解释和例句。</p>
+            <div class="error-actions">
+              <button id="errorRetry" class="btn btn-primary" type="button">重新加载</button>
+              <button id="errorVocab" class="btn btn-ghost" type="button">打开词汇表</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="onboarding" id="onboarding" hidden>
+          <div class="ob-head">
+            <span class="ob-eyebrow">第一次来小词城</span>
+            <span class="ob-step" id="obStep">第 1 / 3 步</span>
+          </div>
+          <div class="ob-body">
+            <div class="ob-icon" id="obIcon" aria-hidden="true"></div>
+            <div>
+              <div class="ob-title" id="obTitle"></div>
+              <p class="ob-text" id="obText"></p>
+            </div>
+          </div>
+          <div class="ob-footer">
+            <div class="ob-dots" id="obDots" aria-hidden="true"><span class="is-on"></span><span></span><span></span></div>
+            <button id="obNext" class="btn btn-primary" type="button">知道啦</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <aside class="panel" id="panel" aria-label="学习面板">
+      <button class="panel-handle" id="panelHandle" type="button" aria-label="展开或收起学习面板" aria-expanded="false">
+        <span></span>
+      </button>
+
+      <button class="panel-peek" id="panelPeek" type="button" aria-label="展开学习面板">
+        <span class="peek-dot"></span>
+        <span class="peek-text" id="peekText">点一点小城里的建筑、车子和动物</span>
+        <span class="peek-count" id="peekCount">0/50</span>
+      </button>
+
+      <div class="panel-scroll" id="panelScroll">
+        <div class="panel-head">
+          <div>
+            <span class="panel-eyebrow">Learning Panel</span>
+            <div class="panel-zone" id="panelZone">全城 · Word City</div>
+          </div>
+          <div class="panel-count" id="panelCount">0/50</div>
+        </div>
+
+        <section class="word-card" id="wordCard" role="dialog" aria-modal="false" aria-label="单词卡" aria-live="polite" hidden>
+          <div class="wc-top">
+            <span class="wc-chip" id="wcChip"></span>
+            <span class="wc-index" id="wcIndex">1 / 50</span>
+            <button class="wc-close" id="wcClose" type="button" aria-label="关闭单词卡">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+          <div class="wc-headline">
+            <h2 class="wc-word" id="wcWord" lang="en">word</h2>
+            <span class="wc-phonetic" id="wcPhonetic" lang="en"></span>
+          </div>
+          <div class="wc-zh" id="wcZh"></div>
+          <div class="wc-def">
+            <span class="def-icon" id="wcDefIcon" aria-hidden="true"></span>
+            <span id="wcDefText"></span>
+          </div>
+          <button class="wc-example" id="wcExample" type="button" aria-label="朗读例句">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 10v4h3l4 3.5v-11L7 10H4Z" />
+              <path d="M15 9.5a3.5 3.5 0 0 1 0 5" />
+            </svg>
+            <span id="wcExampleText" lang="en"></span>
+          </button>
+          <div class="wc-actions">
+            <button class="btn btn-primary" id="wcSpeak" type="button">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 10v4h3l4 3.5v-11L7 10H4Z" />
+                <path d="M15 9.5a3.5 3.5 0 0 1 0 5" />
+                <path d="M17.6 7a7 7 0 0 1 0 10" />
+              </svg>
+              听发音
+            </button>
+            <button class="btn btn-ghost btn-icon" id="wcPrev" type="button" aria-label="上一个单词">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M15 5l-7 7 7 7" />
+              </svg>
+            </button>
+            <button class="btn btn-ghost btn-icon" id="wcNext" type="button" aria-label="下一个单词">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+            <span class="wc-state" id="wcState" hidden></span>
+          </div>
+        </section>
+
+        <section class="panel-empty" id="panelEmpty">
+          <div class="empty-illustration" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 20h18" />
+              <path d="M5 20V11l3-2v11" />
+              <path d="M9.5 20V6.5L14 4v16" />
+              <path d="M14.5 20V10l4 2.5V20" />
+            </svg>
+          </div>
+          <div class="empty-title">点一点小城</div>
+          <p class="empty-text">建筑、公交车、红绿灯、小狗和风筝都在等你。点开它们，就能听到英文名字。</p>
+        </section>
+
+        <section class="progress-card" aria-label="收集进度">
+          <div class="progress-head">
+            <span class="progress-title">小词城护照</span>
+            <span class="progress-num"><span id="progressCount">0</span><em> / 50</em></span>
+          </div>
+          <div class="dot-grid" id="dotGrid"></div>
+          <div class="dot-legend">
+            <span><i></i>已收集会亮起来</span>
+            <span>50 个圆点 · 按分类着色</span>
+          </div>
+          <div class="badge-card" id="badgeCard" hidden>
+            <div class="badge-medal" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3.5l2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 15.9 7.2 18.4l.9-5.4L4.2 9.2l5.4-.8L12 3.5Z" />
+              </svg>
+            </div>
+            <div class="badge-copy">
+              <div class="badge-title">小词城探索家</div>
+              <div class="badge-text">你认识了小词城里的 50 个单词！</div>
+            </div>
+          </div>
+        </section>
+
+        <p class="sr-only" id="sceneDesc">小词城有四条街道、一条小河和四个街区：西北是医院和消防站，东北是学校和图书馆，西南是超市、面包店、咖啡馆、邮局和电影院，东南是公园、池塘和游乐场。城市里有 50 个可点击的英文单词。</p>
+      </div>
+    </aside>
+  </div>
+
+  <div class="modal" id="vocabModal" hidden>
+    <div class="modal-backdrop"></div>
+    <div class="vocab-dialog" role="dialog" aria-modal="true" aria-labelledby="vocabTitle">
+      <header class="vocab-head">
+        <div>
+          <div class="vocab-eyebrow">Word City · 50 Words</div>
+          <h2 class="vocab-title" id="vocabTitle">小词城词汇表</h2>
+        </div>
+        <div class="vocab-meta">
+          <span class="vocab-count" id="vocabCount">已收集 0 / 50</span>
+          <button class="wc-close" id="vocabClose" type="button" aria-label="关闭词汇表">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </div>
+      </header>
+      <div class="vocab-search">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="6.5" />
+          <path d="M16 16l4 4" />
+        </svg>
+        <input id="vocabSearch" type="search" placeholder="搜索英文或中文…" aria-label="搜索单词" autocomplete="off" />
+        <button class="vocab-clear" id="vocabClear" type="button" hidden>清除</button>
+      </div>
+      <div class="vocab-body" id="vocabBody"></div>
+      <div class="vocab-empty" id="vocabEmpty" hidden>
+        <div class="empty-icon" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="6.5" />
+            <path d="M16 16l4 4" />
+          </svg>
+        </div>
+        <strong>没有找到这个单词</strong>
+        <span>换个英文单词或中文试试，比如 hospital 或 公园。</span>
+      </div>
+      <p class="sr-only" id="vocabLive" aria-live="polite"></p>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="confetti" id="confetti" aria-hidden="true"></div>
+
+  <script src="assets/vendor/three.min.js"></script>
+  <script src="assets/city-data.js"></script>
+  <script src="assets/city-models.js"></script>
+  <script src="assets/city-scene.js"></script>
+  <script src="assets/city-app.js"></script>
+</body>
+</html>

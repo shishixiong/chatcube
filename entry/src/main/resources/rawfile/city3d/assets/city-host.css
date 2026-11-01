@@ -1,0 +1,55 @@
+/* ============================================================
+   小词城 · HarmonyOS 宿主模式
+   原生侧通过 window.WordCityApp.setHostMode(true) 或 URL 参数 host=1 开启：
+   收起品牌栏的多余信息，把屏幕高度让给 3D 场景。
+   ============================================================ */
+
+body.is-host {
+  background: #e9eee7;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+body.is-host #app {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+/* 品牌栏隐藏后只剩一行网格：舞台必须显式回到第 1 行，否则会落进隐式第 2 行（auto 高）导致上半屏空白 */
+body.is-host .stage-wrap,
+body.is-host .panel {
+  grid-row: 1;
+}
+
+/* 原生卡片自带标题栏（词汇表 / 夜灯 / 我学会了），网页品牌栏整体隐藏，把高度留给 3D 场景 */
+body.is-host .topbar {
+  display: none;
+}
+
+body.is-host .view::after {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 12%);
+}
+
+body.is-host .hint-chip {
+  bottom: 14px;
+}
+
+body.is-host .view-tools {
+  bottom: 14px;
+}
+
+@media (max-width: 899px) {
+  body.is-host #app {
+    grid-template-rows: minmax(0, 1fr);
+  }
+  body.is-host .view-tools {
+    bottom: 130px;
+  }
+  body.is-host .hint-chip {
+    bottom: 238px;
+  }
+}
+
+/* 宿主模式下若原生把页面放进更小的卡片，按钮仍保持 44px 触控高度 */
+body.is-host .zone-tab {
+  min-height: 44px;
+}

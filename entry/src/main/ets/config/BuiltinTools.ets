@@ -48,7 +48,8 @@ import {
   MAP_CARD_TOOL_ID,
   MAP_QUIZ_TOOL_ID,
   MAP_PUZZLE_TOOL_ID,
-  ROOM_ENGLISH_TOOL_ID
+  ROOM_ENGLISH_TOOL_ID,
+  CITY_ENGLISH_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { getPinyinCharsJoined } from './PinyinData'
 import { getStrokeOrderCharsJoined } from './StrokeOrderData'
@@ -3969,6 +3970,89 @@ function createRoomEnglishToolConfig(): ToolConfig {
 }
 
 
+// ===== city_english 工具 =====
+// 3D 小城市英语探索（讲解型）：120m × 90m 的低多边形城市——一条东西向主街、四个街区、河流与中央广场，
+// 50 个可点击对象（地点 12 / 交通 10 / 街道 9 / 人物 8 / 自然 8 / 动物 3）可点开单词卡
+// （英文 / 音标 / 中文 / 儿童解释 / 例句 / TTS 发音），支持 5 个分区镜头。
+// 参考 open-design 原型 word-city。
+// 交互由前端 CityEnglishCard（Web 容器）处理，后台 ToolExecutionService.handleCityEnglish 拦截。
+
+interface CityEnglishArgs {
+  focus?: string
+  words?: string[]
+  skill_key: string
+}
+
+class CityEnglishExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // city_english 的交互由前端 CityEnglishCard 组件处理。
+    // 后台由 ToolExecutionService.handleCityEnglish 拦截处理。
+    try {
+      const params = JSON.parse(_args) as CityEnglishArgs
+      return JSON.stringify({
+        opened: true,
+        focus: params.focus ?? 'overview',
+        words: params.words ?? [],
+        skill_key: 'english_vocab'
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`city_english error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createCityEnglishToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "focus": {
+        "type": "string",
+        "enum": ["overview", "main_street", "school_zone", "park_zone", "hospital_zone"],
+        "description": "可选。本次重点探索的区域：overview=全城 3/4 全景（默认），main_street=商业街（超市 / 面包店 / 咖啡馆 / 邮局 / 电影院 / 公交站），school_zone=学校区（学校 / 图书馆 / 校门斑马线），park_zone=公园区（公园 / 池塘 / 游乐场 / 小桥），hospital_zone=医院区（医院 / 消防站 / 救护车）。传 all 等同于 overview。"
+      },
+      "words": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "可选。本次想重点教的单词 id，最多 8 个，传了会在城市里自动高亮并打开第一个词的单词卡。合法 id：地点 hospital school park supermarket bus_stop police_station fire_station library bakery cafe post_office cinema；交通 bus car taxi bicycle ambulance fire_truck school_bus truck scooter boat；街道 road crosswalk traffic_light streetlight bench trash_can mailbox bridge fountain；人物 teacher doctor nurse police_officer firefighter driver baker student；自然 tree flower grass pond swing slide seesaw kite；动物 duck dog bird。"
+      },
+      "skill_key": {
+        "type": "string",
+        "enum": ["english_vocab"],
+        "description": "固定传 english_vocab（英语词汇）。"
+      }
+    },
+    "required": ["skill_key"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    CITY_ENGLISH_TOOL_ID,
+    'Open the 3D word city (3D 小城市英语探索): a rotatable low-poly miniature city with a main street, four districts, a river and a central plaza, containing 50 tappable objects in total — places (hospital, school, park, supermarket, bus stop, police station, fire station, library, bakery, cafe, post office, cinema), transport (bus, car, taxi, bicycle, ambulance, fire truck, school bus, truck, scooter, boat), street items (road, crosswalk, traffic light, streetlight, bench, trash can, mailbox, bridge, fountain), people (teacher, doctor, nurse, police officer, firefighter, driver, baker, student), nature (tree, flower, grass, pond, swing, slide, seesaw, kite) and animals (duck, dog, bird). It has 5 camera zones and live traffic with cars, pedestrians and traffic lights. Tapping an object opens a kid-friendly word card with the English word, phonetic, Chinese meaning, a one-line kid definition, an example sentence and a TTS pronunciation button. Use this INSTEAD of describing a city or street scene in plain text when teaching city/street/transport/community vocabulary. Pass words (max 8 ids) to highlight specific words; pass focus (overview, main_street, school_zone, park_zone or hospital_zone) to open on a district. After the receipt, follow up with english_quiz read_aloud to check and award stars.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createCityEnglishToolConfig(): ToolConfig {
+  return new ToolConfig(
+    CITY_ENGLISH_TOOL_ID,
+    '3D 小城市英语探索',
+    '逛一座会动的小城市：医院、学校、公园、超市、公交车、行人、红绿灯，点一点听英文发音、看单词卡，认识 50 个城市单词。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    CITY_ENGLISH_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
 // 注册所有内置工具
 export function registerBuiltinTools(): void {
   const registry = getToolRegistry()
@@ -4337,6 +4421,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(CITY_ENGLISH_TOOL_ID)) {
+    const cityEnglishTool = new RegisteredTool(
+      CITY_ENGLISH_TOOL_ID,
+      createCityEnglishToolConfig(),
+      createCityEnglishToolDefinition(),
+      new CityEnglishExecutor()
+    )
+    registry.registerTool(cityEnglishTool)
+    registeredNow += 1
+  }
+
   console.info(
     'BuiltinTools',
     `Builtin tools ready: total=${registry.getToolCount()}, newlyRegistered=${registeredNow}`
@@ -4345,5 +4440,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID, MAP_CARD_TOOL_ID, MAP_QUIZ_TOOL_ID, MAP_PUZZLE_TOOL_ID, ROOM_ENGLISH_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID, MAP_CARD_TOOL_ID, MAP_QUIZ_TOOL_ID, MAP_PUZZLE_TOOL_ID, ROOM_ENGLISH_TOOL_ID, CITY_ENGLISH_TOOL_ID]
 }
