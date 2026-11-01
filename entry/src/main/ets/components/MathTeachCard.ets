@@ -150,8 +150,8 @@ export struct MathTeachCard {
   private interactionThreshold(): number {
     // number_bond 分与合两步演示课：分/合各计一次（2026-10-03 v2）
     if (this.argsView.mode === 'number_bond') { return 2 }
-    // ten_frame 凑十引导课：8 步各计一次（完成步数，见 TenFrameBoard）
-    if (this.argsView.mode === 'ten_frame') { return 8 }
+    // ten_frame 凑十课：讲解 4 步各计一次（练习答对也计一次，见 TenFrameBoard）
+    if (this.argsView.mode === 'ten_frame') { return 4 }
     // clock 时钟拨一拨：认一认图例 / 拖拽松手 / 步进 / 步长切换 / 引导步进 各计一次（见 ClockBoard）
     if (this.argsView.mode === 'clock') { return 4 }
     return 1
