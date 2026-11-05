@@ -67,12 +67,21 @@ export interface ExpressionToken {
 const MATH_OP_CHARS: string = '+-*/()×÷'
 
 /**
+ * 把 LLM 可能输出的 Unicode 运算符统一成 ASCII (U+2212 '−' / 全角 '－' → '-',
+ * 全角 '＋' → '+')。sanitizeExpression 内部也调它, 但需要单独归一化后
+ * 再走字符串处理的调用方 (如 key 去重、表达式求值) 可直接使用。
+ */
+export function normalizeExpressionText(expr: string): string {
+  return expr.replace(/[−－]/g, '-').replace(/＋/g, '+')
+}
+
+/**
  * 把表达式里的 '=' / '?' / 中文等杂质剥离, 返回可交给 evaluateMathExpression
  * 计算的纯算式串。首个 '=' 或 '?' 之后的内容全部截断; 无有效字符时返回 ''。
  * 例: '49 ÷ 7 = ?' → '49 ÷ 7 '。
  */
 export function sanitizeExpression(expr: string): string {
-  let s: string = expr
+  let s: string = normalizeExpressionText(expr)
   const eqIdx: number = s.indexOf('=')
   if (eqIdx >= 0) {
     s = s.substring(0, eqIdx)

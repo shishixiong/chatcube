@@ -83,6 +83,9 @@ import type { MazeDimensions, MazeExtras, MazeDifficulty } from '../utils/MazeGa
 import { generateSudoku, getDifficultyConfig } from '../utils/SudokuGenerator'
 import { validateAndNormalizeCategorization } from '../utils/CategorizationValidation'
 import { validateMathQuizArgs } from '../utils/MathQuizValidation'
+import { normalizeExpressionText } from '../utils/MathQuizGame'
+import { getMathQuizHistoryService } from './MathQuizHistoryService'
+import type { MathQuizProgressHint } from '../models/MathQuizProgressionModels'
 import { validateMathTeachArgs, MathTeachValidationResult } from '../utils/MathTeachValidation'
 import { validateEnglishQuizArgs } from '../utils/EnglishQuizValidation'
 import { findLocalVocabEntry, findLocalVocabEntryForMode } from '../utils/LocalVocabCatalog'
@@ -726,6 +729,8 @@ export class ToolExecutionService {
     // 预校验 (categorization 同款模式): 阻止「答案不在选项 / comparison 方向反 /
     // time 答案与钟面不一致」等坏题进入 pending 态渲染给孩子,
     // 失败直接回 error ToolResult, AI 据 message 自我修正重出。
+    // 先归一 U+2212 (sanitizeExpression 会丢弃它, 导致多步减法被误判答案不一致)。
+    this.normalizeMathQuizMinus(toolCall)
     const mathValidation = validateMathQuizArgs(toolCall.arguments)
     if (!mathValidation.ok) {
       console.warn('ToolExecutionService', `math_quiz validation failed: ${mathValidation.error}`)
@@ -736,6 +741,27 @@ export class ToolExecutionService {
           error: 'validation_failed',
           message: mathValidation.error,
           should_retry: true
+        }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    // 难度门槛: 正式练习必须匹配当前目标等级 (最近 20 题去重 / 10 题掌握升级),
+    // warm_up / review 可低于当前等级且有会话额度; 被拒时回 should_retry 让 AI 重出。
+    const gate = await getMathQuizHistoryService().evaluateGate(toolCall.arguments, context.sessionId)
+    if (!gate.ok) {
+      console.warn('ToolExecutionService', `math_quiz gate rejected: ${gate.error} ${gate.message}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: gate.error,
+          should_retry: true,
+          message: gate.message,
+          target: gate.target,
+          progress: gate.progress
         }),
         true,
         toolCall.displayName,
@@ -788,17 +814,58 @@ export class ToolExecutionService {
       )
     }
 
+    let progressHint: MathQuizProgressHint | null = null
+    try {
+      progressHint = await getMathQuizHistoryService().recordAnswer(
+        toolCall.arguments, answerJson, context.sessionId, toolCall.id
+      )
+    } catch (error) {
+      console.warn('ToolExecutionService', `math_quiz record failed: ${String(error)}`)
+    }
+    this.recordStarEvent('math_quiz', toolCall, context, answerJson)
     toolCall.approvalState = 'answered'
     toolCall.approvalReason = answerJson
     console.info('ToolExecutionService', `math_quiz answered: ${toolCall.id}`)
-    this.recordStarEvent('math_quiz', toolCall, context, answerJson)
     return new ToolResult(
       toolCall.id,
-      answerJson,
+      this.mergeMathProgressHint(answerJson, progressHint),
       false,
       toolCall.displayName,
       toolCall.sourceLabel
     )
+  }
+
+  // 把进度提示并入 tool_result 内容 (LLM 通道); UI 恢复仍读 approvalReason, 不受影响。
+  private mergeMathProgressHint(answerJson: string, hint: MathQuizProgressHint | null): string {
+    if (hint === null) {
+      return answerJson
+    }
+    try {
+      const parsed: Record<string, Object> = JSON.parse(answerJson) as Record<string, Object>
+      parsed['math_progress'] = hint as Object
+      return JSON.stringify(parsed)
+    } catch (error) {
+      console.warn('ToolExecutionService', `Failed to merge math_progress: ${String(error)}`)
+      return answerJson
+    }
+  }
+
+  private normalizeMathQuizMinus(toolCall: ToolCall): void {
+    try {
+      const args: Record<string, Object> = JSON.parse(toolCall.arguments) as Record<string, Object>
+      const expression = args['expression']
+      if (typeof expression !== 'string') {
+        return
+      }
+      const text = expression as string
+      const normalized = normalizeExpressionText(text)
+      if (normalized !== text) {
+        args['expression'] = normalized as Object
+        toolCall.arguments = JSON.stringify(args)
+      }
+    } catch (error) {
+      console.warn('ToolExecutionService', `math_quiz arg normalization skipped: ${String(error)}`)
+    }
   }
 
   // math_teach 特殊路径: 与 math_quiz 同款 pending 挂起, 等待 MathTeachCard 完成。

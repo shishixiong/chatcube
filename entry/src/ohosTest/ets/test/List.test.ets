@@ -25,6 +25,7 @@ import geoLedgerSectionTest from './utils/GeoLedgerSection.test';
 import stepAnswerPayloadTest from './utils/StepAnswerPayload.test';
 import stepFunTtsTextUtilsTest from './utils/StepFunTtsTextUtils.test';
 import mathColumnPaperLayoutTest from './utils/MathColumnPaperLayout.test';
+import mathQuizProgressionTest from './utils/MathQuizProgression.test';
 import giftModelsTest from './utils/GiftModels.test';
 import redeemCodeUtilsTest from './utils/RedeemCodeUtils.test';
 
@@ -56,6 +57,7 @@ export default function testsuite() {
   stepAnswerPayloadTest();
   stepFunTtsTextUtilsTest();
   mathColumnPaperLayoutTest();
+  mathQuizProgressionTest();
   giftModelsTest();
   redeemCodeUtilsTest();
 }

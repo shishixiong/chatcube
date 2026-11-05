@@ -19,6 +19,7 @@ import { DailyLessonPlanRow, PreparedMediaRow, PlannerStats } from '../models/Le
 import { TeachingStyleAdjustmentRow, WeeklyTrendRow } from '../models/TeachingReflectionModels'
 import { ImageIndexRow } from '../models/ImageIndexModels'
 import { LearningItem, LedgerEventInsert, RepeatStat } from '../models/LearningLedgerModels'
+import { MathQuizProgressRow, MathQuizRecordInsert, MathQuizRecordRow } from '../models/MathQuizProgressionModels'
 import { deserializeMessageParts, serializeMessageParts } from '../models/MessageParts'
 import { ensureMessageParts, buildMessagePartsFromLegacy } from '../utils/ChatMessagePartsHelper'
 import { formatYMD } from '../utils/DateFormatUtils'
@@ -125,6 +126,9 @@ export class TableNames {
   // 星星礼物商城（spec 2026-10-19）
   static readonly GIFTS: string = 'gifts'
   static readonly GIFT_REDEMPTIONS: string = 'gift_redemptions'
+  // math_quiz 难度渐进（spec 2026-11-05）
+  static readonly MATH_QUIZ_RECORDS: string = 'math_quiz_records'
+  static readonly MATH_QUIZ_PROGRESS: string = 'math_quiz_progress'
 	}
 
 // 拼图记录数据接口
@@ -452,6 +456,42 @@ export class DatabaseService {
       )
     `
 
+    // math_quiz 每次出题/作答的历史（难度渐进闸门回查最近 20 条，spec §6.1）
+    const createMathQuizRecordsTable = `
+      CREATE TABLE IF NOT EXISTS ${TableNames.MATH_QUIZ_RECORDS} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at INTEGER NOT NULL,
+        session_id TEXT DEFAULT '',
+        tool_call_id TEXT DEFAULT '',
+        quiz_type TEXT NOT NULL,
+        track TEXT NOT NULL,
+        level INTEGER NOT NULL DEFAULT 0,
+        purpose TEXT NOT NULL DEFAULT 'practice',
+        skill_key TEXT DEFAULT '',
+        expression_key TEXT NOT NULL DEFAULT '',
+        expression TEXT DEFAULT '',
+        question TEXT DEFAULT '',
+        correct INTEGER NOT NULL DEFAULT 0,
+        first_try INTEGER NOT NULL DEFAULT 0,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        child_answer TEXT DEFAULT '',
+        correct_answer TEXT DEFAULT '',
+        counted INTEGER NOT NULL DEFAULT 0,
+        metadata_json TEXT DEFAULT ''
+      )
+    `
+
+    // 每轨一行进度（spec §6.2）
+    const createMathQuizProgressTable = `
+      CREATE TABLE IF NOT EXISTS ${TableNames.MATH_QUIZ_PROGRESS} (
+        track TEXT PRIMARY KEY,
+        current_level INTEGER NOT NULL DEFAULT 1,
+        correct_at_level INTEGER NOT NULL DEFAULT 0,
+        consecutive_wrong INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      )
+    `
+
     // 星星礼物商城：礼物目录（内置幂等种子 + 家长自定义，spec §4.1）
     const createGiftsTable = `
       CREATE TABLE IF NOT EXISTS ${TableNames.GIFTS} (
@@ -604,6 +644,8 @@ export class DatabaseService {
       await this.rdbStore.executeSql(createGeneratedMediaTable)
       await this.rdbStore.executeSql(createPuzzleRecordsTable)
       await this.rdbStore.executeSql(createStarEventsTable)
+      await this.rdbStore.executeSql(createMathQuizRecordsTable)
+      await this.rdbStore.executeSql(createMathQuizProgressTable)
       await this.rdbStore.executeSql(createGiftsTable)
       await this.rdbStore.executeSql(createGiftRedemptionsTable)
       await this.rdbStore.executeSql(createDailyLessonPlansTable)
@@ -667,6 +709,12 @@ export class DatabaseService {
       )
       await this.rdbStore.executeSql(
         `CREATE INDEX IF NOT EXISTS idx_star_events_created_at ON ${TableNames.STAR_EVENTS}(created_at)`
+      )
+      await this.rdbStore.executeSql(
+        `CREATE INDEX IF NOT EXISTS idx_math_quiz_records_track_time ON ${TableNames.MATH_QUIZ_RECORDS}(track, created_at DESC)`
+      )
+      await this.rdbStore.executeSql(
+        `CREATE INDEX IF NOT EXISTS idx_math_quiz_records_session_purpose ON ${TableNames.MATH_QUIZ_RECORDS}(session_id, purpose)`
       )
       await this.rdbStore.executeSql(
         `CREATE INDEX IF NOT EXISTS idx_gift_redemptions_created_at ON ${TableNames.GIFT_REDEMPTIONS}(created_at)`
@@ -3371,6 +3419,193 @@ export class DatabaseService {
       console.error('DatabaseService', `Failed to query star events since ${startMs}: ${JSON.stringify(error)}`)
     }
     return events
+  }
+
+  // ============ math_quiz 难度渐进 ============
+
+  private readMathQuizRecordRow(resultSet: relationalStore.ResultSet): MathQuizRecordRow {
+    const row: MathQuizRecordRow = {
+      id: resultSet.getLong(resultSet.getColumnIndex('id')),
+      createdAt: resultSet.getLong(resultSet.getColumnIndex('created_at')),
+      sessionId: resultSet.getString(resultSet.getColumnIndex('session_id')),
+      toolCallId: resultSet.getString(resultSet.getColumnIndex('tool_call_id')),
+      quizType: resultSet.getString(resultSet.getColumnIndex('quiz_type')),
+      track: resultSet.getString(resultSet.getColumnIndex('track')),
+      level: resultSet.getLong(resultSet.getColumnIndex('level')),
+      purpose: resultSet.getString(resultSet.getColumnIndex('purpose')),
+      skillKey: resultSet.getString(resultSet.getColumnIndex('skill_key')),
+      expressionKey: resultSet.getString(resultSet.getColumnIndex('expression_key')),
+      expression: resultSet.getString(resultSet.getColumnIndex('expression')),
+      question: resultSet.getString(resultSet.getColumnIndex('question')),
+      correct: resultSet.getLong(resultSet.getColumnIndex('correct')) === 1,
+      firstTry: resultSet.getLong(resultSet.getColumnIndex('first_try')) === 1,
+      attempts: resultSet.getLong(resultSet.getColumnIndex('attempts')),
+      childAnswer: resultSet.getString(resultSet.getColumnIndex('child_answer')),
+      correctAnswer: resultSet.getString(resultSet.getColumnIndex('correct_answer')),
+      counted: resultSet.getLong(resultSet.getColumnIndex('counted')) === 1,
+      metadataJson: resultSet.getString(resultSet.getColumnIndex('metadata_json'))
+    }
+    return row
+  }
+
+  async insertMathQuizRecord(record: MathQuizRecordInsert): Promise<number> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return -1
+    }
+    const valueBucket: relationalStore.ValuesBucket = {
+      created_at: record.createdAt,
+      session_id: record.sessionId,
+      tool_call_id: record.toolCallId,
+      quiz_type: record.quizType,
+      track: record.track,
+      level: record.level,
+      purpose: record.purpose,
+      skill_key: record.skillKey,
+      expression_key: record.expressionKey,
+      expression: record.expression,
+      question: record.question,
+      correct: record.correct ? 1 : 0,
+      first_try: record.firstTry ? 1 : 0,
+      attempts: record.attempts,
+      child_answer: record.childAnswer,
+      correct_answer: record.correctAnswer,
+      counted: record.counted ? 1 : 0,
+      metadata_json: record.metadataJson
+    }
+    try {
+      return await this.rdbStore.insert(TableNames.MATH_QUIZ_RECORDS, valueBucket)
+    } catch (error) {
+      console.error('DatabaseService', `Failed to insert math quiz record: ${JSON.stringify(error)}`)
+      return -1
+    }
+  }
+
+  async getRecentMathQuizRecords(track: string, limit: number): Promise<MathQuizRecordRow[]> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return []
+    }
+    const records: MathQuizRecordRow[] = []
+    const predicates = new relationalStore.RdbPredicates(TableNames.MATH_QUIZ_RECORDS)
+    predicates.equalTo('track', track)
+    predicates.orderByDesc('created_at')
+    predicates.orderByDesc('id')
+    predicates.limitAs(limit)
+    try {
+      const resultSet = await this.rdbStore.query(predicates)
+      while (resultSet.goToNextRow()) {
+        records.push(this.readMathQuizRecordRow(resultSet))
+      }
+      resultSet.close()
+    } catch (error) {
+      console.error('DatabaseService', `Failed to query math quiz records: ${JSON.stringify(error)}`)
+    }
+    return records
+  }
+
+  async countMathQuizPurposeInSession(sessionId: string, purpose: string): Promise<number> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return 0
+    }
+    const predicates = new relationalStore.RdbPredicates(TableNames.MATH_QUIZ_RECORDS)
+    predicates.equalTo('session_id', sessionId)
+    predicates.equalTo('purpose', purpose)
+    predicates.greaterThan('level', 0)
+    try {
+      const resultSet = await this.rdbStore.query(predicates)
+      const count: number = resultSet.rowCount
+      resultSet.close()
+      return count
+    } catch (error) {
+      console.error('DatabaseService', `Failed to count math quiz purpose: ${JSON.stringify(error)}`)
+      return 0
+    }
+  }
+
+  async getMathQuizProgress(track: string): Promise<MathQuizProgressRow | null> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return null
+    }
+    const predicates = new relationalStore.RdbPredicates(TableNames.MATH_QUIZ_PROGRESS)
+    predicates.equalTo('track', track)
+    predicates.limitAs(1)
+    try {
+      const resultSet = await this.rdbStore.query(predicates)
+      if (!resultSet.goToNextRow()) {
+        resultSet.close()
+        return null
+      }
+      const row: MathQuizProgressRow = {
+        track: resultSet.getString(resultSet.getColumnIndex('track')),
+        currentLevel: resultSet.getLong(resultSet.getColumnIndex('current_level')),
+        correctAtLevel: resultSet.getLong(resultSet.getColumnIndex('correct_at_level')),
+        consecutiveWrong: resultSet.getLong(resultSet.getColumnIndex('consecutive_wrong')),
+        updatedAt: resultSet.getLong(resultSet.getColumnIndex('updated_at'))
+      }
+      resultSet.close()
+      return row
+    } catch (error) {
+      console.error('DatabaseService', `Failed to query math quiz progress: ${JSON.stringify(error)}`)
+      return null
+    }
+  }
+
+  async upsertMathQuizProgress(row: MathQuizProgressRow): Promise<boolean> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return false
+    }
+    const valueBucket: relationalStore.ValuesBucket = {
+      track: row.track,
+      current_level: row.currentLevel,
+      correct_at_level: row.correctAtLevel,
+      consecutive_wrong: row.consecutiveWrong,
+      updated_at: row.updatedAt
+    }
+    try {
+      await this.rdbStore.insert(TableNames.MATH_QUIZ_PROGRESS, valueBucket,
+        relationalStore.ConflictResolution.ON_CONFLICT_REPLACE)
+      return true
+    } catch (error) {
+      console.error('DatabaseService', `Failed to upsert math quiz progress: ${JSON.stringify(error)}`)
+      return false
+    }
+  }
+
+  async recordMathQuizAnswer(record: MathQuizRecordInsert,
+                             progress: MathQuizProgressRow | null): Promise<number> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      return -1
+    }
+    try {
+      this.rdbStore.beginTransaction()
+      const rowId: number = await this.insertMathQuizRecord(record)
+      if (rowId < 0) {
+        this.rdbStore.rollBack()
+        return -1
+      }
+      if (progress !== null) {
+        const ok: boolean = await this.upsertMathQuizProgress(progress)
+        if (!ok) {
+          this.rdbStore.rollBack()
+          return -1
+        }
+      }
+      this.rdbStore.commit()
+      return rowId
+    } catch (error) {
+      try {
+        this.rdbStore.rollBack()
+      } catch (_rollbackError) {
+        // 事务可能已经结束, 忽略回滚失败
+      }
+      console.error('DatabaseService', `Failed to record math quiz answer: ${JSON.stringify(error)}`)
+      return -1
+    }
   }
 
   /**

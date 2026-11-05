@@ -78,6 +78,8 @@ import { getGeneratedMediaRepository } from '../services/GeneratedMediaRepositor
 import { getAppSettingsState } from '../state/AppSettingsState'
 import { getEffectiveOutputMode } from '../utils/ModelCapabilityDeriver'
 import { getChildProfileService, ChildProfileService, ChildKnowledgeProfile } from '../services/ChildProfileService'
+import { getMathQuizHistoryService } from '../services/MathQuizHistoryService'
+import { ChildProfileMathProgress } from '../models/MathQuizProgressionModels'
 import { evaluateMathExpression } from '../utils/MathExpressionParser'
 
 
@@ -1106,12 +1108,14 @@ class ChildProfileSummary {
   strengths: string[] = []
   weakAreas: string[] = []
   skills: ChildProfileSkillSummary[] = []
+  mathProgress: ChildProfileMathProgress[] = []
 
   constructor(
     childName: string, ageYears: number, overallNote: string,
     sessionCount: number, lastInteraction: number,
     strengths: string[], weakAreas: string[],
-    skills: ChildProfileSkillSummary[]
+    skills: ChildProfileSkillSummary[],
+    mathProgress: ChildProfileMathProgress[]
   ) {
     this.childName = childName
     this.ageYears = ageYears
@@ -1121,6 +1125,7 @@ class ChildProfileSummary {
     this.strengths = strengths
     this.weakAreas = weakAreas
     this.skills = skills
+    this.mathProgress = mathProgress
   }
 }
 
@@ -1149,7 +1154,8 @@ class ChildProfileExecutor implements ToolExecutor {
 
       if (action === 'read') {
         const profile = await service.getProfile()
-        return JSON.stringify(this.formatProfileForAI(profile))
+        const mathProgress = await this.loadMathProgress()
+        return JSON.stringify(this.formatProfileForAI(profile, mathProgress))
       } else if (action === 'update') {
         return await this.handleUpdate(params, service)
       } else {
@@ -1221,10 +1227,21 @@ class ChildProfileExecutor implements ToolExecutor {
 
     profile.lastInteraction = Date.now()
     await service.saveProfile(profile)
-    return JSON.stringify(this.formatProfileForAI(profile))
+    const mathProgress = await this.loadMathProgress()
+    return JSON.stringify(this.formatProfileForAI(profile, mathProgress))
   }
 
-  private formatProfileForAI(profile: ChildKnowledgeProfile): Object {
+  private async loadMathProgress(): Promise<ChildProfileMathProgress[]> {
+    try {
+      return await getMathQuizHistoryService().getProgressSummary()
+    } catch (error) {
+      console.warn('ChildProfileExecutor', `Failed to load math progress: ${String(error)}`)
+      return []
+    }
+  }
+
+  private formatProfileForAI(profile: ChildKnowledgeProfile,
+    mathProgress: ChildProfileMathProgress[]): Object {
     const skillsArray: ChildProfileSkillSummary[] = []
     const keys = Object.keys(profile.skills)
     for (let i = 0; i < keys.length; i++) {
@@ -1236,7 +1253,7 @@ class ChildProfileExecutor implements ToolExecutor {
     return new ChildProfileSummary(
       profile.childName, profile.ageYears, profile.overallNote,
       profile.sessionCount, profile.lastInteraction,
-      profile.strengths, profile.weakAreas, skillsArray
+      profile.strengths, profile.weakAreas, skillsArray, mathProgress
     )
   }
 }
@@ -1432,6 +1449,8 @@ interface MathQuizArgs {
   correct_answer: string | number
   options: Array<string | number>
   skill_key?: string
+  // 出题目的: practice=正式练习(默认, 计入掌握进度); warm_up / review=热身/复习(低于目标难度, 不计入)
+  purpose?: 'practice' | 'warm_up' | 'review'
   // arithmetic 专用; true = 应用题模式 (隐藏算式, 只显示 question 场景描述)
   word_problem?: boolean
   // comparison 专用
@@ -1503,7 +1522,7 @@ function createMathQuizToolDefinition(): ToolDefinition {
       },
       "expression": {
         "type": "string",
-        "description": "arithmetic 专用: 算式字符串, e.g. 「3 + 2」 或多步连加连减链式 「47 + 28 - 15」. 显示为 「47 + 28 - 15 = ?」. 链式最多 3 个运算符, 中间过程与最终结果都不能为负数. 题目卡片会提供「草稿纸」(手写+竖式), 孩子答错一次会获得提示再答一次. 应用题模式 (word_problem=true) 时 expression 留空. 其他 type 不用填."
+        "description": "arithmetic 专用: 算式字符串, e.g. 「3 + 2」 或多步连加连减链式 「47 + 28 - 15」. 显示为 「47 + 28 - 15 = ?」. 链式最多 3 个运算符, 中间过程与最终结果都不能为负数. 应用题 (word_problem=true) 也必须填隐藏算式 (如 「3 + 2」), 卡片只显示 question, 不会把算式显示给孩子. 其他 type 不用填."
       },
       "word_problem": {
         "type": "boolean",
@@ -1559,7 +1578,12 @@ function createMathQuizToolDefinition(): ToolDefinition {
       },
       "skill_key": {
         "type": "string",
-        "description": "Optional. 教学目标维度 key, e.g. math_addition / math_shapes / math_comparison / math_time. Used for updating the child's profile after answering."
+        "description": "强烈建议填写; 决定难度轨与画像维度; 优先用 math_addition / math_subtraction / math_multiply / math_divide / math_comparison / math_time / math_word_problem / math_counting / math_number_sense / math_shapes. 历史短名 (addition / subtraction / multiply / divide / shapes / comparison / time / counting / number_sense / word_problem) 会被自动归一; 未知值按空处理并由算式推断."
+      },
+      "purpose": {
+        "type": "string",
+        "enum": ["practice", "warm_up", "review"],
+        "description": "practice=正式练习（默认，必须匹配当前目标难度，计入掌握进度）；warm_up=热身（可低于当前难度，不计入进度，每会话最多 5 题）；review=复习（可低于当前难度，不计入进度，每会话最多 3 题）。"
       },
       "left_value": {
         "type": "number",
@@ -1583,7 +1607,7 @@ function createMathQuizToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     MATH_QUIZ_TOOL_ID,
-    'Present a math quiz to the child as an interactive game card on screen. Use this INSTEAD of writing math problems in plain text. Set the type field: arithmetic=加减乘除算术题 (含应用题), shape=图形认知, comparison=大小比较, time=时间认知-读时间, elapsed_time=时间认知-计时经过. Provide 3-4 options including the correct answer. For comparison, fill left_value/right_value and operator_options, leave options empty. For time questions, also fill clock_hour (1-12) and clock_minute (5-minute step: 0/5/.../55) so the card can render an analog clock face. For arithmetic word problems, set word_problem=true and write the scenario in question (e.g. 「桌上有 3 个苹果, 再放 2 个, 一共几个呀」); leave expression empty. For elapsed_time questions, set type=elapsed_time and fill start_hour (1-12), start_minute (5-min step), end_hour (1-12), end_minute (5-min step). The correct_answer and options are duration strings like 「1 小时 30 分」,「30 分」,「2 小时」.',
+    'Present a math quiz to the child as an interactive game card on screen. Use this INSTEAD of writing math problems in plain text. Set the type field: arithmetic=加减乘除算术题 (含应用题), shape=图形认知, comparison=大小比较, time=时间认知-读时间, elapsed_time=时间认知-计时经过. Provide 3-4 options including the correct answer. For comparison, fill left_value/right_value and operator_options, leave options empty. For time questions, also fill clock_hour (1-12) and clock_minute (5-minute step: 0/5/.../55) so the card can render an analog clock face. For arithmetic word problems, set word_problem=true and write the scenario in question (e.g. 「桌上有 3 个苹果, 再放 2 个, 一共几个呀」) and also fill the hidden expression. For elapsed_time questions, set type=elapsed_time and fill start_hour (1-12), start_minute (5-min step), end_hour (1-12), end_minute (5-min step). The correct_answer and options are duration strings like 「1 小时 30 分」,「30 分」,「2 小时」. Set purpose (default practice) and skill_key; practice questions must match the child current target level returned by child_profile.mathProgress or the difficulty_gate retry payload.',
     parameters
   )
 
