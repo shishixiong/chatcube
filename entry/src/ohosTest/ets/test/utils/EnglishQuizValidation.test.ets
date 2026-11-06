@@ -360,6 +360,82 @@ export default function englishQuizValidationTest() {
       expect(r.error.includes('case')).assertTrue()
     })
   })
+  describe('validateEnglishQuizArgs - spell_word (整词默写)', () => {
+    it('齐全 → 合法, 回填 mode', 0, () => {
+      const r = validateEnglishQuizArgs(buildArgs({
+        mode: 'spell_word', question: '听一听, 把单词拼出来', correct_answer: 'apple', target_zh: '苹果'
+      }))
+      expect(r.ok).assertTrue()
+      expect(r.mode).assertEqual('spell_word')
+      expect(r.isLegacy).assertFalse()
+    })
+
+    it('大写字母词 → 合法', 0, () => {
+      const r = validateEnglishQuizArgs(buildArgs({
+        mode: 'spell_word', question: 'q', correct_answer: 'Apple', target_zh: '苹果'
+      }))
+      expect(r.ok).assertTrue()
+    })
+
+    it('缺 target_zh → 拒绝 (孩子不知道要默写什么)', 0, () => {
+      const r = validateEnglishQuizArgs(buildArgs({
+        mode: 'spell_word', question: '听一听', correct_answer: 'apple'
+      }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('target_zh')).assertTrue()
+    })
+
+    it('缺 question → 拒绝', 0, () => {
+      const r = validateEnglishQuizArgs(buildArgs({
+        mode: 'spell_word', question: '', correct_answer: 'apple', target_zh: '苹果'
+      }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('question')).assertTrue()
+    })
+
+    it('单词含空格 → 拒绝', 0, () => {
+      const r = validateEnglishQuizArgs(buildArgs({
+        mode: 'spell_word', question: 'q', correct_answer: 'ice cream', target_zh: '冰淇淋'
+      }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('correct_answer')).assertTrue()
+    })
+
+    it('单词含连字符 → 拒绝', 0, () => {
+      const r = validateEnglishQuizArgs(buildArgs({
+        mode: 'spell_word', question: 'q', correct_answer: 'ice-cream', target_zh: '冰淇淋'
+      }))
+      expect(r.ok).assertFalse()
+    })
+
+    it('单字母 → 拒绝 (长度需 2-20)', 0, () => {
+      const r = validateEnglishQuizArgs(buildArgs({
+        mode: 'spell_word', question: 'q', correct_answer: 'a', target_zh: '一个'
+      }))
+      expect(r.ok).assertFalse()
+    })
+
+    it('21 个字母 → 拒绝 (长度上限 20)', 0, () => {
+      const r = validateEnglishQuizArgs(buildArgs({
+        mode: 'spell_word', question: 'q', correct_answer: 'abcdefghijklmnopqrstu', target_zh: '长词'
+      }))
+      expect(r.ok).assertFalse()
+    })
+
+    it('非本地词库词 → 合法 (spell_word 不受词库限制)', 0, () => {
+      const r = validateEnglishQuizArgs(buildArgs({
+        mode: 'spell_word', question: 'q', correct_answer: 'refrigerator', target_zh: '冰箱'
+      }))
+      expect(r.ok).assertTrue()
+    })
+
+    it('resolveQuizMode 识别 spell_word 为新 mode', 0, () => {
+      const r = resolveQuizMode(JSON.parse('{"mode":"spell_word"}') as Record<string, Object>)
+      expect(r.mode).assertEqual('spell_word')
+      expect(r.isLegacy).assertFalse()
+    })
+  })
+
   describe('validateEnglishQuizArgs - 非字符串值/异常 pattern 守卫', () => {
     it('picture_word: correct_answer 为数字 → 校验失败而非抛异常', 0, () => {
       const r = validateEnglishQuizArgs(buildArgs({

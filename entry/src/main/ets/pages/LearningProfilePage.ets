@@ -18,6 +18,7 @@ import { SkillLevelDots } from '../components/SkillLevelDots'
 import { formatRelativeTime } from '../utils/TimeFormatUtils'
 import { getLearningLedgerService } from '../services/LearningLedgerService'
 import { RepeatStat, TOP_REPEATED_WINDOW_MS } from '../models/LearningLedgerModels'
+import { SettingsRouteName } from '../config/SettingsRouteName'
 
 const TAG = 'LearningProfilePage'
 const TOTAL_LEVELS: number = 5
@@ -266,6 +267,12 @@ struct LearningProfilePage {
   private handleBack(): void {
     if (learningProfilePagePathStack !== null && learningProfilePagePathStack.size() > 0) {
       learningProfilePagePathStack.pop()
+    }
+  }
+
+  private openWordLibrary(): void {
+    if (learningProfilePagePathStack !== null) {
+      learningProfilePagePathStack.pushPath({ name: SettingsRouteName.LEARNING_WORD_LIBRARY })
     }
   }
 
@@ -583,6 +590,25 @@ struct LearningProfilePage {
             .width('100%')
         }, (item: string, index: number) => `${index}_${item}`)
       }
+
+      Button() {
+        Row({ space: 2 }) {
+          Text('查看单词库')
+            .fontSize(13)
+            .fontColor(Color.White)
+          SymbolGlyph($r('sys.symbol.chevron_right'))
+            .fontSize(12)
+            .fontColor([Color.White])
+        }
+      }
+      .type(ButtonType.Capsule)
+      .height(32)
+      .padding({ left: 14, right: 14 })
+      .backgroundColor(this.themePrimary)
+      .margin({ top: 4 })
+      .onClick(() => {
+        this.openWordLibrary()
+      })
     }
     .width('100%')
     .padding(14)

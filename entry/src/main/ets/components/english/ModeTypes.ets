@@ -11,7 +11,7 @@ import { resolveQuizMode } from '../../utils/EnglishQuizValidation'
 
 export type EnglishQuizMode =
   | 'listen_choice' | 'picture_word' | 'phonics_blend'
-  | 'sentence_fill' | 'read_aloud' | 'letter_trace' | 'legacy'
+  | 'sentence_fill' | 'read_aloud' | 'letter_trace' | 'spell_word' | 'legacy'
 
 /** answer payload v2: 现有字段全保留 (ToolExecutionService/AI 契约不动), 新增字段全部可选 */
 export interface EnglishQuizAnswerPayload {
@@ -30,6 +30,7 @@ export interface EnglishQuizAnswerPayload {
   pattern?: string
   target_text?: string
   completed?: boolean          // letter_trace 置 true
+  attempts?: number            // spell_word: 本词尝试次数 (1 = 一次拼对)
 }
 
 export interface EnglishQuizModeArgs {
@@ -69,6 +70,7 @@ export function defaultSkillKeyForMode(mode: EnglishQuizMode): string {
     case 'sentence_fill': return 'english_sentence'
     case 'read_aloud': return 'english_reading'
     case 'letter_trace': return 'english_writing'
+    case 'spell_word': return 'english_writing'
     default: return 'english_vocab'   // legacy 默认, 与原 parseQuiz 一致
   }
 }
@@ -81,6 +83,7 @@ export function modeDisplayName(mode: EnglishQuizMode): string {
     case 'sentence_fill': return '句型填空'
     case 'read_aloud': return '跟我读'
     case 'letter_trace': return '字母描红'
+    case 'spell_word': return '单词默写'
     default: return '英语小游戏'
   }
 }

@@ -13,6 +13,10 @@
  *   大区 → 省份展开靠调用方注入 GeoLedgerResolver (本文件仍不碰地图数据, 保持纯函数)
  */
 import {
+  LEDGER_DIM_LISTEN,
+  LEDGER_DIM_READ,
+  LEDGER_DIM_RECOGNIZE,
+  LEDGER_DIM_WRITE,
   LEDGER_ITEM_TYPE_PLACE,
   LEDGER_SKILL_GEO_PLACE,
   LEDGER_SUBJECT_GEO,
@@ -164,6 +168,153 @@ function singleOf(item: LedgerToolItem): LedgerToolItem[] {
 }
 
 /**
+ * 工具+mode → 四维掌握度维度 (2026-11-03)。
+ * mode 用的是台账里存的 composite 形式 (compositeMode(toolId, mode)), 与
+ * extractLedgerItemsFromTool 写入的 mode 完全一致。
+ * 返回 '' = 不推进维度 (语文/地理/讲解型工具, 或未映射的题型)。
+ */
+export function skillDimensionFor(toolId: string, mode: string, subject: string): string {
+  if (subject !== 'en') {
+    return ''
+  }
+  if (toolId === 'english_quiz') {
+    if (mode === 'english_quiz.spell_word') {
+      return LEDGER_DIM_WRITE
+    }
+    if (mode === 'english_quiz.read_aloud') {
+      return LEDGER_DIM_READ
+    }
+    if (mode === 'english_quiz.listen_choice' || mode === 'english_quiz.phonics_blend' ||
+      mode === 'english_quiz.phonics_choice') {
+      return LEDGER_DIM_LISTEN
+    }
+    if (mode === 'english_quiz.picture_word' || mode === 'english_quiz.sentence_fill') {
+      return LEDGER_DIM_RECOGNIZE
+    }
+    // legacy: word / sentence 都是键盘敲整词 → 写
+    if (mode === 'english_quiz.word' || mode === 'english_quiz.sentence') {
+      return LEDGER_DIM_WRITE
+    }
+    return ''
+  }
+  if (toolId === 'picture_vocab') {
+    // picture_vocab.en / picture_vocab(无 mode) → 认; picture_vocab.zh 是语文, subject 已拦截
+    return LEDGER_DIM_RECOGNIZE
+  }
+  if (toolId === 'listening_quiz') {
+    return LEDGER_DIM_LISTEN
+  }
+  if (toolId === 'matching_pairs') {
+    return LEDGER_DIM_RECOGNIZE
+  }
+  if (toolId === 'handwriting_practice') {
+    return LEDGER_DIM_WRITE
+  }
+  return ''
+}
+
+/** 3D 探索工具的词 id 是下划线形式 (coffee_table), 展示前转成 "coffee table" */
+function humanizeExplorationWord(raw: string): string {
+  return raw.trim().replace(/_/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function asRecord(value: Object | undefined): Record<string, Object> | null {
+  if (value === undefined || value === null || typeof value !== 'object') {
+    return null
+  }
+  if (Array.isArray(value)) {
+    return null
+  }
+  return value as Record<string, Object>
+}
+
+/**
+ * room_english 教学曝光词: lesson.steps[].word (人可读的英文词) 优先,
+ * words[] 里没有步骤词的 id 回退成下划线转空格。按归一化 key 去重。
+ */
+function roomEnglishItems(parsed: Record<string, Object>): LedgerToolItem[] {
+  const items: LedgerToolItem[] = []
+  const seen: string[] = []
+  const displayById: Map<string, string> = new Map()
+  const modeTag = compositeMode('room_english', '')
+  const lesson = asRecord(parsed['lesson'])
+  if (lesson !== null) {
+    const stepsRaw = lesson['steps']
+    if (Array.isArray(stepsRaw)) {
+      const steps = stepsRaw as Object[]
+      for (let i = 0; i < steps.length; i++) {
+        const step = asRecord(steps[i])
+        if (step === null) {
+          continue
+        }
+        const id = argString(step, 'id')
+        const word = argString(step, 'word')
+        if (id === '') {
+          continue
+        }
+        const display = word !== '' ? word : humanizeExplorationWord(id)
+        displayById.set(id, display)
+        pushExplorationItem(items, seen, display, modeTag)
+      }
+    }
+  }
+  const wordsRaw = parsed['words']
+  if (Array.isArray(wordsRaw)) {
+    const words = wordsRaw as Object[]
+    for (let i = 0; i < words.length; i++) {
+      const raw = words[i]
+      if (typeof raw !== 'string') {
+        continue
+      }
+      const id = (raw as string).trim()
+      if (id === '') {
+        continue
+      }
+      const planted = displayById.get(id)
+      const display = planted !== undefined ? planted : humanizeExplorationWord(id)
+      pushExplorationItem(items, seen, display, modeTag)
+    }
+  }
+  return items
+}
+
+/** city_english 教学曝光词: words[] 里的 id 下划线转空格后逐项入账 */
+function cityEnglishItems(parsed: Record<string, Object>): LedgerToolItem[] {
+  const items: LedgerToolItem[] = []
+  const seen: string[] = []
+  const modeTag = compositeMode('city_english', '')
+  const wordsRaw = parsed['words']
+  if (!Array.isArray(wordsRaw)) {
+    return items
+  }
+  const words = wordsRaw as Object[]
+  for (let i = 0; i < words.length; i++) {
+    const raw = words[i]
+    if (typeof raw !== 'string') {
+      continue
+    }
+    const id = (raw as string).trim()
+    if (id === '') {
+      continue
+    }
+    pushExplorationItem(items, seen, humanizeExplorationWord(id), modeTag)
+  }
+  return items
+}
+
+function pushExplorationItem(items: LedgerToolItem[], seen: string[], display: string, mode: string): void {
+  if (display === '') {
+    return
+  }
+  const key = normalizeItemKey('en', 'vocab', display)
+  if (key === '' || seen.indexOf(key) >= 0) {
+    return
+  }
+  seen.push(key)
+  items.push(toolItem('en', 'vocab', display, mode, 'english_vocab'))
+}
+
+/**
  * 从工具 arguments 提取目标学习项。字段名严格对照 v1.1 校正:
  * - english_quiz: correct_answer (六 mode 统一; read_aloud 空时回退 target_text);
  *   mode 空/legacy 时回退 question_type; read_aloud → en:sentence
@@ -175,6 +326,8 @@ function singleOf(item: LedgerToolItem): LedgerToolItem[] {
  * - chinese_quiz: word_build→[character zh:char + answer zh:phrase]; sentence_order→answer zh:sentence;
  *   lookalike→answer zh:char; antonym→character zh:char
  * - matching_pairs: pairs[].left 逐项分类; handwriting_practice: character+type (number 跳过)
+ * - room_english / city_english (2026-11-03): 教学曝光词; lesson.steps[].word 优先,
+ *   其余 id 下划线转空格 (coffee_table → coffee table)
  */
 export function extractLedgerItemsFromTool(toolId: string, argsJson: string,
   geo: GeoLedgerResolver | null = null): LedgerToolItem[] {
@@ -337,6 +490,12 @@ export function extractLedgerItemsFromTool(toolId: string, argsJson: string,
     }
     return items
   }
+  if (toolId === 'room_english') {
+    return roomEnglishItems(parsed)
+  }
+  if (toolId === 'city_english') {
+    return cityEnglishItems(parsed)
+  }
   return emptyItems()
 }
 
@@ -415,7 +574,7 @@ export function extractLedgerAnswerItems(toolId: string, argsJson: string,
     return answers
   }
   if (toolId === 'hanzi_card' || toolId === 'pinyin_card' || toolId === 'picture_talk' ||
-    toolId === 'map_card') {
+    toolId === 'map_card' || toolId === 'room_english' || toolId === 'city_english') {
     // 讲解型: 曝光已记, 掌握度不因「看了」推进
     return answers
   }
@@ -430,7 +589,8 @@ export function extractLedgerAnswerItems(toolId: string, argsJson: string,
     for (let i = 0; i < names.length; i++) {
       const answer: LedgerAnswerItem = {
         itemKey: normalizeItemKey(LEDGER_SUBJECT_GEO, LEDGER_ITEM_TYPE_PLACE, names[i]),
-        isCorrect: wrong.indexOf(names[i]) < 0
+        isCorrect: wrong.indexOf(names[i]) < 0,
+        dimension: ''
       }
       answers.push(answer)
     }
@@ -449,7 +609,8 @@ export function extractLedgerAnswerItems(toolId: string, argsJson: string,
     const servedItem = served[i]
     const answer: LedgerAnswerItem = {
       itemKey: normalizeItemKey(servedItem.subject, servedItem.itemType, servedItem.display),
-      isCorrect: isCorrect
+      isCorrect: isCorrect,
+      dimension: skillDimensionFor(toolId, servedItem.mode, servedItem.subject)
     }
     answers.push(answer)
   }

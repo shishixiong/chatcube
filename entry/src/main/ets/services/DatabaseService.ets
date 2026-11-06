@@ -675,7 +675,15 @@ export class DatabaseService {
       mastered_at         INTEGER NOT NULL DEFAULT 0,
       source              TEXT DEFAULT 'session',
       created_at          INTEGER NOT NULL,
-      updated_at          INTEGER NOT NULL
+      updated_at          INTEGER NOT NULL,
+      recognize_tries     INTEGER NOT NULL DEFAULT 0,
+      recognize_ok        INTEGER NOT NULL DEFAULT 0,
+      listen_tries        INTEGER NOT NULL DEFAULT 0,
+      listen_ok           INTEGER NOT NULL DEFAULT 0,
+      read_tries          INTEGER NOT NULL DEFAULT 0,
+      read_ok             INTEGER NOT NULL DEFAULT 0,
+      write_tries         INTEGER NOT NULL DEFAULT 0,
+      write_ok            INTEGER NOT NULL DEFAULT 0
     )`
       const createLearningItemEventsSql = `CREATE TABLE IF NOT EXISTS learning_item_events (
       id           TEXT PRIMARY KEY,
@@ -789,6 +797,8 @@ export class DatabaseService {
       await this.addAssistantSamplingColumnsIfNeeded()
       // 尝试添加助手预设标记列
       await this.addAssistantPresetColumnIfNeeded()
+      // 词汇台账四维掌握度计数列 (2026-11-03, 老库升级)
+      await this.addLearningItemSkillColumnsIfNeeded()
 	      // 迁移现有供应商数据
 	      await this.migrateExistingProviders()
 	      await this.ensureDefaultAssistant()
@@ -1599,6 +1609,25 @@ export class DatabaseService {
       await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.ASSISTANTS} ADD COLUMN is_preset INTEGER DEFAULT 0`)
     } catch (error) {
       console.info('DatabaseService', 'is_preset column may already exist')
+    }
+  }
+
+  /** 词汇台账四维掌握度计数列 (2026-11-03): 老库逐列 ALTER, 已存在会抛错并忽略 */
+  private async addLearningItemSkillColumnsIfNeeded(): Promise<void> {
+    if (this.rdbStore === null) {
+      return
+    }
+    const columns: string[] = [
+      'recognize_tries', 'recognize_ok', 'listen_tries', 'listen_ok',
+      'read_tries', 'read_ok', 'write_tries', 'write_ok'
+    ]
+    for (let i = 0; i < columns.length; i++) {
+      try {
+        await this.rdbStore.executeSql(
+          `ALTER TABLE ${TableNames.LEARNING_ITEMS} ADD COLUMN ${columns[i]} INTEGER NOT NULL DEFAULT 0`)
+      } catch (error) {
+        // 列已存在会抛错, 忽略
+      }
     }
   }
 
@@ -3900,6 +3929,14 @@ export class DatabaseService {
     item.source = rs.getString(rs.getColumnIndex('source'))
     item.createdAt = rs.getLong(rs.getColumnIndex('created_at'))
     item.updatedAt = rs.getLong(rs.getColumnIndex('updated_at'))
+    item.recognizeTries = rs.getLong(rs.getColumnIndex('recognize_tries'))
+    item.recognizeOk = rs.getLong(rs.getColumnIndex('recognize_ok'))
+    item.listenTries = rs.getLong(rs.getColumnIndex('listen_tries'))
+    item.listenOk = rs.getLong(rs.getColumnIndex('listen_ok'))
+    item.readTries = rs.getLong(rs.getColumnIndex('read_tries'))
+    item.readOk = rs.getLong(rs.getColumnIndex('read_ok'))
+    item.writeTries = rs.getLong(rs.getColumnIndex('write_tries'))
+    item.writeOk = rs.getLong(rs.getColumnIndex('write_ok'))
     return item
   }
 
@@ -3924,7 +3961,15 @@ export class DatabaseService {
       'mastered_at': item.masteredAt,
       'source': item.source,
       'created_at': item.createdAt,
-      'updated_at': item.updatedAt
+      'updated_at': item.updatedAt,
+      'recognize_tries': item.recognizeTries,
+      'recognize_ok': item.recognizeOk,
+      'listen_tries': item.listenTries,
+      'listen_ok': item.listenOk,
+      'read_tries': item.readTries,
+      'read_ok': item.readOk,
+      'write_tries': item.writeTries,
+      'write_ok': item.writeOk
     }
     return bucket
   }
@@ -4027,6 +4072,14 @@ export class DatabaseService {
   async queryLedgerCooling(subject: string, sinceMs: number, limit: number): Promise<LearningItem[]> {
     const predicates = new relationalStore.RdbPredicates(TableNames.LEARNING_ITEMS)
     predicates.equalTo('subject', subject).greaterThanOrEqualTo('last_seen_at', sinceMs)
+      .orderByDesc('last_seen_at').limitAs(limit)
+    return await this.queryLedgerItems(predicates)
+  }
+
+  /** 单词库页 (2026-11-03): 按 subject + item_type 取全部词, 最近教学时间倒序 */
+  async queryLedgerWords(subject: string, itemType: string, limit: number): Promise<LearningItem[]> {
+    const predicates = new relationalStore.RdbPredicates(TableNames.LEARNING_ITEMS)
+    predicates.equalTo('subject', subject).equalTo('item_type', itemType)
       .orderByDesc('last_seen_at').limitAs(limit)
     return await this.queryLedgerItems(predicates)
   }

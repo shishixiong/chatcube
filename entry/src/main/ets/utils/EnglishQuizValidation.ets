@@ -41,7 +41,8 @@ export interface ResolvedQuizMode {
   isLegacy: boolean
 }
 
-const NEW_MODES: string[] = ['listen_choice', 'picture_word', 'phonics_blend', 'sentence_fill', 'read_aloud', 'letter_trace']
+const NEW_MODES: string[] = ['listen_choice', 'picture_word', 'phonics_blend', 'sentence_fill',
+  'read_aloud', 'letter_trace', 'spell_word']
 const LEGACY_TYPES: string[] = ['word', 'sentence', 'phonics_choice']
 
 /**
@@ -95,7 +96,7 @@ export function validateEnglishQuizArgs(args: string): EnglishQuizValidationResu
   }
   const resolved = resolveQuizMode(parsed)
   if (resolved.mode === '') {
-    return fail('english_quiz 缺少 mode 字段 (listen_choice/picture_word/phonics_blend/sentence_fill/read_aloud/letter_trace 六选一); 历史兼容的 question_type 也不再接受空值', '', false)
+    return fail('english_quiz 缺少 mode 字段 (listen_choice/picture_word/phonics_blend/sentence_fill/read_aloud/letter_trace/spell_word 七选一); 历史兼容的 question_type 也不再接受空值', '', false)
   }
   if (resolved.isLegacy) {
     return validateLegacyArgs(parsed, resolved.mode)
@@ -113,6 +114,8 @@ export function validateEnglishQuizArgs(args: string): EnglishQuizValidationResu
       return validateReadAloud(parsed, resolved.mode)
     case 'letter_trace':
       return validateLetterTrace(parsed, resolved.mode)
+    case 'spell_word':
+      return validateSpellWord(parsed, resolved.mode)
     default:
       return fail(`未知的 mode「${resolved.mode}」`, '', false)
   }
@@ -403,6 +406,28 @@ function validateLetterTrace(parsed: Record<string, Object>, mode: string): Engl
   const letterCase = readString(parsed, 'case')
   if (letterCase !== 'upper' && letterCase !== 'lower') {
     return fail(`letter_trace 题的 case 必须是「upper」或「lower」(当前「${letterCase}」)`, mode, false)
+  }
+  return pass(mode, false)
+}
+
+/**
+ * 整词默写 (2026-11-03): 孩子听发音 + 看中文意思, 用字母格把整词拼出来。
+ * 不走本地词库硬约束——要覆盖 room_english / city_english 里 76+50 个词,
+ * 其中很多不在 120 词本地词库。
+ */
+function validateSpellWord(parsed: Record<string, Object>, mode: string): EnglishQuizValidationResult {
+  const correct = readString(parsed, 'correct_answer')
+  if (correct === '') {
+    return fail('spell_word 题缺少 correct_answer (要默写的英文单词)', mode, false)
+  }
+  if (!/^[A-Za-z]{2,20}$/.test(correct)) {
+    return fail(`spell_word 题的 correct_answer「${correct}」必须是 2-20 个英文字母的单个单词 (不含空格/连字符/撇号), 请换一个词后重新出题`, mode, false)
+  }
+  if (readString(parsed, 'target_zh') === '') {
+    return fail('spell_word 题缺少 target_zh (这个单词的中文意思), 孩子要靠它理解要默写什么, 请补上后重新出题', mode, false)
+  }
+  if (readString(parsed, 'question') === '') {
+    return fail('spell_word 题缺少 question (给小朋友看的中文提示语), 请补上后重新出题', mode, false)
   }
   return pass(mode, false)
 }

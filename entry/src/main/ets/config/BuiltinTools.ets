@@ -1691,15 +1691,15 @@ function createMathTeachToolConfig(): ToolConfig {
 }
 
 // ===== english_quiz 工具 =====
-// 英语趣味题工具（v2）：mode 六选一（listen_choice / picture_word / phonics_blend /
-// sentence_fill / read_aloud / letter_trace），同时兼容历史 question_type 三题型（word /
+// 英语趣味题工具（v2）：mode 七选一（listen_choice / picture_word / phonics_blend /
+// sentence_fill / read_aloud / letter_trace / spell_word），同时兼容历史 question_type 三题型（word /
 // sentence / phonics_choice）。图片优先从本地缓存加载（ImageIndexService 统一数据访问层：
 // ENGLISH_QUIZ + LESSON_PLAN 双源），缓存未命中时调用图片生成 API。
 // 交互由前端 components/english/EnglishQuizCard 组件处理（按 mode 路由到各 body），与 math_quiz 模式类似。
 
 interface EnglishQuizArgs {
   question: string
-  mode?: string               // v2 六 mode; 缺省时走 legacy question_type 兼容路径
+  mode?: string               // v2 七 mode; 缺省时走 legacy question_type 兼容路径
   image_prompt: string
   correct_answer: string
   question_type: string
@@ -1750,8 +1750,8 @@ function createEnglishQuizToolDefinition(): ToolDefinition {
     "properties": {
       "mode": {
         "type": "string",
-        "enum": ["listen_choice", "picture_word", "phonics_blend", "sentence_fill", "read_aloud", "letter_trace"],
-        "description": "Quiz mode, exactly one of six. listen_choice: child hears a word via TTS and picks it from 4 options (tts_text REQUIRED). picture_word: child sees an image and picks the matching word (image_prompt REQUIRED). phonics_blend: pick the word matching phonics_rule from 4 same-rule options (phonics_rule REQUIRED). sentence_fill: fill the one blank in pattern by picking from 4 options (pattern REQUIRED). read_aloud: child reads target_text aloud, card auto-scores via speech recognition (target_text REQUIRED). letter_trace: trace a single letter (letter and case REQUIRED). phonics_blend 的 4 个选项都符合 phonics_rule, 孩子只能靠听音作答——question 要写成「听一听, 选出你听到的词」这类听音指令. listen_choice / picture_word / phonics_blend / sentence_fill 的 correct_answer 和 4 个 options 只能从内置本地词库选词; 词库外的词会被校验拒绝并要求重出, picture_word 命中本地词时图片直接读取本地资源、不再生成。read_aloud / letter_trace 是朗读/书写练习, 不按本地词库限制。本地词库（主题: 词）—— ${localVocabHint}。"
+        "enum": ["listen_choice", "picture_word", "phonics_blend", "sentence_fill", "read_aloud", "letter_trace", "spell_word"],
+        "description": "Quiz mode, exactly one of seven. listen_choice: child hears a word via TTS and picks it from 4 options (tts_text REQUIRED). picture_word: child sees an image and picks the matching word (image_prompt REQUIRED). phonics_blend: pick the word matching phonics_rule from 4 same-rule options (phonics_rule REQUIRED). sentence_fill: fill the one blank in pattern by picking from 4 options (pattern REQUIRED). read_aloud: child reads target_text aloud, card auto-scores via speech recognition (target_text REQUIRED). letter_trace: trace a single letter (letter and case REQUIRED). spell_word: 单词默写——孩子听发音、看中文意思, 用字母键把整词拼出来 (correct_answer 是要默写的英文单词, target_zh REQUIRED). phonics_blend 的 4 个选项都符合 phonics_rule, 孩子只能靠听音作答——question 要写成「听一听, 选出你听到的词」这类听音指令. listen_choice / picture_word / phonics_blend / sentence_fill 的 correct_answer 和 4 个 options 只能从内置本地词库选词; 词库外的词会被校验拒绝并要求重出, picture_word 命中本地词时图片直接读取本地资源、不再生成。read_aloud / letter_trace / spell_word 是朗读/书写练习, 不按本地词库限制——spell_word 优先默写孩子学过的词。本地词库（主题: 词）—— ${localVocabHint}。"
       },
       "question": {
         "type": "string",
@@ -1759,7 +1759,7 @@ function createEnglishQuizToolDefinition(): ToolDefinition {
       },
       "correct_answer": {
         "type": "string",
-        "description": "The correct English answer for this mode: the heard word (listen_choice), the pictured word (picture_word), the rule-matching word (phonics_blend), the blank word (sentence_fill), or the target sentence itself (read_aloud), or the letter (letter_trace)."
+        "description": "The correct English answer for this mode: the heard word (listen_choice), the pictured word (picture_word), the rule-matching word (phonics_blend), the blank word (sentence_fill), the target sentence itself (read_aloud), the letter (letter_trace), or the single English word to spell (spell_word, 2-20 letters, no spaces/hyphens/apostrophes)."
       },
       "difficulty": {
         "type": "number",
@@ -1797,7 +1797,7 @@ function createEnglishQuizToolDefinition(): ToolDefinition {
       },
       "tts_text": {
         "type": "string",
-        "description": "REQUIRED only for listen_choice: the English word TTS will read aloud. Must be plain TTS-readable English (not IPA, not letter names)."
+        "description": "REQUIRED only for listen_choice: the English word TTS will read aloud. Must be plain TTS-readable English (not IPA, not letter names). Optional for spell_word: the word to dictate; omit to read correct_answer."
       },
       "target_text": {
         "type": "string",
@@ -1805,7 +1805,7 @@ function createEnglishQuizToolDefinition(): ToolDefinition {
       },
       "target_zh": {
         "type": "string",
-        "description": "Optional for read_aloud: Chinese meaning of target_text, e.g. target_text='I see a cat' → '我看见一只猫', target_text='apple' → '苹果'. The card reads it aloud after the English demo so the child learns the meaning. 单词题也可省略——app 会查内置词库兜底."
+        "description": "Optional for read_aloud: Chinese meaning of target_text, e.g. target_text='I see a cat' → '我看见一只猫', target_text='apple' → '苹果'. The card reads it aloud after the English demo so the child learns the meaning. 单词题也可省略——app 会查内置词库兜底. REQUIRED for spell_word: 这个单词的中文意思 (如 '苹果'), 孩子要靠它知道要默写什么."
       },
       "phonetic_hint": {
         "type": "string",
@@ -1844,7 +1844,7 @@ function createEnglishQuizToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     ENGLISH_QUIZ_TOOL_ID,
-    'Present an English quiz to the child as an interactive card. Six modes cover the five-step English lesson: listen_choice (hear and pick), picture_word (see image and pick), phonics_blend (same-rule word pick), sentence_fill (fill one blank), read_aloud (read aloud, auto-scored), letter_trace (trace a letter). VOCABULARY BANK ONLY: for listen_choice / picture_word / phonics_blend / sentence_fill, correct_answer and all 4 options MUST come from the bundled local word bank — the validator rejects out-of-bank words and asks you to retry. Choice modes need EXACTLY 4 distinct words including correct_answer, all from the SAME theme. Use this INSTEAD of writing English questions in plain text — only this tool can grade answers and record stars. Pick mode and difficulty from the child_profile english_* levels. 严禁在文字里直接出英语题, 严禁跨主题混选项, 严禁 phonics_blend 里混入违反 phonics_rule 的词.',
+    'Present an English quiz to the child as an interactive card. Seven modes cover the five-step English lesson: listen_choice (hear and pick), picture_word (see image and pick), phonics_blend (same-rule word pick), sentence_fill (fill one blank), read_aloud (read aloud, auto-scored), letter_trace (trace a letter), spell_word (听发音+看中文意思, 用字母键默写整词; correct_answer 是目标单词, target_zh 必填). VOCABULARY BANK ONLY: for listen_choice / picture_word / phonics_blend / sentence_fill, correct_answer and all 4 options MUST come from the bundled local word bank — the validator rejects out-of-bank words and asks you to retry. Choice modes need EXACTLY 4 distinct words including correct_answer, all from the SAME theme. spell_word is exempt from the word-bank limit: prefer words the child has already learned (see the learning ledger section), then listen/read, and finally spell to close the 听→读→写 loop. Use this INSTEAD of writing English questions in plain text — only this tool can grade answers and record stars. Pick mode and difficulty from the child_profile english_* levels. 严禁在文字里直接出英语题, 严禁跨主题混选项, 严禁 phonics_blend 里混入违反 phonics_rule 的词.',
     parameters
   )
 
@@ -1855,7 +1855,7 @@ function createEnglishQuizToolConfig(): ToolConfig {
   return new ToolConfig(
     ENGLISH_QUIZ_TOOL_ID,
     '英语趣味题',
-    '英语听说读写互动题: 听音选词/看图选词/自然拼读/句型填空/跟读/字母描红, 答对自动记星。',
+    '英语听说读写互动题: 听音选词/看图选词/自然拼读/句型填空/跟读/字母描红/单词默写, 答对自动记星。',
     null,
     true,
     false,

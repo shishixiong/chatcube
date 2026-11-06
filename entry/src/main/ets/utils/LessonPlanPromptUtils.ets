@@ -20,7 +20,7 @@ import {
   LessonPlanWritingItem,
   LessonPlanGeneralItem
 } from '../models/LessonPlanModels'
-import { LedgerSummary, DueReviewHint } from '../models/LearningLedgerModels'
+import { LedgerSummary, DueReviewHint, dimensionLabel } from '../models/LearningLedgerModels'
 import { SHARED_OVERRIDE_HEADER } from './SharedPromptFragments'
 import { collectPlanItemsForSubject, PlanSubject } from './LessonPlanSubjectUtils'
 
@@ -590,18 +590,29 @@ function appendLedgerSubjectLines(lines: string[], label: string, summary: Ledge
   if (summary.dueReview.length > 0) {
     const parts: string[] = []
     for (let i = 0; i < summary.dueReview.length; i++) {
-      const hint = summary.dueReview[i]
-      if (hint.lastMode !== '') {
-        parts.push(`${hint.display}(上次 ${hint.lastMode})`)
-      } else {
-        parts.push(hint.display)
-      }
+      parts.push(dueReviewLine(summary.dueReview[i]))
     }
     lines.push(`- ${label}待复习(请换题型巩固): ${parts.join(' / ')}`)
   }
   if (summary.cooling.length > 0) {
     lines.push(`- ${label}冷却中(本轮勿出): ${summary.cooling.join(', ')}`)
   }
+}
+
+/** 单词库四维弱项标签 (2026-11-03): 有弱项才追加, 老数据 (无维度计数) 显示为空白 */
+function dueReviewLine(hint: DueReviewHint): string {
+  const weak: string[] = []
+  for (let i = 0; i < hint.weakDimensions.length; i++) {
+    weak.push(dimensionLabel(hint.weakDimensions[i]))
+  }
+  let line = hint.display
+  if (hint.lastMode !== '') {
+    line = `${line}(上次 ${hint.lastMode})`
+  }
+  if (weak.length > 0) {
+    line = `${line}, 弱项: ${weak.join('/')}`
+  }
+  return line
 }
 
 /**
@@ -644,5 +655,8 @@ export function renderVocabLedgerSection(en: LedgerSummary | null, zh: LedgerSum
   }
   lines.push('出题规则: 新词优先; 复习词必须换一种题型复现, 不要同一题型连出同一词; ' +
     '同一词一节课最多出现 2 次(不同题型), 不要连续 5 题内重复。')
+  lines.push('维度对应题型: 认=picture_word / picture_vocab(en) / matching_pairs; ' +
+    '听=listen_choice / phonics_blend / listening_quiz; 读=read_aloud; 写=spell_word / letter_trace。' +
+    '复习时优先用该词的弱项维度出题——弱项是「写」就默写, 是「读」就跟读, 是「认」就选词。')
   return lines.join('\n')
 }

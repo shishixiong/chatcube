@@ -15,6 +15,7 @@ import { ChoiceModeBody } from './bodies/ChoiceModeBody'
 import { SentenceFillBody } from './bodies/SentenceFillBody'
 import { ReadAloudBody } from './bodies/ReadAloudBody'
 import { LetterTraceBody } from './bodies/LetterTraceBody'
+import { SpellWordBody } from './bodies/SpellWordBody'
 
 @ComponentV2
 export struct EnglishQuizCard {
@@ -65,6 +66,16 @@ export struct EnglishQuizCard {
           this.onAnswer(toolCallId, answerJson)
         }
       })
+    } else if (this.isSpellWordMode()) {
+      SpellWordBody({
+        toolCall: this.toolCall,
+        isAnswered: this.isAnswered,
+        answeredPayload: this.answeredPayload,
+        largeSize: this.largeSize,
+        onAnswer: (toolCallId: string, answerJson: string): void => {
+          this.onAnswer(toolCallId, answerJson)
+        }
+      })
     } else {
       LegacyBody({
         toolCall: this.toolCall,
@@ -99,5 +110,9 @@ export struct EnglishQuizCard {
 
   private isLetterTraceMode(): boolean {
     return this.resolveMode() === 'letter_trace'
+  }
+
+  private isSpellWordMode(): boolean {
+    return this.resolveMode() === 'spell_word'
   }
 }

@@ -28,6 +28,8 @@ import mathColumnPaperLayoutTest from './utils/MathColumnPaperLayout.test';
 import mathQuizProgressionTest from './utils/MathQuizProgression.test';
 import giftModelsTest from './utils/GiftModels.test';
 import redeemCodeUtilsTest from './utils/RedeemCodeUtils.test';
+import englishQuizValidationTest from './utils/EnglishQuizValidation.test';
+import englishSkillDimensionsTest from './utils/EnglishSkillDimensions.test';
 
 export default function testsuite() {
   abilityTest();
@@ -60,4 +62,6 @@ export default function testsuite() {
   mathQuizProgressionTest();
   giftModelsTest();
   redeemCodeUtilsTest();
+  englishQuizValidationTest();
+  englishSkillDimensionsTest();
 }

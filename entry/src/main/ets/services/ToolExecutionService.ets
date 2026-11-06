@@ -519,9 +519,19 @@ export class ToolExecutionService {
         sessionId: context.sessionId,
         now: now
       }
-      getLearningLedgerService().recordServed(record).catch((_e: Object) => {
-        // 静默: 台账失败不阻断出题
-      })
+      // 3D 探索是「讲解教学」而非出题: 只记曝光, 不进入会话环形缓冲,
+      // 这样讲完 3 个词立刻 read_aloud 复测不会被 session_gap 误拦。
+      const taughtOnly = toolId === 'room_english' || toolId === 'city_english'
+      const ledger = getLearningLedgerService()
+      if (taughtOnly) {
+        ledger.recordTaught(record).catch((_e: Object) => {
+          // 静默: 台账失败不阻断教学
+        })
+      } else {
+        ledger.recordServed(record).catch((_e: Object) => {
+          // 静默: 台账失败不阻断出题
+        })
+      }
     }
   }
 

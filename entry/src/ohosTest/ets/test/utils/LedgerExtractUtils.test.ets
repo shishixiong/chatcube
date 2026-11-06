@@ -344,6 +344,69 @@ export default function ledgerExtractUtilsTest(): void {
       expect(extractLedgerAnswerItems('map_card', args, '{"completed":true}', FAKE_GEO).length)
         .assertEqual(0)
     })
+
+    it('spell_word_extracts_word_and_maps_to_write_dimension', 0, () => {
+      const args = '{"mode":"spell_word","correct_answer":"apple","target_zh":"苹果","question":"听一听"}'
+      const items = extractLedgerItemsFromTool('english_quiz', args)
+      expect(items.length).assertEqual(1)
+      expect(items[0].display).assertEqual('apple')
+      expect(items[0].mode).assertEqual('english_quiz.spell_word')
+      const answers = extractLedgerAnswerItems('english_quiz', args, '{"correct":true}')
+      expect(answers.length).assertEqual(1)
+      expect(answers[0].itemKey).assertEqual('en:vocab:apple')
+      expect(answers[0].isCorrect).assertTrue()
+      expect(answers[0].dimension).assertEqual('write')
+    })
+
+    it('english_quiz_modes_map_to_four_dimensions', 0, () => {
+      const readArgs = '{"mode":"read_aloud","correct_answer":"apple","target_text":"apple"}'
+      const readAnswers = extractLedgerAnswerItems('english_quiz', readArgs, '{"correct":true}')
+      expect(readAnswers[0].dimension).assertEqual('read')
+
+      const listenArgs = '{"mode":"listen_choice","correct_answer":"apple","tts_text":"apple"}'
+      const listenAnswers = extractLedgerAnswerItems('english_quiz', listenArgs, '{"correct":false}')
+      expect(listenAnswers[0].dimension).assertEqual('listen')
+
+      const picArgs = '{"mode":"picture_word","correct_answer":"apple","image_prompt":"an apple"}'
+      const picAnswers = extractLedgerAnswerItems('english_quiz', picArgs, '{"correct":true}')
+      expect(picAnswers[0].dimension).assertEqual('recognize')
+    })
+
+    it('room_english_extracts_steps_and_words_deduped', 0, () => {
+      const args = '{"words":["sofa","coffee_table","sofa"],' +
+        '"lesson":{"steps":[{"id":"sofa","word":"sofa","zh":"沙发"},' +
+        '{"id":"coffee_table","word":"coffee table","zh":"茶几"}]}}'
+      const items = extractLedgerItemsFromTool('room_english', args)
+      expect(items.length).assertEqual(2)
+      expect(items[0].display).assertEqual('sofa')
+      expect(items[0].subject).assertEqual('en')
+      expect(items[0].skillKey).assertEqual('english_vocab')
+      expect(items[1].display).assertEqual('coffee table')
+    })
+
+    it('room_english_words_only_humanizes_ids', 0, () => {
+      const items = extractLedgerItemsFromTool('room_english', '{"words":["coffee_table","fridge"]}')
+      expect(items.length).assertEqual(2)
+      expect(items[0].display).assertEqual('coffee table')
+      expect(items[1].display).assertEqual('fridge')
+    })
+
+    it('city_english_extracts_words', 0, () => {
+      const items = extractLedgerItemsFromTool('city_english', '{"words":["traffic_light","hospital"]}')
+      expect(items.length).assertEqual(2)
+      expect(items[0].display).assertEqual('traffic light')
+      expect(items[1].display).assertEqual('hospital')
+      expect(items[0].mode).assertEqual('city_english')
+    })
+
+    it('exploration_receipt_never_moves_mastery', 0, () => {
+      const roomArgs = '{"words":["sofa"]}'
+      expect(extractLedgerAnswerItems('room_english', roomArgs, '{"completed":true,"explored_count":1}')
+        .length).assertEqual(0)
+      const cityArgs = '{"words":["hospital"]}'
+      expect(extractLedgerAnswerItems('city_english', cityArgs, '{"completed":true,"explored_count":1}')
+        .length).assertEqual(0)
+    })
   })
 }
 

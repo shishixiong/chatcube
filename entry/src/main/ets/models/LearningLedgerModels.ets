@@ -34,6 +34,30 @@ export const LEDGER_ITEM_TYPE_PLACE: string = 'place'
 /** 技能键: 认得这个省 (名称 / 位置 / 轮廓) */
 export const LEDGER_SKILL_GEO_PLACE: string = 'geo_place'
 
+/**
+ * 四维掌握度 (2026-11-03): 每个词分别累积 认/听/读/写 的尝试与正确次数。
+ * 内部代号用于计数列与 prompt, UI 展示走 dimensionLabel。
+ */
+export const LEDGER_DIM_RECOGNIZE: string = 'recognize'
+export const LEDGER_DIM_LISTEN: string = 'listen'
+export const LEDGER_DIM_READ: string = 'read'
+export const LEDGER_DIM_WRITE: string = 'write'
+/** 固定展示顺序: 认 → 听 → 读 → 写 */
+export const LEDGER_DIMENSIONS: string[] = [
+  LEDGER_DIM_RECOGNIZE, LEDGER_DIM_LISTEN, LEDGER_DIM_READ, LEDGER_DIM_WRITE
+]
+
+/** 维度代号 → 给家长/prompt 看的中文标签 */
+export function dimensionLabel(dimension: string): string {
+  switch (dimension) {
+    case LEDGER_DIM_RECOGNIZE: return '认'
+    case LEDGER_DIM_LISTEN: return '听'
+    case LEDGER_DIM_READ: return '读'
+    case LEDGER_DIM_WRITE: return '写'
+    default: return dimension
+  }
+}
+
 /** 重复检查原因码 */
 export const REPEAT_REASON_SESSION_GAP: string = 'session_gap'
 export const REPEAT_REASON_SAME_MODE_COOLDOWN: string = 'same_mode_cooldown'
@@ -61,6 +85,15 @@ export class LearningItem {
   source: string = 'session'
   createdAt: number = 0
   updatedAt: number = 0
+  // 四维掌握度计数 (2026-11-03): 每次作答按题型维度累加; 教学曝光不计入
+  recognizeTries: number = 0
+  recognizeOk: number = 0
+  listenTries: number = 0
+  listenOk: number = 0
+  readTries: number = 0
+  readOk: number = 0
+  writeTries: number = 0
+  writeOk: number = 0
 }
 
 /** 待复习提示 */
@@ -68,6 +101,8 @@ export class DueReviewHint {
   display: string = ''
   lastMode: string = ''
   dueInMs: number = 0
+  /** 弱项维度代号 (未测优先, 其次 level 最低); 空数组 = 无明显弱项 */
+  weakDimensions: string[] = []
 }
 
 /** 近 7 天高频统计 */
@@ -123,6 +158,11 @@ export interface LedgerToolItem {
 export interface LedgerAnswerItem {
   itemKey: string
   isCorrect: boolean
+  /**
+   * 四维掌握度维度代号 (recognize/listen/read/write); '' = 不推进维度
+   * (讲解型工具或未映射的题型)。由 utils/LedgerExtractUtils.skillDimensionFor 计算。
+   */
+  dimension: string
 }
 
 /** learning_item_events 插入 */
@@ -165,6 +205,105 @@ export interface RepeatPolicyInput {
   inSessionGap: boolean
   itemKey: string
   display: string
+}
+
+/**
+ * 单维掌握度 0-5 (纯函数, 2026-11-03)。
+ * 0 = 未测; 1-5 = 从「常错」到「稳定掌握」。样本量门槛的设计目的:
+ * 一次答对不应直接封顶 5, 至少 3 次且有高正确率才给 4-5。
+ */
+export function skillDimensionLevel(ok: number, tries: number): number {
+  if (tries <= 0) {
+    return 0
+  }
+  if (tries === 1) {
+    return ok >= 1 ? 2 : 1
+  }
+  if (tries === 2) {
+    return ok >= 2 ? 3 : (ok >= 1 ? 2 : 1)
+  }
+  const ratio = ok / tries
+  if (ratio >= 0.9) {
+    return 5
+  }
+  if (ratio >= 0.75) {
+    return 4
+  }
+  if (ratio >= 0.5) {
+    return 3
+  }
+  if (ratio >= 0.25) {
+    return 2
+  }
+  return 1
+}
+
+/** 单维计数快照 */
+export interface DimensionCounts {
+  ok: number
+  tries: number
+}
+
+function dimensionCounts(ok: number, tries: number): DimensionCounts {
+  const counts: DimensionCounts = { ok: ok, tries: tries }
+  return counts
+}
+
+/** 某维度在该词上的 (ok, tries); 未知维度返回 tries=0 */
+export function dimensionCountsOf(item: LearningItem, dimension: string): DimensionCounts {
+  switch (dimension) {
+    case LEDGER_DIM_RECOGNIZE:
+      return dimensionCounts(item.recognizeOk, item.recognizeTries)
+    case LEDGER_DIM_LISTEN:
+      return dimensionCounts(item.listenOk, item.listenTries)
+    case LEDGER_DIM_READ:
+      return dimensionCounts(item.readOk, item.readTries)
+    case LEDGER_DIM_WRITE:
+      return dimensionCounts(item.writeOk, item.writeTries)
+    default:
+      return dimensionCounts(0, 0)
+  }
+}
+
+/**
+ * 一个词当前最该练的维度 (最多 2 个):
+ * 1. 未测维度优先 (按 认/听/读/写 固定顺序)
+ * 2. 其次已测但 level ≤ 2 的维度, 按 level 升序 (同级按固定顺序)
+ * 全部维度都 ≥ 3 时返回空数组 (无明显弱项)。
+ */
+export function weakDimensionsFor(item: LearningItem): string[] {
+  const untested: string[] = []
+  const weak: string[] = []
+  const levels: number[] = []
+  for (let i = 0; i < LEDGER_DIMENSIONS.length; i++) {
+    const dim = LEDGER_DIMENSIONS[i]
+    const counts = dimensionCountsOf(item, dim)
+    if (counts.tries <= 0) {
+      untested.push(dim)
+      continue
+    }
+    const level = skillDimensionLevel(counts.ok, counts.tries)
+    if (level <= 2) {
+      // 插入排序保持 level 升序, 同级按 LEDGER_DIMENSIONS 顺序
+      let insertAt = weak.length
+      for (let j = 0; j < weak.length; j++) {
+        if (level < levels[j]) {
+          insertAt = j
+          break
+        }
+      }
+      weak.splice(insertAt, 0, dim)
+      levels.splice(insertAt, 0, level)
+    }
+  }
+  const out: string[] = []
+  for (let i = 0; i < untested.length && out.length < 2; i++) {
+    out.push(untested[i])
+  }
+  for (let i = 0; i < weak.length && out.length < 2; i++) {
+    out.push(weak[i])
+  }
+  return out
 }
 
 /** mastery 对应的下次复习间隔 (毫秒)。mastery=5 走 30 天抽检, 其余走 INTERVAL_DAYS。 */

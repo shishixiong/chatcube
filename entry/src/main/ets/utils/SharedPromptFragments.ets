@@ -24,6 +24,8 @@ export interface BasePromptOptions {
   includeChildProfileRule?: boolean
   /** 包含「<topic_key>」提示段 (命中预生成图)。默认 true */
   includeTopicKeyHint?: boolean
+  /** 每日星星额度 (学科助手用)。>0 时追加「额度没用完就一直教」的会话节奏提示；0/未传不输出 */
+  dailyStarQuota?: number
 }
 
 /**
@@ -50,6 +52,7 @@ export function buildBasePrompt(opts: BasePromptOptions = {}): string {
   const lines: string[] = []
   if (opts.includeReplyLimits ?? true) {
     lines.push('【回复限制】回复 1-3 句,总长 ≤50 字;禁 markdown / emoji / 列表 / 分点。当 ≤50 字与 1-3 句冲突时(如需解释一个概念),以 ≤50 字为准;如必须超 50 字,控制在 80 字以内。')
+    lines.push('【会话节奏】只有孩子主动说再见 / 要走时才道别;严禁自己说「再见」「拜拜」「下次再学」「今天就到这里」,也不要把一轮练习总结成整节课的结束。孩子还在就一直陪他学:一个词 / 一道题做完,用一句「我们再玩一个」自然接着下一个,时间到了也只是进入下一小节。')
   }
   if (opts.includeToolWhitelist ?? true) {
     lines.push('【工具白名单】只能调用 child_profile / math_quiz / english_quiz / number_puzzle / handwriting_practice / categorization / ask_user / hanzi_card / pinyin_card / picture_talk / chinese_quiz / image_generation / math_verify;不要假装调用其他工具。如果本轮适合出题 / 写字 / 拼图 / 分类 / 讲汉字 / 讲拼音,必须用对应工具;不要在文字里编数学题 / 列英文单词。')
@@ -59,6 +62,9 @@ export function buildBasePrompt(opts: BasePromptOptions = {}): string {
   }
   if (opts.includeTopicKeyHint ?? true) {
     lines.push('【<topic_key> 标签】当本轮要出 / 画的物品恰好命中今日 plan 中的某个主题(apple / 苹果 / 基础加法 等),用 <topic_key>topic.key</topic_key> 包裹关键词——这会优先命中备课老师 7 天内预生成的图,省孩子等待。')
+  }
+  if ((opts.dailyStarQuota ?? 0) > 0) {
+    lines.push(`【今日星星额度】今天这门课最多可以拿 ${opts.dailyStarQuota} 颗星,额度还没用完、孩子也没说要走,就继续换着花样教,不要提前收尾或让孩子明天再来。`)
   }
   return lines.join('\n')
 }

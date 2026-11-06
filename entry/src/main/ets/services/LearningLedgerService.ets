@@ -23,6 +23,11 @@ import {
   RepeatStat,
   createEmptyLedgerSummary,
   computeMasteryTransition,
+  weakDimensionsFor,
+  LEDGER_DIM_LISTEN,
+  LEDGER_DIM_READ,
+  LEDGER_DIM_RECOGNIZE,
+  LEDGER_DIM_WRITE,
   SUMMARY_CACHE_TTL_MS,
   SAME_MODE_COOLDOWN_MS,
   SESSION_GAP_ITEMS,
@@ -85,6 +90,19 @@ export class LearningLedgerService {
    */
   async recordServed(input: LedgerRecord): Promise<void> {
     this.pushRecentServed(input.sessionId, input.itemKey, input.mode, input.now)
+    await this.writeServed(input)
+  }
+
+  /**
+   * 教学曝光登记 (2026-11-03): room_english / city_english 等讲解型工具的单词教学。
+   * 与 recordServed 共用主表/事件写入, 但**不进入会话环形缓冲**——否则
+   * 「讲完 3 个词立刻 read_aloud 复测」会被 SESSION_GAP_ITEMS=5 误拦。
+   */
+  async recordTaught(input: LedgerRecord): Promise<void> {
+    await this.writeServed(input)
+  }
+
+  private async writeServed(input: LedgerRecord): Promise<void> {
     try {
       const existing = await this.databaseService.findLearningItemByKey(input.itemKey)
       let item: LearningItem
@@ -159,6 +177,7 @@ export class LearningLedgerService {
         if (transition.justMastered) {
           row.masteredAt = now
         }
+        this.applyDimensionCount(row, answer.dimension, answer.isCorrect)
         row.updatedAt = now
         await this.databaseService.upsertLearningItem(row)
         await this.databaseService.updateLatestOpenLedgerEvent(answer.itemKey, now, answer.isCorrect)
@@ -166,6 +185,38 @@ export class LearningLedgerService {
       }
     } catch (error) {
       hilog.warn(DOMAIN, TAG, `recordAnswer failed (ignored): ${String(error)}`)
+    }
+  }
+
+  /** 四维计数累加 (2026-11-03): 只累加对应维度, 未知维度静默跳过 */
+  private applyDimensionCount(item: LearningItem, dimension: string, isCorrect: boolean): void {
+    switch (dimension) {
+      case LEDGER_DIM_RECOGNIZE:
+        item.recognizeTries = item.recognizeTries + 1
+        if (isCorrect) {
+          item.recognizeOk = item.recognizeOk + 1
+        }
+        break
+      case LEDGER_DIM_LISTEN:
+        item.listenTries = item.listenTries + 1
+        if (isCorrect) {
+          item.listenOk = item.listenOk + 1
+        }
+        break
+      case LEDGER_DIM_READ:
+        item.readTries = item.readTries + 1
+        if (isCorrect) {
+          item.readOk = item.readOk + 1
+        }
+        break
+      case LEDGER_DIM_WRITE:
+        item.writeTries = item.writeTries + 1
+        if (isCorrect) {
+          item.writeOk = item.writeOk + 1
+        }
+        break
+      default:
+        break
     }
   }
 
@@ -218,7 +269,8 @@ export class LearningLedgerService {
         const hint: DueReviewHint = {
           display: row.display,
           lastMode: row.lastMode,
-          dueInMs: Math.max(0, row.nextReviewAt - now)
+          dueInMs: Math.max(0, row.nextReviewAt - now),
+          weakDimensions: weakDimensionsFor(row)
         }
         hints.push(hint)
       }
@@ -286,6 +338,17 @@ export class LearningLedgerService {
     } catch (error) {
       hilog.warn(DOMAIN, TAG, `getMasteredCount failed: ${String(error)}`)
       return 0
+    }
+  }
+
+  /** 单词库页数据源 (2026-11-03): 按最近教学时间倒序 */
+  async listWords(subject: string, itemType: string, limit: number): Promise<LearningItem[]> {
+    try {
+      return await this.databaseService.queryLedgerWords(subject, itemType, limit)
+    } catch (error) {
+      hilog.warn(DOMAIN, TAG, `listWords failed: ${String(error)}`)
+      const empty: LearningItem[] = []
+      return empty
     }
   }
 
