@@ -200,3 +200,63 @@ assert.match(scene, /window\.WordRoomWalls\.nextWallHidden\(cam\.z, centerZ, sta
 assert.match(scene, /window\.WordRoomWalls\.nextWallHidden\(cam\.x, centerX, state\.west\)/);
 assert.ok(!/state\.(north|west) \? 0\.5 : 0\.3/.test(scene), 'inline inverted hysteresis must be gone');
 console.log('room3d wall culling OK: hysteresis stable, one transition per direction');
+
+// ===== 第一人称「走进去」 =====
+// 走路模式的纯几何在 walk-camera.js，Node 里能直接加载做边界回归；
+// DOM / 桥接 / 样式的接线用正则核对，避免「删了控件忘了删 JS」这类静默失联。
+const walkSandbox = { window: { matchMedia: () => ({ matches: false }) } };
+vm.runInNewContext(
+  read('entry/src/main/resources/rawfile/room3d/assets/walk-camera.js'),
+  walkSandbox,
+  { filename: 'walk-camera.js' }
+);
+const walk = walkSandbox.window.WordRoomWalk;
+assert.ok(walk && typeof walk.WalkCamera === 'function', 'walk-camera.js must export WordRoomWalk.WalkCamera');
+assert.ok(walk.EYE.stand > 1.1 && walk.EYE.stand < 1.4, `stand eye height odd: ${walk.EYE.stand}`);
+assert.ok(walk.EYE.crouch < walk.EYE.stand, 'crouch must be lower than stand');
+
+// 方位档位：13 个角度落在预期区间，边界不能共用阈值
+const directionCases = [
+  [0, '正前方'], [10, '正前方'], [-10, '正前方'],
+  [30, '右前方'], [-30, '左前方'], [45, '右前方'],
+  [60, '右手边'], [-60, '左手边'], [90, '右手边'], [-90, '左手边'],
+  [135, '身后'], [-135, '身后'], [180, '身后']
+];
+for (const [deg, want] of directionCases) {
+  assert.equal(walk.direction((deg * Math.PI) / 180), want, `${deg}° should be ${want}`);
+}
+
+// 标签分档：超出「看见多远」必须藏起来，近处不能判成 middle
+assert.equal(walk.labelTier(4, 8), 'near');
+assert.equal(walk.labelTier(6, 8), 'middle');
+assert.equal(walk.labelTier(9, 8), 'hidden');
+
+// 出生点数据：四间房各一个，坐标落在各自房间的取景范围内（具体碰撞由页面里的集成测试兜底）
+assert.ok(layout.spawns, 'room-layout.js must export WordRoomLayout.spawns');
+assert.deepEqual(Object.keys(layout.spawns).sort(), ['balcony', 'child', 'main', 'master']);
+for (const [roomId, spawn] of Object.entries(layout.spawns)) {
+  assert.equal(spawn.room, roomId, `${roomId} spawn.room mismatch`);
+  assert.equal(typeof spawn.yaw, 'number', `${roomId} spawn needs a yaw`);
+  assert.ok(Number.isFinite(spawn.x) && Number.isFinite(spawn.z), `${roomId} spawn coordinates must be finite`);
+}
+
+assert.ok(
+  html.indexOf('assets/walk-camera.js') > -1 &&
+    html.indexOf('assets/walk-camera.js') < html.indexOf('assets/room-scene.js'),
+  'index.html must load walk-camera.js before room-scene.js'
+);
+for (const id of ['walkToggle', 'walkControls', 'walkRange', 'walkRangeOut', 'walkEye', 'walkBack', 'walkHint', 'walkForward']) {
+  assert.ok(html.includes(`id="${id}"`), `index.html missing #${id}`);
+}
+assert.match(app, /'walkToggle', 'walkControls', 'walkRange'/, 'room-app.js must cache the walk controls');
+assert.match(app, /if \(state\.mode === 'walk'\) \{\s*updateWalkLabels\(\);/, 'updateLabels must dispatch to updateWalkLabels in walk mode');
+assert.match(app, /bridgeCall\('onMode', state\.mode\)/, 'Web must broadcast onMode to native');
+assert.match(app, /setMode:\s*function/, 'WordRoomApp.setMode missing');
+assert.match(card, /onMode\(mode: string\): string/, 'RoomNativeBridge.onMode missing');
+assert.match(card, /methodList:\s*\[[^\]]*'onMode'/, 'onMode must be registered in javaScriptProxy methodList');
+assert.match(card, /@Local walkMode/, 'RoomEnglishCard missing @Local walkMode');
+
+const css = read('entry/src/main/resources/rawfile/room3d/assets/room.css');
+assert.match(css, /\.stage-card\.is-walk \.area-tabs\s*\{[^}]*display:\s*none/, 'walk mode must hide area chips');
+assert.match(css, /\.stage-card\.is-walk \.hint-walk\s*\{[^}]*display:\s*inline/, 'walk mode needs its own gesture hint');
+console.log('room3d walk mode OK: geometry ranges + DOM/bridge/CSS wiring');
