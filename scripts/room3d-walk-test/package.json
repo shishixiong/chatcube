@@ -1,0 +1,11 @@
+{
+  "name": "room3d-walk-test",
+  "private": true,
+  "description": "小词屋「走进去」的无头集成测试（jsdom + 仓库自带 three.min.js）",
+  "scripts": {
+    "test": "node integration.cjs"
+  },
+  "devDependencies": {
+    "jsdom": "^26.0.0"
+  }
+}
