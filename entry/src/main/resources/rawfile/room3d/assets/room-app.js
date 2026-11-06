@@ -25,8 +25,25 @@
     activeRoom: 'overview',
     activeArea: null,
     roomApplied: false,
-    labelsMoving: false
+    labelsMoving: false,
+    // 视角：orbit = 上帝视角（默认），walk = 走进去的第一人称
+    mode: 'orbit',
+    pendingWalk: false,
+    labelsBeforeWalk: null,
+    walkVisible: 0,
+    walkEye: 'stand',
+    walkRange: 5,
+    // 方位语音：第二次点同一件物品时才念「在你左手边」。第一次已经念过中文和单词，
+    // 再补一句方位就把音拖到 8 秒开外，小朋友听不完。
+    walkHintTimer: 0,
+    walkHintLast: null,
+    walkHintAt: 0,
+    // 方位语音总开关：默认开，用户点一下关掉就记在本机
+    walkHint: true
   };
+
+  // 同一条方位提示的冷却：停稳后原地转头，同一件东西不重复念
+  const WALK_HINT_COOLDOWN = 9000;
 
   const el = (id) => document.getElementById(id);
   const dom = {};
@@ -52,6 +69,14 @@
   document.body.classList.add('room-host');
 
   function boot() {
+    // 方位语音的开关记在本机：小朋友关过一次，下次进来别再自动说话
+    try {
+      const saved = window.localStorage.getItem('wordroom.walkHint');
+      if (saved === '0') state.walkHint = false;
+    } catch (error) {
+      /* 读不到就用默认值 */
+    }
+    syncWalkHint();
     cacheDom();
     validateData();
     updateStaticCounts();
@@ -81,7 +106,9 @@
       'pronounceButton', 'pronounceLabel', 'prevWord', 'nextWord', 'wordNavIndex',
       'dotGrid', 'welcomeCount', 'openGlossary', 'openGlossaryInline',
       'glossaryModal', 'glossaryBody', 'closeGlossary', 'toast', 'liveRegion',
-      'roomTabs', 'areaTabs', 'sceneEyebrow', 'sceneHeading', 'sceneSize', 'sceneCount'
+      'roomTabs', 'areaTabs', 'sceneEyebrow', 'sceneHeading', 'sceneSize', 'sceneCount',
+      'walkToggle', 'walkControls', 'walkRange', 'walkRangeOut', 'walkEye', 'walkBack', 'walkForward',
+      'walkHint'
     ].forEach((id) => {
       dom[id] = el(id);
     });
@@ -179,6 +206,7 @@
             }
             state.roomApplied = true;
             syncRoomChrome();
+            if (state.pendingWalk) setWalkMode('walk', { silent: true });
             if (state.labelsVisible) {
               measureLabels();
               updateLabels();
@@ -217,6 +245,17 @@
         onFrame: (moving) => {
           if (state.labelsVisible && (moving || state.labelsMoving)) updateLabels();
           state.labelsMoving = moving;
+        },
+        onModeChange: (mode) => {
+          syncWalkMode(mode);
+        },
+        // 站定（脚步和转头都停了）时报一句方位：「左手边，在 2 米外」
+        onWalkSettled: () => {
+          announceWalkDirection();
+        },
+        onWalkRange: (meters) => {
+          state.walkRange = meters;
+          syncRangeOutput(meters);
         }
       });
     } catch (error) {
@@ -243,6 +282,8 @@
   function buildLabelLayer() {
     const svg = dom['label-lines'];
     const labelWrap = dom.labels;
+    // 重建 DOM 时把引用缓存一起清掉，否则会指向已被替换的节点
+    labelNodes.clear();
     OBJECTS.forEach((meta) => {
       const label = document.createElement('span');
       label.className = 'scene-label';
@@ -283,6 +324,11 @@
 
   function updateLabels() {
     if (!state.labelsVisible || !room || !state.ready) return;
+    // 第一人称：标签按「看见多远」分档，和上帝视角的摆放规则完全不同
+    if (state.mode === 'walk') {
+      updateWalkLabels();
+      return;
+    }
     const stageRect = dom.stage.getBoundingClientRect();
     const width = stageRect.width;
     const height = stageRect.height;
@@ -409,6 +455,143 @@
     });
   }
 
+  // 走进去时标签跟着人走：只显示「看见多远」以内的单词，远的先藏起来。
+  // 排序按距离：近的优先占位置，远处的标签宁可藏掉也不拉长引线。
+  function updateWalkLabels() {
+    const stageRect = dom.stage.getBoundingClientRect();
+    const width = stageRect.width;
+    const height = stageRect.height;
+    if (!width || !height) return;
+    if (!labelMetrics.size) measureLabels();
+
+    const svg = dom['label-lines'];
+    svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+    svg.setAttribute('preserveAspectRatio', 'none');
+
+    const tierOf = window.WordRoomWalk
+      ? (distance) => window.WordRoomWalk.labelTier(distance, state.walkRange)
+      : () => 'near';
+    const anchors = room.getLabelAnchors();
+    const anchorById = new Map(anchors.map((anchor) => [anchor.id, anchor]));
+
+    // 安全区要躲开顶部卡片和底部控件：手机竖屏时底部控件更高
+    const safeTop = width < 700 ? 96 : 104;
+    const safeBottom = width < 700 ? 150 : 120;
+    const safeLeft = 10;
+    const safeRight = 10;
+    const maxLead = width < 700 ? 96 : 124;
+    const placed = [];
+    let visibleCount = 0;
+
+    const sorted = OBJECTS.slice()
+      .filter((meta) => {
+        const anchor = anchorById.get(meta.id);
+        return anchor && anchor.visible && tierOf(anchor.distance) !== 'hidden';
+      })
+      .sort((a, b) => {
+        if (state.selectedId) {
+          if (a.id === state.selectedId) return -1;
+          if (b.id === state.selectedId) return 1;
+        }
+        return (anchorById.get(a.id)?.distance ?? 99) - (anchorById.get(b.id)?.distance ?? 99);
+      });
+    const keep = new Set(sorted.map((meta) => meta.id));
+
+    // 先收：这一帧没排上队的一律藏起来，排上的再逐个摆
+    OBJECTS.forEach((meta) => {
+      const nodes = labelNodesFor(meta.id);
+      if (!nodes) return;
+      nodes.label.classList.remove('is-far');
+      if (!keep.has(meta.id)) hideLabelNodes(nodes);
+    });
+
+    sorted.forEach((meta) => {
+      const nodes = labelNodesFor(meta.id);
+      const anchor = anchorById.get(meta.id);
+      if (!nodes || !anchor) return;
+      const label = nodes.label;
+      const line = nodes.line;
+      const dot = nodes.dot;
+      const metrics = labelMetrics.get(meta.id) || { width: 70, height: 24 };
+      const tier = tierOf(anchor.distance);
+      const isSelected = state.selectedId === meta.id;
+      // 标签只有一行：字落在物品上方，不压住物品本身
+      const baseLeft = clamp(anchor.x - metrics.width / 2, safeLeft, width - metrics.width - safeRight);
+      const baseTop = clamp(anchor.y - metrics.height - 14, safeTop, height - metrics.height - safeBottom);
+
+      let chosen = null;
+      const offsets = [[0, 0], [-24, -22], [24, -22], [0, -46], [-48, 0], [48, 0], [0, 26]];
+      for (let i = 0; i < offsets.length && !chosen; i += 1) {
+        const left = clamp(baseLeft + offsets[i][0], safeLeft, width - metrics.width - safeRight);
+        const top = clamp(baseTop + offsets[i][1], safeTop, height - metrics.height - safeBottom);
+        const rect = { left, top, right: left + metrics.width, bottom: top + metrics.height };
+        if (!placed.some((other) => overlaps(rect, other))) chosen = rect;
+      }
+      // 挤不下：远景标签就算了（看不见也是一种发现），近景和选中的必须留
+      if (!chosen && tier === 'near') chosen = { left: baseLeft, top: baseTop, right: baseLeft + metrics.width, bottom: baseTop + metrics.height };
+      if (!chosen && isSelected) chosen = { left: baseLeft, top: baseTop, right: baseLeft + metrics.width, bottom: baseTop + metrics.height };
+      if (!chosen) {
+        hideLabelNodes(nodes);
+        return;
+      }
+
+      const leadX = clamp(anchor.x, chosen.left + 4, chosen.right - 4);
+      const leadY = clamp(anchor.y, chosen.top + 4, chosen.bottom - 4);
+      const lead = Math.hypot(leadX - anchor.x, leadY - anchor.y);
+      // 引线太长说明牌被挤到离物品很远的地方；近景（已经走到跟前）例外——
+      // 不然屏幕边上的东西明明就在手边，标签却因为「引线超长」被藏掉
+      if (lead > maxLead && !isSelected && tier !== 'near') {
+        hideLabelNodes(nodes);
+        return;
+      }
+
+      placed.push(chosen);
+      visibleCount += 1;
+      label.style.visibility = 'visible';
+      label.style.opacity = tier === 'middle' && !isSelected ? '0.72' : '1';
+      label.style.transform = 'translate3d(' + chosen.left + 'px,' + chosen.top + 'px,0)';
+      label.style.zIndex = isSelected ? '3' : '1';
+      label.classList.toggle('is-selected', isSelected);
+      label.classList.toggle('is-far', tier === 'middle' && !isSelected);
+
+      dot.setAttribute('cx', anchor.x);
+      dot.setAttribute('cy', anchor.y);
+      dot.setAttribute('visibility', 'visible');
+      if (lead > 14) {
+        line.setAttribute('x1', anchor.x);
+        line.setAttribute('y1', anchor.y);
+        line.setAttribute('x2', leadX);
+        line.setAttribute('y2', leadY);
+        line.setAttribute('visibility', 'visible');
+      } else {
+        line.setAttribute('visibility', 'hidden');
+      }
+    });
+
+    state.walkVisible = visibleCount;
+  }
+
+  // 标签 DOM 引用缓存：走路时每帧都要摆 76 个标签，每次 querySelector 会把手势帧拖慢
+  const labelNodes = new Map();
+
+  function labelNodesFor(id) {
+    let nodes = labelNodes.get(id);
+    if (nodes) return nodes;
+    const label = dom.labels.querySelector('.scene-label[data-id="' + id + '"]');
+    const group = dom['label-lines'].querySelector('g[data-id="' + id + '"]');
+    if (!label || !group) return null;
+    nodes = { label, group, line: group.querySelector('line'), dot: group.querySelector('circle') };
+    labelNodes.set(id, nodes);
+    return nodes;
+  }
+
+  function hideLabelNodes(nodes) {
+    nodes.label.style.opacity = '0';
+    nodes.label.style.visibility = 'hidden';
+    nodes.line.setAttribute('visibility', 'hidden');
+    nodes.dot.setAttribute('visibility', 'hidden');
+  }
+
   function overlaps(a, b) {
     return a.left < b.right + 4 && a.right + 4 > b.left && a.top < b.bottom + 4 && a.bottom + 4 > b.top;
   }
@@ -504,6 +687,16 @@
     document.querySelectorAll('.room-stat[data-room]').forEach((cell) => {
       cell.classList.toggle('is-active', !overview && cell.dataset.room === state.activeRoom);
     });
+    if (dom.walkToggle) {
+      // 全屋视图没有房间之间的地面，走不出去；只在单间房里出现
+      dom.walkToggle.hidden = overview || !state.ready;
+      dom.walkToggle.setAttribute('aria-pressed', String(state.mode === 'walk'));
+      dom.walkToggle.title = state.mode === 'walk' ? '回到上帝视角看整间房' : '走进去，用第一人称看这间房';
+      dom.walkToggle.querySelector('.walk-toggle-copy span').textContent = state.mode === 'walk' ? '回到全景' : '走进去';
+      dom.walkToggle.querySelector('.walk-toggle-copy small').textContent =
+        state.mode === 'walk' ? '上帝视角看整间房' : '站着看这间房';
+    }
+    if (overview && state.mode === 'walk') setWalkMode('orbit', { silent: true });
     if (dom.labelToggle) {
       dom.labelToggle.disabled = !state.ready || overview;
       dom.labelToggle.title = overview
@@ -516,8 +709,9 @@
       }
     }
     if (dom['scene-canvas']) {
-      dom['scene-canvas'].setAttribute('aria-label',
-        '可旋转的 3D ' + (meta.zh || '房间') + '。点击或触摸物品打开单词卡；也可以打开词汇表选择单词。');
+      dom['scene-canvas'].setAttribute('aria-label', state.mode === 'walk'
+        ? '第一人称视角的 ' + (meta.zh || '房间') + '。拖动环顾，按住向上箭头前进；轻点物品打开单词卡。'
+        : '可旋转的 3D ' + (meta.zh || '房间') + '。点击或触摸物品打开单词卡；也可以打开词汇表选择单词。');
     }
     syncAreaChrome();
   }
@@ -532,6 +726,110 @@
       chip.classList.toggle('is-active', active);
       chip.setAttribute('aria-pressed', String(active));
     });
+  }
+
+  function walkAvailable() {
+    return Boolean(room && state.ready && typeof room.setMode === 'function' && state.activeRoom !== 'overview');
+  }
+
+  // 切换上帝视角 ⇄ 走进去。原生侧也会调（RoomNativeBridge.setMode / WordRoomApp.setMode）。
+  function setWalkMode(mode, options) {
+    const next = mode === 'walk' ? 'walk' : 'orbit';
+    const opts = options || {};
+    if (next === 'walk' && !walkAvailable()) {
+      state.pendingWalk = true;
+      return 'orbit';
+    }
+    state.mode = next;
+    state.pendingWalk = false;
+    // room.setMode 会回调 onModeChange → syncWalkMode：界面只在一个地方跟着状态走
+    if (room && state.ready && typeof room.setMode === 'function' && room.mode !== next) room.setMode(next);
+    else syncWalkMode(next);
+    // 标签层在全屋守卫之外单独处理：走进去时标签是「发现」的主要反馈
+    if (next === 'walk') {
+      // 走路时视线里只有几件东西，标签全开也不会糊成一片；先记住用户原来开没开，出来时还原
+      if (!state.labelsBeforeWalk) state.labelsBeforeWalk = state.labelsVisible;
+      state.labelsVisible = true;
+      dom.labelToggle.setAttribute('aria-checked', 'true');
+      dom['label-layer'].hidden = false;
+      measureLabels();
+      updateLabels();
+      // 新的一程：方位提示的「第二次才念」范围和冷却都重新算
+      state.walkHintLast = null;
+      state.walkHintAt = 0;
+      cancelWalkHint();
+      if (!opts.silent) announce('已经走进房间。拖动环顾，按住向上箭头前进。');
+    } else {
+      cancelWalkHint();
+      const restore = state.labelsBeforeWalk;
+      state.labelsBeforeWalk = null;
+      if (restore === false) setLabelsVisible(false);
+      else if (state.labelsVisible) updateLabels();
+      if (!opts.silent) announce('已回到上帝视角。');
+    }
+    // 原生侧通过 syncWalkMode 里的 onMode 回调知道视角，这里不再单独发一次：
+    // 集中到一个出口，全屋强制回轨道、换房间重置这些「Web 自己改的视角」原生也能跟上。
+    dom['scene-canvas']?.focus?.({ preventScroll: true });
+    hideHoverChip();
+    return next;
+  }
+
+  // 界面跟着模式走：提示文案、控件显隐、画布原子类
+  function syncWalkMode(mode) {
+    const walking = mode === 'walk';
+    syncWalkHint();
+    state.mode = walking ? 'walk' : 'orbit';
+    dom.stage.classList.toggle('is-walk', walking);
+    if (dom.walkControls) dom.walkControls.hidden = !walking;
+    if (dom.resetView) dom.resetView.hidden = walking;
+    if (dom.walkToggle) {
+      dom.walkToggle.setAttribute('aria-pressed', String(walking));
+      dom.walkToggle.setAttribute('aria-label', walking ? '回到上帝视角' : '走进去，用第一人称看这间房');
+    }
+    if (dom.walkEye) {
+      dom.walkEye.setAttribute('aria-pressed', String(state.walkEye === 'crouch'));
+      dom.walkEye.setAttribute('aria-label', state.walkEye === 'crouch' ? '站起来' : '蹲下来看看');
+    }
+    if (dom['scene-canvas'] && state.ready) {
+      const meta = ROOM_META[state.activeRoom] || {};
+      dom['scene-canvas'].setAttribute('aria-label', walking
+        ? '第一人称视角的 ' + (meta.zh || '房间') + '。拖动环顾，按住向上箭头前进；轻点物品打开单词卡。'
+        : '可旋转的 3D ' + (meta.zh || '房间') + '。点击或触摸物品打开单词卡；也可以打开词汇表选择单词。');
+    }
+    syncRangeOutput(state.walkRange);
+    // 进和出都要刷房间外壳：按钮文案（「走进去 / 回到全景」）在 syncRoomChrome 里，
+    // 只在进入时刷，退出后卡片会一直停在「回到全景」。
+    syncRoomChrome();
+    // 唯一的视角广播出口：Web 自己改的（全屋强制回轨道、换房间重置）也要让原生知道，
+    // 否则原生按钮会停在「回到全景」而页面其实已经是上帝视角。
+    bridgeCall('onMode', state.mode);
+  }
+
+  // 方位语音开关的外形：按下 = 开（实心底），松开 = 关（浅底、同色文字，对比度不降）
+  function syncWalkHint() {
+    if (!dom.walkHint) return;
+    dom.walkHint.setAttribute('aria-pressed', String(state.walkHint));
+    dom.walkHint.setAttribute('aria-label', state.walkHint ? '方位提示：打开' : '方位提示：关闭');
+  }
+
+  function setWalkHint(enabled, options) {
+    const opts = options || {};
+    state.walkHint = Boolean(enabled);
+    if (!state.walkHint) cancelWalkHint();
+    syncWalkHint();
+    if (!opts.silent) announce(state.walkHint ? '方位提示打开了：站定时会说东西在你哪边。' : '方位提示关掉了。');
+    try {
+      window.localStorage.setItem('wordroom.walkHint', state.walkHint ? '1' : '0');
+    } catch (error) {
+      /* 隐私模式下写不进去就算了，不影响使用 */
+    }
+    return state.walkHint;
+  }
+
+  function syncRangeOutput(meters) {
+    const value = Number(meters) || 5;
+    if (dom.walkRange) dom.walkRange.value = String(value);
+    if (dom.walkRangeOut) dom.walkRangeOut.textContent = value.toFixed(1) + ' m';
   }
 
   function hasArea(areaId) {
@@ -570,7 +868,15 @@
     state.activeRoom = next;
     state.activeArea = null;
     state.roomApplied = true;
-    if (room && state.ready) room.setRoom(next);
+    // 换到新房间：上一间房的方位提示和冷却都不再适用
+    state.walkHintLast = null;
+    state.walkHintAt = 0;
+    cancelWalkHint();
+    // 走进去时换房间直接落在新房间里：先设模式再换房，避免先复位到轨道机位再跳过去
+    if (room && state.ready) room.setRoom(next, state.mode === 'walk' && next !== 'overview' ? 'walk' : undefined);
+    // 原生在全屋视图里点过「走进去」：等用户选到具体房间，这次请求才真正生效。
+    // 只在换到单间房时补一次，overview 仍然拒绝（四间房之间的地面没建模）。
+    if (state.pendingWalk && next !== 'overview') setWalkMode('walk', { silent: true });
 
     // 全屋视图不支持英文标签——直接关掉状态，不能走 setLabelsVisible（它会被全屋守卫拦下）
     if (next === 'overview') {
@@ -616,6 +922,8 @@
   function setLessonMode(enabled) {
     const on = !!enabled;
     dom.stage.classList.toggle('lesson-mode', on);
+    // 带逛 / 找一找都是「老师带你飞过去看」，机位得由课程控制：先退出第一人称
+    if (on && state.mode === 'walk') setWalkMode('orbit', { silent: true });
     if (on && state.labelsVisible) {
       setLabelsVisible(false);
     }
@@ -626,6 +934,94 @@
       if (!state.ready) return;
       setLabelsVisible(!state.labelsVisible);
     });
+
+    if (dom.walkToggle) {
+      dom.walkToggle.addEventListener('click', () => {
+        if (!state.ready) return;
+        setWalkMode(state.mode === 'walk' ? 'orbit' : 'walk');
+      });
+    }
+
+    if (dom.walkRange) {
+      const applyRange = () => {
+        const value = Number(dom.walkRange.value) || state.walkRange;
+        state.walkRange = value;
+        syncRangeOutput(value);
+        if (room && typeof room.setWalkRange === 'function') room.setWalkRange(value);
+        if (state.labelsVisible && state.mode === 'walk') updateLabels();
+      };
+      dom.walkRange.addEventListener('input', applyRange);
+      dom.walkRange.addEventListener('change', applyRange);
+    }
+
+    if (dom.walkHint) {
+      dom.walkHint.addEventListener('click', () => setWalkHint(!state.walkHint));
+    }
+
+    if (dom.walkEye) {
+      dom.walkEye.addEventListener('click', () => {
+        if (room && typeof room.setWalkEye === 'function') room.setWalkEye(state.walkEye === 'crouch' ? 'stand' : 'crouch');
+        state.walkEye = state.walkEye === 'crouch' ? 'stand' : 'crouch';
+        dom.walkEye.setAttribute('aria-pressed', String(state.walkEye === 'crouch'));
+        dom.walkEye.setAttribute('aria-label', state.walkEye === 'crouch' ? '站起来' : '蹲下来看看');
+        announce(state.walkEye === 'crouch' ? '蹲下来了，视线降到沙发高度。' : '站起来，恢复站立高度。');
+      });
+    }
+
+    if (dom.walkBack && dom.walkToggle) {
+      dom.walkBack.addEventListener('click', () => {
+        // 回到起点 = 重新落一次出生点（模式不变）；再点一次「走进去」也会重新落点
+        if (!walkAvailable() || typeof room.setWalkSpawn !== 'function') return;
+        room.setWalkSpawn(state.activeRoom);
+        announce('回到房间起点。');
+      });
+    }
+
+    if (dom['scene-canvas']) {
+      // 键盘走路的「松开」要兜住：按键在画布外松开、切到别的窗口，都要停下脚步。
+      // 连 keys 一起清：切走后 keyup 收不到，回来时会一直往前走。
+      const releaseKeys = () => {
+        dom.walkForward?.classList.remove('is-down');
+        if (room) {
+          if (typeof room.releaseWalkInput === 'function') room.releaseWalkInput();
+          else if (room.walker) room.walker.press(false);
+        }
+      };
+      window.addEventListener('blur', releaseKeys);
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) releaseKeys();
+      });
+    }
+
+    // 注意别在这里判断 room：bindUI() 跑在 startScene() 之前，那时 room 还是 null，
+    // 条件写 `&& room` 会让「按住前进」永远绑不上事件（点着没反应）。room 在回调里再判。
+    if (dom.walkForward) {
+      const start = (event) => {
+        event.preventDefault();
+        dom.walkForward.classList.add('is-down');
+        dom.walkForward.setPointerCapture?.(event.pointerId);
+        if (room && room.walker) room.walker.press(true);
+      };
+      const stop = (event) => {
+        dom.walkForward.classList.remove('is-down');
+        if (room && room.walker) room.walker.press(false);
+        if (event && event.type === 'pointerup') dom.walkForward.releasePointerCapture?.(event.pointerId);
+      };
+      dom.walkForward.addEventListener('pointerdown', start);
+      dom.walkForward.addEventListener('pointerup', stop);
+      dom.walkForward.addEventListener('pointercancel', stop);
+      dom.walkForward.addEventListener('pointerleave', stop);
+      dom.walkForward.addEventListener('keydown', (event) => {
+        if (event.key !== ' ' && event.key !== 'Enter') return;
+        event.preventDefault();
+        start(event);
+      });
+      dom.walkForward.addEventListener('keyup', (event) => {
+        if (event.key !== ' ' && event.key !== 'Enter') return;
+        event.preventDefault();
+        stop(event);
+      });
+    }
 
     dom.resetView.addEventListener('click', () => {
       room?.resetView();
@@ -763,6 +1159,9 @@
           // 不重渲染、不重发音，自由探索的可见行为不变。
           const meta = byId.get(id);
           bridgeCall('onSelect', id, meta ? meta.word : '');
+          // 走进去时再点一次：单词卡还开着，3 秒后补一句「它在你哪边」，
+          // 不和刚念过的中文 + 英文抢同一句话
+          if (state.mode === 'walk' && state.walkHint && state.autoSpeak) scheduleWalkHint(id);
         }
       } else {
         room.select(id);
@@ -993,6 +1392,106 @@
     }
   }
 
+  // ---------- 方位语音：「在你左手边」 ----------
+
+  // 走进去以后离眼睛最近的物品：方位提示的目标。
+  // 用世界坐标算方位，不用屏幕坐标——透视会把身后的东西翻到画面另一侧，屏幕方位会骗人。
+  function walkNearest() {
+    if (!state.ready || !room || typeof room.getLabelAnchors !== 'function') return null;
+    let best = null;
+    // 进房间/转身后的第一帧矩阵可能还没刷，先同步一次，方位才不会指向旧位置
+    if (room.root && typeof room.root.updateMatrixWorld === 'function') room.root.updateMatrixWorld();
+    room.getLabelAnchors().forEach((anchor) => {
+      if (!anchor || !anchor.world || typeof anchor.distance !== 'number') return;
+      if (anchor.distance > walkRange()) return;
+      const meta = byId.get(anchor.id);
+      if (!meta || meta.room !== state.activeRoom) return;
+      if (!best || anchor.distance < best.distance) {
+        best = { id: meta.id, word: meta.word, distance: anchor.distance, world: anchor.world, lift: anchor.lift };
+      }
+    });
+    return best;
+  }
+
+  // 方位那句话（不含单词本身）：「左手边，在 2 米外」。几何算在 walk-camera.js 里，这里只要一句话。
+  function walkWhere(world, lift) {
+    const walker = room && room.walker;
+    if (!walker || !world || typeof walker.describe !== 'function') return '';
+    // 注意第二个参数是「相对眼睛高多少」，不是世界坐标 y：walk-camera 自己再减一次视线高度，
+    // 传世界高度会把差值抵消掉，空调和地毯都不出声。
+    const height = typeof lift === 'number' ? lift : undefined;
+    return walker.describe(world, height);
+  }
+
+  // 「看见多远」的真实值在 walker 上（滚轮 / 双指直接改它），state.walkRange 只是界面副本
+  function walkRange() {
+    const walker = room && room.walker;
+    const live = walker && typeof walker.targetRange === 'number' ? walker.targetRange : 0;
+    return live || state.walkRange || 5;
+  }
+
+  function cancelWalkHint() {
+    window.clearTimeout(state.walkHintTimer);
+    state.walkHintTimer = 0;
+  }
+
+  // 念一句中文：优先走原生朗读（和单词同一个声音），浏览器里退回 speechSynthesis
+  function speakWhere(text) {
+    if (!text || !state.walkHint) return false;
+    if (getBridge() && bridgeCall('speak', text, '') === 'true') return true;
+    if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) return false;
+    try {
+      const utterance = new window.SpeechSynthesisUtterance(text);
+      utterance.lang = 'zh-CN';
+      utterance.rate = 0.92;
+      window.speechSynthesis.speak(utterance);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // 停稳以后报一句：视野里最近的东西在哪个方向。同一件东西 9 秒内不重复念。
+  function announceWalkDirection() {
+    if (state.mode !== 'walk' || !state.ready) return;
+    const target = walkNearest();
+    if (!target) return;
+    const now = Date.now();
+    if (state.walkHintLast === target.id && now - state.walkHintAt < WALK_HINT_COOLDOWN) return;
+    const where = walkWhere(target.world, target.lift);
+    if (!where) return;
+    state.walkHintLast = target.id;
+    state.walkHintAt = now;
+    markSpeaking('正在播报方位…');
+    speakWhere(target.word + '，' + where);
+  }
+
+  // 方位提示也是一次朗读：按钮跟着亮一下，念完恢复，避免和单词播放的状态打架
+  function markSpeaking(label) {
+    if (!dom.pronounceButton) return;
+    dom.pronounceButton.classList.add('is-playing');
+    if (dom.pronounceLabel) dom.pronounceLabel.textContent = label;
+    window.clearTimeout(state.speechTimer);
+    state.speechTimer = window.setTimeout(() => resetPronounceButton(), 2600);
+  }
+
+  // 第二次点同一件物品：等单词念完再补方位，别和「中文 + 英文」抢一句话
+  function scheduleWalkHint(id) {
+    const meta = byId.get(id);
+    if (!meta || !room || typeof room.getLabelAnchors !== 'function') return;
+    // 用户点的就是这一件，直接查它的锚点：不能拿「离得最近的那件」凑数，
+    // 否则点柜子会报成旁边椅子的方位
+    const anchor = (room.getLabelAnchors() || []).find((item) => item && item.id === id);
+    const where = walkWhere(anchor && anchor.world, anchor && anchor.lift);
+    if (!where) return;
+    cancelWalkHint();
+    state.walkHintTimer = window.setTimeout(() => {
+      if (state.mode !== 'walk') return;
+      markSpeaking('正在播报方位…');
+      speakWhere(meta.word + '，' + where);
+    }, 3200);
+  }
+
   function stopSpeech() {
     state.speechSeq += 1;
     bridgeCall('stopSpeak');
@@ -1018,6 +1517,8 @@
     stopSpeech();
     state.lastFocus = document.activeElement;
     state.modalOpen = true;
+    // 弹层挡住 3D 舞台：停掉键盘走路，别让 W 键在背后带着相机跑
+    if (room && typeof room.setInputBlocked === 'function') room.setInputBlocked(true);
     window.clearTimeout(state.modalTimer);
     dom.glossaryModal.hidden = false;
     dom.openGlossary.setAttribute('aria-expanded', 'true');
@@ -1034,6 +1535,7 @@
   function closeGlossary(restoreFocus, focusTarget) {
     if (!state.modalOpen) return;
     state.modalOpen = false;
+    if (room && typeof room.setInputBlocked === 'function') room.setInputBlocked(false);
     dom.glossaryModal.classList.remove('is-open');
     dom.openGlossary.setAttribute('aria-expanded', 'false');
     dom.openGlossaryInline.setAttribute('aria-expanded', 'false');
@@ -1078,8 +1580,26 @@
     setRoom: function (roomId) { setActiveRoom(roomId); },
     setArea: function (areaId) { return setActiveArea(areaId || ''); },
     setAutoSpeak: function (enabled) { state.autoSpeak = !!enabled; },
+    setWalkHint: function (enabled) { return setWalkHint(enabled, { silent: true }); },
+    getWalkHint: function () { return state.walkHint; },
     setLessonMode: function (enabled) { setLessonMode(!!enabled); },
     prepareFind: function (id) { return prepareFind(id); },
+    // 视角：'walk' 走进去，'orbit' 回上帝视角。全屋视图没有房间之间的地面，会自动回 orbit。
+    setMode: function (mode) { return setWalkMode(mode === 'walk' ? 'walk' : 'orbit'); },
+    getMode: function () { return state.mode; },
+    setWalkRange: function (meters) {
+      state.walkRange = Math.min(8, Math.max(1.5, Number(meters) || 5));
+      syncRangeOutput(state.walkRange);
+      if (room && typeof room.setWalkRange === 'function') room.setWalkRange(state.walkRange);
+      if (state.mode === 'walk' && state.labelsVisible) updateLabels();
+      return state.walkRange;
+    },
+    setWalkEye: function (mode) {
+      state.walkEye = mode === 'crouch' ? 'crouch' : 'stand';
+      if (room && typeof room.setWalkEye === 'function') room.setWalkEye(state.walkEye);
+      if (dom.walkEye) dom.walkEye.setAttribute('aria-pressed', String(state.walkEye === 'crouch'));
+      return state.walkEye;
+    },
     ids: OBJECTS.map(function (item) { return item.id; })
   };
 

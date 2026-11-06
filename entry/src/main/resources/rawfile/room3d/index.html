@@ -72,22 +72,44 @@
           <h1 id="sceneHeading">全屋 3D 探索</h1>
           <p class="scene-meta"><span id="sceneSize">16.8m × 8.9m</span> <span>·</span> <span id="sceneCount">76</span> 件可点击物品</p>
         </div>
-        <button
-          class="label-toggle"
-          type="button"
-          id="labelToggle"
-          disabled
-          role="switch"
-          aria-checked="false"
-          aria-controls="label-layer"
-          data-od-id="label-toggle"
-        >
-          <span class="toggle-copy">
-            <span>显示英文标签</span>
-            <small>点按切换</small>
-          </span>
-          <span class="switch" aria-hidden="true"><span></span></span>
-        </button>
+        <div class="stage-actions">
+          <!-- 上帝视角 ⇄ 走进去：只在单间房里出现，全屋视图没有房间之间的地面 -->
+          <button
+            class="walk-toggle"
+            type="button"
+            id="walkToggle"
+            aria-pressed="false"
+            aria-label="走进去，用第一人称看这间房"
+            title="走进去看这间房"
+            data-od-id="walk-toggle"
+            hidden
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="13" cy="4.5" r="2"></circle>
+              <path d="M12 7.5v5.5l-2.5 3 1 5M12 13l2.5 2.5 1 5.5"></path>
+            </svg>
+            <span class="walk-toggle-copy">
+              <span>走进去</span>
+              <small>站着看这间房</small>
+            </span>
+          </button>
+          <button
+            class="label-toggle"
+            type="button"
+            id="labelToggle"
+            disabled
+            role="switch"
+            aria-checked="false"
+            aria-controls="label-layer"
+            data-od-id="label-toggle"
+          >
+            <span class="toggle-copy">
+              <span>显示英文标签</span>
+              <small>点按切换</small>
+            </span>
+            <span class="switch" aria-hidden="true"><span></span></span>
+          </button>
+        </div>
       </div>
 
       <div class="stage-bottom">
@@ -96,9 +118,48 @@
             <path d="M20 12a8 8 0 1 1-2.34-5.66"></path>
             <path d="M20 4v4h-4"></path>
           </svg>
-          <span class="desktop-only">拖动旋转 · 滚轮缩放 · 放大后可拖动平移</span>
-          <span class="touch-only">单指拖动旋转 · 双指缩放/平移</span>
+          <span class="desktop-only hint-orbit">拖动旋转 · 滚轮缩放 · 放大后可拖动平移</span>
+          <span class="touch-only hint-orbit">单指拖动旋转 · 双指缩放/平移</span>
+          <span class="desktop-only hint-walk">拖动环顾 · 滚轮调节看见多远 · W A S D 走路</span>
+          <span class="touch-only hint-walk">拖动环顾 · 双指张合调节看见多远</span>
         </div>
+
+        <!-- 第一人称专属控件：看见多远 + 蹲下 + 按住前进 + 回到起点 -->
+        <div class="walk-controls" id="walkControls" hidden>
+          <label class="range-control" for="walkRange">
+            <span class="range-head">
+              <span>看见多远</span>
+              <output id="walkRangeOut">5.0 m</output>
+            </span>
+            <input id="walkRange" type="range" min="1.5" max="8" step="0.1" value="5" />
+            <small>看不见的单词先藏起来</small>
+          </label>
+          <button class="icon-btn walk-eye" type="button" id="walkEye" aria-label="蹲下来看看" title="蹲下 / 站起来" data-od-id="walk-eye">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M5 17h14M8 17v-4.5a4 4 0 0 1 8 0V17"></path>
+            </svg>
+          </button>
+          <button class="walk-eye walk-back" type="button" id="walkBack" aria-label="回到起点" title="回到起点" data-od-id="walk-back">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4.5 9A8 8 0 1 1 5 15.5"></path>
+              <path d="M4 4v5h5"></path>
+            </svg>
+          </button>
+          <button class="walk-hint is-on" type="button" id="walkHint" aria-pressed="true" aria-label="方位提示：打开" title="站定时说出东西在你哪边" data-od-id="walk-hint">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 12h3M17 12h3M12 4v3M12 17v3"></path>
+              <path d="M8.5 8.5 15.5 15.5M15.5 8.5 8.5 15.5"></path>
+            </svg>
+            <small>方位</small>
+          </button>
+          <button class="walk-forward" type="button" id="walkForward" aria-label="按住前进" data-od-id="walk-forward">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 19V5M6 11l6-6 6 6"></path>
+            </svg>
+            <small>按住</small>
+          </button>
+        </div>
+
         <button class="icon-btn" type="button" id="resetView" data-od-id="reset-view" aria-label="重置 3D 视角" title="重置视角" disabled>
           <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M4.5 9A8 8 0 1 1 5 15.5"></path>
@@ -291,6 +352,7 @@
   <script src="assets/vendor/three.min.js"></script>
   <script src="assets/scene-data.js"></script>
   <script src="assets/room-layout.js"></script>
+  <script src="assets/walk-camera.js"></script>
   <script src="assets/room-models.js"></script>
   <script src="assets/wall-culling.js"></script>
   <script src="assets/room-scene.js"></script>

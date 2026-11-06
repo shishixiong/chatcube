@@ -412,6 +412,90 @@ a:focus-visible,
   pointer-events: auto;
 }
 
+/* 走进去按钮 + 标签开关竖排：手机竖屏时两个宽卡片并排会溢出 */
+.stage-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.stage-actions > * {
+  pointer-events: auto;
+}
+
+.walk-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 16px 8px 12px;
+  border: 1px solid oklch(100% 0 0 / 0.82);
+  border-radius: 16px;
+  background: oklch(100% 0 0 / 0.72);
+  box-shadow: var(--shadow-float);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+  backdrop-filter: blur(14px) saturate(1.05);
+  transition:
+    background-color 0.16s var(--ease),
+    border-color 0.16s var(--ease),
+    color 0.16s var(--ease);
+}
+
+.walk-toggle[hidden] {
+  display: none;
+}
+
+.walk-toggle svg {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  color: var(--accent-strong);
+}
+
+.walk-toggle-copy {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  line-height: 1.2;
+}
+
+.walk-toggle-copy span {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.walk-toggle-copy small {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+.walk-toggle:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent-mid);
+}
+
+/* 已经在屋里：按钮变成实心，表示再点一下就回到上帝视角 */
+.walk-toggle[aria-pressed="true"] {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
+  color: var(--surface);
+}
+
+.walk-toggle[aria-pressed="true"] svg,
+.walk-toggle[aria-pressed="true"] small {
+  color: oklch(92% 0.03 170);
+}
+
+.walk-toggle[aria-pressed="true"]:hover {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
 /* 引导式小课由原生卡片提供标题与进度，顶部悬浮块会遮挡 3D 物品、挡住点选，lesson 模式整体隐藏。 */
 .stage-card.lesson-mode .stage-top {
   display: none;
@@ -582,8 +666,210 @@ a:focus-visible,
   display: none;
 }
 
+@media (hover: none), (pointer: coarse) {
+  .desktop-only {
+    display: none;
+  }
+
+  .touch-only {
+    display: inline;
+  }
+}
+
 .stage-bottom .icon-btn {
   box-shadow: var(--shadow-float);
+}
+
+/* ---------- 第一人称控件 ---------- */
+
+/* 轨道模式和走路模式各说各自的提示：文案错了比不提示更糟 */
+.hint-walk {
+  display: none;
+}
+
+.stage-card.is-walk .hint-orbit {
+  display: none;
+}
+
+.stage-card.is-walk .hint-walk {
+  display: inline;
+}
+
+/* 分区镜头是给上帝视角用的：走进去以后机位由脚步决定，点「客厅 / 餐厅 / 厨房」会毫无反应 */
+.stage-card.is-walk .area-tabs {
+  display: none;
+}
+
+.walk-controls {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.walk-controls[hidden] {
+  display: none;
+}
+
+/* 「看见多远」：悬浮在控件上方的一整条，滑块交给手指，数字给家长看 */
+.range-control {
+  position: absolute;
+  left: 0;
+  right: 88px;
+  bottom: calc(100% + 10px);
+  display: grid;
+  gap: 2px;
+  padding: 9px 14px 10px;
+  border: 1px solid oklch(100% 0 0 / 0.72);
+  border-radius: 16px;
+  background: oklch(100% 0 0 / 0.82);
+  box-shadow: var(--shadow-float);
+  color: var(--fg);
+  font-size: 12px;
+  backdrop-filter: blur(12px);
+}
+
+.range-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 650;
+}
+
+.range-head output {
+  color: var(--accent-strong);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.range-control small {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.range-control input[type="range"] {
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.walk-eye {
+  flex: none;
+}
+
+.walk-eye svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* 蹲下是开关：按下时实心，和标签开关的语言一致 */
+.walk-eye[aria-pressed="true"] {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
+  color: var(--surface);
+}
+
+.walk-forward {
+  flex: none;
+  font: inherit;
+  display: grid;
+  place-items: center;
+  gap: 1px;
+  width: 64px;
+  height: 64px;
+  border: 1px solid oklch(100% 0 0 / 0.8);
+  border-radius: 50%;
+  background: oklch(100% 0 0 / 0.86);
+  box-shadow: var(--shadow-float);
+  color: var(--accent-deep);
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transition:
+    background-color 0.16s var(--ease),
+    transform 0.16s var(--ease),
+    color 0.16s var(--ease);
+}
+
+.walk-forward svg {
+  width: 24px;
+  height: 24px;
+}
+
+.walk-forward small {
+  font-size: 9.5px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.walk-forward:hover {
+  background: var(--accent-soft);
+}
+
+.walk-forward.is-down {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
+  color: var(--surface);
+  transform: scale(0.95);
+}
+
+/* 方位语音开关：关掉时图标变淡但对比度不降（边框和文字仍按基准色） */
+.walk-hint {
+  flex: none;
+  display: grid;
+  place-items: center;
+  gap: 1px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid oklch(100% 0 0 / 0.72);
+  border-radius: 14px;
+  background: oklch(100% 0 0 / 0.82);
+  box-shadow: var(--shadow-float);
+  color: var(--fg);
+  cursor: pointer;
+  transition:
+    background-color 0.16s var(--ease),
+    color 0.16s var(--ease);
+}
+
+.walk-hint svg {
+  width: 20px;
+  height: 20px;
+}
+
+.walk-hint small {
+  font-size: 9.5px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.walk-hint[aria-pressed="true"] {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
+  color: var(--surface);
+}
+
+/* 关闭态不靠降低对比度来表示：只把图标淡化，底色和文字对比保持不变 */
+.walk-hint[aria-pressed="false"] svg {
+  opacity: 0.55;
+}
+
+.walk-hint:hover {
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+}
+
+.walk-hint[aria-pressed="true"]:hover {
+  background: var(--accent-deep);
+  color: var(--surface);
 }
 
 /* ---------- scene labels ---------- */
@@ -651,6 +937,12 @@ a:focus-visible,
 
 .scene-label.is-selected::before {
   background: var(--surface);
+}
+
+/* 走进去：还没走到跟前（半透明档）的单词票，字色仍是 --fg，只降不透明度——
+   不换 --muted，否则远景单词在浅色房间上会糊成一片看不清。 */
+.scene-label.is-far {
+  box-shadow: 0 6px 16px -14px oklch(24% 0.04 180 / 0.6);
 }
 
 .hover-chip {
@@ -938,4 +1230,32 @@ a:focus-visible,
 
 .room-stat.is-active strong {
   color: var(--accent-strong);
+}
+
+@media (max-width: 640px) {
+  .stage-top {
+    top: 14px;
+    left: 14px;
+    right: 14px;
+    gap: 10px;
+  }
+
+  .stage-bottom {
+    left: 14px;
+    right: 14px;
+    bottom: 14px;
+  }
+
+  .range-control {
+    right: 78px;
+  }
+
+  .walk-forward {
+    width: 58px;
+    height: 58px;
+  }
+
+  .gesture-hint {
+    max-width: 62%;
+  }
 }
