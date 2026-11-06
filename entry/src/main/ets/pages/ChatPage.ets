@@ -147,6 +147,7 @@ import { MapCard, MapCardResult } from '../components/map/MapCard'
 import { MapPuzzleCard, MapPuzzleResult } from '../components/map/MapPuzzleCard'
 import { RoomEnglishAnswerPayload, RoomEnglishCard } from '../components/room/RoomEnglishCard'
 import { CityEnglishAnswerPayload, CityEnglishCard } from '../components/city/CityEnglishCard'
+import { FarmEnglishAnswerPayload, FarmEnglishCard } from '../components/farm/FarmEnglishCard'
 import { MapQuizCard } from '../components/map/MapQuizCard'
 import { MapQuizAnswerPayload, parseMapQuizArgs } from '../components/map/MapQuizTypes'
 import { MessagePartKind } from '../models/MessageParts'
@@ -338,6 +339,9 @@ export struct ChatPage {
   @Local showCityEnglishSheet: boolean = false
   @Local cityEnglishToolCall: ToolCall = new ToolCall()
   @Local cityEnglishAnswered: boolean = false
+  @Local showFarmEnglishSheet: boolean = false
+  @Local farmEnglishToolCall: ToolCall = new ToolCall()
+  @Local farmEnglishAnswered: boolean = false
   @Local toolExecutionApprovalName: string = ''
   @Local showStarSheet: boolean = false
   // 星星浮层触发信号: 每次 onStarEarnedTickChanged 自增, StarBurstOverlay 通过 @Monitor 监听
@@ -2585,6 +2589,11 @@ export struct ChatPage {
             this.cityEnglishAnswered = false
             this.showCityEnglishSheet = true
           },
+          onOpenFarmEnglishSheet: (toolCall: ToolCall): void => {
+            this.farmEnglishToolCall = toolCall
+            this.farmEnglishAnswered = false
+            this.showFarmEnglishSheet = true
+          },
           onReachStart: (): void => {
             this.handleMessageListReachStart()
           },
@@ -3120,6 +3129,32 @@ export struct ChatPage {
                 this.handleAskUserAnswer(this.cityEnglishToolCall.id, JSON.stringify(cancelResult))
               }
               this.showCityEnglishSheet = false
+            }
+          })
+
+        Column()
+          .width(0)
+          .height(0)
+          .bindSheet($$this.showFarmEnglishSheet, this.FarmEnglishSheetBuilder(), {
+            height: SheetSize.LARGE,
+            dragBar: true,
+            showClose: true,
+            blurStyle: BlurStyle.Thick,
+            backgroundColor: this.themeBackground,
+            preferType: SheetType.BOTTOM,
+            onDisappear: () => {
+              if (this.showFarmEnglishSheet && !this.farmEnglishAnswered) {
+                const cancelResult: FarmEnglishAnswerPayload = {
+                  completed: false,
+                  explored_count: 0,
+                  words: [],
+                  focus: 'overview',
+                  skill_key: 'english_vocab',
+                  cancelled: true
+                }
+                this.handleAskUserAnswer(this.farmEnglishToolCall.id, JSON.stringify(cancelResult))
+              }
+              this.showFarmEnglishSheet = false
             }
           })
 
@@ -3711,6 +3746,24 @@ export struct ChatPage {
       },
       onRequestClose: (): void => {
         this.showCityEnglishSheet = false
+      }
+    })
+  }
+
+  @Builder
+  FarmEnglishSheetBuilder() {
+    FarmEnglishCard({
+      toolCall: this.farmEnglishToolCall,
+      isAnswered: false,
+      answeredPayload: '',
+      largeSize: true,
+      onAnswer: (toolCallId: string, answerJson: string): void => {
+        this.farmEnglishAnswered = true
+        this.handleAskUserAnswer(toolCallId, answerJson)
+        this.showFarmEnglishSheet = false
+      },
+      onRequestClose: (): void => {
+        this.showFarmEnglishSheet = false
       }
     })
   }

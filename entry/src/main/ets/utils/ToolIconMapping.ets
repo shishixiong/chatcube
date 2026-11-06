@@ -52,6 +52,9 @@ const ROOM_KEYWORDS: string[] = [
 const CITY_KEYWORDS: string[] = [
   'city_english'
 ]
+const FARM_KEYWORDS: string[] = [
+  'farm_english'
+]
 
 function matchesAny(name: string, keywords: string[]): boolean {
   for (let i = 0; i < keywords.length; i++) {
@@ -128,6 +131,9 @@ export function resolveToolSymbol(functionName: string): Resource {
   }
   if (matchesAny(name, CITY_KEYWORDS)) {
     return $r('sys.symbol.satellite_map')
+  }
+  if (matchesAny(name, FARM_KEYWORDS)) {
+    return $r('sys.symbol.leaf')
   }
   return $r('sys.symbol.wrench_and_screwdriver')
 }

@@ -32,7 +32,7 @@ export default function vocabLedgerSectionTest(): void {
 
     it('due_review_hint_shows_last_mode', 0, () => {
       const summary = createEmptyLedgerSummary()
-      const hint: DueReviewHint = { display: 'banana', lastMode: 'english_quiz.listen_choice', dueInMs: 0 }
+      const hint: DueReviewHint = { display: 'banana', lastMode: 'english_quiz.listen_choice', dueInMs: 0, weakDimensions: [] }
       summary.dueReview = [hint]
       const text = renderVocabLedgerSection(summary, null)
       expect(text.indexOf('banana(上次 english_quiz.listen_choice)') >= 0).assertTrue()

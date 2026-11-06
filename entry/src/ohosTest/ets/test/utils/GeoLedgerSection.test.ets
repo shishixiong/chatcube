@@ -5,7 +5,7 @@ import { LedgerSummary, DueReviewHint, createEmptyLedgerSummary } from '../../..
 function sampleGeoSummary(): LedgerSummary {
   const summary = createEmptyLedgerSummary()
   summary.newPool = ['河北', '山西']
-  const hint: DueReviewHint = { display: '天津', lastMode: 'map_puzzle.district', dueInMs: 0 }
+  const hint: DueReviewHint = { display: '天津', lastMode: 'map_puzzle.district', dueInMs: 0, weakDimensions: [] }
   summary.dueReview = [hint]
   summary.mastered = ['北京']
   summary.cooling = ['内蒙古']

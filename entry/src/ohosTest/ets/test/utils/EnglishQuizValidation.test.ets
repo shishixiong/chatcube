@@ -8,7 +8,28 @@ import { validateEnglishQuizArgs, resolveQuizMode } from '../../../../main/ets/u
  * CLI `hvigorw test` 不可用 (pre-existing scaffold mismatch, 详见 MEMORY.md)
  */
 
-function buildArgs(overrides: Record<string, Object>): string {
+interface QuizArgsOverrides {
+  mode?: Object
+  options?: Object
+  question?: Object
+  letter_options?: Object
+  image_prompt?: Object
+  correct_answer?: Object
+  question_type?: Object
+  target_text?: Object
+  target_zh?: Object
+  sound_text?: Object
+  letter?: Object
+  case?: Object
+  difficulty?: Object
+  skill_key?: Object
+  tts_text?: Object
+  phonics_rule?: Object
+  pattern?: Object
+  phonetic_hint?: Object
+}
+
+function buildArgs(overrides: QuizArgsOverrides): string {
   return JSON.stringify(overrides)
 }
 

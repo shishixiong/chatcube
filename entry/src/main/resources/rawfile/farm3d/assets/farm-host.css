@@ -1,0 +1,72 @@
+.app.host-mode .topbar {
+  display: none;
+}
+
+.app.host-mode .stage-ui {
+  padding-top: calc(12px + env(safe-area-inset-top, 0px));
+}
+
+.app.host-mode .workspace {
+  min-height: 0;
+}
+
+@media (min-width: 1440px) {
+  .panel {
+    width: 420px;
+  }
+
+  .stage-ui {
+    padding: 16px;
+  }
+
+  .zone-tabs {
+    gap: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .topbar {
+    min-height: 58px;
+    padding-inline: 12px;
+  }
+
+  .brand-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+  }
+
+  .stage-ui {
+    padding: 10px;
+  }
+
+  .zone-tab {
+    padding: 0 12px;
+    font-size: 13.5px;
+  }
+
+  .tool {
+    padding: 0 11px;
+    font-size: 13px;
+  }
+}
+
+@media (max-height: 520px) and (orientation: landscape) {
+  .panel {
+    height: 88vh;
+    height: 88dvh;
+    transform: translateY(calc(100% - 132px));
+  }
+
+  .panel-grab {
+    height: 14px;
+  }
+
+  .panel-peek {
+    margin-bottom: 8px;
+  }
+
+  .stage-ui {
+    gap: 6px;
+  }
+}

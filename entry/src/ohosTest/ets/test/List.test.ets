@@ -11,6 +11,7 @@ import chinaMapMetricsTest from './utils/ChinaMapMetrics.test';
 import roomEnglishValidationTest from './utils/RoomEnglishValidation.test';
 import roomEnglishLessonTest from './utils/RoomEnglishLesson.test';
 import cityEnglishValidationTest from './utils/CityEnglishValidation.test';
+import farmEnglishValidationTest from './utils/FarmEnglishValidation.test';
 import kidsSubjectUtilsTest from './utils/KidsSubjectUtils.test';
 import learningLedgerModelsTest from './utils/LearningLedgerModels.test';
 import ledgerExtractUtilsTest from './utils/LedgerExtractUtils.test';
@@ -45,6 +46,7 @@ export default function testsuite() {
   roomEnglishValidationTest();
   roomEnglishLessonTest();
   cityEnglishValidationTest();
+  farmEnglishValidationTest();
   kidsSubjectUtilsTest();
   learningLedgerModelsTest();
   ledgerExtractUtilsTest();

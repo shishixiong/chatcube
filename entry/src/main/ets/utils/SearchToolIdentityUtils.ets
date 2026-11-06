@@ -46,6 +46,9 @@ export const ROOM_ENGLISH_TOOL_ID: string = 'room_english'
 // 小词城 3D 英语探索（2026-11-01）：讲解型城市工具。50 个可点击单词（地点/交通/街道/人物/自然/动物）
 // + 5 个分区镜头 + 单词卡 + TTS 发音，参考 open-design 原型 word-city（120m × 90m 低多边形城市）。
 export const CITY_ENGLISH_TOOL_ID: string = 'city_english'
+// 阳光农场 3D 英语探索（2026-11-06）：讲解型农场工具。50 个可点击单词（地点/动物/农作物/农机/自然/人物）
+// + 5 个分区镜头 + 单词卡 + TTS 发音，参考 open-design 原型 sunny-farm（140m × 110m 低多边形农场）。
+export const FARM_ENGLISH_TOOL_ID: string = 'farm_english'
 
 
 export function normalizeToolFunctionName(raw: string): string {
@@ -205,6 +208,10 @@ export function isCityEnglishFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === CITY_ENGLISH_TOOL_ID
 }
 
+export function isFarmEnglishFunctionName(functionName: string): boolean {
+  return normalizeToolFunctionName(functionName) === FARM_ENGLISH_TOOL_ID
+}
+
 export function isHuarongdaoFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === HUARONGDAO_TOOL_ID
 }
@@ -282,7 +289,8 @@ export function isInteractiveQuizFunctionName(functionName: string): boolean {
     isMapQuizFunctionName(functionName) ||
     isMapPuzzleFunctionName(functionName) ||
     isRoomEnglishFunctionName(functionName) ||
-    isCityEnglishFunctionName(functionName)
+    isCityEnglishFunctionName(functionName) ||
+    isFarmEnglishFunctionName(functionName)
 }
 
 

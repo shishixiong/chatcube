@@ -49,7 +49,8 @@ import {
   MAP_QUIZ_TOOL_ID,
   MAP_PUZZLE_TOOL_ID,
   ROOM_ENGLISH_TOOL_ID,
-  CITY_ENGLISH_TOOL_ID
+  CITY_ENGLISH_TOOL_ID,
+  FARM_ENGLISH_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { getPinyinCharsJoined } from './PinyinData'
 import { getStrokeOrderCharsJoined } from './StrokeOrderData'
@@ -4077,6 +4078,89 @@ function createCityEnglishToolConfig(): ToolConfig {
 }
 
 
+// ===== farm_english 工具 =====
+// 3D 阳光农场英语探索（讲解型）：140m × 110m 的低多边形农场——环形土路串起农舍区、田地区、牧场区、
+// 果园池塘，50 个可点击对象（地点 10 / 动物 14 / 农作物 10 / 农机 8 / 自然 5 / 人物 3）可点开单词卡
+// （英文 / 音标 / 中文 / 儿童解释 / 例句 / TTS 发音），支持 5 个分区镜头。
+// 参考 open-design 原型 sunny-farm。
+// 交互由前端 FarmEnglishCard（Web 容器）处理，后台 ToolExecutionService.handleFarmEnglish 拦截。
+
+interface FarmEnglishArgs {
+  focus?: string
+  words?: string[]
+  skill_key: string
+}
+
+class FarmEnglishExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // farm_english 的交互由前端 FarmEnglishCard 组件处理。
+    // 后台由 ToolExecutionService.handleFarmEnglish 拦截处理。
+    try {
+      const params = JSON.parse(_args) as FarmEnglishArgs
+      return JSON.stringify({
+        opened: true,
+        focus: params.focus ?? 'overview',
+        words: params.words ?? [],
+        skill_key: 'english_vocab'
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`farm_english error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createFarmEnglishToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "focus": {
+        "type": "string",
+        "enum": ["overview", "farmyard_zone", "field_zone", "pasture_zone", "orchard_pond_zone"],
+        "description": "可选。本次重点探索的区域：overview=全农场（默认），farmyard_zone=农舍区（农舍 / 谷仓 / 鸡舍 / 马厩 / 筒仓 / 风车 / 水井 / 拖拉机），field_zone=田地区（小麦 / 玉米 / 土豆 / 胡萝卜 / 向日葵 / 温室），pasture_zone=牧场区（奶牛 / 绵羊 / 马 / 山羊 / 小山），orchard_pond_zone=果园池塘（苹果 / 草莓 / 池塘 / 鸭子 / 花）。传 all 等同于 overview。"
+      },
+      "words": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "可选。本次想重点教的单词 id，最多 8 个，传了会直接选中第一个词的单词卡。合法 id：地点 farmhouse barn chicken_coop stable silo windmill greenhouse well gate fence；动物 cow pig sheep horse goat chicken rooster duck goose rabbit cat dog bee bird；农作物 wheat corn potato carrot tomato pumpkin apple strawberry sunflower hay；农机 tractor trailer plow harvester wheelbarrow watering_can shovel pitchfork；自然 tree grass flower pond hill；人物 farmer child grandma。"
+      },
+      "skill_key": {
+        "type": "string",
+        "enum": ["english_vocab"],
+        "description": "固定传 english_vocab（英语词汇）。"
+      }
+    },
+    "required": ["skill_key"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    FARM_ENGLISH_TOOL_ID,
+    'Open the 3D sunny farm (阳光农场 3D 英语探索): a rotatable low-poly farm with a ring road, five camera zones (overview, farmyard, field, pasture, orchard pond) and farm life in motion — a tractor pulling a trailer, a farmer, a child and a dog walking the road, windmill blades turning, crops swaying, animals idling, pond ripples and bees hovering. It contains 50 tappable objects in total — places (farmhouse, barn, chicken coop, stable, silo, windmill, greenhouse, well, gate, fence), animals (cow, pig, sheep, horse, goat, chicken, rooster, duck, goose, rabbit, cat, dog, bee, bird), crops (wheat, corn, potato, carrot, tomato, pumpkin, apple, strawberry, sunflower, hay), machines (tractor, trailer, plow, harvester, wheelbarrow, watering can, shovel, pitchfork), nature (tree, grass, flower, pond, hill) and people (farmer, child, grandma). Tapping an object opens a kid-friendly word card with the English word, phonetic, Chinese meaning, a one-line kid definition, an example sentence and a TTS pronunciation button. Use this INSTEAD of describing a farm scene in plain text when teaching farm, animal, crop, machine or nature vocabulary. Pass words (max 8 ids) to open a specific word card; pass focus (overview, farmyard_zone, field_zone, pasture_zone or orchard_pond_zone) to fly to a zone. After the receipt, follow up with english_quiz read_aloud to check 2-3 target words and award stars — farm_english itself awards no stars.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createFarmEnglishToolConfig(): ToolConfig {
+  return new ToolConfig(
+    FARM_ENGLISH_TOOL_ID,
+    '阳光农场 3D 英语探索',
+    '走进会动的 3D 农场：农舍、谷仓、奶牛、小麦、拖拉机、池塘，点一点听英文发音、看单词卡，认识 50 个农场单词。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    FARM_ENGLISH_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
 // 注册所有内置工具
 export function registerBuiltinTools(): void {
   const registry = getToolRegistry()
@@ -4456,6 +4540,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(FARM_ENGLISH_TOOL_ID)) {
+    const farmEnglishTool = new RegisteredTool(
+      FARM_ENGLISH_TOOL_ID,
+      createFarmEnglishToolConfig(),
+      createFarmEnglishToolDefinition(),
+      new FarmEnglishExecutor()
+    )
+    registry.registerTool(farmEnglishTool)
+    registeredNow += 1
+  }
+
   console.info(
     'BuiltinTools',
     `Builtin tools ready: total=${registry.getToolCount()}, newlyRegistered=${registeredNow}`
@@ -4464,5 +4559,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID, MAP_CARD_TOOL_ID, MAP_QUIZ_TOOL_ID, MAP_PUZZLE_TOOL_ID, ROOM_ENGLISH_TOOL_ID, CITY_ENGLISH_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID, MAP_CARD_TOOL_ID, MAP_QUIZ_TOOL_ID, MAP_PUZZLE_TOOL_ID, ROOM_ENGLISH_TOOL_ID, CITY_ENGLISH_TOOL_ID, FARM_ENGLISH_TOOL_ID]
 }

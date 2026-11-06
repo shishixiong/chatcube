@@ -302,6 +302,30 @@ function cityEnglishItems(parsed: Record<string, Object>): LedgerToolItem[] {
   return items
 }
 
+/** farm_english 教学曝光词: words[] 里的 id 下划线转空格后逐项入账 */
+function farmEnglishItems(parsed: Record<string, Object>): LedgerToolItem[] {
+  const items: LedgerToolItem[] = []
+  const seen: string[] = []
+  const modeTag = compositeMode('farm_english', '')
+  const wordsRaw = parsed['words']
+  if (!Array.isArray(wordsRaw)) {
+    return items
+  }
+  const words = wordsRaw as Object[]
+  for (let i = 0; i < words.length; i++) {
+    const raw = words[i]
+    if (typeof raw !== 'string') {
+      continue
+    }
+    const id = (raw as string).trim()
+    if (id === '') {
+      continue
+    }
+    pushExplorationItem(items, seen, humanizeExplorationWord(id), modeTag)
+  }
+  return items
+}
+
 function pushExplorationItem(items: LedgerToolItem[], seen: string[], display: string, mode: string): void {
   if (display === '') {
     return
@@ -496,6 +520,9 @@ export function extractLedgerItemsFromTool(toolId: string, argsJson: string,
   if (toolId === 'city_english') {
     return cityEnglishItems(parsed)
   }
+  if (toolId === 'farm_english') {
+    return farmEnglishItems(parsed)
+  }
   return emptyItems()
 }
 
@@ -574,7 +601,8 @@ export function extractLedgerAnswerItems(toolId: string, argsJson: string,
     return answers
   }
   if (toolId === 'hanzi_card' || toolId === 'pinyin_card' || toolId === 'picture_talk' ||
-    toolId === 'map_card' || toolId === 'room_english' || toolId === 'city_english') {
+    toolId === 'map_card' || toolId === 'room_english' || toolId === 'city_english' ||
+    toolId === 'farm_english') {
     // 讲解型: 曝光已记, 掌握度不因「看了」推进
     return answers
   }
