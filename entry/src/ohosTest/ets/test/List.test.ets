@@ -8,6 +8,7 @@ import chinaMapTransformTest from './utils/ChinaMapTransform.test';
 import mapPuzzleLayoutTest from './utils/MapPuzzleLayout.test';
 import mapPuzzleValidationTest from './utils/MapPuzzleValidation.test';
 import chinaMapMetricsTest from './utils/ChinaMapMetrics.test';
+import shanghaiMapDataTest from './utils/ShanghaiMapData.test';
 import roomEnglishValidationTest from './utils/RoomEnglishValidation.test';
 import roomEnglishLessonTest from './utils/RoomEnglishLesson.test';
 import cityEnglishValidationTest from './utils/CityEnglishValidation.test';
@@ -42,6 +43,7 @@ export default function testsuite() {
   mapPuzzleLayoutTest();
   mapPuzzleValidationTest();
   chinaMapMetricsTest();
+  shanghaiMapDataTest();
   roomEnglishValidationTest();
   roomEnglishLessonTest();
   cityEnglishValidationTest();

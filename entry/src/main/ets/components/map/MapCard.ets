@@ -4,9 +4,13 @@
  *
  * 视觉取自 map-card-redesign.html：暖纸质地图册。
  * - 大尺寸（全屏 sheet）：自绘表头（地理 · 小课堂 / 已探索 N/34）+ 地图册卡
- *   （纸质网格底 + 指北针 + 图例 + 南海诸岛题注 + 页脚缩放簇）+ 省份资料卡
+ *   （纸质网格底 + 指北针 + 图例 + 南海诸岛题注 + 页脚缩放簇）+ 资料卡
  *   （简称印章 + 大区标签 + 行政中心 + 听一听 + 小星老师说）+ 进度行 + 主按钮。
  * - 小尺寸（时间线内联复原）：CardShell 外壳 + 紧凑地图 + 资料卡 + 状态行。
+ *
+ * 省级下钻（2026-11-06）：点上海 = 把地图册翻到里面一页。同一张卡片、同一个位置，
+ * 只有地图和资料卡换了内容；页眉左边是「‹ 返回全国」，进度口径仍是 34 个省级行政区，
+ * 区级「看过 k / 16」只做二级进度。上海以外点省仍是原来的单页行为。
  *
  * 交互语义沿用既有定案：focus 省自动展示、点省即读 TTS（🔊/听一听 作重播）、
  * 「我学会了 · 继续」提交回执；讲解课不授星（2026-10-22 定案）。
@@ -19,6 +23,23 @@ import { ToolCall } from '../../models/ChatModels'
 import { withColorAlpha } from '../../utils/ColorAlphaUtils'
 import { ServiceRegistry } from '../../services/ServiceRegistry'
 import { ChinaMapData, ChinaProvince, findProvinceByRef, loadChinaMapData } from '../../utils/ChinaMapData'
+import {
+  SHANGHAI_PROVINCE_ID,
+  ShanghaiDistrict,
+  ShanghaiMapData,
+  districtOrder,
+  findDistrictByRef,
+  loadShanghaiMapData
+} from '../../utils/ShanghaiMapData'
+import {
+  buildBackToChinaLabel,
+  buildDistrictNote,
+  buildDistrictProgressText,
+  buildDistrictSpeech,
+  buildDrilldownEntryLabel,
+  buildPlaceSummary,
+  buildShanghaiAtlasTitle
+} from '../../utils/ShanghaiAtlasCopy'
 import { buildExploreProgressText, buildTeacherNote } from '../../utils/MapAtlasCopy'
 import { CardShell } from '../cardshell/CardShell'
 import { CardShellConfig } from '../cardshell/CardShellTypes'
@@ -26,6 +47,8 @@ import { CardShellState } from '../cardshell/CardShellState'
 import { getMapAtlasPalette, MapAtlasPalette } from './MapAtlasTokens'
 import { ChinaMapStage } from './ChinaMapStage'
 import { ChinaMapStageController } from './ChinaMapStageController'
+import { ShanghaiMapStage } from './ShanghaiMapStage'
+import { MapAtlasDistrictCard, MapAtlasProvinceCard } from './MapAtlasProvinceCard'
 import { MapZoomCluster } from './MapZoomCluster'
 
 export interface MapCardResult {
@@ -41,8 +64,13 @@ export interface MapCardArgsView {
   skillKey: string
 }
 
+/** 地图册翻到哪一页：全国 / 上海 */
+export type MapCardPage = 'cn' | 'sh'
+
 /** 34 个省级行政区；数据未加载时的兜底分母 */
 const DEFAULT_PROVINCE_TOTAL: number = 34
+/** 16 个市辖区；数据未加载时的兜底分母 */
+const DEFAULT_DISTRICT_TOTAL: number = 16
 
 function createDefaultArgsView(): MapCardArgsView {
   const view: MapCardArgsView = { valid: false, focusProvince: '', skillKey: 'general_social' }
@@ -91,10 +119,18 @@ export struct MapCard {
   @Local hasCompleted: boolean = false
   @Local sealScale: number = 1
 
+  /** 当前翻到哪一页。全国页的缩放/选中状态原样保留，翻回来还在 */
+  @Local page: MapCardPage = 'cn'
+  @Local districtData: ShanghaiMapData | null = null
+  @Local selectedDistrictId: string = ''
+  @Local currentDistrict: ShanghaiDistrict | null = null
+  /** 看过的区：二级进度，只影响页眉「看过 k / 16」，不进主进度 */
+  @Local visitedDistrictIds: string[] = []
+
   /** 内联复原时从历史 payload 读回：focus 省 + 已认识数量 */
   private restoredFocusRef: string = ''
   private restoredExplored: number = 0
-  /** 朗读序号：连续点省时旧回调不覆盖新一次「朗读中」状态 */
+  /** 朗读序号：连续点省/区时旧回调不覆盖新一次「朗读中」状态 */
   private speakSeq: number = 0
   private shellState: CardShellState = new CardShellState()
   private shellConfig: CardShellConfig = {
@@ -103,6 +139,7 @@ export struct MapCard {
     feedbackTitleCorrect: '学完啦！', correctAnswerLabel: ''
   }
   private mapController: ChinaMapStageController = new ChinaMapStageController()
+  private districtController: ChinaMapStageController = new ChinaMapStageController()
 
   private get palette(): MapAtlasPalette {
     return getMapAtlasPalette(this.isDarkMode)
@@ -135,6 +172,11 @@ export struct MapCard {
       this.data = loaded
       this.provinceTotal = loaded.provinces.length
       this.applyInitialSelection(loaded)
+    }).catch((_e: Error) => {
+    })
+    // 下钻页的数据提前拿好：点上海时要立刻翻页，不能先出现一帧空地图
+    loadShanghaiMapData(ctx).then((sh: ShanghaiMapData | null) => {
+      this.districtData = sh
     }).catch((_e: Error) => {
     })
   }
@@ -235,6 +277,11 @@ export struct MapCard {
     this.currentInfo = picked
     this.noteText = buildTeacherNote(picked)
     this.markVisited(provinceId)
+    // 点上海 = 把地图册翻到里面一页，而不是换一张资料卡就结束
+    if (provinceId === SHANGHAI_PROVINCE_ID && this.districtData !== null) {
+      this.enterShanghai(false)
+      return
+    }
     this.stampIn()
     // 点省即读：资料卡展示的同时直接 TTS 播报，「听一听」保留作重播
     this.speakProvinceInfo()
@@ -286,6 +333,127 @@ export struct MapCard {
     }
   }
 
+  // ====== 上海页：翻页 / 选区 / 朗读 ======
+
+  /**
+   * @param readOnly true = 讲解已经结束、只是从时间线回看：允许翻页但不改状态
+   */
+  private enterShanghai(readOnly: boolean): void {
+    if (this.districtData === null) {
+      return
+    }
+    if (!readOnly && (this.isAnswered || this.submitDone)) {
+      return
+    }
+    this.page = 'sh'
+    this.selectedDistrictId = ''
+    this.currentDistrict = null
+    this.stopSpeech()
+  }
+
+  private backToChina(): void {
+    // 回看不改任何进度：已讲解完的时间线也能翻回全国页
+    this.page = 'cn'
+    this.selectedDistrictId = ''
+    this.currentDistrict = null
+    this.stopSpeech()
+  }
+
+  private handlePickDistrict(districtId: string): void {
+    if (this.isAnswered || this.submitDone || this.districtData === null) {
+      return
+    }
+    const picked = findDistrictByRef(this.districtData.districts, districtId)
+    if (picked === null) {
+      return
+    }
+    this.selectedDistrictId = picked.id
+    this.currentDistrict = picked
+    if (!this.visitedDistrictIds.includes(picked.id)) {
+      const next: string[] = this.visitedDistrictIds.slice()
+      next.push(picked.id)
+      this.visitedDistrictIds = next
+    }
+    this.stampIn()
+    this.speakDistrictInfo()
+  }
+
+  /** 点空白/海面：取消选区，回到「选一个区开始」 */
+  private handleTapBlank(): void {
+    if (this.selectedDistrictId === '' || this.isAnswered) {
+      return
+    }
+    this.selectedDistrictId = ''
+    this.currentDistrict = null
+    this.stopSpeech()
+  }
+
+  private speakDistrictInfo(): void {
+    const d = this.currentDistrict
+    const data = this.districtData
+    if (d === null || data === null) {
+      return
+    }
+    this.stopSpeech()
+    this.speakSeq = this.speakSeq + 1
+    const seq = this.speakSeq
+    this.isSpeaking = true
+    this.listenLabel = '朗读中'
+    ServiceRegistry.tts().speak(buildDistrictSpeech(d, districtOrder(data.districts, d.id)), {
+      onStart: () => {},
+      onComplete: () => {
+        if (seq !== this.speakSeq) {
+          return
+        }
+        this.isSpeaking = false
+        this.listenLabel = '再听'
+      },
+      onError: (error: string) => {
+        if (seq !== this.speakSeq) {
+          return
+        }
+        this.isSpeaking = false
+        this.listenLabel = '再听'
+        console.error('MapCard', `district info TTS error: ${error}`)
+      }
+    }).catch((e: Error) => {
+      if (seq !== this.speakSeq) {
+        return
+      }
+      this.isSpeaking = false
+      this.listenLabel = '再听'
+      console.error('MapCard', `district info TTS speak failed: ${e.message}`)
+    })
+  }
+
+  private districtCardOrder(): number {
+    const data = this.districtData
+    if (data === null) {
+      return 0
+    }
+    return districtOrder(data.districts, this.selectedDistrictId)
+  }
+
+  private districtCardNote(): string {
+    const d = this.currentDistrict
+    if (d === null) {
+      return ''
+    }
+    return buildDistrictNote(d, this.districtCardOrder())
+  }
+
+  private districtProgressText(): string {
+    const total = this.districtData === null ? DEFAULT_DISTRICT_TOTAL : this.districtData.districts.length
+    return buildDistrictProgressText(this.visitedDistrictIds.length, total)
+  }
+
+  /** 全国页选中上海时才出现下钻入口；本课已提交后不再出现（sheet 随即关闭） */
+  private canShowDrilldownEntry(): boolean {
+    const info = this.currentInfo
+    return this.page === 'cn' && info !== null && info.id === SHANGHAI_PROVINCE_ID
+      && this.districtData !== null && !this.submitDone
+  }
+
   // ====== 提交 ======
 
   private submit(): void {
@@ -314,7 +482,7 @@ export struct MapCard {
           .fontWeight(FontWeight.Medium)
           .fontColor(this.palette.chineseInk)
           .letterSpacing(1.4)
-        Text('中国地图小课堂')
+        Text(this.page === 'sh' ? '上海地图小课堂' : '中国地图小课堂')
           .fontSize(21)
           .fontWeight(FontWeight.Bold)
           .fontColor(this.palette.fg)
@@ -358,18 +526,35 @@ export struct MapCard {
         this.AtlasHead()
       }
 
-      Column() {
-        ChinaMapStage({
-          data: this.data,
-          targetId: '',
-          selectedId: this.selectedId,
-          visitedIds: this.visitedIds,
-          interactive: !this.isAnswered && !this.submitDone,
-          showDecorations: this.largeSize,
-          showZoomControls: !this.largeSize,
-          controller: this.mapController,
-          onPickProvince: (provinceId: string): void => this.handlePickProvince(provinceId)
-        })
+      Stack() {
+        if (this.page === 'sh') {
+          ShanghaiMapStage({
+            data: this.districtData,
+            selectedId: this.selectedDistrictId,
+            visitedIds: this.visitedDistrictIds,
+            interactive: !this.isAnswered && !this.submitDone,
+            showDecorations: this.largeSize,
+            controller: this.districtController,
+            onPickDistrict: (districtId: string): void => this.handlePickDistrict(districtId),
+            onTapBlank: (): void => this.handleTapBlank()
+          })
+        } else {
+          ChinaMapStage({
+            data: this.data,
+            targetId: '',
+            selectedId: this.selectedId,
+            visitedIds: this.visitedIds,
+            interactive: !this.isAnswered && !this.submitDone,
+            showDecorations: this.largeSize,
+            showZoomControls: !this.largeSize,
+            controller: this.mapController,
+            onPickProvince: (provinceId: string): void => this.handlePickProvince(provinceId)
+          })
+        }
+        // 小图没有 AtlasHead 面包屑；上海页在左上角补一个，保证「翻进去还能翻回来」
+        if (this.page === 'sh' && !this.largeSize) {
+          this.CompactBackChip()
+        }
       }
       .width('100%')
       .layoutWeight(1)
@@ -392,23 +577,85 @@ export struct MapCard {
     })
   }
 
+  /** 内联小图的返回键：不占地图高度，压在地图左上角 */
+  @Builder
+  CompactBackChip() {
+    Row({ space: 2 }) {
+      Text('‹')
+        .fontSize(15)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.palette.chineseInk)
+      Text('返回全国')
+        .fontSize(11.5)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.palette.fg)
+    }
+    .height(28)
+    .padding({ left: 7, right: 9 })
+    .borderRadius(9)
+    .backgroundColor(withColorAlpha(this.palette.surface, 'E6'))
+    .border({ width: 1, color: withColorAlpha(this.palette.border, 'B3') })
+    .alignItems(VerticalAlign.Center)
+    .position({ x: 8, y: 8 })
+    .accessibilityText(buildBackToChinaLabel())
+    .onClick(() => {
+      this.backToChina()
+    })
+  }
+
   @Builder
   AtlasHead() {
     Row() {
-      Row({ space: 6 }) {
-        SymbolGlyph($r('sys.symbol.map'))
-          .fontSize(14)
-          .fontColor([this.palette.chineseInk])
-        Text(`中国 · ${this.provinceTotal} 个省级行政区`)
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.palette.fg)
-      }
-      .layoutWeight(1)
+      if (this.page === 'sh') {
+        // 面包屑是入口不是标题：小一号、可点，右边跟二级进度
+        Row({ space: 8 }) {
+          Row({ space: 2 }) {
+            Text('‹')
+              .fontSize(17)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.palette.chineseInk)
+            Text('返回全国')
+              .fontSize(12.5)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.palette.fg)
+          }
+          .height(32)
+          .padding({ left: 4, right: 8 })
+          .borderRadius(10)
+          .backgroundColor(this.palette.surfaceAlt)
+          .border({ width: 1, color: this.palette.border })
+          .accessibilityText(buildBackToChinaLabel())
+          .onClick(() => {
+            this.backToChina()
+          })
 
-      Text('点一点地图')
+          Text(buildShanghaiAtlasTitle(
+            this.districtData === null ? DEFAULT_DISTRICT_TOTAL : this.districtData.districts.length))
+            .fontSize(13)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.palette.muted)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .layoutWeight(1)
+        .alignItems(VerticalAlign.Center)
+      } else {
+        Row({ space: 6 }) {
+          SymbolGlyph($r('sys.symbol.map'))
+            .fontSize(14)
+            .fontColor([this.palette.chineseInk])
+          Text(`中国 · ${this.provinceTotal} 个省级行政区`)
+            .fontSize(13)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.palette.fg)
+        }
+        .layoutWeight(1)
+      }
+
+      Text(this.page === 'sh' ? '点一个区看看' : '点一点地图')
         .fontSize(11)
         .fontColor(this.palette.subtle)
+        .maxLines(1)
     }
     .width('100%')
     .padding({ left: 6, right: 6, top: 1, bottom: 8 })
@@ -425,7 +672,18 @@ export struct MapCard {
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-      if (this.data !== null) {
+      if (this.page === 'sh' && this.districtData !== null) {
+        MapZoomCluster({
+          canZoomIn: this.districtController.canZoomIn,
+          canZoomOut: this.districtController.canZoomOut,
+          isDarkMode: this.isDarkMode,
+          resetLabel: '全市',
+          resetAccessibilityLabel: '查看上海全市',
+          onZoomIn: (): void => this.districtController.zoomIn(),
+          onZoomOut: (): void => this.districtController.zoomOut(),
+          onReset: (): void => this.districtController.reset()
+        })
+      } else if (this.data !== null) {
         MapZoomCluster({
           canZoomIn: this.mapController.canZoomIn,
           canZoomOut: this.mapController.canZoomOut,
@@ -442,257 +700,54 @@ export struct MapCard {
     .alignItems(VerticalAlign.Center)
   }
 
-  // ====== 省份资料卡 ======
+  // ====== 资料卡 ======
 
   @Builder
   ProvinceCard() {
-    Column({ space: this.largeSize ? 12 : 8 }) {
-      if (this.data === null) {
-        Row({ space: 10 }) {
-          LoadingProgress()
-            .width(24)
-            .height(24)
-            .color(this.palette.muted)
-          Text('地图加载中…')
-            .fontSize(13)
-            .fontColor(this.palette.muted)
-        }
-        .width('100%')
-        .height(this.largeSize ? 104 : 80)
-        .justifyContent(FlexAlign.Center)
-      } else if (this.currentInfo !== null) {
-        this.ProvinceFilled()
-        // 矮屏（≈6.5" 以下）让位给地图：设计稿 @media (max-height: 760px) 同款取舍
-        if (this.largeSize && !this.compactHeight) {
-          this.TeacherNote()
-        }
-      } else if (this.isAnswered) {
-        this.CompletedSummary()
-      } else {
-        this.ProvinceEmpty()
-      }
+    if (this.page === 'sh' && this.districtData !== null && !this.isAnswered) {
+      this.DistrictCard()
+    } else {
+      // 全国页原样复用抽出来的资料卡；已交卷后回看的上海页也走这里
+      MapAtlasProvinceCard({
+        info: this.currentInfo,
+        loading: this.data === null,
+        noteText: this.noteText,
+        isSpeaking: this.isSpeaking,
+        listenLabel: this.listenLabel,
+        largeSize: this.largeSize,
+        compactHeight: this.compactHeight,
+        isDarkMode: this.isDarkMode,
+        isAnswered: this.isAnswered,
+        hasCompleted: this.hasCompleted,
+        exploredCount: this.exploredCount(),
+        sealScale: this.sealScale,
+        showDrilldownEntry: this.canShowDrilldownEntry(),
+        drilldownLabel: buildDrilldownEntryLabel(
+          this.districtData === null ? DEFAULT_DISTRICT_TOTAL : this.districtData.districts.length),
+        onListen: (): void => this.speakProvinceInfo(),
+        onEnterDrilldown: (): void => this.enterShanghai(this.isAnswered)
+      })
     }
-    .width('100%')
-    .padding({
-      left: this.largeSize ? 15 : 12,
-      right: this.largeSize ? 15 : 12,
-      top: this.largeSize ? 14 : 11,
-      bottom: this.largeSize ? 13 : 11
+  }
+
+  @Builder
+  DistrictCard() {
+    MapAtlasDistrictCard({
+      district: this.currentDistrict,
+      order: this.districtCardOrder(),
+      noteText: this.districtCardNote(),
+      total: this.districtData === null ? DEFAULT_DISTRICT_TOTAL : this.districtData.districts.length,
+      // 与地图同一条分级判定：卡片写「外滩 +2」，地图上此刻也只有外滩那一个点。
+      // 倍率取遥控器的 zoomLevel（舞台每次 applyView 回写），不另存一份状态
+      placesText: buildPlaceSummary(this.currentDistrict, this.districtController.zoomLevel),
+      isSpeaking: this.isSpeaking,
+      listenLabel: this.listenLabel,
+      largeSize: this.largeSize,
+      compactHeight: this.compactHeight,
+      isDarkMode: this.isDarkMode,
+      sealScale: this.sealScale,
+      onListen: (): void => this.speakDistrictInfo()
     })
-    .borderRadius(this.largeSize ? 22 : 16)
-    .backgroundColor(this.palette.surface)
-    .border({ width: 1, color: this.palette.border })
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  @Builder
-  ProvinceFilled() {
-    Row({ space: this.largeSize ? 11 : 9 }) {
-      this.Seal()
-
-      Column({ space: 2 }) {
-        Row({ space: 6 }) {
-          Text(this.currentInfo!.short)
-            .fontSize(this.largeSize ? 28 : 22)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(this.palette.fg)
-            .maxLines(1)
-          Text(this.currentInfo!.region)
-            .fontSize(10.5)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.palette.accentInk)
-            .padding({ left: 7, right: 7, top: 3, bottom: 3 })
-            .backgroundColor(this.palette.surfaceAlt)
-            .borderRadius(999)
-        }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
-
-        Text(this.currentInfo!.name)
-          .fontSize(11.5)
-          .fontColor(this.palette.muted)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width('100%')
-
-        Row({ space: 4 }) {
-          SymbolGlyph($r('sys.symbol.pin'))
-            .fontSize(12)
-            .fontColor([this.palette.chineseInk])
-          Text('行政中心')
-            .fontSize(12)
-            .fontColor(this.palette.muted)
-          Text(this.currentInfo!.capital)
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.palette.fg)
-            .maxLines(1)
-        }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
-        .margin({ top: 3 })
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-
-      this.ListenButton()
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Center)
-  }
-
-  @Builder
-  Seal() {
-    Column() {
-      // 内圈细线 = 设计稿印章的 inset 环，abbr 大字号压在内圈里
-      Column({ space: 1 }) {
-        Text(this.currentInfo!.abbr)
-          .fontSize(this.largeSize ? 25 : 21)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.palette.chineseInk)
-          .lineHeight(this.largeSize ? 27 : 23)
-        Text('简称')
-          .fontSize(9)
-          .fontColor(this.palette.muted)
-      }
-      .padding({ left: 4, right: 4, top: 2, bottom: 2 })
-      .border({ width: 3, color: this.palette.surface })
-      .borderRadius(10)
-    }
-    .width(this.largeSize ? 54 : 46)
-    .height(this.largeSize ? 58 : 50)
-    .borderRadius(13)
-    .backgroundColor(this.palette.surfaceAlt)
-    .border({ width: 1.5, color: this.palette.sealBorder })
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
-    .rotate({ angle: -2 })
-    .scale({ x: this.sealScale, y: this.sealScale })
-    .accessibilityText(`简称${this.currentInfo!.abbr}`)
-  }
-
-  @Builder
-  ListenButton() {
-    Row({ space: 4 }) {
-      SymbolGlyph(this.isSpeaking
-        ? $r('sys.symbol.speaker_wave_2_fill')
-        : $r('sys.symbol.speaker_wave_2'))
-        .fontSize(15)
-        .fontColor([this.palette.chineseInk])
-      Text(this.listenLabel)
-        .fontSize(11.5)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.palette.fg)
-        .maxLines(1)
-    }
-    .height(44)
-    .padding({ left: 10, right: 10 })
-    .borderRadius(13)
-    .backgroundColor(this.isSpeaking
-      ? withColorAlpha(this.palette.accent, '2E')
-      : this.palette.surfaceAlt)
-    .border({
-      width: 1,
-      color: this.isSpeaking ? withColorAlpha(this.palette.accent, '66') : this.palette.border
-    })
-    .accessibilityText(this.listenAccessibilityLabel())
-    .onClick(() => {
-      this.speakProvinceInfo()
-    })
-  }
-
-  private listenAccessibilityLabel(): string {
-    const info = this.currentInfo
-    if (info === null) {
-      return '听一听省份介绍'
-    }
-    return `听一听${info.name}的介绍`
-  }
-
-  @Builder
-  TeacherNote() {
-    Divider()
-      .width('100%')
-      .strokeWidth(1)
-      .color(this.palette.noteLine)
-    Row({ space: 7 }) {
-      Text('小星老师说')
-        .fontSize(10)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.palette.chineseInk)
-        .letterSpacing(0.4)
-      Text(this.noteText)
-        .fontSize(12.5)
-        .fontColor(this.palette.muted)
-        .layoutWeight(1)
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Top)
-  }
-
-  @Builder
-  ProvinceEmpty() {
-    Row({ space: 12 }) {
-      Column() {
-        SymbolGlyph($r('sys.symbol.map'))
-          .fontSize(24)
-          .fontColor([this.palette.chineseInk])
-      }
-      .width(48)
-      .height(48)
-      .borderRadius(15)
-      .backgroundColor(this.palette.surfaceAlt)
-      .justifyContent(FlexAlign.Center)
-
-      Column({ space: 5 }) {
-        Text('选一个地方开始')
-          .fontSize(this.largeSize ? 19 : 16)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.palette.fg)
-        Text('点一点地图，看看它的名字、简称和行政中心。')
-          .fontSize(12)
-          .fontColor(this.palette.muted)
-          .maxLines(2)
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Center)
-  }
-
-  @Builder
-  CompletedSummary() {
-    Row({ space: 12 }) {
-      Column() {
-        SymbolGlyph($r('sys.symbol.checkmark'))
-          .fontSize(24)
-          .fontColor([this.palette.success])
-      }
-      .width(48)
-      .height(48)
-      .borderRadius(15)
-      .backgroundColor(this.palette.surfaceAlt)
-      .justifyContent(FlexAlign.Center)
-
-      Column({ space: 4 }) {
-        Text(this.hasCompleted ? '本节地图课已完成' : '这一课先到这里')
-          .fontSize(this.largeSize ? 19 : 16)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.palette.fg)
-        Text(this.exploredCount() > 0
-          ? `认识了 ${this.exploredCount()} 个地方，点开地图还能回看。`
-          : '点开地图还能回看。')
-          .fontSize(12)
-          .fontColor(this.palette.muted)
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Center)
   }
 
   // ====== 页脚：进度 + 主按钮 ======
@@ -701,21 +756,29 @@ export struct MapCard {
   FooterRegion() {
     Column({ space: 8 }) {
       Row() {
-        Text() {
-          Span('已认识 ')
-          Span(`${this.exploredCount()}`)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(this.palette.fg)
-          Span(' 个地方')
+        if (this.page === 'sh' && this.districtData !== null) {
+          // 二级进度：单位是区，只在地图册页脚出现，不进主进度
+          Text(this.districtProgressText())
+            .fontSize(11.5)
+            .fontColor(this.palette.muted)
+            .layoutWeight(1)
+            .accessibilityText(
+              `看过 ${this.visitedDistrictIds.length} 个区，共 ${this.districtData.districts.length} 个`)
+        } else {
+          Text() {
+            Span('已认识 ')
+            Span(`${this.exploredCount()}`)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.palette.fg)
+            Span(' 个地方')
+          }
+          .fontSize(11.5)
+          .fontColor(this.palette.muted)
+          .layoutWeight(1)
+          .accessibilityText(buildExploreProgressText(this.exploredCount()))
         }
-        .fontSize(11.5)
-        .fontColor(this.palette.muted)
-        .layoutWeight(1)
-        .accessibilityText(buildExploreProgressText(this.exploredCount()))
 
-        Text(this.isFinished()
-          ? '本节地图课已完成'
-          : (this.isAnswered ? '这一课先到这里' : (this.canSubmit() ? '再点几个，记得更牢' : '点一个省份就能继续')))
+        Text(this.footerHint())
           .fontSize(10.5)
           .fontColor(this.isFinished() ? this.palette.success : this.palette.subtle)
           .maxLines(1)
@@ -756,6 +819,20 @@ export struct MapCard {
     }
     .width('100%')
     .padding({ left: 4, right: 4 })
+  }
+
+  /** 页脚右侧的下一步提示：按页给不同的「再做什么」，不重复主按钮文案 */
+  private footerHint(): string {
+    if (this.isFinished()) {
+      return '本节地图课已完成'
+    }
+    if (this.isAnswered) {
+      return '这一课先到这里'
+    }
+    if (this.page === 'sh') {
+      return this.visitedDistrictIds.length > 0 ? '再看看别的区，记得更牢' : '点一个区，听听它叫什么'
+    }
+    return this.canSubmit() ? '再点几个，记得更牢' : '点一个省份就能继续'
   }
 
   /** 未选省时按钮改文案（设计稿：先点一个地方） */

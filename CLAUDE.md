@@ -124,7 +124,7 @@ MVVM 分层（`entry/src/main/ets/`）：
 | `MatchingPairsCard` | `matching_pairs` | 连一连观察配对 |
 | `MemoryMatchCard` | `memory_match` | 记忆翻牌（宝石配对，kids_games 专属） |
 | `AskUserCard` | `ask_user` | AI 反问收集偏好 |
-| `map/MapCard` | `map_card` | 中国地图小课堂（讲解型：34 省可点 + 资料卡 + focus 高亮；待答态横幅 → 全屏 sheet） |
+| `map/MapCard` | `map_card` | 中国地图小课堂（讲解型：34 省可点 + 资料卡 + focus 高亮；点上海原地翻到 16 区地图，区级只讲不考；待答态横幅 → 全屏 sheet） |
 | `map/MapQuizCard` | `map_quiz` | 中国地图出题（3 mode：choice/locate/write；待答态横幅 → 全屏 sheet） |
 | `map/MapPuzzleCard` | `map_puzzle` | 中国地图拼图（3-8 省拖拽/点选拼回地图，棋盘按本局省份自动聚焦；拼对朗读省名/简称/省会，长按 600ms 提示；按错误次数授 1-3 星；待答态横幅 → 全屏 sheet） |
 | `room/RoomEnglishCard` | `room_english` | 全屋 3D 英语探索（讲解型：Web 容器加载 `rawfile/room3d/` 的 three.js 场景，客餐厅 + 厨房 11.8m × 6m / 儿童房 4.4m × 3.6m / 主卧 4.6m × 3.6m / 生活阳台 6.6m × 2.4m，共 76 件家具可点开单词卡；默认打开全屋户型，面板顶部「全屋 / 四间房」5 标签切换，360° 环绕 + 近侧墙自动隐藏；`RoomNativeBridge` 接原生 TTS，讲解型不授星） |
