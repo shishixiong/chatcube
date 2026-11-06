@@ -91,7 +91,15 @@
 
 ## 验证
 
-仓库里没有 Web 侧测试基建，这次用 `jsdom` + 仓库自带的 `three.min.js` 做无头集成测试（真几何、真射线、假 WebGL）：
+Web 侧原来没有测试基建，这次补了两层，都不进 HAP：
+
+- `scripts/verify-room3d-data.mjs`（无依赖）：DOM id / 脚本顺序 / 桥接方法 /
+  `WordRoomApp` API / CSS 规则 / 方位档位 / 出生点数据；
+- `scripts/room3d-walk-test/`（`npm install` 只装 jsdom）：用 jsdom 打开真实
+  `index.html` + 仓库自带 `three.min.js`，只把 `WebGLRenderer` 换成桩，
+  几何、射线拾取、碰撞盒、标签分档、方位播报全是真的。
+
+集成测试 31 项，覆盖：
 
 - 全屋拒绝第一人称；单间房进入后按钮/控件/重置视角状态正确，「走进去 / 回到全景」文案跟着翻；
 - 拖动环顾会让方位发生变化；按住前进 1 秒走约 0.9m，松手不漂；W/S/A 三个方向都能走，斜着走不会更快；
