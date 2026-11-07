@@ -136,6 +136,8 @@ class RoomNativeBridge {
   readyHandler: () => void = (): void => {}
   selectHandler: (id: string, word: string) => void = (): void => {}
   progressHandler: (idsJson: string) => void = (): void => {}
+  // 视角切换：'walk' 走进去（第一人称），'orbit' 回上帝视角。原生据此收起/恢复自己的播放控件。
+  modeHandler: (mode: string) => void = (): void => {}
 
   // 返回值统一用字符串：ArkWeb 代理方法对返回类型最宽容，且 Web 侧只判断真值。
   // zh 为物品的中文意思（可空）：原生先读中文、再读英文单词。
@@ -163,6 +165,11 @@ class RoomNativeBridge {
     this.progressHandler(idsJson)
     return 'true'
   }
+
+  onMode(mode: string): string {
+    this.modeHandler(mode)
+    return 'true'
+  }
 }
 
 @ComponentV2
@@ -178,6 +185,10 @@ export struct RoomEnglishCard {
   @Local exploredIds: string[] = []
   @Local exploredWords: string[] = []
   @Local pageReady: boolean = false
+  // 视角：false = 上帝视角（默认），true = 走进去的第一人称。
+  // Web 是唯一的状态源，切换入口也在 Web 顶部卡片里；onMode 只把状态同步回原生
+  // （标题栏的提示语随之变化），两边不留第二份状态。
+  @Local walkMode: boolean = false
   @Local sceneFailed: boolean = false
   @Local speaking: boolean = false
   @Local hasCompleted: boolean = false
@@ -235,6 +246,11 @@ export struct RoomEnglishCard {
           return
         }
         this.noteSelected(id, word)
+      })
+    }
+    this.bridge.modeHandler = (mode: string): void => {
+      this.runOnUi((): void => {
+        this.walkMode = mode === 'walk'
       })
     }
     this.bridge.progressHandler = (idsJson: string): void => {
@@ -806,6 +822,12 @@ export struct RoomEnglishCard {
     if (this.lessonMode === 'summary' || this.lessonMode === 'answered') {
       return '本课完成'
     }
+    // 第一人称：告诉孩子手势怎么用，比「已收集 N 个」更急用
+    if (this.walkMode) {
+      return this.exploredCount > 0
+        ? `第一人称 · 已收集 ${this.exploredCount} / ${ROOM_OBJECT_TOTAL} 个单词`
+        : '第一人称 · 拖动环顾，按住向上箭头前进'
+    }
     return this.exploredCount > 0
       ? `已收集 ${this.exploredCount} / ${ROOM_OBJECT_TOTAL} 个单词`
       : '全屋、客餐厅、儿童房、主卧、阳台，点一点就知道它叫什么'
@@ -1091,7 +1113,7 @@ export struct RoomEnglishCard {
             .javaScriptProxy({
               object: this.bridge,
               name: 'RoomNativeBridge',
-              methodList: ['speak', 'stopSpeak', 'onReady', 'onSelect', 'onProgress'],
+              methodList: ['speak', 'stopSpeak', 'onReady', 'onSelect', 'onProgress', 'onMode'],
               controller: this.controller
             })
             .onPageEnd(() => {

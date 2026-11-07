@@ -127,7 +127,7 @@ MVVM 分层（`entry/src/main/ets/`）：
 | `map/MapCard` | `map_card` | 中国地图小课堂（讲解型：34 省可点 + 资料卡 + focus 高亮；点上海原地翻到 16 区地图，区级只讲不考；待答态横幅 → 全屏 sheet） |
 | `map/MapQuizCard` | `map_quiz` | 中国地图出题（3 mode：choice/locate/write；待答态横幅 → 全屏 sheet） |
 | `map/MapPuzzleCard` | `map_puzzle` | 中国地图拼图（3-8 省拖拽/点选拼回地图，棋盘按本局省份自动聚焦；拼对朗读省名/简称/省会，长按 600ms 提示；按错误次数授 1-3 星；待答态横幅 → 全屏 sheet） |
-| `room/RoomEnglishCard` | `room_english` | 全屋 3D 英语探索（讲解型：Web 容器加载 `rawfile/room3d/` 的 three.js 场景，客餐厅 + 厨房 11.8m × 6m / 儿童房 4.4m × 3.6m / 主卧 4.6m × 3.6m / 生活阳台 6.6m × 2.4m，共 76 件家具可点开单词卡；默认打开全屋户型，面板顶部「全屋 / 四间房」5 标签切换，360° 环绕 + 近侧墙自动隐藏；`RoomNativeBridge` 接原生 TTS，讲解型不授星） |
+| `room/RoomEnglishCard` | `room_english` | 全屋 3D 英语探索（讲解型：Web 容器加载 `rawfile/room3d/` 的 three.js 场景，客餐厅 + 厨房 11.8m × 6m / 儿童房 4.4m × 3.6m / 主卧 4.6m × 3.6m / 生活阳台 6.6m × 2.4m，共 76 件家具可点开单词卡；默认打开全屋户型，面板顶部「全屋 / 四间房」5 标签切换，360° 环绕 + 近侧墙自动隐藏；单间房可切「走进去」第一人称——拖动环顾 / 按住前进 / WASD / 看见多远分档标签 / 站定报方位；`RoomNativeBridge` 接原生 TTS 与 onMode，讲解型不授星） |
 | `city/CityEnglishCard` | `city_english` | 小词城 3D 英语探索（讲解型：Web 容器加载 `rawfile/city3d/` 的 three.js 场景，120m × 90m 低多边形城市——主街 + 商业街/学校/公园/医院四街区 + 河流/广场，50 个可点单词（地点 12 / 交通 10 / 街道 9 / 人物 8 / 自然 8 / 动物 3），公交车/汽车/自行车/行人循环 + 路口红绿灯；「全城 / 商业街 / 学校 / 公园 / 医院」5 分区镜头；`CityNativeBridge` 接原生 TTS（先中文后英文），讲解型不授星） |
 | `farm/FarmEnglishCard` | `farm_english` | 阳光农场 3D 英语探索（讲解型：Web 容器加载 `rawfile/farm3d/` 的 three.js 场景，140m × 110m 低多边形农场——环形土路串起农舍区、田地区、牧场区、果园池塘，50 个可点对象（地点 10 / 动物 14 / 农作物 10 / 农机 8 / 自然 5 / 人物 3），拖拉机/农民/小朋友/小狗沿路移动 + 风车转动 + 池塘波纹；「全农场 / 农舍区 / 田地区 / 牧场区 / 果园池塘」5 分区镜头；`FarmNativeBridge` 接原生 TTS（先中文后英文），讲解型不授星） |
 

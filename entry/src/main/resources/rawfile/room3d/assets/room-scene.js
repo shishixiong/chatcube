@@ -19,9 +19,23 @@
   const DEFAULT_ROOM = 'overview';
   const PHI_MIN = 0.38;
   const PHI_MAX = 1.22;
+  // 第一人称「走进去」：只在单间房里用，全屋视图保持上帝视角。
+  // 视线高度 1.25m（小朋友站姿；蹲下 0.8m 在 walk-camera.js 里），比轨道相机更自然的广角。
+  const MODES = { orbit: 'orbit', walk: 'walk' };
+  const WALK_FOV_LANDSCAPE = 68;
+  const WALK_FOV_PORTRAIT = 76;
+  // 方位提示要等脚步和转头都停下来：走两步就念一次，小朋友听不清也嫌吵
+  const WALK_SETTLE = 0.45;
 
   function wrapAngle(angle) {
     return Math.atan2(Math.sin(angle), Math.cos(angle));
+  }
+
+  // 焦点在输入控件里：按键属于控件自己（滑块调值、输入框打字），别抢
+  function isFormControl(node) {
+    if (!node || !node.tagName) return false;
+    const tag = node.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || node.isContentEditable === true;
   }
 
   function shortestAngle(delta) {
@@ -78,6 +92,9 @@
 
       this.activeRoom = DEFAULT_ROOM;
       this.activeArea = null;
+      this.mode = MODES.orbit;
+      this.walker = null;
+      this.walkSettle = 0;
       this.frame = frameOf(DEFAULT_ROOM);
       this.roomGroups = {};
       this.roomObjects = {};
@@ -120,7 +137,8 @@
       this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
       this.scene = new THREE.Scene();
-      this.camera = new THREE.PerspectiveCamera(38, 1, 0.1, 120);
+      // near 从 0.1 收到 0.05：走进去以后会贴着桌面、杯口看单词，0.1 会切掉近处
+      this.camera = new THREE.PerspectiveCamera(38, 1, 0.05, 120);
 
       this.addLights();
 
@@ -274,6 +292,8 @@
       this.onWheel = this.handleWheel.bind(this);
       this.onPointerLeave = this.handlePointerLeave.bind(this);
       this.onKeyDown = this.handleKeyDown.bind(this);
+      // 键盘监听挂在 document 上：画布一旦失焦时钟/词汇表里按 WASD 也要能走
+      this.onKeyUp = this.handleKeyUp.bind(this);
       this.onContextMenu = (event) => event.preventDefault();
 
       this.canvas.addEventListener('pointerdown', this.onPointerDown);
@@ -282,7 +302,9 @@
       this.canvas.addEventListener('pointercancel', this.onPointerCancel);
       this.canvas.addEventListener('pointerleave', this.onPointerLeave);
       this.canvas.addEventListener('wheel', this.onWheel, { passive: false });
-      this.canvas.addEventListener('keydown', this.onKeyDown);
+      // 键盘走路只听 document，不重复绑在画布上：同一次 keydown 会被画布冒泡到 document 触发两次
+      document.addEventListener('keydown', this.onKeyDown);
+      document.addEventListener('keyup', this.onKeyUp);
       this.canvas.addEventListener('contextmenu', this.onContextMenu);
 
       if ('ResizeObserver' in window) {
@@ -327,7 +349,9 @@
       this.renderer.setSize(width, height, false);
       const aspect = width / height;
       this.camera.aspect = aspect;
-      this.camera.fov = aspect < 0.92 ? 44 : 38;
+      this.camera.fov = this.mode === MODES.walk
+        ? (aspect < 0.8 ? WALK_FOV_PORTRAIT : WALK_FOV_LANDSCAPE)
+        : (aspect < 0.92 ? 44 : 38);
       this.camera.updateProjectionMatrix();
       if (this.autoFit) {
         this.desired.radius = this.fitRadius();
@@ -362,11 +386,15 @@
       const key = this.keyLight;
       if (!key) return;
       const b = this.frame.bounds;
-      const target = this.frame.target;
+      // 第一人称时阴影盒子跟着脚底走（人走不出单间），否则走到房间另一头会掉进阴影外
+      const walker = this.mode === MODES.walk ? this.walker : null;
+      const target = walker
+        ? { x: walker.walk.x, z: walker.walk.z }
+        : { x: this.frame.target.x, z: this.frame.target.z };
       key.position.set(target.x + 6.5, 0.8 + 8.7, target.z + 7.5);
       key.target.position.set(target.x, 0.8, target.z);
       key.target.updateMatrixWorld();
-      const half = Math.max(b.maxX - b.minX, b.maxZ - b.minZ) / 2 + 2;
+      const half = walker ? 6 : Math.max(b.maxX - b.minX, b.maxZ - b.minZ) / 2 + 2;
       key.shadow.camera.left = -half;
       key.shadow.camera.right = half;
       key.shadow.camera.top = half;
@@ -379,6 +407,20 @@
     // 每帧按世界中心 + 迟滞更新显隐
     updateWalls() {
       const cam = this.camera.position;
+      if (this.mode === MODES.walk) {
+        // 走进去以后相机在屋里，两面墙都不该藏：北墙是"边际"，west 是门所在的共享墙——
+        // 藏了会看到模型外侧的空洞，而门洞本来就在墙上开口，挡不住视线
+        Object.keys(this.roomGroups).forEach((roomId) => {
+          const state = this.wallHidden[roomId];
+          if (!state) return;
+          state.north = false;
+          state.west = false;
+          this.roomWalls[roomId].north.forEach((mesh) => { mesh.visible = true; });
+          this.roomWalls[roomId].west.forEach((mesh) => { mesh.visible = true; });
+          this.wallObjects[roomId].forEach((entry) => { entry.group.visible = true; });
+        });
+        return;
+      }
       Object.keys(this.roomGroups).forEach((roomId) => {
         const b = frameOf(roomId).bounds;
         const state = this.wallHidden[roomId];
@@ -430,8 +472,11 @@
     }
 
     // 换房间：只切可见性 + 重新取景，几何早就建好了，切换是瞬时的。
-    setRoom(roomId) {
+    // mode 可选：不传就沿用当前模式。全屋视图没有「走进去」——四间房之间要走的是外面的地，
+    // 原型里没建模，所以 overview 强制轨道相机。
+    setRoom(roomId, mode) {
       const next = roomId === 'overview' || this.roomGroups[roomId] ? roomId : 'overview';
+      if (mode === MODES.walk && next !== 'overview') this.setMode(MODES.walk);
       if (next === this.activeRoom) {
         this.resetView();
         return this.activeRoom;
@@ -455,11 +500,135 @@
       this.selected = null;
       this.updateWalls();
       this.hovered = null;
+      if (this.mode === MODES.walk) {
+        if (next === 'overview') {
+          this.setMode(MODES.orbit);
+        } else {
+          this.placeWalker(next);
+          this.updateShadowFrustum();
+        }
+      }
       return this.activeRoom;
     }
 
     getRoomObjects(roomId) {
       return this.roomObjects[roomId || this.activeRoom] || [];
+    }
+
+    // ---------- 第一人称「走进去」 ----------
+
+    // 只在单间房里可用：全屋视图没有房间之间的地面，走进去只会看到一片空白。
+    canWalk() {
+      return this.activeRoom !== 'overview';
+    }
+
+    setMode(mode) {
+      const next = mode === MODES.walk && this.canWalk() ? MODES.walk : MODES.orbit;
+      if (next === this.mode) {
+        if (next === MODES.walk && this.walker) this.placeWalker(this.activeRoom);
+        this.options.onModeChange?.(this.mode);
+        return this.mode;
+      }
+      if (next === MODES.walk) {
+        if (!window.WordRoomWalk) return this.mode;
+        if (!this.walker) {
+          this.walker = new window.WordRoomWalk.WalkCamera(this, {
+            spawns: (window.WordRoomLayout && window.WordRoomLayout.spawns) || {}
+          });
+          // 跟随系统的「减少动态效果」：不做走路晃动，环顾也不缓动
+          this.walker.reducedMotion = this.reducedMotion;
+        }
+        this.mode = MODES.walk;
+        this.placeWalker(this.activeRoom);
+        // 进门这一下要瞬移到位，不能从上一间房的机位滑过来；走起来再恢复正常平滑
+        this.walker.snap();
+        this.walkSettle = WALK_SETTLE;
+        this.canvas.focus?.({ preventScroll: true });
+      } else {
+        this.mode = MODES.orbit;
+        if (this.walker) this.walker.reducedMotion = this.reducedMotion;
+        // 退出时把轨道相机的取景复位到当前房间，避免停在上一间房的机位上
+        this.resetView();
+        this.snapCamera();
+      }
+      this.resize();
+      this.updateShadowFrustum();
+      this.clearOutline();
+      this.hovered = null;
+      this.canvas.classList.remove('is-dragging');
+      this.pointers.clear();
+      this.walkGesture = null;
+      // 切模式时把按住/键盘的走路状态清干净：否则「按着 W 点回到全景」再进来会自己走
+      if (this.walker) this.walker.stopInput();
+      this.options.onModeChange?.(this.mode);
+      return this.mode;
+    }
+
+    // 站在哪：WALK_SPAWNS 里存的是房间局部坐标，加上 ROOM_OFFSETS 换成世界坐标。
+    // 碰撞盒一次取「所有房间」的：门洞在共享墙上，只取当前房间会漏掉挡门的家具。
+    placeWalker(roomId) {
+      if (!this.walker) return null;
+      const spawns = (window.WordRoomLayout && window.WordRoomLayout.spawns) || {};
+      const offsets = (window.WordRoomModels && window.WordRoomModels.offsets) || {};
+      const local = spawns[roomId];
+      let point = local ? { x: local.x, z: local.z, yaw: local.yaw, room: roomId } : null;
+      const off = offsets[roomId];
+      if (point && off) {
+        point.x += off.x;
+        point.z += off.z;
+      }
+      const all = this.roomHitboxes.overview || [];
+      // 碰撞盒只在第一次进房间时算（遍历所有物品的包围盒不便宜），之后复用
+      if (!this.walker.obstaclesReady) this.walker.setColliders(all.length ? all : this.hitboxes);
+      this.walker.place(point);
+      return this.walker;
+    }
+
+    // 回到出生点：只挪脚底，模式和朝向都重来一次
+    setWalkSpawn(roomId) {
+      if (!this.walker) return null;
+      this.placeWalker(roomId);
+      this.walker.snap();
+      this.updateShadowFrustum();
+      return this.getWalkState();
+    }
+
+    getWalkState() {
+      if (!this.walker) return null;
+      return {
+        eye: this.walker.eyeMode,
+        height: this.walker.eyeHeight(),
+        range: this.walker.targetRange,
+        x: this.walker.walk.x,
+        z: this.walker.walk.z
+      };
+    }
+
+    setWalkEye(mode) {
+      if (!this.walker) return 'stand';
+      return this.walker.setEyeMode(mode);
+    }
+
+    setWalkRange(meters) {
+      if (!this.walker) return null;
+      return this.walker.setRange(meters);
+    }
+
+    // 词汇表弹层打开时停掉键盘走路：document 级的 WASD 不该在当前被遮住的场景里生效，
+    // 也避免「按住 W 打开词汇表」后脚一直在走。松开状态一并清掉，关掉弹层不会自己动。
+    setInputBlocked(blocked) {
+      this.inputBlocked = Boolean(blocked);
+      this.pointers.clear();
+      this.drag = null;
+      this.pinch = null;
+      this.walkGesture = null;
+      this.releaseWalkInput();
+    }
+
+    // 松开所有走路输入（键盘 / 按住前进 / 正在拖的那根手指）
+    releaseWalkInput() {
+      this.walkGesture = null;
+      if (this.walker) this.walker.stopInput();
     }
 
     setPointer(event) {
@@ -498,6 +667,11 @@
       this.spinPhi = 0;
       this.canvas.classList.add('is-dragging');
 
+      if (this.mode === MODES.walk) {
+        this.handleWalkDown(event);
+        return;
+      }
+
       if (this.pointers.size === 1) {
         this.drag = {
           id: event.pointerId,
@@ -530,6 +704,11 @@
         const pointer = this.pointers.get(event.pointerId);
         pointer.x = event.clientX;
         pointer.y = event.clientY;
+      }
+
+      if (this.mode === MODES.walk) {
+        this.handleWalkMove(event);
+        return;
       }
 
       if (this.pointers.size === 2) {
@@ -589,6 +768,10 @@
     }
 
     handlePointerUp(event) {
+      if (this.mode === MODES.walk) {
+        this.handleWalkUp(event);
+        return;
+      }
       const pointer = this.pointers.get(event.pointerId);
       const wasDragging = this.drag && this.drag.id === event.pointerId;
       const canTap =
@@ -640,6 +823,10 @@
     }
 
     handlePointerCancel(event) {
+      if (this.mode === MODES.walk && this.walkGesture) {
+        this.endWalkGesture(event);
+        return;
+      }
       this.pointers.delete(event.pointerId);
       this.drag = null;
       this.pinch = null;
@@ -657,6 +844,13 @@
 
     handleWheel(event) {
       event.preventDefault();
+      // 走进去以后滚轮/双指调节「看见多远」，不能改相机位置
+      if (this.mode === MODES.walk && this.walker) {
+        const next = this.walker.setRange(this.walker.targetRange - Math.sign(event.deltaY) * 0.4);
+        this.options.onWalkRange?.(next);
+        this.options.onFrame?.(true);
+        return;
+      }
       const direction = Math.sign(event.deltaY);
       if (!direction) return;
       const zoom = this.zoomRange();
@@ -664,7 +858,127 @@
       this.autoFit = false;
     }
 
+    // 第一人称手势：单指拖动 = 环顾，双指张合 = 调「看见多远」，轻点 = 选中物品（和轨道模式一样）
+    handleWalkDown(event) {
+      if (this.pointers.size > 2) return;
+      if (this.pointers.size === 1) {
+        this.walkGesture = {
+          id: event.pointerId,
+          lastX: event.clientX,
+          lastY: event.clientY,
+          startTime: performance.now(),
+          moved: 0
+        };
+        this.pinch = null;
+      } else if (this.pointers.size === 2) {
+        const points = Array.from(this.pointers.values());
+        this.pinch = {
+          distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y),
+          range: this.walker ? this.walker.targetRange : 5
+        };
+        this.walkGesture = null;
+        this.gestureMoved = true;
+        this.setHovered(null);
+      }
+    }
+
+    handleWalkMove(event) {
+      if (!this.walker) return;
+      if (this.pointers.size === 2) {
+        const points = Array.from(this.pointers.values());
+        const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+        if (this.pinch && this.pinch.distance > 10) {
+          // 张开 = 看得更远，捏合 = 收近一点
+          const next = this.walker.setRange(this.pinch.range * (distance / Math.max(10, this.pinch.distance)));
+          this.options.onWalkRange?.(next);
+        }
+        return;
+      }
+      const gesture = this.walkGesture;
+      if (!gesture || gesture.id !== event.pointerId) {
+        if (event.pointerType === 'mouse' || event.pointerType === 'pen') {
+          this.setHovered(this.pickAt(event.clientX, event.clientY), event.clientX, event.clientY);
+        }
+        return;
+      }
+      const dx = event.clientX - gesture.lastX;
+      const dy = event.clientY - gesture.lastY;
+      gesture.lastX = event.clientX;
+      gesture.lastY = event.clientY;
+      gesture.moved += Math.abs(dx) + Math.abs(dy);
+      if (gesture.moved > 4) this.gestureMoved = true;
+      this.walker.look(dx, dy);
+      this.setHovered(null);
+    }
+
+    handleWalkUp(event) {
+      const gesture = this.walkGesture;
+      const pointer = this.pointers.get(event.pointerId);
+      if (pointer) {
+        this.canvas.releasePointerCapture?.(event.pointerId);
+        this.pointers.delete(event.pointerId);
+      }
+      if (gesture && gesture.id === event.pointerId) {
+        const canTap = gesture.moved < 7 && performance.now() - gesture.startTime < 800 && !this.gestureMoved;
+        if (canTap) this.options.onTap?.(this.pickAt(event.clientX, event.clientY) || null);
+        this.walkGesture = null;
+      }
+      if (this.pointers.size === 1) {
+        // 双指松开剩下一根手指：接着当拖动用，不触发点击
+        const remaining = Array.from(this.pointers.entries())[0];
+        this.walkGesture = {
+          id: remaining[0],
+          lastX: remaining[1].x,
+          lastY: remaining[1].y,
+          startTime: performance.now(),
+          moved: 99
+        };
+        this.pinch = null;
+      } else if (this.pointers.size === 0) {
+        this.pinch = null;
+        this.canvas.classList.remove('is-dragging');
+      }
+    }
+
+    endWalkGesture(event) {
+      this.pointers.delete(event.pointerId);
+      this.walkGesture = null;
+      this.pinch = null;
+      this.canvas.classList.remove('is-dragging');
+    }
+
+    handleKeyUp(event) {
+      if (this.inputBlocked) return;
+      if (this.mode !== MODES.walk || !this.walker) return;
+      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+      if ('wsad'.indexOf(key) < 0) return;
+      event.preventDefault();
+      this.walker.keyRelease(key);
+    }
+
     handleKeyDown(event) {
+      // 词汇表打开时键盘交给弹层（Esc 关窗、Tab 走焦点），WASD 不能带着人走
+      if (this.inputBlocked) return;
+      // 「看见多远」滑块用方向键调值时，方向键是滑块的，不是相机的
+      if (isFormControl(event.target)) return;
+      // 第一人称：WASD / 方向键走路，不用按住按钮（键盘孩子也能玩）
+      if (this.mode === MODES.walk && this.walker) {
+        const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+        const dirs = { w: [0, 1], s: [0, -1], a: [-1, 0], d: [1, 0] };
+        if (dirs[key]) {
+          this.walker.keyMove(dirs[key][0], dirs[key][1]);
+          event.preventDefault();
+          return;
+        }
+        if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'ArrowLeft' || key === 'ArrowRight') {
+          if (key === 'ArrowLeft') this.walker.look(-60, 0);
+          else if (key === 'ArrowRight') this.walker.look(60, 0);
+          else if (key === 'ArrowUp') this.walker.look(0, -60);
+          else this.walker.look(0, 60);
+          event.preventDefault();
+          return;
+        }
+      }
       const step = 0.07;
       let handled = true;
       if (event.key === 'ArrowLeft') this.desired.theta = wrapAngle(this.desired.theta - step);
@@ -886,6 +1200,13 @@
           x: (projected.x * 0.5 + 0.5) * width,
           y: (-projected.y * 0.5 + 0.5) * height,
           depth: projected.z,
+          // 走进去时带上水平距离：标签按「看见多远」分档，轨道模式下为 null（保持原样）
+          distance: this.walker ? this.walker.distanceTo(world) : null,
+          // 方位提示要知道物品比眼睛高还是低（空调、吊灯 vs 地毯）
+          lift: this.walker ? world.y - this.walker.walk.y : null,
+          // 方位必须用世界坐标算：屏幕投影会把身后的东西翻到画面另一侧（world 是 RoomScene 里
+          // 预算好的 labelAnchor，不要再 clone，每帧都取会白造 76 个向量）
+          world: this.walker ? world : null,
           visible
         });
       });
@@ -897,6 +1218,11 @@
       const now = performance.now();
       const dt = Math.min(0.05, Math.max(0, (now - this.lastFrame) / 1000));
       this.lastFrame = now;
+
+      if (this.mode === MODES.walk && this.walker) {
+        this.animateWalk(dt);
+        return;
+      }
 
       if (!this.pointers.size && (this.spinTheta || this.spinPhi) && !this.reducedMotion) {
         this.desired.theta = wrapAngle(this.desired.theta + this.spinTheta * dt);
@@ -949,6 +1275,36 @@
       this.options.onFrame?.(moving);
     }
 
+    // 第一人称每帧：相机姿态 → 阴影盒子 → 墙 → 渲染；标签由 APP 层按距离摆放
+    animateWalk(dt) {
+      const moved = this.walker.update(dt);
+      const moving = moved > 1e-4 || this.walker.isMoving();
+      if (moving) this.updateShadowFrustum();
+      // 从「在动」变成「停稳」的这一刻通知一次：方位提示只在这时念，不在每一帧念
+      if (moving) {
+        this.walkSettle = WALK_SETTLE;
+      } else if (this.walkSettle > 0) {
+        this.walkSettle -= dt;
+        if (this.walkSettle <= 0) {
+          this.walkSettle = 0;
+          this.options.onWalkSettled?.();
+        }
+      }
+      if (this.outlineRing) {
+        if (this.reducedMotion) {
+          this.outlineRing.material.opacity = 0.68;
+          this.outlineRing.scale.set(1, 1, 1);
+        } else {
+          const time = performance.now() * 0.001;
+          this.outlineRing.material.opacity = 0.58 + Math.sin(time * 2.6) * 0.14;
+          const scale = 1 + Math.sin(time * 2.6) * 0.003;
+          this.outlineRing.scale.set(scale, scale, scale);
+        }
+      }
+      this.renderer.render(this.scene, this.camera);
+      this.options.onFrame?.(moving);
+    }
+
     destroy() {
       this.destroyed = true;
       this.renderer.setAnimationLoop(null);
@@ -961,7 +1317,8 @@
       this.canvas.removeEventListener('pointercancel', this.onPointerCancel);
       this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
       this.canvas.removeEventListener('wheel', this.onWheel);
-      this.canvas.removeEventListener('keydown', this.onKeyDown);
+      document.removeEventListener('keydown', this.onKeyDown);
+      document.removeEventListener('keyup', this.onKeyUp);
       this.canvas.removeEventListener('contextmenu', this.onContextMenu);
       this.canvas.classList.remove('is-dragging', 'is-hovering');
       this.clearOutline();

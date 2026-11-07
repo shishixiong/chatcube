@@ -40,5 +40,20 @@
     master: { z0: -0.46, z1: 0.34, height: 2.05, open: 1.42 }
   };
 
-  global.WordRoomLayout = { areas: MAIN_AREAS, doors: ROOM_DOORS };
+  // 第一人称的出生点（世界坐标，朝向用弧度：0 朝 +z，+PI/2 朝 +x）。
+  // 都选在房间中央的空地上、离开家具，进门第一眼就能看到最有代表性的几件东西。
+  //  - main：客餐厅中部过道，朝东看到餐桌和开放厨房，转身就是客厅
+  //  - child：儿童房中央，面朝书桌和书柜（门在身后）
+  //  - master：主卧床尾地毯上，面朝床（床尾凳在正前方，绕过去就到床边）
+  //  - balcony（x/z 为阳台房间局部坐标，room 决定落点取景框）：阳台中间，面朝洗衣机那一头
+  var WALK_SPAWNS = {
+    main: { x: 4.3, z: 1.15, yaw: 1.9, room: 'main' },
+    child: { x: 0, z: 0.55, yaw: -1.35, room: 'child' },
+    // 世界坐标 (10.31, 4.10)：床尾凳在 z 3.23–3.63，出生点留在凳子外侧 0.4m，
+    // 原来写 z 0.6（世界 3.41）正好落在凳子盒子里，一进门就被推进床里
+    master: { x: 0.2, z: 1.29, yaw: 3.14, room: 'master' },
+    balcony: { x: 0.2, z: 0.1, yaw: 1.6, room: 'balcony' }
+  };
+
+  global.WordRoomLayout = { areas: MAIN_AREAS, doors: ROOM_DOORS, spawns: WALK_SPAWNS };
 })(typeof window !== 'undefined' ? window : globalThis);
