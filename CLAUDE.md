@@ -123,6 +123,7 @@ MVVM 分层（`entry/src/main/ets/`）：
 | `PinyinQuizCard` | `pinyin_quiz` | 拼音认读（看字选拼音，内置字表） |
 | `MatchingPairsCard` | `matching_pairs` | 连一连观察配对 |
 | `MemoryMatchCard` | `memory_match` | 记忆翻牌（宝石配对，kids_games 专属） |
+| `MusicEarCard` | `music_ear` | 音符小耳朵（听音辨高低 / 复述 / 猜歌，原生 PCM 合音，kids_games 专属） |
 | `AskUserCard` | `ask_user` | AI 反问收集偏好 |
 | `map/MapCard` | `map_card` | 中国地图小课堂（讲解型：34 省可点 + 资料卡 + focus 高亮；点上海原地翻到 16 区地图，区级只讲不考；待答态横幅 → 全屏 sheet） |
 | `map/MapQuizCard` | `map_quiz` | 中国地图出题（3 mode：choice/locate/write；待答态横幅 → 全屏 sheet） |

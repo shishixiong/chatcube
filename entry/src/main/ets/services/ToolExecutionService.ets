@@ -14,6 +14,7 @@ import { validateMapCardArgs, validateMapQuizArgs } from '../utils/MapToolValida
 import { validateMapPuzzleArgs } from '../utils/MapPuzzleValidation'
 import { validateRoomEnglishArgs } from '../utils/RoomEnglishValidation'
 import { validateCityEnglishArgs } from '../utils/CityEnglishValidation'
+import { validateMusicEarArgs } from '../utils/MusicEarValidation'
 import { validateFarmEnglishArgs } from '../utils/FarmEnglishValidation'
 import { getToolRegistry, RegisteredTool, ToolRegistry } from './ToolRegistry'
 import {
@@ -35,6 +36,7 @@ import {
   MATCHING_PAIRS_TOOL_ID,
   MEMORY_MATCH_TOOL_ID,
   SNAKE_GAME_TOOL_ID,
+  MUSIC_EAR_TOOL_ID,
   MATH_TEACH_TOOL_ID,
   HANZI_CARD_TOOL_ID,
   PINYIN_CARD_TOOL_ID,
@@ -57,6 +59,7 @@ import {
   isMatchingPairsFunctionName,
   isMemoryMatchFunctionName,
   isSnakeGameFunctionName,
+  isMusicEarFunctionName,
   isHanziCardFunctionName,
   isPinyinCardFunctionName,
   isPictureTalkFunctionName,
@@ -3070,6 +3073,96 @@ export class ToolExecutionService {
     )
   }
 
+  // music_ear 特殊路径: 挂起等待 MusicEarCard 回答。
+  // 题目由卡片内部生成（镜像 snake_game 模式, 无 handler 注入）;
+  // handler 只做参数预校验 + pending 等待 + 星星记录。
+  private async handleMusicEar(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = MUSIC_EAR_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '音符小耳朵'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    const validation = validateMusicEarArgs(toolCall.arguments)
+    if (!validation.ok) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: 'validation_failed', message: validation.error, should_retry: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    } else {
+      toolCall.arguments = JSON.stringify({
+        drill: validation.drill,
+        difficulty: validation.difficulty
+      })
+    }
+
+    toolCall.approvalState = 'pending'
+    this.recordLedgerServed('music_ear', toolCall, context)
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = MUSIC_EAR_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `music_ear answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `music_ear 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'music_ear cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未完成音符小耳朵' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `music_ear answered: ${toolCall.id}`)
+    this.recordStarEvent('music_ear', toolCall, context, answerJson)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
   // snake_game 特殊路径: 挂起等待 SnakeCard 回答。
   // 棋局由卡片内部运行（镜像 number_puzzle 模式, 无 handler 注入）;
   // handler 只做难度规范化 + pending 等待 + 星星记录。
@@ -3547,6 +3640,12 @@ export class ToolExecutionService {
     // 贪吃蛇互动工具, 由 SnakeCard 收集小朋友的对局结果。
     if (isSnakeGameFunctionName(normalizedFunctionName)) {
       return await this.handleSnakeGame(toolCall, context)
+    }
+
+    // === music_ear 特殊路径 ===
+    // 音符小耳朵听觉训练, 由 MusicEarCard 收集最好一轮的练习结果。
+    if (isMusicEarFunctionName(normalizedFunctionName)) {
+      return await this.handleMusicEar(toolCall, context)
     }
 
     // === hanzi_card 特殊路径 ===

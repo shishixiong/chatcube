@@ -7,7 +7,7 @@
  * - 读取: ChatPage 标题栏菜单项 / TodayStarDetailSheet
  */
 
-export type StarActivityType = 'math_quiz' | 'english_quiz' | 'number_puzzle' | 'handwriting_practice' | 'categorization' | 'maze' | 'sudoku' | 'picture_vocab' | 'listening_quiz' | 'pinyin_quiz' | 'matching_pairs' | 'memory_match' | 'snake_game' | 'chat_correct' | 'hanzi_card' | 'pinyin_card' | 'picture_talk' | 'chinese_quiz' | 'map_card' | 'map_quiz' | 'map_puzzle' | 'vertical_math'
+export type StarActivityType = 'math_quiz' | 'english_quiz' | 'number_puzzle' | 'handwriting_practice' | 'categorization' | 'maze' | 'sudoku' | 'picture_vocab' | 'listening_quiz' | 'pinyin_quiz' | 'matching_pairs' | 'memory_match' | 'snake_game' | 'music_ear' | 'chat_correct' | 'hanzi_card' | 'pinyin_card' | 'picture_talk' | 'chinese_quiz' | 'map_card' | 'map_quiz' | 'map_puzzle' | 'vertical_math'
 
 export interface StarEventInsert {
   createdAt: number
@@ -49,6 +49,7 @@ export interface TodayStarSummaryByType {
   matching_pairs: StarTypeBucket
   memory_match: StarTypeBucket
   snake_game: StarTypeBucket
+  music_ear: StarTypeBucket
   chat_correct: StarTypeBucket
   hanzi_card: StarTypeBucket
   pinyin_card: StarTypeBucket
@@ -94,6 +95,7 @@ export function createEmptyTodayStarSummary(): TodayStarSummary {
     matching_pairs: createEmptyBucket(),
     memory_match: createEmptyBucket(),
     snake_game: createEmptyBucket(),
+    music_ear: createEmptyBucket(),
     chat_correct: createEmptyBucket(),
     hanzi_card: createEmptyBucket(),
     pinyin_card: createEmptyBucket(),
@@ -129,6 +131,7 @@ export interface StarActivityMetaMap {
   matching_pairs: StarActivityMeta
   memory_match: StarActivityMeta
   snake_game: StarActivityMeta
+  music_ear: StarActivityMeta
   chat_correct: StarActivityMeta
   hanzi_card: StarActivityMeta
   pinyin_card: StarActivityMeta
@@ -224,6 +227,13 @@ const META_SNAKE_GAME: StarActivityMeta = {
   grantedHint: '贪吃蛇完成',
   unit: '局'
 }
+const META_MUSIC: StarActivityMeta = {
+  emoji: '🎵',
+  shortLabel: '音乐',
+  longLabel: '音符小耳朵',
+  grantedHint: '音符小耳朵完成',
+  unit: '局'
+}
 const META_CHAT_CORRECT: StarActivityMeta = {
   emoji: '💬',
   shortLabel: '聊天',
@@ -309,6 +319,7 @@ const metaRecord: StarActivityMetaMap = {
   matching_pairs: META_MATCHING,
   memory_match: META_MEMORY_MATCH,
   snake_game: META_SNAKE_GAME,
+  music_ear: META_MUSIC,
   chat_correct: META_CHAT_CORRECT,
   hanzi_card: META_HANZI_CARD,
   pinyin_card: META_PINYIN_CARD,
@@ -321,7 +332,7 @@ const metaRecord: StarActivityMetaMap = {
 }
 export const STAR_ACTIVITY_META: StarActivityMetaMap = metaRecord
 
-const activityTypes: StarActivityType[] = ['math_quiz', 'english_quiz', 'number_puzzle', 'handwriting_practice', 'categorization', 'maze', 'sudoku', 'picture_vocab', 'listening_quiz', 'pinyin_quiz', 'matching_pairs', 'memory_match', 'snake_game', 'chat_correct', 'hanzi_card', 'pinyin_card', 'picture_talk', 'chinese_quiz', 'map_card', 'map_quiz', 'map_puzzle', 'vertical_math']
+const activityTypes: StarActivityType[] = ['math_quiz', 'english_quiz', 'number_puzzle', 'handwriting_practice', 'categorization', 'maze', 'sudoku', 'picture_vocab', 'listening_quiz', 'pinyin_quiz', 'matching_pairs', 'memory_match', 'snake_game', 'music_ear', 'chat_correct', 'hanzi_card', 'pinyin_card', 'picture_talk', 'chinese_quiz', 'map_card', 'map_quiz', 'map_puzzle', 'vertical_math']
 export const STAR_ACTIVITY_TYPES: StarActivityType[] = activityTypes
 
 export function getBucketFromSummary(summary: TodayStarSummary, type: StarActivityType): StarTypeBucket {
@@ -343,6 +354,9 @@ export function getBucketFromSummary(summary: TodayStarSummary, type: StarActivi
   }
   if (type === 'sudoku') {
     return byType.sudoku
+  }
+  if (type === 'music_ear') {
+    return byType.music_ear
   }
   if (type === 'chat_correct') {
     return byType.chat_correct
@@ -410,6 +424,9 @@ export function getActivityMeta(type: StarActivityType): StarActivityMeta {
   }
   if (type === 'sudoku') {
     return META_SUDOKU
+  }
+  if (type === 'music_ear') {
+    return META_MUSIC
   }
   if (type === 'chat_correct') {
     return META_CHAT_CORRECT
@@ -481,6 +498,9 @@ export function getActivitySymbol(type: StarActivityType): Resource {
   }
   if (type === 'sudoku') {
     return $r('sys.symbol.dot_grid_2x2')
+  }
+  if (type === 'music_ear') {
+    return $r('sys.symbol.speaker_wave_2')
   }
   if (type === 'chat_correct') {
     return $r('sys.symbol.message')

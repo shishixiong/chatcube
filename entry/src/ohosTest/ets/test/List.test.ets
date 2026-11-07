@@ -32,6 +32,10 @@ import giftModelsTest from './utils/GiftModels.test';
 import redeemCodeUtilsTest from './utils/RedeemCodeUtils.test';
 import englishQuizValidationTest from './utils/EnglishQuizValidation.test';
 import englishSkillDimensionsTest from './utils/EnglishSkillDimensions.test';
+import musicEarLogicTest from './utils/MusicEarLogic.test';
+import musicToneSynthTest from './utils/MusicToneSynth.test';
+import musicVoiceMixerTest from './utils/MusicVoiceMixer.test';
+import musicEarValidationTest from './utils/MusicEarValidation.test';
 
 export default function testsuite() {
   abilityTest();
@@ -68,4 +72,8 @@ export default function testsuite() {
   redeemCodeUtilsTest();
   englishQuizValidationTest();
   englishSkillDimensionsTest();
+  musicEarLogicTest();
+  musicToneSynthTest();
+  musicVoiceMixerTest();
+  musicEarValidationTest();
 }

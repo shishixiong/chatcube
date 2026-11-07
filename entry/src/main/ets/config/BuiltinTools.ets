@@ -40,6 +40,7 @@ import {
   MATCHING_PAIRS_TOOL_ID,
   MEMORY_MATCH_TOOL_ID,
   SNAKE_GAME_TOOL_ID,
+  MUSIC_EAR_TOOL_ID,
   GRANT_STAR_TOOL_ID,
   HANZI_CARD_TOOL_ID,
   PINYIN_CARD_TOOL_ID,
@@ -3103,6 +3104,81 @@ function createSnakeGameToolConfig(): ToolConfig {
 }
 
 
+// ===== music_ear 工具 =====
+// 音符小耳朵（听觉训练）：自由敲琴热身 + 三种听音练习（听高低 / 复述旋律 / 猜儿歌）。
+// 交互由前端 MusicEarCard 组件处理, 后端由 ToolExecutionService.handleMusicEar 拦截。
+
+interface MusicEarArgs {
+  drill: string
+  difficulty: number
+}
+
+class MusicEarExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // music_ear 的交互由前端 MusicEarCard 组件处理。
+    // 后端由 ToolExecutionService.handleMusicEar 拦截处理。
+    // 如果工具被直接调用 (没有前端交互), 返回提示信息。
+    try {
+      const params = JSON.parse(_args) as MusicEarArgs
+      return JSON.stringify({
+        drill: params.drill ?? 'high_low',
+        difficulty: params.difficulty ?? 1,
+        answered: false,
+        hint: '音符小耳朵已准备好,请小朋友先在自由敲琴里按一按,再开始听音练习。'
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`music_ear error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createMusicEarToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "drill": {
+        "type": "string",
+        "description": "练习类型:high_low = 听两个音判断谁更高(3 级会出现「一样高」);echo = 听 3-5 个音按顺序弹出来;guess_song = 听一小段旋律猜是哪首儿歌。",
+        "enum": ["high_low", "echo", "guess_song"]
+      },
+      "difficulty": {
+        "type": "integer",
+        "description": "难度:1 = 5 岁(高音程 / 3 音复述 / 3 选 1),2 = 6 岁(2 度音程 / 4 音复述 / 4 选 1),3 = 7 岁(相邻音与同音 / 5 音复述 / 5 选 1)。按 child_profile 的 observation level 选择,初次从 1 开始。",
+        "enum": [1, 2, 3]
+      }
+    },
+    "required": ["drill", "difficulty"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    MUSIC_EAR_TOOL_ID,
+    'Present an ear-training music game (音符小耳朵) to the child as an interactive card. The card opens on a free-play piano row (six fruit-colored keys) so the child can warm up and learn each key\'s sound. Then the child plays ONE drill of your choosing: high_low = hear two notes and say which is higher (level 3 sometimes plays the SAME note twice); echo = hear 3-5 notes and play them back in order on the keys; guess_song = hear the opening of a nursery rhyme (小星星 / 两只老虎 / 欢乐颂 / 小羊羔 / 划小船 / 小蜜蜂) and pick which song it is. A round is 5 questions; wrong answers get one retry. The child can replay locally without submitting; only 「回消息」 or closing the card reports the best round. Result fields: drill, difficulty, total, correct, first_try_correct, completed, stars (1-3), songs, rounds_played. Pick difficulty 1-3 by the child\'s observation level from child_profile. After completion, call child_profile update to record observation based on performance.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createMusicEarToolConfig(): ToolConfig {
+  return new ToolConfig(
+    MUSIC_EAR_TOOL_ID,
+    '音符小耳朵',
+    '听音辨高低、复述旋律、猜儿歌,练耳朵的音乐小游戏。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    MUSIC_EAR_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
 // ===== hanzi_card 工具 =====
 // 汉字小课堂（讲解型）：按六步识字法讲一个汉字——认字→正音→明义→观形（笔顺动画）→组词→练写。
 // character 必须在 StrokeOrderData 笔顺字典内（保证米字格笔顺动画可播放）。
@@ -4441,6 +4517,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(MUSIC_EAR_TOOL_ID)) {
+    const musicEarTool = new RegisteredTool(
+      MUSIC_EAR_TOOL_ID,
+      createMusicEarToolConfig(),
+      createMusicEarToolDefinition(),
+      new MusicEarExecutor()
+    )
+    registry.registerTool(musicEarTool)
+    registeredNow += 1
+  }
+
   if (!registry.isToolRegistered(HANZI_CARD_TOOL_ID)) {
     const hanziCardTool = new RegisteredTool(
       HANZI_CARD_TOOL_ID,
@@ -4559,5 +4646,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID, MAP_CARD_TOOL_ID, MAP_QUIZ_TOOL_ID, MAP_PUZZLE_TOOL_ID, ROOM_ENGLISH_TOOL_ID, CITY_ENGLISH_TOOL_ID, FARM_ENGLISH_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, MUSIC_EAR_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID, MAP_CARD_TOOL_ID, MAP_QUIZ_TOOL_ID, MAP_PUZZLE_TOOL_ID, ROOM_ENGLISH_TOOL_ID, CITY_ENGLISH_TOOL_ID, FARM_ENGLISH_TOOL_ID]
 }

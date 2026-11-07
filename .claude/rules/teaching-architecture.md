@@ -52,7 +52,7 @@
 | `kids_math` | 小星数学老师 | 数 | #4E8FE0 | ask_user, child_profile, get_time_info, grant_star, math_verify, math_quiz, vertical_math, math_teach, matching_pairs | 1 |
 | `kids_english` | 小星英语老师 | 英 | #35A98A | ask_user, child_profile, get_time_info, grant_star, english_quiz, picture_vocab, listening_quiz, room_english, city_english, farm_english | 2 |
 | `kids_chinese` | 小星语文老师 | 语 | #E2603C | ask_user, child_profile, get_time_info, grant_star, pinyin_quiz, handwriting_practice, hanzi_card, pinyin_card, picture_talk, chinese_quiz, map_card, map_quiz, map_puzzle | 3 |
-| `kids_games` | 小星游戏老师 | 玩 | #8B72E0 | ask_user, child_profile, get_time_info, grant_star, number_puzzle, maze, sudoku, matching_pairs, memory_match, categorization, snake_game | 4 |
+| `kids_games` | 小星游戏老师 | 玩 | #8B72E0 | ask_user, child_profile, get_time_info, grant_star, number_puzzle, maze, sudoku, matching_pairs, memory_match, categorization, snake_game, music_ear | 4 |
 
 - 定义：`models/AssistantModels.ets` 的 `KIDS_SUBJECT_SPECS`（行 374-411）+ `createKidsSubjectAssistants()`（行 439）。系统提示词与小星老师同源（共用 `SharedPromptFragments.buildBasePrompt`），按学科裁剪；每科提示词约束 `child_profile(action:"update")` 只更新本学科维度。
 - **不含** `image_generation` / `music_generation`（学科助手不出图不出乐）。
@@ -116,7 +116,7 @@
 
 ## 4. 教学工具生态
 
-小星老师 **锁定 30 个工具**（§2 `DEFAULT_ASSISTANT_LOCKED_TOOL_IDS`；2026-10-22 起 `snake_game` 从 kids_games 专属扩入默认助手；2026-11-01 起 `city_english` 扩入默认 + kids_english；2026-11-06 起 `farm_english` 扩入默认 + kids_english），其中 24 个有 UI 互动卡片（含 `ask_user`，已并入锁定白名单），3 个纯后端（`child_profile`、`math_verify`、`grant_star`），2 个非互动生成类（`image_generation`、`music_generation`），外加 `get_time_info`。4 个学科助手各锁定其中一个子集（见 §2.1，均不含 image_generation / music_generation）；唯一例外是 kids_math 额外锁定小星老师集合之外的 `math_teach`（2026-09-27 起，见下表）。
+小星老师 **锁定 30 个工具**（§2 `DEFAULT_ASSISTANT_LOCKED_TOOL_IDS`；2026-10-22 起 `snake_game` 从 kids_games 专属扩入默认助手；2026-11-01 起 `city_english` 扩入默认 + kids_english；2026-11-06 起 `farm_english` 扩入默认 + kids_english），其中 24 个有 UI 互动卡片（含 `ask_user`，已并入锁定白名单），3 个纯后端（`child_profile`、`math_verify`、`grant_star`），2 个非互动生成类（`image_generation`、`music_generation`），外加 `get_time_info`。4 个学科助手各锁定其中一个子集（见 §2.1，均不含 image_generation / music_generation）；小星老师集合之外的额外锁定：kids_math 的 `math_teach`（2026-09-27）、kids_games 的 `music_ear`（2026-11-07，见下表）。
 
 | 工具 ID | UI 卡片 | 是否锁定 | 备注 |
 |---------|---------|----------|------|
@@ -141,6 +141,7 @@
 | `matching_pairs` | `MatchingPairsCard.ets` | ✓ | 连一连观察配对，预校验 |
 | `memory_match` | `MemoryMatchCard.ets` | ✓ | 记忆翻牌（宝石配对）：5 难度 3×2–6×4 + 预览倒计时 + 步数效率 1-3 星评级 + 按难度最佳成绩；kids_games 专属（镜像 math_teach 先例），2026-10-05 |
 | `snake_game` | `SnakeCard.ets` | ✓ | 贪吃蛇（2026-10-06，2026-10-22 目标果子制改版）：16×16 硬墙，难度 1-3 = 基础速度 × 目标果子数（慢慢爬·8 颗 / 正常速·12 颗 / 飞快·16 颗），吃满过关；方向键/屏幕按钮/滑动三通道转弯；原 kids_games 专属，2026-10-22 扩入 default |
+| `music_ear` | `MusicEarCard.ets` | kids_games | 音符小耳朵（2026-11-07）：三种练习——`high_low` 听两个音谁高（含「一样高」，按音程距离出题）、`echo` 听 3~5 音按序复述、`guess_song` 听旋律猜儿歌；6 个水果琴键 + 3 音色（钢琴/木琴/八音盒），原生 PCM 合音（`audio.createAudioRenderer` + 加性合成 + 谐波衰减），不依赖音频素材；自由敲琴先行，一轮 5 题、首答错给一次重听机会，答对 ≥80% 得 1-3 星；卡片在 `aboutToDisappear` 唯一提交，sheet 只复位 UI |
 | `ask_user` | `AskUserCard.ets` | ✓（v2 已并入锁定列表） | AI 反问 |
 | `hanzi_card` | `HanziCard.ets` | ✓ | 汉字小课堂（六步识字讲解 + 笔顺动画），讲解型回执，预校验 |
 | `pinyin_card` | `PinyinCard.ets` | ✓ | 拼音小课堂（拼装公式 + 四声 TTS 示范），讲解型回执，预校验 |
@@ -248,6 +249,7 @@ DB 行 `DailyLessonPlanRow`（行 248-263）→ 表 `daily_lesson_plans`，状�
 | `matching_pairs` | 全对 0 失误 / 有失误 / 放弃 | 难度 1/2/3 / 1 / 0 |
 | `memory_match` | `completed === true` | 难度基数 1-5 星，评级调节（3★ 满额 / 2★ 减 1 / 1★ 给 1）；放弃 0 |
 | `snake_game` | 通关（吃满目标果子）/ 撞墙未通关 / 放弃 | 按难度 1/2/3 星 / 1 星（参与）/ 0 |
+| `music_ear` | `completed === true` 且首答正确 ≥ ceil(total×0.8) / 完成但未达标 / 未完成（cancelled） | min(3, difficulty+1) / 1 / 0 |
 | `chat_correct` | 聊天答对 | 1 |
 
 **副作用**（`StarRewardService.ets:119-164` 的 `recordEvent`）：

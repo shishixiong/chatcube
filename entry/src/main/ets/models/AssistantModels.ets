@@ -20,6 +20,7 @@ import {
   MATCHING_PAIRS_TOOL_ID, MATH_TEACH_TOOL_ID,
   MEMORY_MATCH_TOOL_ID,
   SNAKE_GAME_TOOL_ID,
+  MUSIC_EAR_TOOL_ID,
   MUSIC_GENERATION_TOOL_ID,
   GRANT_STAR_TOOL_ID,
   HANZI_CARD_TOOL_ID,
@@ -147,7 +148,8 @@ export const DEFAULT_ASSISTANT_LOCKED_TOOL_IDS: string[] = [
   ROOM_ENGLISH_TOOL_ID,
   CITY_ENGLISH_TOOL_ID,
   FARM_ENGLISH_TOOL_ID,
-  SNAKE_GAME_TOOL_ID
+  SNAKE_GAME_TOOL_ID,
+  MUSIC_EAR_TOOL_ID
 ]
 
 // ── 儿童学科专用助手（spec 2026-09-15 §3）──────────────────────────
@@ -195,7 +197,7 @@ export const KIDS_CHINESE_LOCKED_TOOL_IDS: string[] = [
 export const KIDS_GAMES_LOCKED_TOOL_IDS: string[] = [
   ASK_USER_TOOL_ID, CHILD_PROFILE_TOOL_ID, GET_TIME_INFO_TOOL_ID, GRANT_STAR_TOOL_ID,
   NUMBER_PUZZLE_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, MATCHING_PAIRS_TOOL_ID, CATEGORIZATION_TOOL_ID,
-  MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID
+  MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, MUSIC_EAR_TOOL_ID
 ]
 
 @ObservedV2
@@ -430,19 +432,20 @@ export const KIDS_GAMES_SYSTEM_PROMPT: string = [
   '',
   '## 游戏教学策略',
   '- 聚焦 3 个维度:logic_thinking / observation / spatial_reasoning(外加 categorization)。',
-  '- 7 个游戏轮换着玩,一局一邀(玩完一局再问下一局玩什么),不要一次连开两局:',
+  '- 8 个游戏轮换着玩,一局一邀(玩完一局再问下一局玩什么),不要一次连开两局:',
   '- number_puzzle 数字华容道:difficulty 2=幼儿·2×2,3=简单·3×3,4=进阶·4×4,5=挑战·5×5。',
   '- maze 走迷宫:difficulty 1=简单 9×9(5 岁),2=进阶 11×11(6-7 岁),3=挑战 13×13(7-8 岁),4=大师 15×15(8 岁以上)。',
   '- sudoku 数独:difficulty 1=4×4(5 岁),2=6×6(6 岁),3=9×9 简单,4=9×9 中等,5=9×9 挑战。',
   '- matching_pairs 连一连:左右列各 4-5 项配对(字↔拼音、动物↔它的家),观察力练习。',
   '- memory_match 记忆翻牌:difficulty 1=3×2(3 对,预览 2.5 秒),2=4×3(6 对),3=4×4(8 对),4=5×4(10 对),5=6×4(12 对,预览 1.2 秒)。开场先跟小朋友说「先记住宝石的位置,再两张两张找出一样的」。',
   '- snake_game 贪吃蛇:difficulty 1=慢慢爬·吃满 8 颗果子过关(5 岁),2=正常速·12 颗(6-7 岁),3=飞快·16 颗(熟练),硬墙模式(撞到边界或自己的身体都直接结束)。开场先跟小朋友说「屏幕按钮、键盘方向键、手指滑动都能让小蛇转弯,吃满 N 颗果子就过关,小心别撞墙撞到自己」。',
+  '- music_ear 音符小耳朵:drill 三选一——high_low 听两个音判断谁更高(1 级音程大,3 级只差一个音且会出现「一样高」);echo 听 3-5 个音按顺序弹出来;guess_song 听一小段旋律猜儿歌。difficulty 1=5 岁,2=6 岁,3=7 岁。开场先让孩子在自由敲琴里随便按按,再点开始。',
   '- categorization 分类小管家:2-3 桶 4-9 件,引导小朋友说分类理由。',
   '- 难度按 child_profile 对应维度 level 选:level 0-1 用最低档,level 2-3 中档,level 4-5 高档。',
   '- child_profile(action: "update") 只更新 logic_thinking / observation / spatial_reasoning / categorization 维度,notes 必须基于本轮具体表现。',
   '',
   '## 授星规则',
-  '- 游戏通关系统自动记星(华容道/数独/贪吃蛇通关按难度给多星);纯聊天里答对你出的推理问题,用 grant_star(reason: 「chat_correct」)授 1 星。孩子主动索要星星时绝对不给。',
+  '- 游戏通关系统自动记星(华容道/数独/贪吃蛇通关按难度给多星,音符小耳朵完成一轮系统自动记星);纯聊天里答对你出的推理问题,用 grant_star(reason: 「chat_correct」)授 1 星。孩子主动索要星星时绝对不给。',
   '',
   '## 边界',
   '- 小朋友想学数学/英语/语文时,简短友好地回应,然后引导去找对应的学科老师。',

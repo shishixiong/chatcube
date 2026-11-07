@@ -54,7 +54,7 @@ import {
   getMarkdownTitleSizes
 } from '../utils/MarkdownTypographyUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isMathTeachFunctionName, isEnglishQuizFunctionName, isHuarongdaoFunctionName, isNumberPuzzleFunctionName, isHandwritingPracticeFunctionName, isCategorizationFunctionName, isVerticalMathFunctionName, isMusicGenerationFunctionName, isMazeFunctionName, isSudokuFunctionName, isPictureVocabFunctionName, isListeningQuizFunctionName, isPinyinQuizFunctionName, isMatchingPairsFunctionName, isMemoryMatchFunctionName, isSnakeGameFunctionName, isHanziCardFunctionName, isPinyinCardFunctionName, isPictureTalkFunctionName, isChineseQuizFunctionName, isMapCardFunctionName, isMapQuizFunctionName, isMapPuzzleFunctionName, isRoomEnglishFunctionName, isCityEnglishFunctionName, isFarmEnglishFunctionName } from '../utils/SearchToolIdentityUtils'
+import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isMathTeachFunctionName, isEnglishQuizFunctionName, isHuarongdaoFunctionName, isNumberPuzzleFunctionName, isHandwritingPracticeFunctionName, isCategorizationFunctionName, isVerticalMathFunctionName, isMusicGenerationFunctionName, isMazeFunctionName, isSudokuFunctionName, isPictureVocabFunctionName, isListeningQuizFunctionName, isPinyinQuizFunctionName, isMatchingPairsFunctionName, isMemoryMatchFunctionName, isSnakeGameFunctionName, isHanziCardFunctionName, isPinyinCardFunctionName, isPictureTalkFunctionName, isChineseQuizFunctionName, isMapCardFunctionName, isMapQuizFunctionName, isMapPuzzleFunctionName, isRoomEnglishFunctionName, isCityEnglishFunctionName, isFarmEnglishFunctionName, isMusicEarFunctionName } from '../utils/SearchToolIdentityUtils'
 import { MessagePart, MessagePartKind, ToolPartStatus } from '../models/MessageParts'
 import {
   ensureMessageParts,
@@ -312,6 +312,8 @@ export struct MessageBubble {
   @Event onOpenCityEnglishSheet: (toolCall: ToolCall) => void = () => {}
   // 阳光农场 3D 英语探索 sheet 入口（3D 场景在气泡内太小，必须全屏）
   @Event onOpenFarmEnglishSheet: (toolCall: ToolCall) => void = () => {}
+  // 音符小耳朵 sheet 入口（键盘 + 练习流程在气泡内太小，必须全屏）
+  @Event onOpenMusicEarSheet: (toolCall: ToolCall) => void = () => {}
 
   // 支持的翻译语言列表
   private translateLanguages: TranslateLanguage[] = [
@@ -2548,6 +2550,53 @@ export struct MessageBubble {
                 }, (toolCall: ToolCall, index: number) => 'farm_english_' + toolCall.id + '_' + index.toString())
               }
 
+              // music_ear 待答时显示入口横幅，点开全屏 sheet 听音练习。
+              if (this.message.hasToolCalls()) {
+                ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
+                  if (this.shouldRenderMusicEarInteractionCard(toolCall, index)) {
+                    Row() {
+                      Column() {
+                        SymbolGlyph($r('sys.symbol.waveform'))
+                          .fontSize(15)
+                          .fontColor([this.themePrimary])
+                      }
+                      .width(32)
+                      .height(32)
+                      .borderRadius(16)
+                      .backgroundColor(withColorAlpha(this.themePrimary, '18'))
+                      .alignItems(HorizontalAlign.Center)
+                      .justifyContent(FlexAlign.Center)
+
+                      Column({ space: 2 }) {
+                        Text(`音符小耳朵 · ${this.getMusicEarDrillText(toolCall)}`)
+                          .fontSize(13)
+                          .fontWeight(FontWeight.Medium)
+                          .fontColor($r('app.color.text_primary'))
+                        Text('点开听一听')
+                          .fontSize(11)
+                          .fontColor($r('app.color.text_tertiary'))
+                      }
+                      .alignItems(HorizontalAlign.Start)
+                      .margin({ left: 8 })
+                      .layoutWeight(1)
+
+                      Text('>')
+                        .fontSize(14)
+                        .fontColor($r('app.color.text_tertiary'))
+                    }
+                    .width('100%')
+                    .padding(12)
+                    .backgroundColor(this.themeAiBubble)
+                    .borderRadius(12)
+                    .border({ width: 1, color: $r('app.color.divider') })
+                    .margin({ bottom: 6 })
+                    .onClick(() => {
+                      this.onOpenMusicEarSheet(toolCall)
+                    })
+                  }
+                }, (toolCall: ToolCall, index: number) => 'music_ear_' + toolCall.id + '_' + index.toString())
+              }
+
               // sudoku 待答时显示独立互动卡片;提交后收缩到 timeline step 内。
               if (this.message.hasToolCalls()) {
                 ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
@@ -3227,6 +3276,10 @@ export struct MessageBubble {
       // 阳光农场 3D 英语探索: 已完成的可以展开回看这次点开的单词
       return this.isSuccessfulToolStep(part)
     }
+    if (isMusicEarFunctionName(part.toolName)) {
+      // 音符小耳朵: 已完成的可以展开回看这一轮成绩
+      return this.isSuccessfulToolStep(part)
+    }
     if (isMatchingPairsFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
@@ -3291,7 +3344,7 @@ export struct MessageBubble {
       return true
     }
     // 默认行为: 图片生成/数学游戏/英语看图说话 成功后默认展开查看结果
-    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isMathTeachFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isListeningQuizFunctionName(part.toolName) || isPinyinQuizFunctionName(part.toolName) || isMatchingPairsFunctionName(part.toolName) || isMemoryMatchFunctionName(part.toolName) || isSnakeGameFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName) || isHanziCardFunctionName(part.toolName) || isPinyinCardFunctionName(part.toolName) || isPictureTalkFunctionName(part.toolName) || isChineseQuizFunctionName(part.toolName) || isMapCardFunctionName(part.toolName) || isMapQuizFunctionName(part.toolName) || isRoomEnglishFunctionName(part.toolName) || isCityEnglishFunctionName(part.toolName) || isFarmEnglishFunctionName(part.toolName)) {
+    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isMathTeachFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isListeningQuizFunctionName(part.toolName) || isPinyinQuizFunctionName(part.toolName) || isMatchingPairsFunctionName(part.toolName) || isMemoryMatchFunctionName(part.toolName) || isSnakeGameFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName) || isHanziCardFunctionName(part.toolName) || isPinyinCardFunctionName(part.toolName) || isPictureTalkFunctionName(part.toolName) || isChineseQuizFunctionName(part.toolName) || isMapCardFunctionName(part.toolName) || isMapQuizFunctionName(part.toolName) || isRoomEnglishFunctionName(part.toolName) || isCityEnglishFunctionName(part.toolName) || isFarmEnglishFunctionName(part.toolName) || isMusicEarFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
     return false
@@ -3301,7 +3354,7 @@ export struct MessageBubble {
     const key = this.getToolStepKey(part)
     // 默认展开的工具类型: 图片生成、数学游戏、英语看图说话、数字华容道、迷宫等
     const isDefaultExpanded = this.isSuccessfulToolStep(part) &&
-      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isMathTeachFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isListeningQuizFunctionName(part.toolName) || isPinyinQuizFunctionName(part.toolName) || isMatchingPairsFunctionName(part.toolName) || isMemoryMatchFunctionName(part.toolName) || isSnakeGameFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName) || isHanziCardFunctionName(part.toolName) || isPinyinCardFunctionName(part.toolName) || isPictureTalkFunctionName(part.toolName) || isChineseQuizFunctionName(part.toolName) || isMapCardFunctionName(part.toolName) || isMapQuizFunctionName(part.toolName) || isRoomEnglishFunctionName(part.toolName) || isCityEnglishFunctionName(part.toolName) || isFarmEnglishFunctionName(part.toolName))
+      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isMathTeachFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isListeningQuizFunctionName(part.toolName) || isPinyinQuizFunctionName(part.toolName) || isMatchingPairsFunctionName(part.toolName) || isMemoryMatchFunctionName(part.toolName) || isSnakeGameFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName) || isHanziCardFunctionName(part.toolName) || isPinyinCardFunctionName(part.toolName) || isPictureTalkFunctionName(part.toolName) || isChineseQuizFunctionName(part.toolName) || isMapCardFunctionName(part.toolName) || isMapQuizFunctionName(part.toolName) || isRoomEnglishFunctionName(part.toolName) || isCityEnglishFunctionName(part.toolName) || isFarmEnglishFunctionName(part.toolName) || isMusicEarFunctionName(part.toolName))
     const next: string[] = []
     let found = false
     let foundCollapsed = false
@@ -3561,6 +3614,29 @@ export struct MessageBubble {
       return false
     }
     return !this.isAskUserToolCallAnswered(toolCall, index)
+  }
+
+  private shouldRenderMusicEarInteractionCard(toolCall: ToolCall, index: number): boolean {
+    if (!isMusicEarFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
+      return false
+    }
+    return !this.isAskUserToolCallAnswered(toolCall, index)
+  }
+
+  private getMusicEarDrillText(toolCall: ToolCall): string {
+    try {
+      const parsed = JSON.parse(toolCall.arguments) as Record<string, Object>
+      const drill = (parsed['drill'] as string) ?? 'high_low'
+      if (drill === 'echo') {
+        return '听音复述'
+      }
+      if (drill === 'guess_song') {
+        return '听旋律猜歌'
+      }
+      return '听音辨高低'
+    } catch (_e) {
+      return '听音练习'
+    }
   }
 
   private shouldRenderVerticalMathInteractionCard(toolCall: ToolCall, index: number): boolean {
@@ -4020,6 +4096,11 @@ export struct MessageBubble {
     }
     // 阳光农场 3D 英语探索: 展开/折叠回看点开的单词
     if (isFarmEnglishFunctionName(part.toolName)) {
+      this.toggleToolStep(part)
+      return
+    }
+    // 音符小耳朵: 展开/折叠回看这一轮成绩
+    if (isMusicEarFunctionName(part.toolName)) {
       this.toggleToolStep(part)
       return
     }
@@ -4490,6 +4571,8 @@ export struct MessageBubble {
       this.CityEnglishStepContent(step)
     } else if (isFarmEnglishFunctionName(step.toolName)) {
       this.FarmEnglishStepContent(step)
+    } else if (isMusicEarFunctionName(step.toolName)) {
+      this.MusicEarStepContent(step)
     } else if (isImageGenerationFunctionName(step.toolName) && this.isToolStepClickable(step)) {
       // 图片生成: 折叠/展开, 在下方直接展示生成结果缩略图
       Column() {
@@ -5262,6 +5345,79 @@ export struct MessageBubble {
     }
     .width('100%')
     .margin({ top: 8 })
+  }
+
+  // music_ear 工具步骤: 已完成的音符小耳朵, 在 timeline 中显示这一轮成绩
+  @Builder
+  MusicEarStepContent(step: MessagePart) {
+    Column() {
+      Row({ space: 6 }) {
+        if (step.toolStatus === 'succeeded') {
+          SymbolGlyph($r('sys.symbol.checkmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_success')])
+        } else if (step.toolStatus === 'failed' || step.toolStatus === 'denied') {
+          SymbolGlyph($r('sys.symbol.xmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_error')])
+        } else {
+          Column()
+            .width(8)
+            .height(8)
+            .borderRadius(4)
+            .backgroundColor(this.themePrimary)
+        }
+
+        Text(this.buildToolStepTitle(step))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+
+        if (this.isToolStepClickable(step)) {
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(12)
+            .fontColor([$r('app.color.text_tertiary')])
+            .rotate({ angle: this.isToolStepExpanded(step) ? 0 : -90 })
+            .animation({ duration: 200, curve: Curve.EaseOut })
+        }
+      }
+      .width('100%')
+      .onClick(() => {
+        if (this.isToolStepClickable(step)) {
+          this.handleToolStepClick(step)
+        }
+      })
+
+      if (this.isToolStepExpanded(step) && step.toolResult !== '') {
+        Text(this.musicEarResultText(step))
+          .fontSize(12)
+          .fontColor($r('app.color.text_secondary'))
+          .width('100%')
+          .margin({ top: 8 })
+      }
+    }
+    .width('100%')
+  }
+
+  private musicEarResultText(step: MessagePart): string {
+    const payload = resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason)
+    try {
+      const parsed = JSON.parse(payload) as Record<string, Object>
+      if ((parsed['completed'] as boolean) !== true) {
+        return '这一轮没听完'
+      }
+      const first = (parsed['first_try_correct'] as number) ?? 0
+      const total = (parsed['total'] as number) ?? 5
+      const stars = (parsed['stars'] as number) ?? 0
+      let starText = ''
+      for (let i = 0; i < stars; i++) {
+        starText += '⭐'
+      }
+      return `首答正确 ${first} / ${total} · ${starText}`
+    } catch (_e) {
+      return ''
+    }
   }
 
   // map_card 工具步骤: 已完成的中国地图小课堂, 在 timeline 中显示简化结果, 可展开回看讲解

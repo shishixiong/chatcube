@@ -148,6 +148,7 @@ import { MapPuzzleCard, MapPuzzleResult } from '../components/map/MapPuzzleCard'
 import { RoomEnglishAnswerPayload, RoomEnglishCard } from '../components/room/RoomEnglishCard'
 import { CityEnglishAnswerPayload, CityEnglishCard } from '../components/city/CityEnglishCard'
 import { FarmEnglishAnswerPayload, FarmEnglishCard } from '../components/farm/FarmEnglishCard'
+import { MusicEarCard } from '../components/MusicEarCard'
 import { MapQuizCard } from '../components/map/MapQuizCard'
 import { MapQuizAnswerPayload, parseMapQuizArgs } from '../components/map/MapQuizTypes'
 import { MessagePartKind } from '../models/MessageParts'
@@ -342,6 +343,8 @@ export struct ChatPage {
   @Local showFarmEnglishSheet: boolean = false
   @Local farmEnglishToolCall: ToolCall = new ToolCall()
   @Local farmEnglishAnswered: boolean = false
+  @Local showMusicEarSheet: boolean = false
+  @Local musicEarToolCall: ToolCall = new ToolCall()
   // 3D 探索卡挂载时注册的回执 provider：下拉收起 sheet 时调用，拿到「此刻 = 完成本课」的
   // 正常回执（含已点开的单词），而不是把它当成一次被取消的工具调用。
   private roomEnglishDismissPayload: (() => string) | null = null
@@ -2602,6 +2605,10 @@ export struct ChatPage {
             this.farmEnglishDismissPayload = null
             this.showFarmEnglishSheet = true
           },
+          onOpenMusicEarSheet: (toolCall: ToolCall): void => {
+            this.musicEarToolCall = toolCall
+            this.showMusicEarSheet = true
+          },
           onReachStart: (): void => {
             this.handleMessageListReachStart()
           },
@@ -3192,6 +3199,22 @@ export struct ChatPage {
                 this.handleAskUserAnswer(this.farmEnglishToolCall.id, resultJson)
               }
               this.showFarmEnglishSheet = false
+            }
+          })
+
+        // 音符小耳朵: 卡片自己在 aboutToDisappear 里唯一提交, 这里只复位 UI
+        Column()
+          .width(0)
+          .height(0)
+          .bindSheet($$this.showMusicEarSheet, this.MusicEarSheetBuilder(), {
+            height: SheetSize.LARGE,
+            dragBar: true,
+            showClose: true,
+            blurStyle: BlurStyle.Thick,
+            backgroundColor: this.themeBackground,
+            preferType: SheetType.BOTTOM,
+            onDisappear: () => {
+              this.showMusicEarSheet = false
             }
           })
 
@@ -3810,6 +3833,22 @@ export struct ChatPage {
       },
       onRegisterDismissPayload: (provider: () => string): void => {
         this.farmEnglishDismissPayload = provider
+      }
+    })
+  }
+
+  @Builder
+  MusicEarSheetBuilder() {
+    MusicEarCard({
+      toolCall: this.musicEarToolCall,
+      isAnswered: false,
+      answeredPayload: '',
+      largeSize: true,
+      onAnswer: (toolCallId: string, answerJson: string): void => {
+        this.handleAskUserAnswer(toolCallId, answerJson)
+      },
+      onRequestClose: (): void => {
+        this.showMusicEarSheet = false
       }
     })
   }

@@ -26,6 +26,7 @@ import {
 import { getAppUiState, setAppUiStateValue } from '../state/AppUiState'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { getStartOfMonthMs } from '../utils/DateFormatUtils'
+import { computeMusicEarStars } from '../utils/MusicEarLogic'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 
 const DOMAIN = 0x0000
@@ -247,6 +248,18 @@ export class StarRewardService {
       // 竖式练习 (练习型): 按答对题数授星, 1 题对 1 星, 封顶 5 (一卡最多 10 题, 防刷星)
       const correctCount = (payload['correct_count'] as number) ?? 0
       return Math.min(5, Math.max(0, Math.floor(correctCount)))
+    }
+    if (activityType === 'music_ear') {
+      // 音符小耳朵 (练习型): 未完成 0 星; 首答正确率 >= 80% 按难度 2/3 星, 否则 1 星参与。
+      // 公式与卡片结算页共用 computeMusicEarStars, 避免两处漂移。
+      if (payload['completed'] !== true) {
+        return 0
+      }
+      return computeMusicEarStars(
+        (payload['difficulty'] as number) ?? 1,
+        (payload['total'] as number) ?? 5,
+        (payload['first_try_correct'] as number) ?? 0
+      )
     }
     return 0
   }

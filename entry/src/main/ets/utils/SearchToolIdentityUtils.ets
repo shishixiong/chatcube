@@ -29,6 +29,8 @@ export const MEMORY_MATCH_TOOL_ID: string = 'memory_match'
 // 贪吃蛇（2026-10-06）：经典贪吃蛇小游戏, 参考 docs/tanshishe_game.html 原型。
 // 16×16 网格, 红苹果 + 金色星星限时奖励 + 连击系统, kids_games 专属（镜像 memory_match 先例）。
 export const SNAKE_GAME_TOOL_ID: string = 'snake_game'
+// 音符小耳朵（2026-11-07）：听觉训练小游戏, kids_games 专属。
+export const MUSIC_EAR_TOOL_ID: string = 'music_ear'
 // 语文 v2（2026-09-29）：讲解型 hanzi_card / pinyin_card + 表达型 picture_talk
 // + 练习路由器 chinese_quiz（word_build / sentence_order / lookalike / antonym 四 mode）。
 export const HANZI_CARD_TOOL_ID: string = 'hanzi_card'
@@ -167,6 +169,12 @@ export function isSnakeGameFunctionName(functionName: string): boolean {
     normalized === 'greedy_snake'
 }
 
+export function isMusicEarFunctionName(functionName: string): boolean {
+  const normalized = normalizeToolFunctionName(functionName)
+  return normalized === MUSIC_EAR_TOOL_ID ||
+    normalized === 'ear_training'
+}
+
 export function isHanziCardFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === HANZI_CARD_TOOL_ID
 }
@@ -274,6 +282,7 @@ export function isInteractiveQuizFunctionName(functionName: string): boolean {
     isMatchingPairsFunctionName(functionName) ||
     isMemoryMatchFunctionName(functionName) ||
     isSnakeGameFunctionName(functionName) ||
+    isMusicEarFunctionName(functionName) ||
     isHuarongdaoFunctionName(functionName) ||
     isNumberPuzzleFunctionName(functionName) ||
     isHandwritingPracticeFunctionName(functionName) ||

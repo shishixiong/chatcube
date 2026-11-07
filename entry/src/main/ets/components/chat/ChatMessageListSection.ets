@@ -61,6 +61,7 @@ export struct ChatMessageListSection {
   @Event onOpenRoomEnglishSheet: (toolCall: ToolCall) => void = (_toolCall: ToolCall): void => {}
   @Event onOpenCityEnglishSheet: (toolCall: ToolCall) => void = (_toolCall: ToolCall): void => {}
   @Event onOpenFarmEnglishSheet: (toolCall: ToolCall) => void = (_toolCall: ToolCall): void => {}
+  @Event onOpenMusicEarSheet: (toolCall: ToolCall) => void = (_toolCall: ToolCall): void => {}
   @Event onOpenMapQuizSheet: (toolCall: ToolCall) => void = (_toolCall: ToolCall): void => {}
   @Event onListAppear: () => void = (): void => {}
   @Event onReachStart: () => void = (): void => {}
@@ -510,6 +511,9 @@ export struct ChatMessageListSection {
                     },
                     onOpenCityEnglishSheet: (toolCall: ToolCall): void => {
                       this.onOpenCityEnglishSheet(toolCall)
+                    },
+                    onOpenMusicEarSheet: (toolCall: ToolCall): void => {
+                      this.onOpenMusicEarSheet(toolCall)
                     },
                     onOpenFarmEnglishSheet: (toolCall: ToolCall): void => {
                       this.onOpenFarmEnglishSheet(toolCall)
