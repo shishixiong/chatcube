@@ -17,6 +17,9 @@ export struct MapZoomCluster {
   @Param canZoomIn: boolean = true
   @Param canZoomOut: boolean = false
   @Param isDarkMode: boolean = false
+  /** 复位键文案：全国图「全图」，上海页「全市」 */
+  @Param resetLabel: string = '全图'
+  @Param resetAccessibilityLabel: string = '查看全国地图'
   @Event onZoomIn: () => void = () => {}
   @Event onZoomOut: () => void = () => {}
   @Event onReset: () => void = () => {}
@@ -69,7 +72,7 @@ export struct MapZoomCluster {
       SymbolGlyph($r('sys.symbol.arrow_counterclockwise'))
         .fontSize(14)
         .fontColor([this.palette.accentInk])
-      Text('全图')
+      Text(this.resetLabel)
         .fontSize(11.5)
         .fontWeight(FontWeight.Medium)
         .fontColor(this.palette.fg)
@@ -77,7 +80,7 @@ export struct MapZoomCluster {
     .layoutWeight(1)
     .height('100%')
     .justifyContent(FlexAlign.Center)
-    .accessibilityText('查看全国地图')
+    .accessibilityText(this.resetAccessibilityLabel)
     .onClick(() => {
       this.onReset()
     })
