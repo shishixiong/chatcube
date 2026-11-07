@@ -560,6 +560,9 @@
         o.position.y = baseY + Math.abs(Math.sin(t * 2.3 + cfg.phase)) * 0.42;
       } else if (cfg.kind === 'cat') {
         o.rotation.z = Math.sin(t * 1.6 + cfg.phase) * 0.02;
+      } else if (cfg.kind === 'lazy_cat') {
+        if (cfg.tail) cfg.tail.rotation.y = Math.sin(t * 1.1 + cfg.phase) * 0.28;
+        o.position.y = baseY + Math.sin(t * 0.8 + cfg.phase) * 0.012;
       } else if (cfg.kind === 'dog') {
         if (cfg.tail) cfg.tail.rotation.z = Math.sin(t * 8 + cfg.phase) * 0.5;
       } else if (cfg.kind === 'bird') {

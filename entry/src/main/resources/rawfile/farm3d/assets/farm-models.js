@@ -705,6 +705,72 @@
     return g;
   }
 
+  function makeLazyCat() {
+    var g = new THREE.Group();
+    var fur = 0xE9A05C;
+    var stripe = 0xB97A3F;
+    var belly = 0xFFE7CE;
+    // 侧躺贴地的身体 + 浅色肚皮 + 背上的虎斑条纹
+    var body = mesh(g, sph(0.5, 9, 7), fur, 0, 0.34, 0);
+    body.scale.set(1.25, 0.62, 0.92);
+    var tummy = mesh(g, sph(0.34, 7, 5), belly, 0, 0.2, 0.14);
+    tummy.scale.set(1.3, 0.42, 1.0);
+    mesh(g, box(0.1, 0.06, 0.5), stripe, -0.18, 0.62, -0.04);
+    mesh(g, box(0.1, 0.07, 0.5), stripe, 0.02, 0.63, -0.07);
+    mesh(g, box(0.1, 0.06, 0.46), stripe, 0.22, 0.61, -0.01);
+    // 头枕在前爪上，眯眼、粉鼻、胡须
+    mesh(g, sph(0.27, 8, 6), fur, 0, 0.42, 0.5);
+    mesh(g, box(0.34, 0.12, 0.3), belly, 0, 0.14, 0.6);
+    mesh(g, cone(0.1, 0.2, 4), fur, -0.16, 0.64, 0.48);
+    mesh(g, cone(0.1, 0.2, 4), fur, 0.16, 0.64, 0.48);
+    mesh(g, cone(0.055, 0.12, 4), 0xE7B7A4, -0.16, 0.66, 0.5);
+    mesh(g, cone(0.055, 0.12, 4), 0xE7B7A4, 0.16, 0.66, 0.5);
+    mesh(g, box(0.1, 0.03, 0.05), C.ink, -0.11, 0.44, 0.75);
+    mesh(g, box(0.1, 0.03, 0.05), C.ink, 0.11, 0.44, 0.75);
+    mesh(g, box(0.06, 0.05, 0.05), C.pink, 0, 0.38, 0.79);
+    mesh(g, box(0.22, 0.015, 0.015), C.cream, -0.2, 0.36, 0.72, { rz: 0.12 });
+    mesh(g, box(0.22, 0.015, 0.015), C.cream, 0.2, 0.36, 0.72, { rz: -0.12 });
+    // 尾巴单独成组，idle 时轻轻摆动
+    var tail = new THREE.Group();
+    tail.position.set(0.28, 0.14, -0.32);
+    g.add(tail);
+    mesh(tail, cyl(0.05, 0.055, 0.5, 5), fur, 0, 0, -0.24, { rx: Math.PI / 2 });
+    mesh(tail, cyl(0.04, 0.05, 0.34, 5), fur, 0.16, 0.01, -0.44, { rx: Math.PI / 2, ry: 0.6 });
+    g.userData.idle = { kind: 'lazy_cat', tail: tail, phase: 0.8, body: g };
+    return g;
+  }
+
+  function makeHopRabbit() {
+    var g = new THREE.Group();
+    var fur = 0xF3EDE2;
+    var shade = 0xD9D0C2;
+    var pink = 0xF2B5C0;
+    // 前倾的身体 + 后腿大脚 + 收在胸前的前爪（像正要蹦起来）
+    var body = mesh(g, sph(0.36, 8, 6), fur, 0, 0.44, 0.02, { rx: -0.2 });
+    body.scale.set(1.0, 1.05, 0.95);
+    mesh(g, sph(0.2, 6, 5), shade, -0.2, 0.3, -0.16);
+    mesh(g, sph(0.2, 6, 5), shade, 0.2, 0.3, -0.16);
+    mesh(g, box(0.2, 0.1, 0.34), fur, -0.2, 0.06, -0.06);
+    mesh(g, box(0.2, 0.1, 0.34), fur, 0.2, 0.06, -0.06);
+    mesh(g, cyl(0.06, 0.06, 0.3, 5), fur, -0.13, 0.46, 0.34, { rx: 0.9 });
+    mesh(g, cyl(0.06, 0.06, 0.3, 5), fur, 0.13, 0.46, 0.34, { rx: 0.9 });
+    // 头 + 口鼻 + 粉鼻 + 眼睛
+    mesh(g, sph(0.27, 8, 6), fur, 0, 0.78, 0.14);
+    mesh(g, sph(0.1, 6, 4), 0xFFFDF6, 0, 0.7, 0.36);
+    mesh(g, box(0.05, 0.05, 0.04), pink, 0, 0.74, 0.47);
+    mesh(g, box(0.05, 0.05, 0.04), C.ink, -0.1, 0.83, 0.38);
+    mesh(g, box(0.05, 0.05, 0.04), C.ink, 0.1, 0.83, 0.38);
+    // 竖起的长耳朵（内耳粉色）
+    var earL = mesh(g, box(0.1, 0.5, 0.09), fur, -0.12, 1.16, 0.08, { rz: 0.12 });
+    var earR = mesh(g, box(0.1, 0.5, 0.09), fur, 0.12, 1.16, 0.08, { rz: -0.12 });
+    mesh(earL, box(0.05, 0.32, 0.05), pink, 0, 0, 0.03);
+    mesh(earR, box(0.05, 0.32, 0.05), pink, 0, 0, 0.03);
+    // 圆尾巴
+    mesh(g, sph(0.13, 6, 5), 0xFFFDF6, 0, 0.46, -0.34);
+    g.userData.idle = { kind: 'rabbit', phase: 0.9, body: g };
+    return g;
+  }
+
   function makeDog() {
     var g = new THREE.Group();
     mesh(g, box(0.5, 0.46, 1.0), 0xA9743F, 0, 0.6, 0);
@@ -1119,6 +1185,20 @@
       herdAnimal.userData.wordId = herd.id;
       root.add(herdAnimal);
     }
+
+    // 牧场里的两个小活宝：树荫下打盹的慵懒小猫 + 围着羊群蹦蹦跳跳的小兔子
+    var lazyCat = makeLazyCat();
+    lazyCat.position.set(-59.5, 0, 17.5);
+    lazyCat.rotation.y = 2.4;
+    lazyCat.userData.wordId = 'cat';
+    root.add(lazyCat);
+
+    var hopRabbit = makeHopRabbit();
+    hopRabbit.position.set(-28.5, 0, 29);
+    hopRabbit.rotation.y = -0.9;
+    hopRabbit.scale.setScalar(0.92);
+    hopRabbit.userData.wordId = 'rabbit';
+    root.add(hopRabbit);
 
     var chicken = placeFromLayout('chicken', makeChicken(false));
     root.add(chicken);
