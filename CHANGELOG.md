@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased · 3D 探索卡收起即完成
+
+`room_english` / `city_english` / `farm_english` 的全屏卡片下拉收起后，聊天里不再出现「工具调用已取消」，而是按当前进度正常交卷，老师接着收尾总结。
+
+### 修正
+
+- 下拉收起 / 点 ✕ / 「退出本课」都走正常回执（`cancelled: false`），带上已经点开的单词与课程进度；一个词都没点时 `completed: false`，由老师自己起个话头总结
+- 卡片在 `aboutToAppear` 里把「此刻收起该交的回执」注册给 ChatPage（`onRegisterDismissPayload`），页面在 sheet `onDisappear` 时调用它读取最新进度；页面侧兜底的空回执也不再带 `cancelled`
+- `scripts/verify-room3d-data.mjs` 增静态校验：三张 3D 卡必须注册收起回执，ChatPage 的收起路径不得再构造 `cancelled` 回执
+
 ## Unreleased · 上海地图下钻（map_card）
 
 `map_card` 从「一张全国图」扩成「一本地图册」：点上海，原地翻到里面一页，看 16 个区。没有新工具、没有新页面、没有新区级练习。

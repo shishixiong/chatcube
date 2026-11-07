@@ -115,6 +115,9 @@ export struct CityEnglishCard {
   @Param largeSize: boolean = false
   @Event onAnswer: (toolCallId: string, answerJson: string) => void = () => {}
   @Event onRequestClose: () => void = () => {}
+  // 宿主（ChatPage）在 sheet 被下拉收起时调用这个 provider，拿到「此刻收起 = 完成本课」的回执：
+  // 已经点开的单词不会丢，也不会被当成「工具调用已取消」。
+  @Event onRegisterDismissPayload: (provider: () => string) => void = () => {}
 
   @Local argsView: CityEnglishArgsView = createArgsView()
   @Local exploredIds: string[] = []
@@ -158,6 +161,7 @@ export struct CityEnglishCard {
   aboutToAppear(): void {
     this.uiContext = this.getUIContext()
     this.argsView = parseCityEnglishArgs(this.toolCall.arguments)
+    this.onRegisterDismissPayload((): string => this.buildDismissJson())
     this.bridge.speakHandler = (text: string, zh: string): boolean => this.speakWord(text, zh)
     this.bridge.stopHandler = (): void => this.stopSpeak()
     this.bridge.readyHandler = (): void => {
@@ -408,6 +412,12 @@ export struct CityEnglishCard {
 
   private canSubmit(): boolean {
     return !this.isAnswered && !this.submitted && this.exploredCount > 0
+  }
+
+  // 下拉收起 sheet = 本课到此为止（不是「取消」）：带上已经点开的单词正常回执，
+  // 老师拿到结果后照常收尾总结；一个词都没点时 completed 为 false，让老师自己起个话头。
+  private buildDismissJson(): string {
+    return JSON.stringify(this.buildPayload(this.exploredCount > 0, false))
   }
 
   private submit(): void {

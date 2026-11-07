@@ -180,6 +180,9 @@ export struct RoomEnglishCard {
   @Param largeSize: boolean = false
   @Event onAnswer: (toolCallId: string, answerJson: string) => void = () => {}
   @Event onRequestClose: () => void = () => {}
+  // 宿主（ChatPage）在 sheet 被下拉收起时调用这个 provider，拿到「此刻收起 = 完成本课」的回执：
+  // 已经点开的单词、课程进度都不会丢，也不会被当成「工具调用已取消」。
+  @Event onRegisterDismissPayload: (provider: () => string) => void = () => {}
 
   @Local argsView: RoomEnglishArgsView = createArgsView()
   @Local exploredIds: string[] = []
@@ -228,6 +231,7 @@ export struct RoomEnglishCard {
   aboutToAppear(): void {
     this.uiContext = this.getUIContext()
     this.argsView = parseRoomEnglishArgs(this.toolCall.arguments)
+    this.onRegisterDismissPayload((): string => this.buildDismissJson())
     this.lesson = this.argsView.lesson
     this.bridge.speakHandler = (text: string, zh: string): boolean => this.speakWord(text, zh)
     this.bridge.stopHandler = (): void => this.stopSpeak()
@@ -780,6 +784,13 @@ export struct RoomEnglishCard {
     return this.exploredCount > 0
   }
 
+  // 下拉收起 sheet = 本课到此为止（不是「取消」）：带上已经点开的单词正常回执，
+  // 老师拿到结果后照常收尾总结；一个词都没点时 completed 为 false，让老师自己起个话头。
+  private buildDismissJson(): string {
+    const completed: boolean = this.lesson !== null ? this.taskState.completed : this.exploredCount > 0
+    return JSON.stringify(this.buildPayload(completed, false))
+  }
+
   private submit(): void {
     if (this.submitted || !this.canSubmit() || this.isAnswered) {
       return
@@ -800,9 +811,9 @@ export struct RoomEnglishCard {
     this.submitted = true
     this.clearAdvanceTimer()
     this.stopSpeak()
-    // 课程已结束时退出，completed 仍为 true（任务完成事实不变）；课程中途退出才是 false。
-    const completed: boolean = this.lesson !== null ? this.taskState.completed : false
-    const payload: RoomEnglishAnswerPayload = this.buildPayload(completed, true)
+    // 中途退出不是系统错误：照常交一份正常回执（completed 反映任务是否做完），
+    // 让老师接着总结；带 cancelled 标志会在聊天里变成「工具调用已取消」。
+    const payload: RoomEnglishAnswerPayload = this.buildPayload(this.taskState.completed, false)
     this.onAnswer(this.toolCall.id, JSON.stringify(payload))
   }
 

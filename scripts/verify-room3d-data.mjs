@@ -260,3 +260,42 @@ const css = read('entry/src/main/resources/rawfile/room3d/assets/room.css');
 assert.match(css, /\.stage-card\.is-walk \.area-tabs\s*\{[^}]*display:\s*none/, 'walk mode must hide area chips');
 assert.match(css, /\.stage-card\.is-walk \.hint-walk\s*\{[^}]*display:\s*inline/, 'walk mode needs its own gesture hint');
 console.log('room3d walk mode OK: geometry ranges + DOM/bridge/CSS wiring');
+
+// 3D 探索卡（room / city / farm）下拉收起 = 本课到此为止，不是「取消」。
+// 卡片把当前回执交给页面，页面用这份回执交卷；任何一条路径回传 cancelled:true 都会在聊天里
+// 变成「工具调用已取消」错误，孩子看到的就是报错而不是老师的总结。
+const chatPage = read('entry/src/main/ets/pages/ChatPage.ets');
+for (const cardPath of [
+  'entry/src/main/ets/components/room/RoomEnglishCard.ets',
+  'entry/src/main/ets/components/city/CityEnglishCard.ets',
+  'entry/src/main/ets/components/farm/FarmEnglishCard.ets'
+]) {
+  const src = read(cardPath);
+  assert.match(
+    src,
+    /@Event onRegisterDismissPayload: \(provider: \(\) => string\) => void/,
+    `${cardPath}: 缺 onRegisterDismissPayload`
+  );
+  assert.match(
+    src,
+    /this\.onRegisterDismissPayload\(\(\): string => this\.buildDismissJson\(\)\)/,
+    `${cardPath}: aboutToAppear 没有注册收起回执`
+  );
+  assert.match(
+    src,
+    /private buildDismissJson\(\): string \{\s*[^}]*buildPayload\([^)]*false\)/,
+    `${cardPath}: buildDismissJson 必须走 buildPayload(..., false)（cancelled 为 false）`
+  );
+}
+for (const key of ['roomEnglish', 'cityEnglish', 'farmEnglish']) {
+  assert.ok(
+    chatPage.includes(`this.${key}DismissPayload`),
+    `ChatPage: ${key} sheet 收起时没有用卡片回执`
+  );
+}
+assert.equal(
+  (chatPage.match(/const cancelResult: (Room|City|Farm)EnglishAnswerPayload/g) || []).length,
+  0,
+  'ChatPage: 3D 探索卡收起路径不能再构造 cancelled 回执'
+);
+console.log('room3d dismiss payload OK: 三张 3D 卡收起即完成，不报「工具调用已取消」');

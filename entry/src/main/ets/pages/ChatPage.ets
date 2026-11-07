@@ -342,6 +342,11 @@ export struct ChatPage {
   @Local showFarmEnglishSheet: boolean = false
   @Local farmEnglishToolCall: ToolCall = new ToolCall()
   @Local farmEnglishAnswered: boolean = false
+  // 3D 探索卡挂载时注册的回执 provider：下拉收起 sheet 时调用，拿到「此刻 = 完成本课」的
+  // 正常回执（含已点开的单词），而不是把它当成一次被取消的工具调用。
+  private roomEnglishDismissPayload: (() => string) | null = null
+  private cityEnglishDismissPayload: (() => string) | null = null
+  private farmEnglishDismissPayload: (() => string) | null = null
   @Local toolExecutionApprovalName: string = ''
   @Local showStarSheet: boolean = false
   // 星星浮层触发信号: 每次 onStarEarnedTickChanged 自增, StarBurstOverlay 通过 @Monitor 监听
@@ -2582,16 +2587,19 @@ export struct ChatPage {
           onOpenRoomEnglishSheet: (toolCall: ToolCall): void => {
             this.roomEnglishToolCall = toolCall
             this.roomEnglishAnswered = false
+            this.roomEnglishDismissPayload = null
             this.showRoomEnglishSheet = true
           },
           onOpenCityEnglishSheet: (toolCall: ToolCall): void => {
             this.cityEnglishToolCall = toolCall
             this.cityEnglishAnswered = false
+            this.cityEnglishDismissPayload = null
             this.showCityEnglishSheet = true
           },
           onOpenFarmEnglishSheet: (toolCall: ToolCall): void => {
             this.farmEnglishToolCall = toolCall
             this.farmEnglishAnswered = false
+            this.farmEnglishDismissPayload = null
             this.showFarmEnglishSheet = true
           },
           onReachStart: (): void => {
@@ -3091,16 +3099,27 @@ export struct ChatPage {
             preferType: SheetType.BOTTOM,
             onDisappear: () => {
               if (this.showRoomEnglishSheet && !this.roomEnglishAnswered) {
-                const cancelResult: RoomEnglishAnswerPayload = {
-                  completed: false,
-                  explored_count: 0,
-                  words: [],
-                  focus: 'all',
-                  skill_key: 'english_vocab',
-                  cancelled: true,
-                  lesson: null
+                // 下拉收起 = 本课到此为止，不是「取消」：用卡片此刻的回执（含已点开的单词）正常交卷，
+                // 让老师接着收尾总结；只有卡片没来得及注册时才退到空回执，且不带 cancelled 标志。
+                const provider = this.roomEnglishDismissPayload
+                let resultJson: string = ''
+                if (provider !== null) {
+                  resultJson = provider()
                 }
-                this.handleAskUserAnswer(this.roomEnglishToolCall.id, JSON.stringify(cancelResult))
+                if (resultJson === '') {
+                  const dismissResult: RoomEnglishAnswerPayload = {
+                    completed: false,
+                    explored_count: 0,
+                    words: [],
+                    focus: 'all',
+                    skill_key: 'english_vocab',
+                    cancelled: false,
+                    lesson: null
+                  }
+                  resultJson = JSON.stringify(dismissResult)
+                }
+                this.roomEnglishAnswered = true
+                this.handleAskUserAnswer(this.roomEnglishToolCall.id, resultJson)
               }
               this.showRoomEnglishSheet = false
             }
@@ -3118,15 +3137,24 @@ export struct ChatPage {
             preferType: SheetType.BOTTOM,
             onDisappear: () => {
               if (this.showCityEnglishSheet && !this.cityEnglishAnswered) {
-                const cancelResult: CityEnglishAnswerPayload = {
-                  completed: false,
-                  explored_count: 0,
-                  words: [],
-                  focus: 'overview',
-                  skill_key: 'english_vocab',
-                  cancelled: true
+                const provider = this.cityEnglishDismissPayload
+                let resultJson: string = ''
+                if (provider !== null) {
+                  resultJson = provider()
                 }
-                this.handleAskUserAnswer(this.cityEnglishToolCall.id, JSON.stringify(cancelResult))
+                if (resultJson === '') {
+                  const dismissResult: CityEnglishAnswerPayload = {
+                    completed: false,
+                    explored_count: 0,
+                    words: [],
+                    focus: 'overview',
+                    skill_key: 'english_vocab',
+                    cancelled: false
+                  }
+                  resultJson = JSON.stringify(dismissResult)
+                }
+                this.cityEnglishAnswered = true
+                this.handleAskUserAnswer(this.cityEnglishToolCall.id, resultJson)
               }
               this.showCityEnglishSheet = false
             }
@@ -3144,15 +3172,24 @@ export struct ChatPage {
             preferType: SheetType.BOTTOM,
             onDisappear: () => {
               if (this.showFarmEnglishSheet && !this.farmEnglishAnswered) {
-                const cancelResult: FarmEnglishAnswerPayload = {
-                  completed: false,
-                  explored_count: 0,
-                  words: [],
-                  focus: 'overview',
-                  skill_key: 'english_vocab',
-                  cancelled: true
+                const provider = this.farmEnglishDismissPayload
+                let resultJson: string = ''
+                if (provider !== null) {
+                  resultJson = provider()
                 }
-                this.handleAskUserAnswer(this.farmEnglishToolCall.id, JSON.stringify(cancelResult))
+                if (resultJson === '') {
+                  const dismissResult: FarmEnglishAnswerPayload = {
+                    completed: false,
+                    explored_count: 0,
+                    words: [],
+                    focus: 'overview',
+                    skill_key: 'english_vocab',
+                    cancelled: false
+                  }
+                  resultJson = JSON.stringify(dismissResult)
+                }
+                this.farmEnglishAnswered = true
+                this.handleAskUserAnswer(this.farmEnglishToolCall.id, resultJson)
               }
               this.showFarmEnglishSheet = false
             }
@@ -3728,6 +3765,9 @@ export struct ChatPage {
       },
       onRequestClose: (): void => {
         this.showRoomEnglishSheet = false
+      },
+      onRegisterDismissPayload: (provider: () => string): void => {
+        this.roomEnglishDismissPayload = provider
       }
     })
   }
@@ -3746,6 +3786,9 @@ export struct ChatPage {
       },
       onRequestClose: (): void => {
         this.showCityEnglishSheet = false
+      },
+      onRegisterDismissPayload: (provider: () => string): void => {
+        this.cityEnglishDismissPayload = provider
       }
     })
   }
@@ -3764,6 +3807,9 @@ export struct ChatPage {
       },
       onRequestClose: (): void => {
         this.showFarmEnglishSheet = false
+      },
+      onRegisterDismissPayload: (provider: () => string): void => {
+        this.farmEnglishDismissPayload = provider
       }
     })
   }
