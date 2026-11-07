@@ -971,10 +971,10 @@
           return;
         }
         if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'ArrowLeft' || key === 'ArrowRight') {
-          if (key === 'ArrowLeft') this.walker.look(-60, 0);
-          else if (key === 'ArrowRight') this.walker.look(60, 0);
-          else if (key === 'ArrowUp') this.walker.look(0, -60);
-          else this.walker.look(0, 60);
+          if (key === 'ArrowLeft') this.walker.turn(-1, 0);
+          else if (key === 'ArrowRight') this.walker.turn(1, 0);
+          else if (key === 'ArrowUp') this.walker.turn(0, 1);
+          else this.walker.turn(0, -1);
           event.preventDefault();
           return;
         }

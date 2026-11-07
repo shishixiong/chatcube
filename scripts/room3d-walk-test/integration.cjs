@@ -303,7 +303,10 @@ attachSceneProbe();
   });
 
   check('拖动环顾改变朝向（世界坐标方位随之变化）', () => {
-    const before = readNearestDirection();
+    const walker = walkerRef();
+    const target = nearestAnchorWorld();
+    assert(target, '拿不到方位');
+    const before = walker.bearing(target);
     canvas.dispatchEvent(pointer('pointerdown', 200, 300));
     for (let i = 1; i <= 10; i += 1) {
       canvas.dispatchEvent(pointer('pointermove', 200 + i * 18, 300));
@@ -311,10 +314,44 @@ attachSceneProbe();
     }
     canvas.dispatchEvent(pointer('pointerup', 380, 300));
     frames(20);
-    const after = readNearestDirection();
-    assert(before !== null && after !== null, '拿不到方位');
-    assert(before !== after, '转了 180° 方位没变：' + before + ' / ' + after);
-    return before + ' → ' + after;
+    const after = walker.bearing(target);
+    // bearing 是「物件方位 − 朝向」：往右拖视线左转，偏角就该变小
+    const delta = shortestAngle(after - before);
+    assert(delta < -0.2, `转了 180° 方位没变：${before.toFixed(3)} → ${after.toFixed(3)}`);
+    return `${walker.direction(before)} → ${walker.direction(after)}`;
+  });
+
+  // 和全景（轨道）模式对齐：手指往右拖，房间跟着往右走 = 视线往左转（yaw 增加）。
+  // 反过来就是「镜头跟手」，切模式时会觉得画面转反了。
+  check('往右拖时房间跟着往右走（和轨道模式同向）', () => {
+    const walker = walkerRef();
+    const beforeYaw = walker.targetYaw;
+    canvas.dispatchEvent(pointer('pointerdown', 200, 300));
+    for (let i = 1; i <= 10; i += 1) {
+      canvas.dispatchEvent(pointer('pointermove', 200 + i * 18, 300));
+      tick(16);
+    }
+    canvas.dispatchEvent(pointer('pointerup', 380, 300));
+    frames(20);
+    const delta = shortestAngle(walker.targetYaw - beforeYaw);
+    assert(delta > 0.2, `往右拖 180px 视线应往左转（yaw 增加），实际 Δyaw=${delta.toFixed(3)}`);
+    return `Δyaw=${delta.toFixed(3)} rad`;
+  });
+
+  check('方向键环顾：← 往左看，→ 往右看', () => {
+    const walker = walkerRef();
+    const y0 = walker.targetYaw;
+    key('keydown', 'ArrowLeft');
+    frames(2);
+    const dLeft = shortestAngle(walker.targetYaw - y0);
+    assert(dLeft > 0.1, `按 ← 应往左看（yaw 增加），实际 Δyaw=${dLeft.toFixed(3)}`);
+    const y1 = walker.targetYaw;
+    key('keydown', 'ArrowRight');
+    key('keydown', 'ArrowRight');
+    frames(2);
+    const dRight = shortestAngle(walker.targetYaw - y1);
+    assert(dRight < -0.1, `按 → 应往右看（yaw 减少），实际 Δyaw=${dRight.toFixed(3)}`);
+    return `← ${dLeft.toFixed(2)} / → ${dRight.toFixed(2)}`;
   });
 
   check('按住前进会移动，松手会停', () => {
@@ -680,6 +717,10 @@ function walkerRef() {
   const canvas = document.getElementById('scene-canvas');
   return canvas.__scene && canvas.__scene.walker ? canvas.__scene.walker : window.__walker;
 }
+// 把角度差收进 (-PI, PI]，比较朝向有没有转、往哪边转都用它
+function shortestAngle(a) {
+  return Math.atan2(Math.sin(a), Math.cos(a));
+}
 function cameraPosition() {
   const canvas = document.getElementById('scene-canvas');
   const cam = canvas.__scene && canvas.__scene.camera;
@@ -692,7 +733,7 @@ function walkBounds() {
   assert(sc && sc.walker, '拿不到 walker');
   return sc.walker.bounds;
 }
-function readNearestDirection() {
+function nearestAnchorWorld() {
   const canvas = document.getElementById('scene-canvas');
   const sc = canvas.__scene;
   if (!sc || !sc.walker) return null;
@@ -702,8 +743,7 @@ function readNearestDirection() {
     if (!a.world) return;
     if (!best || a.distance < best.distance) best = a;
   });
-  if (!best) return null;
-  return sc.walker.direction(sc.walker.bearing(best.world));
+  return best ? best.world : null;
 }
 function countVisibleLabels(range) {
   // 撞墙测试之后相机会贴在墙角，先回到出生点再数，数字才有可比性

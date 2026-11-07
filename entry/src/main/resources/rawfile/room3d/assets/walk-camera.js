@@ -24,6 +24,8 @@
   var PITCH_LIMIT = 1.2; // ±69°，不让人把镜头翻到头顶
   var LOOK_X = 0.0042; // 每像素转多少弧度：手机上划一整屏约转 90°
   var LOOK_Y = 0.0034;
+  var KEY_LOOK_X = LOOK_X * 60; // 方向键按一下 ≈ 拖 60px，手感和大屏平移键一致
+  var KEY_LOOK_Y = LOOK_Y * 60;
   var WALK_INSET = 0.42; // 与墙的最小距离，按肩宽 + 手指误触留量
   var RADIUS = 0.26; // 身体半径，撞家具时用
   var HIGH_PROPS = 1.2; // 底边高过这个高度的碰撞盒当作挂件，不挡人
@@ -211,10 +213,18 @@
       this.apply(0);
     }
 
-    // 拖动环顾：和轨道相机的方向一致（往左拖，眼前的房间往右转）
+    // 拖动环顾：和轨道模式 / 平移一样是「抓房间」——往右拖，眼前的房间跟着往右走，
+    // 也就是视线往左转（yaw 增加）。反过来会变成「镜头跟手」，切换视角时方向是反的。
     look(dx, dy) {
-      this.targetYaw = wrapAngle(this.targetYaw - dx * LOOK_X);
+      this.targetYaw = wrapAngle(this.targetYaw + dx * LOOK_X);
       this.targetPitch = clamp(this.targetPitch - dy * LOOK_Y, -PITCH_LIMIT, PITCH_LIMIT);
+    }
+
+    // 方向键环顾：dirX > 0 往右看，dirY > 0 抬头。
+    // 键盘没有手指位移，直接说视线往哪边转，别让调用方去反推拖动符号。
+    turn(dirX, dirY) {
+      this.targetYaw = wrapAngle(this.targetYaw - dirX * KEY_LOOK_X);
+      this.targetPitch = clamp(this.targetPitch + dirY * KEY_LOOK_Y, -PITCH_LIMIT, PITCH_LIMIT);
     }
 
     // 屏幕上的「按住前进」
