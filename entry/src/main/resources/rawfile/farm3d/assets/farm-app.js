@@ -122,10 +122,22 @@
     }
   }
 
+  // 把原生朗读桥和舞台/气泡层交给智能体模块
+  function attachAgentUI() {
+    if (!sceneOk || !global.FarmAgents || !global.FarmAgents.attachUI) return;
+    global.FarmAgents.attachUI({
+      layer: dom.bubbleLayer,
+      stage: dom.stage,
+      speak: speak,
+      stopSpeak: stopSpeak,
+      toast: showToast
+    });
+  }
+
   function cacheDom() {
     var ids = [
       'app', 'webTopbar', 'nightBtn', 'nightLabel', 'vocabBtn', 'stage', 'farmCanvas',
-      'zoneTabs', 'labelsBtn', 'resetBtn', 'labelLayer', 'sceneToast', 'loadScreen', 'failCard',
+      'zoneTabs', 'labelsBtn', 'resetBtn', 'labelLayer', 'bubbleLayer', 'sceneToast', 'loadScreen', 'failCard',
       'failVocabBtn', 'failRetryBtn', 'panel', 'panelGrab', 'panelToggle', 'panelZone',
       'panelCount', 'panelPeek', 'panelBody', 'emptyState', 'wordCard', 'cardCat', 'cardIndex',
       'cardWord', 'cardPhon', 'cardZh', 'cardDef', 'cardExample', 'cardExampleText',
@@ -445,6 +457,10 @@
     var h = dom.stage.clientHeight;
     if (w < 20 || h < 20) return;
     var used = [];
+    if (global.FarmAgents && global.FarmAgents.getOcclusionRects) {
+      var bubbleRects = global.FarmAgents.getOcclusionRects();
+      for (var b = 0; b < bubbleRects.length; b++) used.push(bubbleRects[b]);
+    }
     for (var i = 0; i < data.length; i++) {
       var d = data[i];
       var item = byIdMap[d.id];
@@ -479,8 +495,9 @@
   }
 
   function frameTick() {
-    if (!state.labels) return;
     var now = Date.now();
+    if (global.FarmAgents && global.FarmAgents.frame) global.FarmAgents.frame(now);
+    if (!state.labels) return;
     if (now - labelTick < 90) return;
     labelTick = now;
     positionLabels();
@@ -489,6 +506,10 @@
   function handlePick(id, root) {
     if (id) selectWord(id, { root: root });
     else closeCard();
+    // 单击动物：单词卡照常打开，同时让动物做一个短反应并冒双语气泡
+    if (id && global.FarmAgents && global.FarmAgents.isAgent && global.FarmAgents.isAgent(id)) {
+      global.FarmAgents.interact(id, root);
+    }
   }
 
   function renderVocabList() {
@@ -692,6 +713,11 @@
         else if (state.selected) closeCard();
       }
     });
+    doc.addEventListener('visibilitychange', function () {
+      if (doc.hidden && global.FarmAgents && global.FarmAgents.clearBubbles) {
+        global.FarmAgents.clearBubbles();
+      }
+    });
   }
 
   function dismissOnboard() {
@@ -777,6 +803,7 @@
       initScene();
       if (sceneOk && global.FarmScene) {
         global.FarmScene.resize();
+        attachAgentUI();
         if (state.labels) global.FarmScene.setLabelsVisible(true);
         if (state.night) global.FarmScene.setNight(true);
       }

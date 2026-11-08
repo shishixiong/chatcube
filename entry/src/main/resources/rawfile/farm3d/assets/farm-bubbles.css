@@ -1,0 +1,88 @@
+/* 动物 / 人物对话气泡层：位于英文标签之上、界面控件之下 */
+.bubble-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.bubble {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-width: 216px;
+  width: max-content;
+  padding: 8px 12px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
+  text-align: left;
+  white-space: normal;
+  transform: translate(-50%, -100%);
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.bubble.is-entering {
+  opacity: 0;
+  transform: translate(-50%, calc(-100% + 6px));
+}
+
+.bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  transform: rotate(45deg);
+  border-bottom-right-radius: 3px;
+  pointer-events: none;
+}
+
+.bubble:not(.is-entering) {
+  opacity: 1;
+  transform: translate(-50%, -100%);
+}
+
+.bubble:active {
+  transform: translate(-50%, calc(-100% + 1px));
+}
+
+.bubble-zh {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.bubble-en {
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ink-soft);
+}
+
+/* 夜间气泡统一带一点月光感的冷色描边 */
+.bubble[data-agent="cat"],
+.bubble[data-agent="rabbit"] {
+  border-color: #E2DCCB;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble {
+    transition: none;
+  }
+}

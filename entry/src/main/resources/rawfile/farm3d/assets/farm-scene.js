@@ -65,9 +65,11 @@
   var ripples = [];
   var beeBase = null;
   var fireflyBase = [];
+  var rabbitAuto = true;
 
   var tmpV = new THREE.Vector3();
   var tmpS = new THREE.Vector3();
+  var projV = new THREE.Vector3();
   var daySkyColor = new THREE.Color(DAY.sky);
   var nightSkyColor = new THREE.Color(NIGHT.sky);
   var dayFogColor = new THREE.Color(DAY.fog);
@@ -178,12 +180,34 @@
     for (var ii = 0; ii < built.idles.length; ii++) {
       built.idles[ii].baseY = built.idles[ii].root.position.y;
     }
+    buildRabbitTrips();
+    buildGrainCycle();
     beeBase = built.bee.position.clone();
     for (var i = 0; i < built.fireflies.length; i++) {
       fireflyBase.push({ x: built.fireflies[i].x0, y: built.fireflies[i].baseY, z: built.fireflies[i].z0, phase: built.fireflies[i].phase, r: built.fireflies[i].r });
     }
     createRing();
     createRipples();
+
+    if (global.FarmAgents && global.FarmAgents.init) {
+      global.FarmAgents.init({
+        THREE: THREE,
+        data: D,
+        scene: scene,
+        camera: camera,
+        canvas: canvasEl,
+        built: built,
+        getTime: function () { return elapsed; },
+        isReduceMotion: function () { return reduceMotion; },
+        getNight: function () { return nightTarget > 0.5; },
+        getNightAmount: function () { return night; },
+        getGrainState: S.getGrainState,
+        getRabbitState: S.getRabbitState,
+        setRabbitAuto: S.setRabbitAuto,
+        holdActor: S.holdActor,
+        project: S.project
+      });
+    }
 
     clock = new THREE.Clock();
     bindEvents();
@@ -371,11 +395,17 @@
         },
         to: to
       };
+      if (global.FarmAgents && global.FarmAgents.isReady && global.FarmAgents.isReady()) {
+        global.FarmAgents.onZoneChange(name);
+      }
     }
   }
 
   S.setNight = function (on) {
     nightTarget = on ? 1 : 0;
+    if (global.FarmAgents && global.FarmAgents.isReady && global.FarmAgents.isReady()) {
+      global.FarmAgents.onNightChange(!!on);
+    }
   };
 
   S.getNight = function () { return nightTarget > 0.5; };
@@ -461,6 +491,22 @@
     return out;
   };
 
+  // 智能体气泡用的世界坐标 → CSS 像素投影（不依赖英文标签开关）
+  S.project = function (x, y, z) {
+    if (!camera || !canvasEl) return { x: 0, y: 0, visible: false, dist: 0 };
+    var w = canvasEl.clientWidth || 1;
+    var h = canvasEl.clientHeight || 1;
+    projV.set(x, y, z);
+    var dist = camera.position.distanceTo(projV);
+    projV.project(camera);
+    return {
+      x: (projV.x * 0.5 + 0.5) * w,
+      y: (-projV.y * 0.5 + 0.5) * h,
+      visible: projV.z >= -1 && projV.z <= 1,
+      dist: dist
+    };
+  };
+
   S.resize = function () {
     if (!renderer || !canvasEl) return;
     var w = canvasEl.clientWidth || 1;
@@ -477,6 +523,7 @@
     var actors = built.actors;
     for (var i = 0; i < actors.length; i++) {
       var a = actors[i];
+      if (a.held) continue;
       a.angle += a.speed * dt;
       var x = Math.cos(a.angle) * 24.8;
       var z = Math.sin(a.angle) * 18.3;
@@ -489,10 +536,498 @@
       var walker = built.actors[2];
       var walker2 = built.actors[3];
       var dog = built.actors[4];
-      if (walker) walker.obj.position.y = 0.05 + Math.abs(Math.sin(elapsed * 4.2)) * 0.06;
-      if (walker2) walker2.obj.position.y = 0.05 + Math.abs(Math.sin(elapsed * 4.6 + 1)) * 0.06;
-      if (dog) dog.obj.position.y = 0.05 + Math.abs(Math.sin(elapsed * 6.0 + 2)) * 0.08;
+      if (walker && !walker.held) walker.obj.position.y = 0.05 + Math.abs(Math.sin(elapsed * 4.2)) * 0.06;
+      if (walker2 && !walker2.held) walker2.obj.position.y = 0.05 + Math.abs(Math.sin(elapsed * 4.6 + 1)) * 0.06;
+      if (dog && !dog.held) dog.obj.position.y = 0.05 + Math.abs(Math.sin(elapsed * 6.0 + 2)) * 0.08;
     }
+  }
+
+  // 智能体小剧场用：把环形 actor 冻在当前位置（只改朝向/小起伏，不搬离环）
+  S.holdActor = function (id, on) {
+    if (!built) return false;
+    for (var i = 0; i < built.actors.length; i++) {
+      if (built.actors[i].id === id) {
+        built.actors[i].held = !!on;
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // ---------------------------------------------------------------
+  // 兔子吃萝卜小剧场：原地待一会儿 → 蹦到菜园 → 低头啃掉一棵胡萝卜
+  // → 蹦回窝 → 再等一段时间。吃完的胡萝卜过一会儿慢慢长回来。
+  // ---------------------------------------------------------------
+  var RABBIT_RUN_SPEED = 3.1;
+  var RABBIT_EAT_TIME = 2.9;
+  var CARROT_REGROW_TIME = 55;
+  var rabbitTrips = [];
+
+  function setRabbitEars(cfg, now, swing) {
+    if (cfg.earL) cfg.earL.rotation.z = 0.12 + Math.sin(now * 2.2 + cfg.phase) * swing;
+    if (cfg.earR) cfg.earR.rotation.z = -0.12 + Math.sin(now * 2.2 + cfg.phase + 0.6) * swing;
+  }
+
+  function buildRabbitTrips() {
+    rabbitTrips = [];
+    if (!built || !built.carrotGarden) return;
+    var entry = built.objects.rabbit;
+    if (!entry || !entry.root || !entry.root.userData.idle) return;
+    var rabbit = entry.root;
+    var garden = built.carrotGarden;
+    var gp = garden.group.position;
+    var ry = garden.group.rotation.y;
+    var cs = Math.cos(ry);
+    var sn = Math.sin(ry);
+    var carrots = [];
+    for (var i = 0; i < garden.carrots.length; i++) {
+      var node = garden.carrots[i].group;
+      var lp = node.position;
+      carrots.push({
+        node: node,
+        lx: lp.x,
+        lz: lp.z,
+        x: gp.x + lp.x * cs + lp.z * sn,
+        z: gp.z - lp.x * sn + lp.z * cs,
+        front: lp.z > 0,
+        state: 'ready',
+        grow: 1,
+        regen: 0
+      });
+    }
+    rabbitTrips.push({
+      root: rabbit,
+      cfg: rabbit.userData.idle,
+      carrots: carrots,
+      gardenX: gp.x,
+      gardenZ: gp.z,
+      cs: cs,
+      sn: sn,
+      homeX: rabbit.position.x,
+      homeY: rabbit.position.y,
+      homeZ: rabbit.position.z,
+      homeYaw: rabbit.rotation.y,
+      state: 'wait',
+      timer: 5.5,
+      target: null,
+      fromX: 0,
+      fromZ: 0,
+      toX: 0,
+      toZ: 0,
+      travelT: 0,
+      travelDur: 1
+    });
+  }
+
+  function chooseCarrot(trip) {
+    var best = null;
+    var bestScore = Infinity;
+    for (var i = 0; i < trip.carrots.length; i++) {
+      var c = trip.carrots[i];
+      // 只啃靠敞口那一排：后排被土床和木栅栏挡着，兔子站过去会踩进菜畦里
+      if (c.state !== 'ready' || c.grow < 0.5 || !c.front) continue;
+      var dx = c.x - trip.homeX;
+      var dz = c.z - trip.homeZ;
+      var score = Math.sqrt(dx * dx + dz * dz);
+      if (score < bestScore) {
+        bestScore = score;
+        best = c;
+      }
+    }
+    return best;
+  }
+
+  function updateCarrots(carrots, dt) {
+    for (var i = 0; i < carrots.length; i++) {
+      var c = carrots[i];
+      if (c.state === 'eaten') {
+        c.grow = Math.max(0, c.grow - dt / 0.32);
+        c.regen -= dt;
+        if (c.grow <= 0 && c.regen <= 0) {
+          c.state = 'ready';
+          c.grow = 0.02;
+        }
+      } else if (c.grow < 1) {
+        c.grow = Math.min(1, c.grow + dt / 0.8);
+      }
+      c.node.visible = c.grow > 0.02;
+      c.node.scale.setScalar(Math.max(0.02, c.grow));
+    }
+  }
+
+  function updateRabbitTrips(dt, now) {
+    for (var i = 0; i < rabbitTrips.length; i++) {
+      var trip = rabbitTrips[i];
+      var root = trip.root;
+      var cfg = trip.cfg;
+      updateCarrots(trip.carrots, dt);
+      if (!rabbitAuto) continue;
+
+      if (trip.state === 'wait') {
+        trip.timer -= dt;
+        root.position.set(trip.homeX, trip.homeY, trip.homeZ);
+        // 闲着的时候慢慢左右张望
+        root.rotation.y = trip.homeYaw + Math.sin(now * 0.42 + 1.3) * 0.16;
+        if (cfg.head) cfg.head.rotation.x = 0;
+        setRabbitEars(cfg, now, 0.06);
+        if (trip.timer <= 0) {
+          var pick = chooseCarrot(trip);
+          if (!pick) {
+            trip.timer = 4;
+            continue;
+          }
+          trip.target = pick;
+          trip.fromX = root.position.x;
+          trip.fromZ = root.position.z;
+          var standLz = pick.lz + 0.85;
+          trip.toX = trip.gardenX + pick.lx * trip.cs + standLz * trip.sn;
+          trip.toZ = trip.gardenZ - pick.lx * trip.sn + standLz * trip.cs;
+          var dx = trip.toX - trip.fromX;
+          var dz = trip.toZ - trip.fromZ;
+          trip.travelDur = Math.max(0.5, Math.sqrt(dx * dx + dz * dz) / RABBIT_RUN_SPEED);
+          trip.travelT = 0;
+          trip.state = 'run';
+        }
+      } else if (trip.state === 'run' || trip.state === 'back') {
+        trip.travelT = Math.min(trip.travelDur, trip.travelT + dt);
+        var k = trip.travelT / trip.travelDur;
+        root.position.x = trip.fromX + (trip.toX - trip.fromX) * k;
+        root.position.z = trip.fromZ + (trip.toZ - trip.fromZ) * k;
+        root.position.y = trip.homeY + Math.abs(Math.sin(now * 9.0)) * 0.16;
+        root.rotation.y = Math.atan2(trip.toX - trip.fromX, trip.toZ - trip.fromZ);
+        if (cfg.head) cfg.head.rotation.x = 0;
+        setRabbitEars(cfg, now, 0.18);
+        if (trip.travelT >= trip.travelDur) {
+          root.position.x = trip.toX;
+          root.position.z = trip.toZ;
+          root.position.y = trip.homeY;
+          if (trip.state === 'run') {
+            trip.state = 'eat';
+            trip.timer = RABBIT_EAT_TIME;
+          } else {
+            trip.state = 'wait';
+            trip.timer = 9 + Math.random() * 8;
+            root.position.set(trip.homeX, trip.homeY, trip.homeZ);
+            root.rotation.y = trip.homeYaw;
+          }
+        }
+      } else if (trip.state === 'eat') {
+        trip.timer -= dt;
+        var c = trip.target;
+        if (c) {
+          root.rotation.y = Math.atan2(c.x - root.position.x, c.z - root.position.z);
+          // 低头一顿一顿地啃，身子跟着一伏一起
+          if (cfg.head) cfg.head.rotation.x = -0.62 + Math.sin(now * 11.0) * 0.12;
+          root.position.y = trip.homeY - 0.03 + Math.abs(Math.sin(now * 11.0)) * 0.035;
+          if (c.state === 'ready' && trip.timer <= RABBIT_EAT_TIME * 0.35) {
+            c.state = 'eaten';
+            c.regen = CARROT_REGROW_TIME;
+          }
+        }
+        setRabbitEars(cfg, now, 0.05);
+        if (trip.timer <= 0) {
+          trip.state = 'back';
+          trip.fromX = root.position.x;
+          trip.fromZ = root.position.z;
+          trip.toX = trip.homeX;
+          trip.toZ = trip.homeZ;
+          var bdx = trip.toX - trip.fromX;
+          var bdz = trip.toZ - trip.fromZ;
+          trip.travelDur = Math.max(0.5, Math.sqrt(bdx * bdx + bdz * bdz) / RABBIT_RUN_SPEED);
+          trip.travelT = 0;
+          trip.target = null;
+        }
+      }
+    }
+  }
+
+  // 智能体接管兔子时暂停自动巡游；恢复时回到窝边重新等待
+  S.setRabbitAuto = function (on) {
+    rabbitAuto = !!on;
+    if (!rabbitAuto) return false;
+    for (var i = 0; i < rabbitTrips.length; i++) {
+      var trip = rabbitTrips[i];
+      trip.state = 'wait';
+      trip.timer = 6 + Math.random() * 6;
+      trip.target = null;
+      trip.root.position.set(trip.homeX, trip.homeY, trip.homeZ);
+      trip.root.rotation.y = trip.homeYaw;
+      if (trip.cfg.head) trip.cfg.head.rotation.x = 0;
+      if (trip.cfg.earL) trip.cfg.earL.rotation.z = 0.12;
+      if (trip.cfg.earR) trip.cfg.earR.rotation.z = -0.12;
+    }
+    return true;
+  };
+
+  S.getRabbitState = function () {
+    var trip = rabbitTrips.length ? rabbitTrips[0] : null;
+    return { state: trip ? trip.state : 'none', auto: rabbitAuto };
+  };
+
+  // ---------------------------------------------------------------
+  // 运粮小剧场：拖拉机拉着拖车每绕农场一圈，都会在谷仓门口的土路岔口停一次。
+  // 停稳 → 谷仓门打开 → 农夫推着满满一车粮食走到拖车旁倒进去 →
+  // 推空车回谷仓、把门关上 → 拖拉机才继续往前开。
+  // 全程躲着兔子走，不会从它身上碾过去。
+  // ---------------------------------------------------------------
+  var GRAIN_BAY_ANGLE = 3.93;      // 拖车停车点（椭圆参数角，正好落在通往谷仓的土路口）
+  var GRAIN_TRACTOR_GAP = 0.15;    // 拖拉机比拖车领先的角度
+  var GRAIN_WALK_SPEED = 2.0;
+  var GRAIN_DOOR_SPEED = 1.9;
+  var GRAIN_POUR_TIME = 2.4;
+  var GRAIN_RABBIT_CLEAR = 2.0;    // 农夫和兔子之间的最小距离
+  var grainCycle = null;
+
+  S.getGrainState = function () {
+    return {
+      active: !!(grainCycle && grainCycle.state && grainCycle.state !== 'idle'),
+      state: grainCycle ? grainCycle.state : 'idle'
+    };
+  };
+
+  function buildGrainCycle() {
+    grainCycle = null;
+    if (!built || !built.grainFarmer) return;
+    var tEntry = built.objects.trailer;
+    var kEntry = built.objects.tractor;
+    var bEntry = built.objects.barn;
+    if (!tEntry || !kEntry || !bEntry) return;
+    var farmer = built.grainFarmer;
+    var doors = bEntry.root.userData.doors;
+    if (!doors || !farmer.userData.barrowPivot || !farmer.userData.barrow) return;
+    var tractorActor = null;
+    var trailerActor = null;
+    for (var i = 0; i < built.actors.length; i++) {
+      if (built.actors[i].id === 'tractor') tractorActor = built.actors[i];
+      if (built.actors[i].id === 'trailer') trailerActor = built.actors[i];
+    }
+    if (!tractorActor || !trailerActor) return;
+    var barn = bEntry.root;
+
+    // 倒粮时空中飞过的小谷粒：从独轮车斗划一道弧线，翻过拖车挡板落进车斗里。
+    // 场景根挂在原点，谷粒直接挂上去按世界坐标摆放即可。
+    var bits = [];
+    var bitMat = new THREE.MeshPhongMaterial({
+      color: 0xF2C14E, flatShading: true, shininess: 0, specular: 0x000000
+    });
+    var bitGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+    for (var nb = 0; nb < 7; nb++) {
+      var bit = new THREE.Mesh(bitGeo, bitMat);
+      bit.visible = false;
+      built.root.add(bit);
+      bits.push(bit);
+    }
+
+    grainCycle = {
+      tractor: kEntry.root,
+      trailer: tEntry.root,
+      tractorActor: tractorActor,
+      trailerActor: trailerActor,
+      tractorSpeed: tractorActor.speed,
+      trailerSpeed: trailerActor.speed,
+      doors: doors,
+      farmer: farmer,
+      pivot: farmer.userData.barrowPivot,
+      barrowHeap: farmer.userData.barrow.userData.heap,
+      trailerHeap: tEntry.root.userData.heap,
+      doorX: barn.position.x + Math.sin(barn.rotation.y) * 4.95,
+      doorZ: barn.position.z + Math.cos(barn.rotation.y) * 4.95,
+      intoX: Math.sin(barn.rotation.y),
+      intoZ: Math.cos(barn.rotation.y),
+      state: 'idle',
+      doorT: 0,
+      walk: 0,
+      total: 0,
+      path: [],
+      pourT: 0,
+      standX: 0,
+      standZ: 0,
+      bits: bits,
+      fromX: 0, fromY: 0, fromZ: 0,
+      toX: 0, toY: 0, toZ: 0
+    };
+    if (grainCycle.trailerHeap) grainCycle.trailerHeap.scale.set(1, 0.12, 1);
+    if (grainCycle.barrowHeap) grainCycle.barrowHeap.scale.set(1, 1, 1);
+    for (var b = 0; b < bits.length; b++) bits[b].visible = false;
+  }
+
+  function startGrainTrip(gc) {
+    // 拖车停在哪，就在它靠谷仓那一侧找个位置倒粮
+    var tp = gc.trailer.position;
+    var ry = gc.trailer.rotation.y;
+    var lx = Math.cos(ry);
+    var lz = -Math.sin(ry);
+    var dx = gc.doorX - tp.x;
+    var dz = gc.doorZ - tp.z;
+    var dd = Math.sqrt(dx * dx + dz * dz) || 1;
+    var side = (lx * (dx / dd) + lz * (dz / dd)) >= 0 ? 1 : -1;
+    // 站得离拖车远一点，整辆独轮车（连车头轮子）都留在挡板外面，不会插进车斗
+    gc.standX = tp.x + lx * side * 2.85;
+    gc.standZ = tp.z + lz * side * 2.85;
+
+    // 倒粮弧线：从独轮车车斗顶划一道弧线，翻过挡板落进拖车斗里
+    var yawTo = Math.atan2(tp.x - gc.standX, tp.z - gc.standZ);
+    gc.fromX = gc.standX + Math.sin(yawTo) * 1.28;
+    gc.fromZ = gc.standZ + Math.cos(yawTo) * 1.28;
+    gc.fromY = 1.34;
+    var sx = Math.sin(ry);
+    var cx = Math.cos(ry);
+    gc.toX = tp.x + lx * side * 0.45 - sx * 1.0;
+    gc.toZ = tp.z + lz * side * 0.45 - cx * 1.0;
+    gc.toY = 1.5;
+
+    // 从谷仓门口顺着通往谷仓的土路走到拖车旁边
+    var pts = [
+      { x: gc.doorX, z: gc.doorZ },
+      { x: -33.5, z: -22.3 },
+      { x: -30.5, z: -20.6 },
+      { x: -26.5, z: -17.9 },
+      { x: -22.8, z: -15.2 },
+      { x: gc.standX, z: gc.standZ }
+    ];
+    var total = 0;
+    for (var i = 0; i < pts.length - 1; i++) {
+      var ax = pts[i + 1].x - pts[i].x;
+      var az = pts[i + 1].z - pts[i].z;
+      pts[i].len = Math.sqrt(ax * ax + az * az);
+      total += pts[i].len;
+    }
+    gc.path = pts;
+    gc.total = total;
+    gc.walk = 0;
+    gc.pourT = 0;
+    gc.doorT = 0;
+
+    // 门开到一半再把农夫露出来，免得他从门板里穿出来
+    gc.farmer.position.set(gc.doorX, 0.05, gc.doorZ);
+    gc.farmer.rotation.y = Math.atan2(pts[1].x - gc.doorX, pts[1].z - gc.doorZ);
+    gc.farmer.visible = false;
+    gc.pivot.rotation.x = 0;
+    if (gc.barrowHeap) gc.barrowHeap.scale.set(1, 1, 1);
+    if (gc.trailerHeap) gc.trailerHeap.scale.set(1, 0.12, 1);
+  }
+
+  function grainPathPos(gc, dist) {
+    var pts = gc.path;
+    var d = dist;
+    for (var i = 0; i < pts.length - 1; i++) {
+      var seg = pts[i].len || 0;
+      if (d <= seg || i === pts.length - 2) {
+        var k = seg > 0.0001 ? clamp(d / seg, 0, 1) : 0;
+        return {
+          x: pts[i].x + (pts[i + 1].x - pts[i].x) * k,
+          z: pts[i].z + (pts[i + 1].z - pts[i].z) * k,
+          yaw: Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z)
+        };
+      }
+      d -= seg;
+    }
+    return { x: pts[0].x, z: pts[0].z, yaw: 0 };
+  }
+
+  function placeGrainFarmer(gc, x, z, yaw, now, walking) {
+    // 兔子可能在路上歇着，农夫绕着它走，绝不从它身上压过去
+    var rb = built.objects.rabbit;
+    if (rb) {
+      var rx = x - rb.root.position.x;
+      var rz = z - rb.root.position.z;
+      var rd = Math.sqrt(rx * rx + rz * rz);
+      if (rd < GRAIN_RABBIT_CLEAR && rd > 0.0001) {
+        var push = GRAIN_RABBIT_CLEAR - rd;
+        x += (rx / rd) * push;
+        z += (rz / rd) * push;
+      }
+    }
+    var bob = walking ? Math.abs(Math.sin(now * 4.6)) * 0.06 : 0;
+    gc.farmer.position.set(x, 0.05 + bob, z);
+    gc.farmer.rotation.y = yaw;
+  }
+
+  function updateGrainCycle(dt, now) {
+    if (!grainCycle) return;
+    var gc = grainCycle;
+
+    if (gc.state === 'idle') {
+      // 拖车开到岔口就刹住（也把拖拉机一起停住）
+      var ta = gc.trailerActor;
+      var lap = Math.floor((ta.angle - GRAIN_BAY_ANGLE) / (Math.PI * 2)) + 1;
+      var bay = GRAIN_BAY_ANGLE + lap * Math.PI * 2;
+      if (ta.angle + ta.speed * dt < bay) return;
+      ta.angle = bay;
+      gc.tractorActor.angle = bay + GRAIN_TRACTOR_GAP;
+      ta.speed = 0;
+      gc.tractorActor.speed = 0;
+      startGrainTrip(gc);
+      gc.state = 'opening';
+      return;
+    }
+
+    if (gc.state === 'opening') {
+      gc.doorT = Math.min(1, gc.doorT + dt * GRAIN_DOOR_SPEED);
+      if (gc.doorT >= 0.7) gc.farmer.visible = true;
+      if (gc.doorT >= 1) gc.state = 'walkOut';
+    } else if (gc.state === 'walkOut') {
+      gc.walk = Math.min(gc.total, gc.walk + GRAIN_WALK_SPEED * dt);
+      var pos = grainPathPos(gc, gc.walk);
+      placeGrainFarmer(gc, pos.x, pos.z, pos.yaw, now, true);
+      if (gc.walk >= gc.total) {
+        gc.pourT = 0;
+        gc.state = 'pour';
+      }
+    } else if (gc.state === 'pour') {
+      gc.pourT += dt;
+      var k = clamp(gc.pourT / GRAIN_POUR_TIME, 0, 1);
+      var tip = k < 0.22 ? k / 0.22 : (k > 0.82 ? (1 - k) / 0.18 : 1);
+      gc.pivot.rotation.x = tip * 0.42;
+      if (gc.barrowHeap) gc.barrowHeap.scale.set(1, Math.max(0.04, 1 - Math.min(1, k * 1.5)), 1);
+      if (gc.trailerHeap) gc.trailerHeap.scale.set(1, 0.12 + 0.88 * k, 1);
+      // 谷粒顺着弧线翻过挡板落进车斗
+      var pouring = k > 0.06 && k < 0.95;
+      for (var b = 0; b < gc.bits.length; b++) {
+        var bit = gc.bits[b];
+        bit.visible = pouring;
+        if (!pouring) continue;
+        var u = (gc.pourT / 0.8 + b / gc.bits.length) % 1;
+        var lift = Math.sin(Math.PI * u) * 0.7;
+        bit.position.set(
+          gc.fromX + (gc.toX - gc.fromX) * u,
+          gc.fromY + (gc.toY - gc.fromY) * u + lift,
+          gc.fromZ + (gc.toZ - gc.fromZ) * u);
+        bit.rotation.x = u * 6;
+        bit.rotation.z = u * 4;
+      }
+      var tp = gc.trailer.position;
+      placeGrainFarmer(gc, gc.standX, gc.standZ,
+        Math.atan2(tp.x - gc.standX, tp.z - gc.standZ), now, false);
+      if (gc.pourT >= GRAIN_POUR_TIME) {
+        gc.pivot.rotation.x = 0;
+        for (var hb = 0; hb < gc.bits.length; hb++) gc.bits[hb].visible = false;
+        gc.state = 'walkBack';
+      }
+    } else if (gc.state === 'walkBack') {
+      gc.walk = Math.max(0, gc.walk - GRAIN_WALK_SPEED * dt);
+      var bp = grainPathPos(gc, gc.walk);
+      placeGrainFarmer(gc, bp.x, bp.z, bp.yaw + Math.PI, now, true);
+      if (gc.walk <= 0) gc.state = 'closing';
+    } else if (gc.state === 'closing') {
+      gc.doorT = Math.max(0, gc.doorT - dt * GRAIN_DOOR_SPEED);
+      // 趁机退回谷仓里，让门板在他身后合上，而不是从他身上扫过去
+      var back = (1 - gc.doorT) * 2.2;
+      gc.farmer.position.set(
+        gc.doorX - gc.intoX * back, 0.05, gc.doorZ - gc.intoZ * back);
+      gc.farmer.rotation.y = Math.atan2(-gc.intoX, -gc.intoZ);
+      if (gc.doorT <= 0) {
+        gc.doorT = 0;
+        gc.farmer.visible = false;
+        if (gc.barrowHeap) gc.barrowHeap.scale.set(1, 1, 1);
+        gc.trailerActor.speed = gc.trailerSpeed;
+        gc.tractorActor.speed = gc.tractorSpeed;
+        gc.state = 'idle';
+      }
+    }
+
+    gc.doors.left.rotation.y = -gc.doorT * 1.9;
+    gc.doors.right.rotation.y = gc.doorT * 1.9;
   }
 
   function updateCamera(dt) {
@@ -549,6 +1084,7 @@
         o.position.y = baseY + Math.sin(t * 1.2 + cfg.phase) * 0.02;
       } else if (cfg.kind === 'pig') {
         o.rotation.z = Math.sin(t * 1.8 + cfg.phase) * 0.02;
+        if (cfg.tail) cfg.tail.rotation.z = Math.sin(t * 2.6 + cfg.phase) * 0.14;
       } else if (cfg.kind === 'goat') {
         o.rotation.z = Math.sin(t * 1.1 + cfg.phase) * 0.018;
       } else if (cfg.kind === 'chicken' || cfg.kind === 'rooster') {
@@ -557,18 +1093,37 @@
       } else if (cfg.kind === 'duck' || cfg.kind === 'goose') {
         o.position.y = baseY + Math.sin(t * 1.3 + cfg.phase) * 0.03;
       } else if (cfg.kind === 'rabbit') {
-        o.position.y = baseY + Math.abs(Math.sin(t * 2.3 + cfg.phase)) * 0.42;
+        // 不再原地蹦跳：站立时由 updateRabbitTrips 接管位置（等一会儿就跑向胡萝卜地），
+        // 这里只留耳朵的轻微抖动兜底（reduceMotion 时也能保持一点生气）。
+        if (cfg.earL) cfg.earL.rotation.z = 0.12 + Math.sin(t * 1.9 + cfg.phase) * 0.06;
+        if (cfg.earR) cfg.earR.rotation.z = -0.12 + Math.sin(t * 1.9 + cfg.phase + 0.7) * 0.06;
+      } else if (cfg.kind === 'rabbit_graze') {
+        // 牧场里的装饰兔：一会儿抬头、一会儿低头闻草，不再跳
+        if (cfg.head) cfg.head.rotation.x = -0.28 - Math.max(0, Math.sin(t * 0.45 + cfg.phase)) * 0.34;
+        if (cfg.earL) cfg.earL.rotation.z = 0.12 + Math.sin(t * 2.1 + cfg.phase) * 0.08;
+        if (cfg.earR) cfg.earR.rotation.z = -0.12 + Math.sin(t * 2.1 + cfg.phase + 0.5) * 0.08;
       } else if (cfg.kind === 'cat') {
         o.rotation.z = Math.sin(t * 1.6 + cfg.phase) * 0.02;
+        // 尾巴慢慢摆、耳朵时不时抖一下
+        if (cfg.tail) cfg.tail.rotation.y = Math.sin(t * 1.2 + cfg.phase) * 0.07;
+        if (cfg.earL) cfg.earL.rotation.z = 0.22 + Math.sin(t * 0.9 + cfg.phase) * 0.045;
+        if (cfg.earR) cfg.earR.rotation.z = -0.22 + Math.sin(t * 0.9 + cfg.phase + 0.8) * 0.045;
       } else if (cfg.kind === 'lazy_cat') {
         if (cfg.tail) cfg.tail.rotation.y = Math.sin(t * 1.1 + cfg.phase) * 0.28;
         o.position.y = baseY + Math.sin(t * 0.8 + cfg.phase) * 0.012;
       } else if (cfg.kind === 'dog') {
-        if (cfg.tail) cfg.tail.rotation.z = Math.sin(t * 8 + cfg.phase) * 0.5;
+        if (cfg.tail) cfg.tail.rotation.z = Math.sin(t * 8 + cfg.phase) * 0.45;
+        if (cfg.earL) cfg.earL.rotation.z = -0.35 + Math.sin(t * 1.5 + cfg.phase) * 0.05;
+        if (cfg.earR) cfg.earR.rotation.z = 0.35 - Math.sin(t * 1.5 + cfg.phase + 0.5) * 0.05;
       } else if (cfg.kind === 'bird') {
         o.position.y = baseY + Math.sin(t * 1.8 + cfg.phase) * 0.12;
         o.rotation.y = Math.sin(t * 0.6 + cfg.phase) * 0.3;
       }
+    }
+
+    if (!reduceMotion) {
+      updateRabbitTrips(dt, t);
+      updateGrainCycle(dt, t);
     }
 
     if (built.bee) {
@@ -619,11 +1174,15 @@
         var hs = selectedObj.userData.homeScale || 1;
         selectedObj.scale.setScalar(hs * (1.02 + 0.012 * Math.sin(t * 4.2)));
       }
-      if (selectedId === 'tractor' || selectedId === 'trailer' || selectedId === 'farmer' || selectedId === 'child' || selectedId === 'dog') {
+      if (selectedId === 'tractor' || selectedId === 'trailer' || selectedId === 'farmer' || selectedId === 'child' || selectedId === 'dog' || selectedId === 'rabbit') {
         selectedObj.getWorldPosition(tmpV);
         ring.position.x = tmpV.x;
         ring.position.z = tmpV.z;
       }
+    }
+
+    if (global.FarmAgents && global.FarmAgents.isReady && global.FarmAgents.isReady()) {
+      global.FarmAgents.update(dt, reduceMotion ? 0 : dt, t);
     }
 
     placeActors(reduceMotion ? 0 : dt);
@@ -694,6 +1253,9 @@
 
   S.dispose = function () {
     stop();
+    if (global.FarmAgents && global.FarmAgents.dispose) {
+      try { global.FarmAgents.dispose(); } catch (e) {}
+    }
     unbindEvents();
     if (scene) {
       scene.traverse(function (o) {
@@ -714,6 +1276,8 @@
     scene = null;
     camera = null;
     built = null;
+    rabbitTrips = [];
+    grainCycle = null;
     started = false;
   };
 
