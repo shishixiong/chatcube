@@ -55,6 +55,15 @@ export class PreferenceKeys {
   // 儿童学习画像
   static readonly CHILD_PROFILE_JSON: string = 'child_profile_json'
 
+  // 儿童动画片片库（CartoonEntry[] JSON，家长端「动画片管理」）
+  static readonly CARTOON_LIBRARY_JSON: string = 'cartoon_library_json'
+
+  // 儿童动画片观看额度（单次 20 分钟 / 每天 60 分钟 / 闲置 30 分钟重置）
+  static readonly CARTOON_WATCH_DAY: string = 'cartoon_watch_day'
+  static readonly CARTOON_WATCH_DAY_MS: string = 'cartoon_watch_day_ms'
+  static readonly CARTOON_WATCH_SESSION_MS: string = 'cartoon_watch_session_ms'
+  static readonly CARTOON_WATCH_LAST_ACTIVITY_MS: string = 'cartoon_watch_last_activity_ms'
+
   // 英语出题工具图片缓存索引
   static readonly ENGLISH_QUIZ_IMAGE_INDEX_JSON: string = 'english_quiz_image_index_json'
 

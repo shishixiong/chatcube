@@ -21,7 +21,10 @@ import { getAttachmentStorageService, AttachmentStorageService } from '../servic
 import { getToolExecutionService, ToolExecutionService, ToolExecutionContext, isCancelledToolResult, CancelledToolResultInfo } from '../services/ToolExecutionService'
 import { getProviderViewModel, ProviderViewModel } from './ProviderViewModel'
 import { getAssistantService, AssistantService, AssistantRuntimeConfig } from '../services/AssistantService'
-import { DEFAULT_ASSISTANT_ID } from '../models/AssistantModels'
+import { DEFAULT_ASSISTANT_ID, KIDS_GAMES_ASSISTANT_ID } from '../models/AssistantModels'
+import { getCartoonLibraryService } from '../services/CartoonLibraryService'
+import { getCartoonWatchService } from '../services/CartoonWatchService'
+import { renderCartoonCatalogSection } from '../utils/CartoonPromptUtils'
 import { getLessonPlanningService } from '../services/LessonPlanningService'
 import { getLearningLedgerService } from '../services/LearningLedgerService'
 import { LEDGER_SUBJECT_GEO } from '../models/LearningLedgerModels'
@@ -329,6 +332,10 @@ export class ChatViewModel {
 	      if (subject !== null) {
 	        composed = await this.injectSubjectPlanSection(composed, subject)
 	      }
+	      // 小星游戏老师：注入本地动画片库 + 实时剩余额度（2026-11-10）
+	      if (assistantConfig.assistantId === KIDS_GAMES_ASSISTANT_ID) {
+	        composed = await this.injectCartoonCatalogSection(composed)
+	      }
 	      // 保留主动招呼元指令（学科老师开场, 2026-09-25）, 末尾最高优先级
 	      if (greetingHint.trim() !== '') {
 	        return this.assistantService.combineSystemPrompts(composed, greetingHint)
@@ -357,6 +364,25 @@ export class ChatViewModel {
       return this.assistantService.combineSystemPrompts(basePrompt, section)
     } catch (error) {
       console.error('ChatViewModel', `injectSubjectPlanSection failed: ${(error as Error)?.message ?? String(error)}`)
+      return basePrompt
+    }
+  }
+
+  /**
+   * 小星游戏老师：把「本地动画片库 + 实时剩余额度」段拼到 system prompt 末尾。
+   * 拉取/渲染失败静默降级，不阻塞对话（与教学段同款容错）。
+   */
+  private async injectCartoonCatalogSection(basePrompt: string): Promise<string> {
+    try {
+      const entries = getCartoonLibraryService().list()
+      const snapshot = await getCartoonWatchService().snapshot()
+      const section = renderCartoonCatalogSection(entries, snapshot)
+      if (section === '') {
+        return basePrompt
+      }
+      return this.assistantService.combineSystemPrompts(basePrompt, section)
+    } catch (error) {
+      console.error('ChatViewModel', `injectCartoonCatalogSection failed: ${(error as Error)?.message ?? String(error)}`)
       return basePrompt
     }
   }

@@ -30,6 +30,8 @@ import { getWeeklyTrendService, WeeklyTrendService } from './WeeklyTrendService'
 import { getTeachingStyleAdjustmentService, TeachingStyleAdjustmentService } from './TeachingStyleAdjustmentService'
 import { getEvaluationService, EvaluationService } from './EvaluationService'
 import { getLearningLedgerService, LearningLedgerService } from './LearningLedgerService'
+import { getCartoonLibraryService, CartoonLibraryService } from './CartoonLibraryService'
+import { getCartoonWatchService, CartoonWatchService } from './CartoonWatchService'
 
 // 统一服务装配入口（过渡层），降低上层对具体单例实现的直接耦合
 export class ServiceRegistry {
@@ -159,5 +161,13 @@ export class ServiceRegistry {
 
   static learningLedger(): LearningLedgerService {
     return getLearningLedgerService()
+  }
+
+  static cartoonLibrary(): CartoonLibraryService {
+    return getCartoonLibraryService()
+  }
+
+  static cartoonWatch(): CartoonWatchService {
+    return getCartoonWatchService()
   }
 }

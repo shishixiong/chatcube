@@ -3237,6 +3237,14 @@
       "value": "英语图片与 CVC 拼读词"
     },
     {
+      "name": "cartoon_library_title",
+      "value": "动画片管理"
+    },
+    {
+      "name": "cartoon_library_desc",
+      "value": "配置小星游戏老师能播放的本地动画片"
+    },
+    {
       "name": "learning_image_filter_cvc",
       "value": "CVC"
     },

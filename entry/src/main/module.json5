@@ -52,6 +52,9 @@
           "abilities": ["EntryAbility"],
           "when": "inuse"
         }
+      },
+      {
+        "name": "ohos.permission.FILE_ACCESS_PERSIST"
       }
     ],
     "querySchemes": [

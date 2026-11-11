@@ -35,6 +35,7 @@ import { ChineseQuizCard } from './chinese/ChineseQuizCard'
 import { MapCard } from './map/MapCard'
 import { MapPuzzleCard } from './map/MapPuzzleCard'
 import { MapQuizCard } from './map/MapQuizCard'
+import { CartoonCard } from './cartoon/CartoonCard'
 import { HtmlPreviewCard } from './HtmlPreviewCard'
 import { MermaidPreviewCard } from './MermaidPreviewCard'
 import { TypingDots } from './TypingDots'
@@ -54,7 +55,7 @@ import {
   getMarkdownTitleSizes
 } from '../utils/MarkdownTypographyUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isMathTeachFunctionName, isEnglishQuizFunctionName, isHuarongdaoFunctionName, isNumberPuzzleFunctionName, isHandwritingPracticeFunctionName, isCategorizationFunctionName, isVerticalMathFunctionName, isMusicGenerationFunctionName, isMazeFunctionName, isSudokuFunctionName, isPictureVocabFunctionName, isListeningQuizFunctionName, isPinyinQuizFunctionName, isMatchingPairsFunctionName, isMemoryMatchFunctionName, isSnakeGameFunctionName, isHanziCardFunctionName, isPinyinCardFunctionName, isPictureTalkFunctionName, isChineseQuizFunctionName, isMapCardFunctionName, isMapQuizFunctionName, isMapPuzzleFunctionName, isRoomEnglishFunctionName, isCityEnglishFunctionName, isFarmEnglishFunctionName, isMusicEarFunctionName } from '../utils/SearchToolIdentityUtils'
+import { isSearchToolFunctionName, isSearchToolId, isAskUserFunctionName, isScrapeWebFunctionName, isSearchWebFunctionName, isImageGenerationFunctionName, isMathQuizFunctionName, isMathTeachFunctionName, isEnglishQuizFunctionName, isHuarongdaoFunctionName, isNumberPuzzleFunctionName, isHandwritingPracticeFunctionName, isCategorizationFunctionName, isVerticalMathFunctionName, isMusicGenerationFunctionName, isMazeFunctionName, isSudokuFunctionName, isPictureVocabFunctionName, isListeningQuizFunctionName, isPinyinQuizFunctionName, isMatchingPairsFunctionName, isMemoryMatchFunctionName, isSnakeGameFunctionName, isHanziCardFunctionName, isPinyinCardFunctionName, isPictureTalkFunctionName, isChineseQuizFunctionName, isMapCardFunctionName, isMapQuizFunctionName, isMapPuzzleFunctionName, isRoomEnglishFunctionName, isCityEnglishFunctionName, isFarmEnglishFunctionName, isMusicEarFunctionName, isPlayCartoonFunctionName } from '../utils/SearchToolIdentityUtils'
 import { MessagePart, MessagePartKind, ToolPartStatus } from '../models/MessageParts'
 import {
   ensureMessageParts,
@@ -314,6 +315,8 @@ export struct MessageBubble {
   @Event onOpenFarmEnglishSheet: (toolCall: ToolCall) => void = () => {}
   // 音符小耳朵 sheet 入口（键盘 + 练习流程在气泡内太小，必须全屏）
   @Event onOpenMusicEarSheet: (toolCall: ToolCall) => void = () => {}
+  // 本地动画片播放页入口（视频必须全屏横屏）
+  @Event onOpenCartoonPlayer: (toolCall: ToolCall) => void = () => {}
 
   // 支持的翻译语言列表
   private translateLanguages: TranslateLanguage[] = [
@@ -2258,6 +2261,21 @@ export struct MessageBubble {
                   }
                 }, (toolCall: ToolCall, index: number) => 'maze_' + toolCall.id + '_' + index.toString())
               }
+              // play_cartoon 待答时显示「▶ 播放」横幅, 点击打开全屏横屏播放页
+              if (this.message.hasToolCalls()) {
+                ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
+                  if (this.shouldRenderCartoonInteractionCard(toolCall, index)) {
+                    CartoonCard({
+                      toolCall: toolCall,
+                      isAnswered: false,
+                      answeredPayload: '',
+                      onOpen: (tc: ToolCall): void => {
+                        this.onOpenCartoonPlayer(tc)
+                      }
+                    })
+                  }
+                }, (toolCall: ToolCall, index: number) => 'cartoon_' + toolCall.id + '_' + index.toString())
+              }
               // map_card 待答时显示紧凑横幅, 点击打开全屏 sheet (地图在气泡内太小, 参考 maze/handwriting 模式)
               if (this.message.hasToolCalls()) {
                 ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
@@ -3228,6 +3246,9 @@ export struct MessageBubble {
     if (isMazeFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
+    if (isPlayCartoonFunctionName(part.toolName)) {
+      return this.isSuccessfulToolStep(part)
+    }
     if (isSudokuFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
@@ -3344,7 +3365,7 @@ export struct MessageBubble {
       return true
     }
     // 默认行为: 图片生成/数学游戏/英语看图说话 成功后默认展开查看结果
-    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isMathTeachFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isListeningQuizFunctionName(part.toolName) || isPinyinQuizFunctionName(part.toolName) || isMatchingPairsFunctionName(part.toolName) || isMemoryMatchFunctionName(part.toolName) || isSnakeGameFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName) || isHanziCardFunctionName(part.toolName) || isPinyinCardFunctionName(part.toolName) || isPictureTalkFunctionName(part.toolName) || isChineseQuizFunctionName(part.toolName) || isMapCardFunctionName(part.toolName) || isMapQuizFunctionName(part.toolName) || isRoomEnglishFunctionName(part.toolName) || isCityEnglishFunctionName(part.toolName) || isFarmEnglishFunctionName(part.toolName) || isMusicEarFunctionName(part.toolName)) {
+    if (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isMathTeachFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isListeningQuizFunctionName(part.toolName) || isPinyinQuizFunctionName(part.toolName) || isMatchingPairsFunctionName(part.toolName) || isMemoryMatchFunctionName(part.toolName) || isSnakeGameFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName) || isHanziCardFunctionName(part.toolName) || isPinyinCardFunctionName(part.toolName) || isPictureTalkFunctionName(part.toolName) || isChineseQuizFunctionName(part.toolName) || isMapCardFunctionName(part.toolName) || isMapQuizFunctionName(part.toolName) || isRoomEnglishFunctionName(part.toolName) || isCityEnglishFunctionName(part.toolName) || isFarmEnglishFunctionName(part.toolName) || isMusicEarFunctionName(part.toolName) || isPlayCartoonFunctionName(part.toolName)) {
       return this.isSuccessfulToolStep(part)
     }
     return false
@@ -3354,7 +3375,7 @@ export struct MessageBubble {
     const key = this.getToolStepKey(part)
     // 默认展开的工具类型: 图片生成、数学游戏、英语看图说话、数字华容道、迷宫等
     const isDefaultExpanded = this.isSuccessfulToolStep(part) &&
-      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isMathTeachFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isListeningQuizFunctionName(part.toolName) || isPinyinQuizFunctionName(part.toolName) || isMatchingPairsFunctionName(part.toolName) || isMemoryMatchFunctionName(part.toolName) || isSnakeGameFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName) || isHanziCardFunctionName(part.toolName) || isPinyinCardFunctionName(part.toolName) || isPictureTalkFunctionName(part.toolName) || isChineseQuizFunctionName(part.toolName) || isMapCardFunctionName(part.toolName) || isMapQuizFunctionName(part.toolName) || isRoomEnglishFunctionName(part.toolName) || isCityEnglishFunctionName(part.toolName) || isFarmEnglishFunctionName(part.toolName) || isMusicEarFunctionName(part.toolName))
+      (isImageGenerationFunctionName(part.toolName) || isMathQuizFunctionName(part.toolName) || isMathTeachFunctionName(part.toolName) || isEnglishQuizFunctionName(part.toolName) || isNumberPuzzleFunctionName(part.toolName) || isHuarongdaoFunctionName(part.toolName) || isHandwritingPracticeFunctionName(part.toolName) || isCategorizationFunctionName(part.toolName) || isMazeFunctionName(part.toolName) || isSudokuFunctionName(part.toolName) || isPictureVocabFunctionName(part.toolName) || isListeningQuizFunctionName(part.toolName) || isPinyinQuizFunctionName(part.toolName) || isMatchingPairsFunctionName(part.toolName) || isMemoryMatchFunctionName(part.toolName) || isSnakeGameFunctionName(part.toolName) || isVerticalMathFunctionName(part.toolName) || isMusicGenerationFunctionName(part.toolName) || isHanziCardFunctionName(part.toolName) || isPinyinCardFunctionName(part.toolName) || isPictureTalkFunctionName(part.toolName) || isChineseQuizFunctionName(part.toolName) || isMapCardFunctionName(part.toolName) || isMapQuizFunctionName(part.toolName) || isRoomEnglishFunctionName(part.toolName) || isCityEnglishFunctionName(part.toolName) || isFarmEnglishFunctionName(part.toolName) || isMusicEarFunctionName(part.toolName) || isPlayCartoonFunctionName(part.toolName))
     const next: string[] = []
     let found = false
     let foundCollapsed = false
@@ -3492,6 +3513,13 @@ export struct MessageBubble {
 
   private shouldRenderMazeInteractionCard(toolCall: ToolCall, index: number): boolean {
     if (!isMazeFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
+      return false
+    }
+    return !this.isAskUserToolCallAnswered(toolCall, index)
+  }
+
+  private shouldRenderCartoonInteractionCard(toolCall: ToolCall, index: number): boolean {
+    if (!isPlayCartoonFunctionName(toolCall.functionName) || this.shouldHideToolCallCard(toolCall)) {
       return false
     }
     return !this.isAskUserToolCallAnswered(toolCall, index)
@@ -4008,6 +4036,10 @@ export struct MessageBubble {
       return
     }
     if (isMazeFunctionName(part.toolName)) {
+      this.toggleToolStep(part)
+      return
+    }
+    if (isPlayCartoonFunctionName(part.toolName)) {
       this.toggleToolStep(part)
       return
     }
@@ -4535,6 +4567,8 @@ export struct MessageBubble {
       this.CategorizationStepContent(step)
     } else if (isMazeFunctionName(step.toolName)) {
       this.MazeStepContent(step)
+    } else if (isPlayCartoonFunctionName(step.toolName)) {
+      this.CartoonStepContent(step)
     } else if (isSudokuFunctionName(step.toolName)) {
       this.SudokuStepContent(step)
     } else if (isPictureVocabFunctionName(step.toolName)) {
@@ -5859,6 +5893,61 @@ export struct MessageBubble {
           onAnswer: (_toolCallId: string, _answerJson: string): void => {}
         })
           .margin({ top: 8 })
+      }
+    }
+    .width('100%')
+  }
+
+  // play_cartoon 工具步骤: 已看完/关掉的动画片, 展开显示一行观看摘要
+  @Builder
+  CartoonStepContent(step: MessagePart) {
+    Column() {
+      Row({ space: 6 }) {
+        if (step.toolStatus === 'succeeded') {
+          SymbolGlyph($r('sys.symbol.checkmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_success')])
+        } else if (step.toolStatus === 'failed' || step.toolStatus === 'denied') {
+          SymbolGlyph($r('sys.symbol.xmark_circle'))
+            .fontSize(13)
+            .fontColor([$r('app.color.status_error')])
+        } else {
+          Column()
+            .width(8)
+            .height(8)
+            .borderRadius(4)
+            .backgroundColor(this.themePrimary)
+        }
+
+        Text(this.buildToolStepTitle(step))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+
+        if (this.isToolStepClickable(step)) {
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(12)
+            .fontColor([$r('app.color.text_tertiary')])
+            .rotate({ angle: this.isToolStepExpanded(step) ? 0 : -90 })
+            .animation({ duration: 200, curve: Curve.EaseOut })
+        }
+      }
+      .width('100%')
+      .onClick(() => {
+        if (this.isToolStepClickable(step)) {
+          this.handleToolStepClick(step)
+        }
+      })
+
+      if (this.isToolStepExpanded(step) && step.toolResult !== '') {
+        CartoonCard({
+          toolCall: this.buildToolCallFromStep(step),
+          isAnswered: true,
+          answeredPayload: resolveStepAnswerPayload(step.toolResult, step.toolApprovalReason),
+          onOpen: (_tc: ToolCall): void => {}
+        })
+          .margin({ top: 6 })
       }
     }
     .width('100%')

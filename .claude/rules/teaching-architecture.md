@@ -52,7 +52,7 @@
 | `kids_math` | 小星数学老师 | 数 | #4E8FE0 | ask_user, child_profile, get_time_info, grant_star, math_verify, math_quiz, vertical_math, math_teach, matching_pairs | 1 |
 | `kids_english` | 小星英语老师 | 英 | #35A98A | ask_user, child_profile, get_time_info, grant_star, english_quiz, picture_vocab, listening_quiz, room_english, city_english, farm_english | 2 |
 | `kids_chinese` | 小星语文老师 | 语 | #E2603C | ask_user, child_profile, get_time_info, grant_star, pinyin_quiz, handwriting_practice, hanzi_card, pinyin_card, picture_talk, chinese_quiz, map_card, map_quiz, map_puzzle | 3 |
-| `kids_games` | 小星游戏老师 | 玩 | #8B72E0 | ask_user, child_profile, get_time_info, grant_star, number_puzzle, maze, sudoku, matching_pairs, memory_match, categorization, snake_game, music_ear | 4 |
+| `kids_games` | 小星游戏老师 | 玩 | #8B72E0 | ask_user, child_profile, get_time_info, grant_star, number_puzzle, maze, sudoku, matching_pairs, memory_match, categorization, snake_game, music_ear, play_cartoon | 4 |
 
 - 定义：`models/AssistantModels.ets` 的 `KIDS_SUBJECT_SPECS`（行 374-411）+ `createKidsSubjectAssistants()`（行 439）。系统提示词与小星老师同源（共用 `SharedPromptFragments.buildBasePrompt`），按学科裁剪；每科提示词约束 `child_profile(action:"update")` 只更新本学科维度。
 - **不含** `image_generation` / `music_generation`（学科助手不出图不出乐）。
@@ -116,7 +116,7 @@
 
 ## 4. 教学工具生态
 
-小星老师 **锁定 30 个工具**（§2 `DEFAULT_ASSISTANT_LOCKED_TOOL_IDS`；2026-10-22 起 `snake_game` 从 kids_games 专属扩入默认助手；2026-11-01 起 `city_english` 扩入默认 + kids_english；2026-11-06 起 `farm_english` 扩入默认 + kids_english），其中 24 个有 UI 互动卡片（含 `ask_user`，已并入锁定白名单），3 个纯后端（`child_profile`、`math_verify`、`grant_star`），2 个非互动生成类（`image_generation`、`music_generation`），外加 `get_time_info`。4 个学科助手各锁定其中一个子集（见 §2.1，均不含 image_generation / music_generation）；小星老师集合之外的额外锁定：kids_math 的 `math_teach`（2026-09-27）、kids_games 的 `music_ear`（2026-11-07，见下表）。
+小星老师 **锁定 30 个工具**（§2 `DEFAULT_ASSISTANT_LOCKED_TOOL_IDS`；2026-10-22 起 `snake_game` 从 kids_games 专属扩入默认助手；2026-11-01 起 `city_english` 扩入默认 + kids_english；2026-11-06 起 `farm_english` 扩入默认 + kids_english），其中 24 个有 UI 互动卡片（含 `ask_user`，已并入锁定白名单），3 个纯后端（`child_profile`、`math_verify`、`grant_star`），2 个非互动生成类（`image_generation`、`music_generation`），外加 `get_time_info`。4 个学科助手各锁定其中一个子集（见 §2.1，均不含 image_generation / music_generation）；小星老师集合之外的额外锁定：kids_math 的 `math_teach`（2026-09-27）、kids_games 的 `music_ear`（2026-11-07，见下表）、kids_games 的 `play_cartoon`（2026-11-10，本地动画片播放，见下表）。
 
 | 工具 ID | UI 卡片 | 是否锁定 | 备注 |
 |---------|---------|----------|------|
@@ -152,6 +152,7 @@
 | `room_english` | `room/RoomEnglishCard.ets` | ✓ | 全屋 3D 英语探索（讲解型，不授星）：three.js 全屋户型默认视图 + 「全屋/客餐厅/儿童房/主卧/阳台」5 标签，76 件家具可点开单词卡（英文/音标/中文/儿童解释/例句/原生 TTS），360° 环绕 + 近侧墙自动隐藏；focus 映射 `living/dining/kitchen → main`、`child/master/balcony → 同名`、`all/缺省 → overview`（`resolveRoomEnglishView`）；预校验 |
 | `city_english` | `city/CityEnglishCard.ets` | ✓ | 小词城 3D 英语探索（讲解型，不授星，2026-11-01）：three.js 120m × 90m 低多边形城市——主街 + 商业街/学校/公园/医院四街区 + 河流/广场，50 个可点单词（地点 12 / 交通 10 / 街道 9 / 人物 8 / 自然 8 / 动物 3），公交车/汽车/自行车/行人循环 + 路口红绿灯；「全城/商业街/学校/公园/医院」5 分区镜头；focus 映射 `overview/main_street/school_zone/park_zone/hospital_zone`（`resolveCityEnglishView`），点物即读（先中文后英文）；预校验；待答态入口横幅 → 全屏 sheet |
 | `farm_english` | `farm/FarmEnglishCard.ets` | ✓ | 阳光农场 3D 英语探索（讲解型，不授星，2026-11-06）：three.js 140m × 110m 低多边形农场——环形土路串起农舍区、田地区、牧场区、果园池塘，50 个可点对象（地点 10 / 动物 14 / 农作物 10 / 农机 8 / 自然 5 / 人物 3），拖拉机/农民/小朋友/小狗沿路移动 + 风车转动 + 作物轻摆 + 池塘波纹；动物/人物另有轻量智能体层 `assets/farm-agents.js`（2026-11-08：定时轮播 / 昼夜切换 / 点击动物 / 分区镜头四种触发，吃草、蹦跳、游水、打滚、打鸣、睡觉等小片段 + 中英双语气泡，点击气泡走原生 TTS）；「全农场/农舍区/田地区/牧场区/果园池塘」5 分区镜头；focus 映射 `overview/farmyard_zone/field_zone/pasture_zone/orchard_pond_zone`（`resolveFarmEnglishView`），点物即读（先中文后英文）；`words` 驱动会自动选中第一个词的单词卡；预校验；待答态入口横幅 → 全屏 sheet |
+| `play_cartoon` | `cartoon/CartoonCard.ets` + `components/cartoon/CartoonPlayerCover.ets` | kids_games | 本地动画片播放（讲解/娱乐型，**不授星**，2026-11-10；2026-11-11 v2 真机修订）：家长在设置 → 学习中心 →「动画片管理」配置本地视频（文件选择器 + `fileShare` 持久授权，**不复制文件**；超过 20 分钟的文件拒绝导入）；片库按「动画片名 / 第几季 / 第几集」建索引（导入时解析 `SxxEyy` 或 `第N季第M集`，系列名优先取父文件夹），提示词按系列给出「上次看到 / 下一集 → id」，孩子没指定就顺序播下一集，也可点名季集；孩子主动说想看动画时老师才调用，绝不主动提议；`play_cartoon(video_id)` 后气泡出现「▶ 播放」横幅，点击由 `Index` 根节点 `bindContentCover` 打开**真全屏横屏** `AVPlayer + XComponent` 覆盖层（盖住分栏/底部 Tab/待答浮条），底部带可拖动进度条（跳转不计观看时长）；单次连续观看 20 分钟 / 每天 60 分钟硬闸，**只在集与集之间拦、绝不切断正在播的一集**；闲置 30 分钟重置本次；应用切后台自动暂停计时 |
 
 math_quiz 的难度由 `utils/MathQuizProgression.ets` 从算式结构判定（加减 15 级 / 乘除 10 级 / 比较 6 级 / 认钟与经过时间各 4 级），`services/MathQuizHistoryService.ets` 负责闸门与作答记录（`math_quiz_records` / `math_quiz_progress` 两表）。`child_profile` 读取时额外返回 `mathProgress`（每轨当前级与 `nextTarget`），AI 应据此出题。
 

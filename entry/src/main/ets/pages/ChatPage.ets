@@ -35,6 +35,9 @@ import {
   ToolSourceType,
   SearchEngine
 } from '../models/ChatModels'
+import { CartoonPlayerRouteParams } from '../models/CartoonModels'
+import { beginCartoonPlayerSession, endCartoonPlayerSession } from '../utils/CartoonPlayerSession'
+import { launchCartoonPlayer } from '../utils/CartoonPlayerLauncher'
 import { Assistant, DEFAULT_ASSISTANT_ID } from '../models/AssistantModels'
 import { AttachmentPicker } from '../components/AttachmentPicker'
 import { ScrollToBottomButton } from '../components/ScrollToBottomButton'
@@ -2608,6 +2611,9 @@ export struct ChatPage {
           onOpenMusicEarSheet: (toolCall: ToolCall): void => {
             this.musicEarToolCall = toolCall
             this.showMusicEarSheet = true
+          },
+          onOpenCartoonPlayer: (toolCall: ToolCall): void => {
+            this.openCartoonPlayer(toolCall)
           },
           onReachStart: (): void => {
             this.handleMessageListReachStart()
@@ -5675,6 +5681,43 @@ export struct ChatPage {
         console.warn('ChatPage', `resolveToolExecutionApproval: no pending approval for ${toolCallId}`)
       }
     }
+  }
+
+  // play_cartoon: 请求 Index 在根节点上挂全屏覆盖层（分栏模式下 push 路由不是真全屏）
+  private openCartoonPlayer(toolCall: ToolCall): void {
+    // 连点同一张横幅会打开两个播放层 → 双倍计时 + 双份 AVPlayer
+    if (!beginCartoonPlayerSession(toolCall.id)) {
+      return
+    }
+    const params = this.parseCartoonRouteParams(toolCall)
+    if (!launchCartoonPlayer(params)) {
+      console.error('ChatPage', 'openCartoonPlayer: launcher not registered')
+      endCartoonPlayerSession(toolCall.id)
+    }
+  }
+
+  private parseCartoonRouteParams(toolCall: ToolCall): CartoonPlayerRouteParams {
+    const params: CartoonPlayerRouteParams = {
+      toolCallId: toolCall.id,
+      videoId: '',
+      title: '',
+      durationMs: 0,
+      uri: ''
+    }
+    try {
+      const parsed = JSON.parse(toolCall.arguments) as Record<string, Object>
+      const videoId = parsed['video_id'] as string
+      const title = parsed['title'] as string
+      const durationMs = parsed['duration_ms'] as number
+      const uri = parsed['uri'] as string
+      params.videoId = videoId !== undefined && videoId !== null ? videoId : ''
+      params.title = title !== undefined && title !== null ? title : ''
+      params.durationMs = durationMs !== undefined && durationMs !== null ? durationMs : 0
+      params.uri = uri !== undefined && uri !== null ? uri : ''
+    } catch (error) {
+      console.warn('ChatPage', `parseCartoonRouteParams failed: ${JSON.stringify(error)}`)
+    }
+    return params
   }
 
   // AskUserCard 提交回调: 把答案 JSON 喂给 ToolExecutionService.handleAskUser 的 await

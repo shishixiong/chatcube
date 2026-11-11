@@ -76,13 +76,18 @@ import {
   ROOM_ENGLISH_TOOL_ID,
   CITY_ENGLISH_TOOL_ID,
   FARM_ENGLISH_TOOL_ID,
+  PLAY_CARTOON_TOOL_ID,
   isScrapeWebFunctionName,
   isSearchWebFunctionName,
-  isGrantStarFunctionName
+  isGrantStarFunctionName,
+  isPlayCartoonFunctionName
 } from '../utils/SearchToolIdentityUtils'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
 import { getImageIndexService, ImageIndexService } from './ImageIndexService'
+import { getCartoonLibraryService } from './CartoonLibraryService'
+import { getCartoonWatchService } from './CartoonWatchService'
+import { CartoonAvailableItem, CartoonQuotaSnapshot } from '../models/CartoonModels'
 import { ImageSource } from '../models/ImageIndexModels'
 import { generateMaze, getGridDimensions, getGridSizeLabel, getMazeExtras, getCarrotCount } from '../utils/MazeGame'
 import type { MazeDimensions, MazeExtras, MazeDifficulty } from '../utils/MazeGame'
@@ -2708,6 +2713,182 @@ export class ToolExecutionService {
     )
   }
 
+  // play_cartoon 特殊路径: 本地动画片播放 (spec 2026-11-10)。
+  // 片源校验 / 单次与每日额度 / pending 守卫都在这里做; 播放页只负责播完回传结果。
+  private async handlePlayCartoon(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = PLAY_CARTOON_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '看动画片'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    let videoId = ''
+    try {
+      const parsed = JSON.parse(toolCall.arguments) as Record<string, Object>
+      const rawVideoId = parsed['video_id'] as string
+      videoId = rawVideoId !== undefined && rawVideoId !== null ? rawVideoId : ''
+    } catch (_error) {
+      videoId = ''
+    }
+    if (videoId.trim() === '') {
+      return this.buildCartoonErrorResult(toolCall, 'validation_failed', null, true)
+    }
+
+    const library = getCartoonLibraryService()
+    const entry = library.findById(videoId)
+    if (entry === null || entry.status !== 'ok' || !(await library.isUriReadable(entry.uri))) {
+      if (entry !== null) {
+        await library.markUnavailable(entry.id)
+      }
+      return this.buildCartoonErrorResult(toolCall, 'video_unavailable', null, true)
+    }
+
+    const watch = getCartoonWatchService()
+    if (!watch.canStartNewEpisode()) {
+      return this.buildCartoonErrorResult(toolCall, 'too_soon', null, false)
+    }
+    if (!watch.beginPending(toolCall.id)) {
+      return this.buildCartoonErrorResult(toolCall, 'already_playing', null, false)
+    }
+
+    try {
+      const decision = await watch.decideStart(entry.durationMs)
+      if (!decision.allowed) {
+        const snapshot = await watch.snapshot()
+        return this.buildCartoonErrorResult(
+          toolCall,
+          decision.errorCode,
+          snapshot,
+          decision.errorCode === 'video_unavailable'
+        )
+      }
+
+      // 把卡片/播放页需要的快照写进 arguments，避免 UI 再异步查库
+      const enriched: Record<string, Object> = {
+        'video_id': entry.id,
+        'title': entry.title,
+        'duration_ms': entry.durationMs,
+        'uri': entry.uri,
+        'series_title': entry.seriesTitle,
+        'season': entry.season,
+        'episode': entry.episode
+      }
+      toolCall.arguments = JSON.stringify(enriched)
+      toolCall.approvalState = 'pending'
+
+      let answerJson: string | null = null
+      try {
+        answerJson = await new Promise<string | null>((resolve) => {
+          const existing = this.pendingAnswers.get(toolCall.id)
+          if (existing !== undefined) {
+            existing.resolve(null)
+            this.pendingAnswers.delete(toolCall.id)
+          }
+          const snapshot = this.buildAskUserSnapshot(toolCall, context)
+          snapshot.kind = PendingToolInteractionKind.ASK_USER
+          snapshot.toolId = PLAY_CARTOON_TOOL_ID
+          this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+          this.publishPendingInteractionChanged()
+        })
+      } catch (error) {
+        console.error('ToolExecutionService', `play_cartoon answer callback failed: ${JSON.stringify(error)}`)
+        toolCall.approvalState = 'denied'
+        return new ToolResult(
+          toolCall.id,
+          JSON.stringify({ error: `play_cartoon 失败: ${JSON.stringify(error)}`, cancelled: true }),
+          true,
+          toolCall.displayName,
+          toolCall.sourceLabel
+        )
+      }
+
+      if (this.isCancelled()) {
+        console.info('ToolExecutionService', 'play_cartoon cancelled by external stop')
+        toolCall.approvalState = 'denied'
+        return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+      }
+
+      if (answerJson === null) {
+        toolCall.approvalState = 'denied'
+        return new ToolResult(
+          toolCall.id,
+          JSON.stringify({ cancelled: true, error: '小朋友没有打开播放页' }),
+          true,
+          toolCall.displayName,
+          toolCall.sourceLabel
+        )
+      }
+
+      toolCall.approvalState = 'answered'
+      toolCall.approvalReason = answerJson
+      console.info('ToolExecutionService', `play_cartoon answered: ${toolCall.id}`)
+      return new ToolResult(
+        toolCall.id,
+        answerJson,
+        false,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    } finally {
+      watch.endPending(toolCall.id)
+    }
+  }
+
+  /** 动画片失败/拒绝的统一返回；只有校验类错误标记 isError */
+  private buildCartoonErrorResult(
+    toolCall: ToolCall,
+    errorCode: string,
+    snapshot: CartoonQuotaSnapshot | null,
+    shouldRetry: boolean
+  ): ToolResult {
+    const payload: Record<string, Object> = { 'error': errorCode }
+    if (snapshot !== null) {
+      payload['today_watched_seconds'] = Math.round(snapshot.dayMs / 1000)
+      payload['daily_limit_seconds'] = Math.round(snapshot.dayLimitMs / 1000)
+      payload['session_watched_seconds'] = Math.round(snapshot.sessionMs / 1000)
+      payload['session_limit_seconds'] = Math.round(snapshot.sessionLimitMs / 1000)
+    }
+    if (shouldRetry) {
+      payload['should_retry'] = true
+    }
+    if (errorCode === 'video_unavailable' || errorCode === 'validation_failed') {
+      const available = this.buildAvailableCartoons()
+      if (available.length > 0) {
+        payload['available'] = available
+      }
+    }
+    toolCall.approvalState = 'denied'
+    return new ToolResult(
+      toolCall.id,
+      JSON.stringify(payload),
+      shouldRetry,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
+  private buildAvailableCartoons(): CartoonAvailableItem[] {
+    const available: CartoonAvailableItem[] = []
+    const entries = getCartoonLibraryService().list()
+    for (let i = 0; i < entries.length && available.length < 10; i++) {
+      const entry = entries[i]
+      if (entry.status !== 'ok') {
+        continue
+      }
+      const item: CartoonAvailableItem = {
+        id: entry.id,
+        title: entry.title,
+        duration_seconds: Math.round(entry.durationMs / 1000)
+      }
+      available.push(item)
+    }
+    return available
+  }
+
   // sudoku 特殊路径: 与 maze 类似, 挂起等待 SudokuCard 回答。
   // 数独盘面在后台生成并注入 toolCall.arguments (givens / solution / size / boxRows / boxCols)。
   private async handleSudoku(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
@@ -3598,6 +3779,12 @@ export class ToolExecutionService {
     // 走迷宫互动工具, 由 MazeCard 收集小朋友的移动 / 完成结果。
     if (isMazeFunctionName(normalizedFunctionName)) {
       return await this.handleMaze(toolCall, context)
+    }
+
+    // === play_cartoon 特殊路径 ===
+    // 本地动画片播放, 由 CartoonCard 打开全屏播放页, 播完回传结果。
+    if (isPlayCartoonFunctionName(normalizedFunctionName)) {
+      return await this.handlePlayCartoon(toolCall, context)
     }
 
     // === sudoku 特殊路径 ===

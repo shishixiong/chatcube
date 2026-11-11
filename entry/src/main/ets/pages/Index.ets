@@ -28,6 +28,9 @@ import { SharePreviewSheet } from '../components/SharePreviewSheet'
 import { ProviderIconSmall } from '../components/ProviderIcon'
 import { ColorTheme, ThemeColorConfig } from '../models/ThemeColors'
 import { ServiceRegistry } from '../services/ServiceRegistry'
+import { CartoonPlayerCover } from '../components/cartoon/CartoonPlayerCover'
+import { CartoonPlayerRouteParams } from '../models/CartoonModels'
+import { registerCartoonPlayerLauncher } from '../utils/CartoonPlayerLauncher'
 import {
   getToolExecutionService,
   PendingToolInteractionKind,
@@ -907,9 +910,19 @@ struct Index {
     this.pendingToolInteractionAlertTimerId = -1
   }
 
+  @Local showCartoonCover: boolean = false
+  @Local cartoonCoverParams: CartoonPlayerRouteParams = {
+    toolCallId: '', videoId: '', title: '', durationMs: 0, uri: ''
+  }
+
   aboutToAppear(): void {
     this.registerAppUiStateObservers()
     this.loadKidsModeEnabled()
+    // 动画片播放：由 ChatPage 请求，在当前根节点挂全屏 content cover（避开分栏）
+    registerCartoonPlayerLauncher((params: CartoonPlayerRouteParams): void => {
+      this.cartoonCoverParams = params
+      this.showCartoonCover = true
+    })
     this.chatTabNavStack.setInterception({
       didShow: (_from: NavDestinationContext | "navBar", to: NavDestinationContext | "navBar",
         _operation: NavigationOperation, _isAnimated: boolean): void => {
@@ -1013,6 +1026,7 @@ struct Index {
   }
 
   aboutToDisappear(): void {
+    registerCartoonPlayerLauncher(null)
     this.unregisterAppUiStateObservers()
     this.clearPendingToolInteractionAlertTimer()
     this.clearChatListPaneResizeSaveTimer()
@@ -1819,6 +1833,10 @@ struct Index {
   }
 
   private processPendingToolInteractionAlert(forcePrompt: boolean): void {
+    // 动画片全屏播放时不要弹系统 SnackBar 盖在视频上
+    if (this.showCartoonCover) {
+      return
+    }
     const interactions = ServiceRegistry.toolExecution().getPendingInteractions()
     const currentIds: Set<string> = new Set<string>()
     for (let i = 0; i < interactions.length; i++) {
@@ -2094,6 +2112,16 @@ struct Index {
     return this.chatTabTopSessionId
   }
 
+  @Builder
+  private CartoonCoverBuilder() {
+    CartoonPlayerCover({
+      params: this.cartoonCoverParams,
+      onClose: (): void => {
+        this.showCartoonCover = false
+      }
+    })
+  }
+
   build() {
     Stack() {
       if (!this.kidsModeLoaded) {
@@ -2109,6 +2137,21 @@ struct Index {
       } else {
         this.CompactRoot()
       }
+
+      // 动画片全屏覆盖层：盖住分栏、底部 Tab 和待答浮条（2026-11-11 真机反馈）
+      Column()
+        .width(0)
+        .height(0)
+        .bindContentCover($$this.showCartoonCover, this.CartoonCoverBuilder(), {
+          modalTransition: ModalTransition.NONE,
+          backgroundColor: Color.Black,
+          onWillDismiss: (action: DismissContentCoverAction) => {
+            action.dismiss()
+          },
+          onDisappear: () => {
+            this.showCartoonCover = false
+          }
+        })
 
       // bindSheet 宿主：每个 bindSheet 必须挂在独立组件上，避免多 bindSheet 冲突
       Column()
@@ -5120,6 +5163,9 @@ struct Index {
       },
       onOpenLearningEnglishImages: (): void => {
         this.openSettingsDestination(SettingsRouteName.LEARNING_ENGLISH_IMAGES)
+      },
+      onOpenCartoonLibrary: (): void => {
+        this.openSettingsDestination(SettingsRouteName.CARTOON_LIBRARY)
       },
       onOpenLearningDailyEvaluation: (): void => {
         this.openSettingsDestination(SettingsRouteName.LEARNING_DAILY_EVALUATION)

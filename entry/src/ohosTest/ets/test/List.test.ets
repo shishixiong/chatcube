@@ -36,6 +36,11 @@ import musicEarLogicTest from './utils/MusicEarLogic.test';
 import musicToneSynthTest from './utils/MusicToneSynth.test';
 import musicVoiceMixerTest from './utils/MusicVoiceMixer.test';
 import musicEarValidationTest from './utils/MusicEarValidation.test';
+import cartoonQuotaMathTest from './utils/CartoonQuotaMath.test';
+import cartoonLibraryUtilsTest from './utils/CartoonLibraryUtils.test';
+import cartoonPromptUtilsTest from './utils/CartoonPromptUtils.test';
+import cartoonCardUtilsTest from './utils/CartoonCardUtils.test';
+import cartoonPlayerSessionTest from './utils/CartoonPlayerSession.test';
 
 export default function testsuite() {
   abilityTest();
@@ -76,4 +81,9 @@ export default function testsuite() {
   musicToneSynthTest();
   musicVoiceMixerTest();
   musicEarValidationTest();
+  cartoonQuotaMathTest();
+  cartoonLibraryUtilsTest();
+  cartoonPromptUtilsTest();
+  cartoonCardUtilsTest();
+  cartoonPlayerSessionTest();
 }

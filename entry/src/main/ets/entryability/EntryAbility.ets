@@ -121,6 +121,10 @@ export default class EntryAbility extends UIAbility {
       await ServiceRegistry.preferences().initialize(this.context);
       hilog.info(DOMAIN, 'testTag', 'PreferencesService initialized successfully');
 
+      // 初始化儿童动画片片库（读取 JSON + 重新激活持久化文件授权）
+      await ServiceRegistry.cartoonLibrary().initialize();
+      hilog.info(DOMAIN, 'testTag', 'CartoonLibraryService initialized successfully');
+
       // 注入 UIAbilityContext 给工具执行服务（map 工具读 rawfile 地图数据用）
       ServiceRegistry.toolExecution().init(this.context);
 
@@ -598,6 +602,11 @@ export default class EntryAbility extends UIAbility {
   onBackground(): void {
     // Ability has back to background
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onBackground');
+    try {
+      this.context.eventHub.emit('app_background');
+    } catch (error) {
+      hilog.warn(DOMAIN, 'testTag', 'emit app_background failed: %{public}s', JSON.stringify(error));
+    }
     setAppUiStateValue(AppStorageKeys.APP_IN_BACKGROUND, true);
     ServiceRegistry.backgroundGuard().onAppBackgroundChanged(true)
   }

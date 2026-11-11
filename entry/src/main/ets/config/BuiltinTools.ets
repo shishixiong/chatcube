@@ -41,6 +41,7 @@ import {
   MEMORY_MATCH_TOOL_ID,
   SNAKE_GAME_TOOL_ID,
   MUSIC_EAR_TOOL_ID,
+  PLAY_CARTOON_TOOL_ID,
   GRANT_STAR_TOOL_ID,
   HANZI_CARD_TOOL_ID,
   PINYIN_CARD_TOOL_ID,
@@ -2011,6 +2012,69 @@ function createMazeToolConfig(): ToolConfig {
     ToolSourceType.BUILTIN,
     'builtin',
     MAZE_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+// ===== play_cartoon 工具 =====
+// 本地动画片播放：仅 kids_games 可用，家长在「动画片管理」配置片源。
+// 交互由 CartoonCard / CartoonPlayerCover 处理, 后端由 ToolExecutionService.handlePlayCartoon 拦截。
+
+interface PlayCartoonArgs {
+  video_id: string
+}
+
+class PlayCartoonExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    try {
+      const params = JSON.parse(_args) as PlayCartoonArgs
+      return JSON.stringify({
+        video_id: params.video_id !== undefined ? params.video_id : '',
+        answered: false,
+        hint: '请在卡片里点播放。'
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`play_cartoon error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createPlayCartoonToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "video_id": {
+        "type": "string",
+        "description": "动画片 id，必须精确取自 system prompt 末尾「本地动画片库」段（形如 ct_xxx）。不要自己编。"
+      }
+    },
+    "required": ["video_id"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    PLAY_CARTOON_TOOL_ID,
+    '播放本地动画片库中的一集给孩子看。仅当孩子明确说想看动画片或点名想看某部动画时调用；不要主动建议看动画。一次只播一集，播完后等孩子说「还想看」再调用下一集。video_id 必须精确取自 system prompt 末尾「本地动画片库」段。',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createPlayCartoonToolConfig(): ToolConfig {
+  return new ToolConfig(
+    PLAY_CARTOON_TOOL_ID,
+    '看动画片',
+    '播放本地动画片库中的一集，仅孩子主动提出时使用；单次 20 分钟 / 每天 60 分钟硬闸。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    PLAY_CARTOON_TOOL_ID,
     '内置工具',
     ToolPermissionLevel.READ
   )
@@ -4396,6 +4460,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(PLAY_CARTOON_TOOL_ID)) {
+    const playCartoonTool = new RegisteredTool(
+      PLAY_CARTOON_TOOL_ID,
+      createPlayCartoonToolConfig(),
+      createPlayCartoonToolDefinition(),
+      new PlayCartoonExecutor()
+    )
+    registry.registerTool(playCartoonTool)
+    registeredNow += 1
+  }
+
   if (!registry.isToolRegistered(SUDOKU_TOOL_ID)) {
     const sudokuTool = new RegisteredTool(
       SUDOKU_TOOL_ID,
@@ -4646,5 +4721,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, MUSIC_EAR_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID, MAP_CARD_TOOL_ID, MAP_QUIZ_TOOL_ID, MAP_PUZZLE_TOOL_ID, ROOM_ENGLISH_TOOL_ID, CITY_ENGLISH_TOOL_ID, FARM_ENGLISH_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, MUSIC_EAR_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID, MAP_CARD_TOOL_ID, MAP_QUIZ_TOOL_ID, MAP_PUZZLE_TOOL_ID, ROOM_ENGLISH_TOOL_ID, CITY_ENGLISH_TOOL_ID, FARM_ENGLISH_TOOL_ID, PLAY_CARTOON_TOOL_ID]
 }

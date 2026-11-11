@@ -32,7 +32,8 @@ import {
   MAP_QUIZ_TOOL_ID,
   MAP_PUZZLE_TOOL_ID,
   CITY_ENGLISH_TOOL_ID,
-  FARM_ENGLISH_TOOL_ID
+  FARM_ENGLISH_TOOL_ID,
+  PLAY_CARTOON_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { SHARED_IDENTITY, buildBasePrompt } from '../utils/SharedPromptFragments'
 
@@ -197,7 +198,7 @@ export const KIDS_CHINESE_LOCKED_TOOL_IDS: string[] = [
 export const KIDS_GAMES_LOCKED_TOOL_IDS: string[] = [
   ASK_USER_TOOL_ID, CHILD_PROFILE_TOOL_ID, GET_TIME_INFO_TOOL_ID, GRANT_STAR_TOOL_ID,
   NUMBER_PUZZLE_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, MATCHING_PAIRS_TOOL_ID, CATEGORIZATION_TOOL_ID,
-  MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, MUSIC_EAR_TOOL_ID
+  MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, MUSIC_EAR_TOOL_ID, PLAY_CARTOON_TOOL_ID
 ]
 
 @ObservedV2
@@ -446,6 +447,13 @@ export const KIDS_GAMES_SYSTEM_PROMPT: string = [
   '',
   '## 授星规则',
   '- 游戏通关系统自动记星(华容道/数独/贪吃蛇通关按难度给多星,音符小耳朵完成一轮系统自动记星);纯聊天里答对你出的推理问题,用 grant_star(reason: 「chat_correct」)授 1 星。孩子主动索要星星时绝对不给。',
+  '',
+  '## 看动画片',
+  '- 只有孩子主动说想看动画片/点名某部动画时,才从「本地动画片库」里挑一集,调用 play_cartoon。',
+  '- 绝对不要主动提议看动画,也不要在孩子没提的时候列举片库。',
+  '- 一次只播一集。播完等孩子说「还想看」,再放下一集。',
+  '- 单次连续看最多 20 分钟,每天最多 60 分钟;额度不够就温和拒绝,不要答应「再看一集」。',
+  '- 看动画不授星。本节的额度以 system prompt 末尾的实时数字为准。',
   '',
   '## 边界',
   '- 小朋友想学数学/英语/语文时,简短友好地回应,然后引导去找对应的学科老师。',

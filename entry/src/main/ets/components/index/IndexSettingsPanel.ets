@@ -56,6 +56,7 @@ export struct IndexSettingsPanel {
   @Event onOpenLearningProfile: () => void = () => {}
   @Event onOpenLearningTomorrowPlan: () => void = () => {}
   @Event onOpenLearningEnglishImages: () => void = () => {}
+  @Event onOpenCartoonLibrary: () => void = () => {}
   @Event onOpenLearningDailyEvaluation: () => void = () => {}
   @Event onOpenGiftManage: () => void = () => {}
   @Event onOpenAbout: () => void = () => {}
@@ -112,6 +113,13 @@ export struct IndexSettingsPanel {
         title: $r('app.string.learning_english_images_title'),
         subtitle: $r('app.string.learning_english_images_desc'),
         action: (): void => { this.onOpenLearningEnglishImages() }
+      } as SettingsListItemModel,
+      {
+        key: SettingsRouteName.CARTOON_LIBRARY,
+        icon: $r('sys.symbol.play_circle'),
+        title: $r('app.string.cartoon_library_title'),
+        subtitle: $r('app.string.cartoon_library_desc'),
+        action: (): void => { this.onOpenCartoonLibrary() }
       } as SettingsListItemModel,
       {
         key: SettingsRouteName.LEARNING_DAILY_EVALUATION,
