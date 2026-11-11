@@ -503,12 +503,20 @@
     positionLabels();
   }
 
-  function handlePick(id, root) {
-    if (id) selectWord(id, { root: root });
-    else closeCard();
-    // 单击动物：单词卡照常打开，同时让动物做一个短反应并冒双语气泡
-    if (id && global.FarmAgents && global.FarmAgents.isAgent && global.FarmAgents.isAgent(id)) {
+  function handlePick(id, root, point) {
+    if (!id) {
+      closeCard();
+      return;
+    }
+    // 单击动物：先让它做短反应（马会先回到原位），再打开单词卡，
+    // 这样选中环和相机都按反应后的位置计算，不会对到旧位置。
+    if (global.FarmAgents && global.FarmAgents.isAgent && global.FarmAgents.isAgent(id)) {
       global.FarmAgents.interact(id, root);
+    }
+    selectWord(id, { root: root });
+    // 点中物体：把相机中心移到它身上，方便继续放大细看
+    if (sceneOk && global.FarmScene && global.FarmScene.focus) {
+      global.FarmScene.focus(id, root, point);
     }
   }
 

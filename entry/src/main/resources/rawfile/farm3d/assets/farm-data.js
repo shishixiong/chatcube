@@ -89,7 +89,7 @@
     orchard_pond_zone: { target: [38, 2, 26], radius: 62, theta: 0.80, phi: 0.92, focus: ['pond', 'duck', 'apple', 'flower'] }
   };
 
-  var camera = { minRadius: 22, maxRadius: 320, minPhi: 0.2, maxPhi: 1.32 };
+  var camera = { minRadius: 10, maxRadius: 320, minPhi: 0.2, maxPhi: 1.32 };
 
   var layout = {
     farmhouse: { x: -48, z: -14, ry: 0.10 },

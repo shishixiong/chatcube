@@ -210,6 +210,7 @@
       earL: idle && idle.earL ? idle.earL : null,
       earR: idle && idle.earR ? idle.earR : null,
       tail: idle && idle.tail ? idle.tail : null,
+      legs: idle && idle.legs ? idle.legs : null,
       cooldown: 0,
       repeat: {},
       temp: false,
@@ -464,6 +465,11 @@
     a.sEarLZ = a.earL ? a.earL.rotation.z : 0;
     a.sEarRZ = a.earR ? a.earR.rotation.z : 0;
     a.sTailY = a.tail ? a.tail.rotation.y : 0;
+    a.sLegs = null;
+    if (a.legs) {
+      a.sLegs = [];
+      for (var li = 0; li < a.legs.length; li++) a.sLegs.push(a.legs[li].rotation.x);
+    }
   }
 
   function restoreAgent(a) {
@@ -473,6 +479,9 @@
     if (a.earL) a.earL.rotation.z = a.sEarLZ;
     if (a.earR) a.earR.rotation.z = a.sEarRZ;
     if (a.tail) a.tail.rotation.y = a.sTailY;
+    if (a.legs && a.sLegs) {
+      for (var lr = 0; lr < a.legs.length; lr++) a.legs[lr].rotation.x = a.sLegs[lr];
+    }
   }
 
   function releaseResources(s) {
@@ -480,6 +489,8 @@
       if (nightOn) host.setRabbitAuto(false);
       else host.setRabbitAuto(true);
     }
+    if (s.stableHorse && host.setHorseAuto) host.setHorseAuto(!nightOn);
+    if (s.coopBirds && host.setCoopBirdsAuto) host.setCoopBirdsAuto(!nightOn);
     if (s.heldActors) {
       for (var i = 0; i < s.heldActors.length; i++) {
         var id = s.heldActors[i];
@@ -509,6 +520,7 @@
       bubbles: opts.short ? [] : (def.bubbles ? def.bubbles.slice() : (def.bubble ? [{ at: 0.2, who: 'agent', zh: def.bubble.zh, en: def.bubble.en }] : [])),
       sent: [],
       rabbit: a.id === 'rabbit',
+      stableHorse: !!(a.root && a.root.userData && a.root.userData.stableHorse),
       heldActors: def.actor ? [def.actor] : [],
       farmer: null,
       chicken: null,
@@ -534,6 +546,13 @@
       }
     }
 
+    s.coopBirds = false;
+    for (var ci = 0; ci < s.agents.length; ci++) {
+      var cr = s.agents[ci].root;
+      if (cr && cr.userData && cr.userData.coopBird) { s.coopBirds = true; break; }
+    }
+    if (s.stableHorse && host.setHorseAuto) host.setHorseAuto(false);
+    if (s.coopBirds && host.setCoopBirdsAuto) host.setCoopBirdsAuto(false);
     for (var i = 0; i < s.agents.length; i++) {
       var ag = s.agents[i];
       snap(ag);
@@ -620,6 +639,13 @@
     a.root.position.y = a.sy + Math.abs(Math.sin(t * 8)) * 0.18;
     a.root.rotation.y = -ang;
     if (a.tail) a.tail.rotation.z = Math.sin(t * 7) * 0.4;
+    if (a.legs) {
+      var gallop = t * 9.5;
+      a.legs[0].rotation.x = Math.sin(gallop) * 0.55;
+      a.legs[1].rotation.x = Math.sin(gallop + Math.PI) * 0.55;
+      a.legs[2].rotation.x = Math.sin(gallop + Math.PI) * 0.45;
+      a.legs[3].rotation.x = Math.sin(gallop) * 0.45;
+    }
   }
 
   function poseWallow(a, t) {
@@ -988,6 +1014,8 @@
     if (on === nightOn) return;
     nightOn = on;
     cancelStory();
+    if (host.setHorseAuto) host.setHorseAuto(!on);
+    if (host.setCoopBirdsAuto) host.setCoopBirdsAuto(!on);
     if (on) {
       host.setRabbitAuto(false);
       var rabbit = agents.rabbit;
@@ -1032,6 +1060,8 @@
       host.holdActor('child', false);
       host.holdActor('dog', false);
       host.setRabbitAuto(true);
+      if (host.setHorseAuto) host.setHorseAuto(true);
+      if (host.setCoopBirdsAuto) host.setCoopBirdsAuto(true);
     }
     ready = false;
     ui = null;

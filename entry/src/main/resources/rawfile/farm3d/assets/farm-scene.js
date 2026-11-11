@@ -181,6 +181,9 @@
       built.idles[ii].baseY = built.idles[ii].root.position.y;
     }
     buildRabbitTrips();
+    buildHorseRoutine();
+    buildCoopBirdRoutine();
+    buildLazyCatRoutine();
     buildGrainCycle();
     beeBase = built.bee.position.clone();
     for (var i = 0; i < built.fireflies.length; i++) {
@@ -204,6 +207,8 @@
         getGrainState: S.getGrainState,
         getRabbitState: S.getRabbitState,
         setRabbitAuto: S.setRabbitAuto,
+        setHorseAuto: S.setHorseAuto,
+        setCoopBirdsAuto: S.setCoopBirdsAuto,
         holdActor: S.holdActor,
         project: S.project
       });
@@ -346,6 +351,7 @@
     var hits = raycaster.intersectObjects(built.pickRoots, true);
     var id = null;
     var target = null;
+    var point = hits.length ? hits[0].point : null;
     if (hits.length) {
       var obj = hits[0].object;
       while (obj) {
@@ -353,7 +359,7 @@
         obj = obj.parent;
       }
     }
-    if (hooks.onPick) hooks.onPick(id, target);
+    if (hooks.onPick) hooks.onPick(id, target, point);
   }
 
   S.setView = function (name) {
@@ -362,6 +368,65 @@
 
   S.resetView = function () {
     applyView('overview', false);
+  };
+
+  // 点中物体后把相机中心平滑移到它身上，并拉近到能看清的距离。
+  // 之后的双指缩放/滚轮都会围绕这个新中心，不再被分区中心（谷仓）锁住。
+  var FOCUS_DURATION = 760;
+
+  function flyTo(target, radius) {
+    tween = {
+      t: 0,
+      dur: FOCUS_DURATION,
+      from: {
+        theta: goal.theta,
+        phi: goal.phi,
+        radius: goal.radius,
+        target: goal.target.clone()
+      },
+      to: {
+        theta: goal.theta,
+        phi: clamp(goal.phi, D.camera.minPhi, D.camera.maxPhi),
+        radius: clamp(radius, D.camera.minRadius, D.camera.maxRadius),
+        target: target.clone()
+      }
+    };
+  }
+
+  function focusObject(id, root, point) {
+    if (!built) return false;
+    var entry = built.objects[id];
+    var obj = root || (entry && entry.root);
+    if (!obj) return false;
+    var target = new THREE.Vector3();
+    var radius = 20;
+    if (obj.isInstancedMesh && point) {
+      // 成片作物 / 边界围栏：以点中的那一株/那一段为中心
+      target.copy(point);
+    } else {
+      var box = new THREE.Box3().setFromObject(obj);
+      if (box.isEmpty()) {
+        obj.getWorldPosition(target);
+      } else {
+        box.getCenter(target);
+        var size = new THREE.Vector3();
+        box.getSize(size);
+        // 按包围球和当前画面的较小视场角算距离：竖屏手机也能把宽建筑装进画面。
+        // 1.2 是整体放宽系数：点选后既把物体放到画面中心，又保留一点周边环境。
+        var bound = 0.5 * Math.sqrt(size.x * size.x + size.y * size.y + size.z * size.z);
+        var halfV = Math.tan((camera.fov || 46) * Math.PI / 360);
+        var halfH = halfV * (camera.aspect || 1.6);
+        radius = bound / Math.min(halfV, halfH) * 1.2 + 3;
+      }
+    }
+    if (!isFinite(target.y)) target.y = 2;
+    target.y = Math.max(target.y, 0.8);
+    flyTo(target, radius);
+    return true;
+  }
+
+  S.focus = function (id, root, point) {
+    return focusObject(id, root, point);
   };
 
   function applyView(name, instant) {
@@ -422,8 +487,18 @@
     var cat = item ? D.categories[item.category] : null;
     ring.material.color.set(cat ? cat.color : '#F2C14E');
     if (id === 'fence') {
-      ring.position.set(0, 0.09, -52);
-      selectedBase = 6;
+      // 马厩前的小牧场围栏和场地边界围栏共用 fence 词条：
+      // 点牧场围栏时高亮环落在牧场本身，而不是场地边界。
+      if (overrideRoot && !overrideRoot.isInstancedMesh) {
+        var fenceBox = new THREE.Box3().setFromObject(root);
+        fenceBox.getCenter(tmpV);
+        fenceBox.getSize(tmpS);
+        ring.position.set(tmpV.x, 0.09, tmpV.z);
+        selectedBase = Math.max(tmpS.x, tmpS.z) * 0.55 + 0.9;
+      } else {
+        ring.position.set(0, 0.09, -52);
+        selectedBase = 6;
+      }
     } else if (entry.instanced) {
       root.getWorldPosition(tmpV);
       ring.position.set(tmpV.x, 0.09, tmpV.z);
@@ -765,6 +840,627 @@
   };
 
   // ---------------------------------------------------------------
+  // 马厩小剧场：马在牧场里待一会儿 → 走到草料架低头吃草 →
+  // 走到水槽低头喝水 → 走回原位。走路时四条腿摆动。
+  // 点击马（智能体小跑）或天黑时暂停，回到原位。
+  // ---------------------------------------------------------------
+  var HORSE_WALK_SPEED = 1.55;
+  var HORSE_EAT_TIME = 5.5;
+  var HORSE_DRINK_TIME = 4.2;
+  var horseAuto = true;
+  var horseRoutine = null;
+
+  function horseLegsPose(cfg, phase) {
+    if (!cfg || !cfg.legs || cfg.legs.length < 4) return;
+    var legs = cfg.legs;
+    legs[0].rotation.x = Math.sin(phase) * 0.36;
+    legs[1].rotation.x = Math.sin(phase + Math.PI) * 0.36;
+    legs[2].rotation.x = Math.sin(phase + Math.PI) * 0.3;
+    legs[3].rotation.x = Math.sin(phase) * 0.3;
+  }
+
+  function horseLegsRest(cfg) {
+    if (!cfg || !cfg.legs) return;
+    for (var i = 0; i < cfg.legs.length; i++) cfg.legs[i].rotation.x = 0;
+  }
+
+  function buildHorseRoutine() {
+    horseRoutine = null;
+    var horse = built && built.stableHorse;
+    if (!horse || !horse.userData.stableHome || !horse.userData.stableSpots) return;
+    var home = horse.userData.stableHome;
+    horseRoutine = {
+      root: horse,
+      cfg: horse.userData.idle,
+      home: new THREE.Vector3(home.x, 0, home.z),
+      homeYaw: home.yaw,
+      spots: horse.userData.stableSpots,
+      state: 'wait',
+      timer: 7 + Math.random() * 6,
+      target: null,
+      faceYaw: home.yaw,
+      after: 'home',
+      walkPhase: 0
+    };
+    horseAuto = true;
+  }
+
+  function updateHorseRoutine(dt, now) {
+    var r = horseRoutine;
+    if (!r) return;
+    // 智能体故事接管时不要抢位置
+    if (!horseAuto) return;
+    var root = r.root;
+    var cfg = r.cfg;
+
+    if (nightTarget > 0.5 || reduceMotion) {
+      root.position.x = r.home.x;
+      root.position.z = r.home.z;
+      root.rotation.set(0, r.homeYaw, 0);
+      horseLegsRest(cfg);
+      if (cfg.head) {
+        cfg.head.rotation.x = 0;
+        if (cfg.headBaseY != null) cfg.head.position.y = cfg.headBaseY;
+      }
+      r.state = 'wait';
+      return;
+    }
+
+    if (r.state === 'wait') {
+      root.position.x = r.home.x;
+      root.position.z = r.home.z;
+      root.rotation.y = r.homeYaw + Math.sin(now * 0.35) * 0.14;
+      horseLegsRest(cfg);
+      if (cfg.head) {
+        cfg.head.rotation.x = Math.sin(now * 0.8) * 0.03;
+        if (cfg.headBaseY != null) cfg.head.position.y = cfg.headBaseY;
+      }
+      r.timer -= dt;
+      if (r.timer <= 0) {
+        r.target = r.spots.hay;
+        r.faceYaw = r.spots.hay.yaw;
+        r.after = 'eat';
+        r.state = 'walk';
+      }
+    } else if (r.state === 'walk') {
+      var dx = r.target.x - root.position.x;
+      var dz = r.target.z - root.position.z;
+      var dist = Math.sqrt(dx * dx + dz * dz);
+      var step = HORSE_WALK_SPEED * dt;
+      if (dist <= step) {
+        root.position.x = r.target.x;
+        root.position.z = r.target.z;
+        root.rotation.y = r.faceYaw;
+        horseLegsRest(cfg);
+        if (r.after === 'eat') {
+          r.state = 'eat';
+          r.timer = HORSE_EAT_TIME;
+        } else if (r.after === 'drink') {
+          r.state = 'drink';
+          r.timer = HORSE_DRINK_TIME;
+        } else {
+          r.state = 'wait';
+          r.timer = 9 + Math.random() * 8;
+          r.after = 'home';
+        }
+      } else {
+        root.position.x += dx / dist * step;
+        root.position.z += dz / dist * step;
+        root.rotation.y = Math.atan2(dx, dz);
+        r.walkPhase += dt * 9.2;
+        horseLegsPose(cfg, r.walkPhase);
+        if (cfg.head) {
+          cfg.head.rotation.x = Math.sin(r.walkPhase * 0.5) * 0.035;
+          if (cfg.headBaseY != null) cfg.head.position.y = cfg.headBaseY;
+        }
+      }
+    } else if (r.state === 'eat') {
+      root.rotation.y = r.faceYaw;
+      horseLegsRest(cfg);
+      if (cfg.head) {
+        cfg.head.rotation.x = 0.95 + Math.sin(now * 8.0) * 0.1;
+        if (cfg.headBaseY != null) cfg.head.position.y = cfg.headBaseY - 0.22;
+      }
+      r.timer -= dt;
+      if (r.timer <= 0) {
+        r.target = r.spots.trough;
+        r.faceYaw = r.spots.trough.yaw;
+        r.after = 'drink';
+        r.state = 'walk';
+      }
+    } else if (r.state === 'drink') {
+      root.rotation.y = r.faceYaw;
+      horseLegsRest(cfg);
+      if (cfg.head) {
+        cfg.head.rotation.x = 0.8 + Math.sin(now * 5.0) * 0.06;
+        if (cfg.headBaseY != null) cfg.head.position.y = cfg.headBaseY - 0.18;
+      }
+      r.timer -= dt;
+      if (r.timer <= 0) {
+        r.target = { x: r.home.x, z: r.home.z };
+        r.faceYaw = r.homeYaw;
+        r.after = 'home';
+        r.state = 'walk';
+      }
+    }
+  }
+
+  // 智能体接管马时暂停自动巡游；恢复时回到原位重新等待
+  S.setHorseAuto = function (on) {
+    horseAuto = !!on;
+    var r = horseRoutine;
+    if (!r) return false;
+    r.state = 'wait';
+    r.timer = on ? 6 + Math.random() * 5 : 8;
+    r.target = null;
+    r.after = 'home';
+    if (!on) {
+      r.root.position.set(r.home.x, 0, r.home.z);
+      r.root.rotation.set(0, r.homeYaw, 0);
+      horseLegsRest(r.cfg);
+      if (r.cfg && r.cfg.head) {
+        r.cfg.head.rotation.x = 0;
+        if (r.cfg.headBaseY != null) r.cfg.head.position.y = r.cfg.headBaseY;
+      }
+    }
+    return true;
+  };
+
+  // ---------------------------------------------------------------
+  // 鸡舍小剧场：小鸡在门前闲庭信步、低头啄虫子，偶尔走回鸡舍里待一会儿再出来。
+  // 故事接管（chicken_peck / rooster_crow / grandma_feed）或天黑时暂停。
+  // ---------------------------------------------------------------
+  var CHICKEN_WALK_SPEED = 0.62;
+  var coopBirdAuto = true;
+  var coopBirdRoutines = [];
+  var coopBirdWormMat = null;
+
+  function makeCoopWorm() {
+    if (!coopBirdWormMat) {
+      coopBirdWormMat = new THREE.MeshPhongMaterial({
+        color: 0xC06A57,
+        flatShading: true,
+        shininess: 0,
+        specular: 0x000000
+      });
+    }
+    var w = new THREE.Group();
+    var segGeo = new THREE.SphereGeometry(0.085, 6, 4);
+    for (var i = 0; i < 3; i++) {
+      var m = new THREE.Mesh(segGeo, coopBirdWormMat);
+      m.position.set(Math.sin(i * 1.3) * 0.05, 0.02, i * 0.12);
+      m.scale.set(1, 0.78, 1.35);
+      m.castShadow = false;
+      m.receiveShadow = false;
+      w.add(m);
+    }
+    w.visible = false;
+    scene.add(w);
+    return w;
+  }
+
+  function coopLegsPose(cfg, phase, amp) {
+    if (!cfg || !cfg.legs || cfg.legs.length < 2) return;
+    cfg.legs[0].rotation.x = Math.sin(phase) * amp;
+    cfg.legs[1].rotation.x = Math.sin(phase + Math.PI) * amp;
+  }
+
+  function coopLegsRest(cfg) {
+    if (!cfg || !cfg.legs) return;
+    for (var i = 0; i < cfg.legs.length; i++) cfg.legs[i].rotation.x = 0;
+  }
+
+  function resetCoopBird(r) {
+    r.state = 'wait';
+    r.timer = 1 + Math.random() * 3;
+    r.target = null;
+    r.worm.visible = false;
+    r.wormTimer = 0;
+    r.root.visible = true;
+    r.root.scale.setScalar(1);
+    r.root.position.set(r.home.x, r.home.y, r.home.z);
+    r.root.rotation.set(0, r.home.yaw, 0);
+    coopLegsRest(r.cfg);
+  }
+
+  function coopIsBusy(except) {
+    for (var i = 0; i < coopBirdRoutines.length; i++) {
+      var r = coopBirdRoutines[i];
+      if (r === except) continue;
+      if (r.state === 'toCoop' || r.state === 'enter' || r.state === 'inside' || r.state === 'exit') return true;
+    }
+    return false;
+  }
+
+  function pickCoopTarget(r) {
+    var a = Math.random() * Math.PI * 2;
+    var rr = Math.sqrt(Math.random());
+    return {
+      x: r.center.x + Math.cos(a) * rr * r.rx,
+      z: r.center.z + Math.sin(a) * rr * r.rz
+    };
+  }
+
+  function startCoopPeck(r) {
+    r.state = 'peck';
+    r.timer = 2.2 + Math.random() * 1.8;
+    r.wormTimer = 1.1 + Math.random() * 0.6;
+    var yaw = r.root.rotation.y;
+    var fx = Math.sin(yaw);
+    var fz = Math.cos(yaw);
+    r.worm.position.set(r.root.position.x + fx * 0.5, 0.05, r.root.position.z + fz * 0.5);
+    r.worm.rotation.set(0, yaw, 0);
+    r.worm.visible = Math.random() < 0.75;
+  }
+
+  function buildCoopBirdRoutine() {
+    coopBirdRoutines = [];
+    if (!built || !built.objects || !D.layout.chicken_coop) return;
+    var coop = D.layout.chicken_coop;
+    var ry = coop.ry || 0;
+    var cs = Math.cos(ry);
+    var sn = Math.sin(ry);
+    function localPoint(x, z) {
+      return { x: coop.x + x * cs + z * sn, z: coop.z - x * sn + z * cs };
+    }
+    var door = localPoint(0, 1.82);
+    var stage = localPoint(0, 3.15);
+    var ids = ['chicken', 'rooster'];
+    for (var i = 0; i < ids.length; i++) {
+      var entry = built.objects[ids[i]];
+      if (!entry || !entry.root || !entry.root.userData.idle) continue;
+      var root = entry.root;
+      root.userData.coopBird = true;
+      coopBirdRoutines.push({
+        id: ids[i],
+        root: root,
+        cfg: root.userData.idle,
+        baseY: root.position.y,
+        home: { x: root.position.x, y: root.position.y, z: root.position.z, yaw: root.rotation.y },
+        door: door,
+        stage: stage,
+        center: localPoint(0, 4.4),
+        rx: 4.0,
+        rz: 1.9,
+        enterChance: ids[i] === 'chicken' ? 0.2 : 0.08,
+        state: 'wait',
+        timer: 1.5 + Math.random() * 3,
+        target: null,
+        faceYaw: root.rotation.y,
+        walkPhase: Math.random() * 6,
+        travelT: 0,
+        travelDur: 1,
+        fromX: 0,
+        fromZ: 0,
+        toX: 0,
+        toZ: 0,
+        worm: makeCoopWorm(),
+        wormTimer: 0
+      });
+    }
+    coopBirdAuto = true;
+  }
+
+  function updateCoopBirds(dt, now) {
+    if (!coopBirdRoutines.length) return;
+    if (!coopBirdAuto) return;
+    var sleeping = nightTarget > 0.5 || reduceMotion;
+    for (var i = 0; i < coopBirdRoutines.length; i++) {
+      var r = coopBirdRoutines[i];
+      var root = r.root;
+      var cfg = r.cfg;
+      if (sleeping) {
+        resetCoopBird(r);
+        continue;
+      }
+      if (r.worm.visible) {
+        r.worm.rotation.y = Math.sin(now * 9) * 0.35;
+        r.worm.position.y = 0.05 + Math.abs(Math.sin(now * 7)) * 0.03;
+      }
+
+      if (r.state === 'wait') {
+        root.rotation.x = 0;
+        root.rotation.z = Math.sin(now * 2 + cfg.phase) * 0.02;
+        root.position.y = r.baseY + Math.abs(Math.sin(now * 3.4 + cfg.phase)) * 0.02;
+        coopLegsRest(cfg);
+        r.timer -= dt;
+        if (r.timer <= 0) {
+          var roll = Math.random();
+          if (roll < r.enterChance && !coopIsBusy(r)) {
+            r.target = r.stage;
+            r.faceYaw = Math.atan2(r.door.x - r.stage.x, r.door.z - r.stage.z);
+            r.state = 'toCoop';
+          } else if (roll < r.enterChance + 0.25) {
+            startCoopPeck(r);
+          } else {
+            r.target = pickCoopTarget(r);
+            r.faceYaw = root.rotation.y;
+            r.state = 'walk';
+          }
+        }
+      } else if (r.state === 'walk' || r.state === 'toCoop') {
+        var dx = r.target.x - root.position.x;
+        var dz = r.target.z - root.position.z;
+        var dist = Math.sqrt(dx * dx + dz * dz);
+        var step = CHICKEN_WALK_SPEED * dt;
+        if (dist <= step) {
+          root.position.x = r.target.x;
+          root.position.z = r.target.z;
+          coopLegsRest(cfg);
+          if (r.state === 'toCoop') {
+            root.rotation.y = r.faceYaw;
+            r.state = 'enter';
+            r.fromX = root.position.x;
+            r.fromZ = root.position.z;
+            r.toX = r.door.x;
+            r.toZ = r.door.z;
+            r.travelT = 0;
+            r.travelDur = 0.65;
+          } else if (Math.random() < 0.65) {
+            startCoopPeck(r);
+          } else {
+            r.state = 'wait';
+            r.timer = 1 + Math.random() * 2.5;
+          }
+        } else {
+          root.position.x += dx / dist * step;
+          root.position.z += dz / dist * step;
+          root.rotation.y = Math.atan2(dx, dz);
+          r.walkPhase += dt * 10.5;
+          coopLegsPose(cfg, r.walkPhase, 0.45);
+          root.rotation.x = 0;
+          root.rotation.z = Math.sin(r.walkPhase) * 0.07;
+          root.position.y = r.baseY + Math.abs(Math.sin(r.walkPhase * 2)) * 0.035;
+        }
+      } else if (r.state === 'peck') {
+        root.rotation.x = 0.32 + Math.abs(Math.sin(now * 9.5)) * 0.22;
+        root.rotation.z = Math.sin(now * 3.2) * 0.02;
+        root.position.y = r.baseY + Math.abs(Math.sin(now * 9.5)) * 0.015;
+        coopLegsRest(cfg);
+        r.timer -= dt;
+        if (r.wormTimer > 0) {
+          r.wormTimer -= dt;
+          if (r.wormTimer <= 0) r.worm.visible = false;
+        }
+        if (r.timer <= 0) {
+          r.worm.visible = false;
+          root.rotation.x = 0;
+          r.state = 'wait';
+          r.timer = 1.2 + Math.random() * 3;
+        }
+      } else if (r.state === 'enter' || r.state === 'exit') {
+        r.travelT = Math.min(r.travelDur, r.travelT + dt);
+        var k = r.travelT / r.travelDur;
+        var e = k * k * (3 - 2 * k);
+        var nx = r.fromX + (r.toX - r.fromX) * e;
+        var nz = r.fromZ + (r.toZ - r.fromZ) * e;
+        if (r.state === 'enter') {
+          root.position.set(nx, r.baseY + 0.3 * e, nz);
+          root.scale.setScalar(1 - 0.42 * e);
+        } else {
+          root.position.set(nx, r.baseY + 0.3 * (1 - e), nz);
+          root.scale.setScalar(0.58 + 0.42 * e);
+        }
+        root.rotation.set(0, r.faceYaw, 0);
+        coopLegsRest(cfg);
+        if (r.travelT >= r.travelDur) {
+          if (r.state === 'enter') {
+            root.visible = false;
+            root.scale.setScalar(1);
+            r.state = 'inside';
+            r.timer = 3 + Math.random() * 3.5;
+          } else {
+            root.scale.setScalar(1);
+            root.position.y = r.baseY;
+            r.state = 'wait';
+            r.timer = 1.5 + Math.random() * 3;
+          }
+        }
+      } else if (r.state === 'inside') {
+        root.visible = false;
+        r.timer -= dt;
+        if (r.timer <= 0) {
+          root.visible = true;
+          root.position.set(r.door.x, r.baseY, r.door.z);
+          root.scale.setScalar(0.58);
+          root.rotation.set(0, r.faceYaw, 0);
+          r.fromX = r.door.x;
+          r.fromZ = r.door.z;
+          r.toX = r.stage.x;
+          r.toZ = r.stage.z;
+          r.travelT = 0;
+          r.travelDur = 0.7;
+          r.state = 'exit';
+        }
+      }
+    }
+  }
+
+  // 故事接管鸡舍的小鸡时暂停自动巡游；恢复时回到原位重新等待
+  S.setCoopBirdsAuto = function (on) {
+    coopBirdAuto = !!on;
+    for (var i = 0; i < coopBirdRoutines.length; i++) {
+      resetCoopBird(coopBirdRoutines[i]);
+    }
+    return true;
+  };
+
+  // ---------------------------------------------------------------
+  // 懒猫小剧场：睡觉（呼吸/尾巴轻摆）→ 醒来睁眼 → 抻懒腰打哈欠
+  // → 地上打滚 → 再睡回去。天黑时一直睡；白天循环。
+  // ---------------------------------------------------------------
+  var lazyCatRoutine = null;
+
+  function setLazyCatEyes(cfg, open) {
+    if (!cfg) return;
+    if (cfg.eyesClosed) {
+      for (var i = 0; i < cfg.eyesClosed.length; i++) cfg.eyesClosed[i].visible = !open;
+    }
+    if (cfg.eyesOpen) {
+      for (var j = 0; j < cfg.eyesOpen.length; j++) cfg.eyesOpen[j].visible = open;
+    }
+  }
+
+  function resetLazyCatPose(r, sleeping) {
+    var cfg = r.cfg;
+    var root = r.root;
+    root.rotation.set(0, r.homeYaw, 0);
+    root.position.y = r.baseY;
+    if (cfg.head) {
+      cfg.head.rotation.set(0, 0, 0);
+      cfg.head.position.set(0, r.headY, r.headZ);
+    }
+    if (cfg.paws) {
+      for (var i = 0; i < cfg.paws.length; i++) cfg.paws[i].position.z = cfg.pawZ;
+    }
+    if (cfg.yawn) cfg.yawn.visible = false;
+    setLazyCatEyes(cfg, !sleeping);
+  }
+
+  function buildLazyCatRoutine() {
+    lazyCatRoutine = null;
+    var cat = built && built.lazyCat;
+    if (!cat || !cat.userData.idle) return;
+    var cfg = cat.userData.idle;
+    var head = cfg.head;
+    lazyCatRoutine = {
+      root: cat,
+      cfg: cfg,
+      baseY: cat.position.y,
+      homeYaw: cat.rotation.y,
+      headY: head ? head.position.y : 0,
+      headZ: head ? head.position.z : 0,
+      state: 'sleep',
+      timer: 7 + Math.random() * 8,
+      t: 0,
+      rollPhase: 0,
+      rollDur: 3.2,
+      settleZ: 0,
+      settleX: 0
+    };
+    resetLazyCatPose(lazyCatRoutine, true);
+  }
+
+  function updateLazyCat(dt, now) {
+    var r = lazyCatRoutine;
+    if (!r) return;
+    var cfg = r.cfg;
+    var root = r.root;
+    var head = cfg.head;
+
+    if (nightTarget > 0.5 || reduceMotion) {
+      resetLazyCatPose(r, true);
+      r.state = 'sleep';
+      r.timer = 6 + Math.random() * 5;
+      return;
+    }
+
+    if (r.state === 'sleep') {
+      root.rotation.x = 0;
+      root.rotation.z = 0;
+      root.position.y = r.baseY + Math.sin(now * 1.4) * 0.008;
+      if (head) {
+        head.rotation.x = Math.sin(now * 0.9) * 0.015;
+        head.rotation.z = 0;
+        head.position.set(0, r.headY, r.headZ);
+      }
+      if (cfg.tail) cfg.tail.rotation.y = Math.sin(now * 1.1) * 0.24;
+      if (cfg.paws) {
+        for (var i = 0; i < cfg.paws.length; i++) cfg.paws[i].position.z = cfg.pawZ;
+      }
+      if (cfg.yawn) cfg.yawn.visible = false;
+      setLazyCatEyes(cfg, false);
+      r.timer -= dt;
+      if (r.timer <= 0) {
+        r.state = 'wake';
+        r.t = 0;
+      }
+    } else if (r.state === 'wake') {
+      r.t += dt;
+      var k = Math.min(1, r.t / 1.2);
+      var e = k * k * (3 - 2 * k);
+      root.position.y = r.baseY + 0.012 * e;
+      if (head) {
+        head.rotation.x = -0.3 * e;
+        head.position.set(0, r.headY, r.headZ);
+      }
+      setLazyCatEyes(cfg, true);
+      if (cfg.tail) cfg.tail.rotation.y = Math.sin(now * 2.2) * 0.3;
+      if (k >= 1) {
+        r.state = 'stretch';
+        r.t = 0;
+      }
+    } else if (r.state === 'stretch') {
+      r.t += dt;
+      var ks = Math.min(1, r.t / 2.4);
+      var arch = Math.sin(Math.PI * ks);
+      root.rotation.x = -0.14 * arch;
+      root.position.y = r.baseY + 0.02 * arch;
+      if (head) {
+        head.rotation.x = -0.3 - 0.16 * arch;
+        head.position.set(0, r.headY, r.headZ + 0.05 * arch);
+      }
+      if (cfg.paws) {
+        for (var pi = 0; pi < cfg.paws.length; pi++) cfg.paws[pi].position.z = cfg.pawZ + 0.1 * arch;
+      }
+      if (cfg.tail) cfg.tail.rotation.y = Math.sin(now * 3) * 0.3;
+      if (cfg.yawn) cfg.yawn.visible = ks > 0.18 && ks < 0.72;
+      setLazyCatEyes(cfg, true);
+      if (ks >= 1) {
+        r.state = 'roll';
+        r.t = 0;
+        r.rollPhase = 0;
+        r.rollDur = 3.2;
+      }
+    } else if (r.state === 'roll') {
+      r.t += dt;
+      r.rollPhase += dt * 5.4;
+      var wob = Math.sin(r.rollPhase);
+      root.rotation.z = wob * 0.85;
+      root.rotation.x = 0.02 * Math.sin(r.rollPhase * 0.5);
+      root.position.y = r.baseY + 0.012 + Math.abs(wob) * 0.05;
+      if (head) {
+        head.rotation.x = -0.12;
+        head.rotation.z = -wob * 0.22;
+        head.position.set(0, r.headY, r.headZ);
+      }
+      if (cfg.paws) {
+        for (var pj = 0; pj < cfg.paws.length; pj++) cfg.paws[pj].position.z = cfg.pawZ + Math.abs(wob) * 0.04;
+      }
+      if (cfg.tail) cfg.tail.rotation.y = Math.sin(r.rollPhase * 1.7) * 0.5;
+      if (cfg.yawn) cfg.yawn.visible = false;
+      setLazyCatEyes(cfg, true);
+      if (r.t >= r.rollDur) {
+        r.state = 'settle';
+        r.t = 0;
+        r.settleZ = root.rotation.z;
+        r.settleX = root.rotation.x;
+      }
+    } else if (r.state === 'settle') {
+      r.t += dt;
+      var kt = Math.min(1, r.t / 1.8);
+      var et = kt * kt * (3 - 2 * kt);
+      root.rotation.z = r.settleZ * (1 - et);
+      root.rotation.x = r.settleX * (1 - et);
+      root.position.y = r.baseY + 0.012 * (1 - et);
+      if (head) {
+        head.rotation.x = -0.12 * (1 - et);
+        head.rotation.z = 0;
+        head.position.set(0, r.headY, r.headZ);
+      }
+      if (cfg.paws) {
+        for (var pk = 0; pk < cfg.paws.length; pk++) cfg.paws[pk].position.z = cfg.pawZ;
+      }
+      if (cfg.tail) cfg.tail.rotation.y = Math.sin(now * 1.2) * 0.24;
+      if (kt >= 0.6) setLazyCatEyes(cfg, false);
+      if (kt >= 1) {
+        r.state = 'sleep';
+        r.timer = 8 + Math.random() * 8;
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------
   // 运粮小剧场：拖拉机拉着拖车每绕农场一圈，都会在谷仓门口的土路岔口停一次。
   // 停稳 → 谷仓门打开 → 农夫推着满满一车粮食走到拖车旁倒进去 →
   // 推空车回谷仓、把门关上 → 拖拉机才继续往前开。
@@ -1080,8 +1776,15 @@
         o.position.y = baseY + Math.sin(t * 1.5 + cfg.phase) * 0.02;
         o.rotation.z = Math.sin(t * 0.9 + cfg.phase) * 0.015;
       } else if (cfg.kind === 'horse') {
-        if (cfg.tail) cfg.tail.rotation.z = Math.sin(t * 1.4 + cfg.phase) * 0.3;
+        if (cfg.tail) {
+          cfg.tail.rotation.z = Math.sin(t * 1.4 + cfg.phase) * 0.28;
+          cfg.tail.rotation.y = Math.sin(t * 0.8 + cfg.phase) * 0.14;
+        }
+        if (cfg.head) cfg.head.rotation.x = Math.sin(t * 0.9 + cfg.phase) * 0.04;
+        if (cfg.earL) cfg.earL.rotation.z = 0.22 + Math.sin(t * 1.7 + cfg.phase) * 0.05;
+        if (cfg.earR) cfg.earR.rotation.z = -0.22 - Math.sin(t * 1.7 + cfg.phase + 0.7) * 0.05;
         o.position.y = baseY + Math.sin(t * 1.2 + cfg.phase) * 0.02;
+        o.rotation.z = Math.sin(t * 0.7 + cfg.phase) * 0.008;
       } else if (cfg.kind === 'pig') {
         o.rotation.z = Math.sin(t * 1.8 + cfg.phase) * 0.02;
         if (cfg.tail) cfg.tail.rotation.z = Math.sin(t * 2.6 + cfg.phase) * 0.14;
@@ -1125,6 +1828,10 @@
       updateRabbitTrips(dt, t);
       updateGrainCycle(dt, t);
     }
+
+    updateHorseRoutine(dt, t);
+    updateCoopBirds(dt, t);
+    updateLazyCat(dt, t);
 
     if (built.bee) {
       built.bee.position.x = beeBase.x + Math.sin(t * 0.62) * 3.2;

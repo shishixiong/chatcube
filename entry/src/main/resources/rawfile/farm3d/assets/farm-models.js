@@ -123,6 +123,21 @@
     mesh(parent, box(0.5, 0.5, d + 0.2), color, 0, y + h, 0);
   }
 
+  // 封闭的山墙三角面：把屋顶下露空的三角补上，窗/阁楼门才有实墙可挂
+  function gableEnd(parent, w, h, y, z, color) {
+    var shape = new THREE.Shape();
+    shape.moveTo(-w / 2, 0);
+    shape.lineTo(w / 2, 0);
+    shape.lineTo(0, h);
+    shape.closePath();
+    var m = new THREE.Mesh(new THREE.ShapeGeometry(shape), material(color));
+    m.position.set(0, y, z);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    parent.add(m);
+    return m;
+  }
+
   function makeRng(seed) {
     var s = seed % 2147483647;
     if (s <= 0) s += 2147483646;
@@ -243,12 +258,226 @@
 
   function makeStable() {
     var g = new THREE.Group();
+
+    // 石砌墙基 + 木主体 + 四角立柱
+    mesh(g, box(9.0, 0.5, 5.8), C.stone, 0, 0.25, 0);
     mesh(g, box(8.6, 3.6, 5.4), C.wood, 0, 1.8, 0);
+    mesh(g, box(0.42, 3.8, 0.42), C.woodDark, -4.2, 1.9, 2.58);
+    mesh(g, box(0.42, 3.8, 0.42), C.woodDark, 4.2, 1.9, 2.58);
+    mesh(g, box(0.42, 3.8, 0.42), C.woodDark, -4.2, 1.9, -2.58);
+    mesh(g, box(0.42, 3.8, 0.42), C.woodDark, 4.2, 1.9, -2.58);
+
+    // 墙面竖木板缝（正面门外两侧 + 两侧墙）
+    for (var s = 0; s < 3; s++) {
+      var off = 3.42 + s * 0.3;
+      mesh(g, box(0.05, 3.2, 0.05), C.woodDark, -off, 1.95, 2.73, { cast: false });
+      mesh(g, box(0.05, 3.2, 0.05), C.woodDark, off, 1.95, 2.73, { cast: false });
+      mesh(g, box(0.05, 3.2, 0.05), C.woodDark, 4.32, 1.95, -1.5 + s * 1.5, { cast: false });
+      mesh(g, box(0.05, 3.2, 0.05), C.woodDark, -4.32, 1.95, -1.5 + s * 1.5, { cast: false });
+    }
+
+    // 屋顶 + 封闭山墙 + 屋脊通风塔 + 风向标
     gable(g, 9.6, 6.4, 2.3, C.barnDeep, 3.6);
-    mesh(g, box(2.0, 2.6, 0.16), C.cream, -2.0, 1.3, 2.74);
-    mesh(g, box(2.0, 2.6, 0.16), C.cream, 2.0, 1.3, 2.74);
-    mesh(g, box(8.7, 0.3, 0.2), C.cream, 0, 3.3, 2.72);
-    mesh(g, box(0.9, 0.9, 0.14), windowMaterial(), 0, 4.4, 2.66);
+    gableEnd(g, 8.6, 2.3, 3.6, 2.705, C.wood);
+    var backGable = gableEnd(g, 8.6, 2.3, 3.6, -2.705, C.wood);
+    backGable.rotation.y = Math.PI;
+    mesh(g, box(1.5, 0.14, 1.5), C.woodDark, 0, 6.04, 0);
+    mesh(g, box(0.12, 0.78, 0.12), C.woodDark, -0.55, 6.46, -0.5);
+    mesh(g, box(0.12, 0.78, 0.12), C.woodDark, 0.55, 6.46, -0.5);
+    mesh(g, box(0.12, 0.78, 0.12), C.woodDark, -0.55, 6.46, 0.5);
+    mesh(g, box(0.12, 0.78, 0.12), C.woodDark, 0.55, 6.46, 0.5);
+    gable(g, 2.0, 1.7, 0.6, C.barnDeep, 6.84);
+    mesh(g, cyl(0.045, 0.045, 1.2, 5), C.ink, 0, 8.04, 0);
+    mesh(g, box(1.5, 0.07, 0.07), C.ink, 0.1, 8.46, 0);
+    mesh(g, cone(0.14, 0.34, 4), C.ink, 0.86, 8.46, 0, { rz: -Math.PI / 2 });
+    mesh(g, box(0.32, 0.3, 0.05), C.ink, -0.62, 8.46, 0);
+
+    // 山墙：干草阁楼门 + 左窗
+    mesh(g, box(1.74, 1.58, 0.12), C.woodDark, 0, 4.6, 2.72);
+    mesh(g, box(1.46, 1.32, 0.16), C.creamDeep, 0, 4.6, 2.79);
+    mesh(g, box(1.9, 0.1, 0.07), C.wood, 0, 4.6, 2.88, { rz: 0.73 });
+    mesh(g, box(0.07, 0.07, 0.07), C.ink, -0.56, 4.3, 2.89);
+    mesh(g, box(0.07, 0.07, 0.07), C.ink, -0.56, 4.9, 2.89);
+    mesh(g, box(0.22, 0.1, 0.3), C.wheat, -0.46, 3.96, 2.8, { rz: 0.3, cast: false });
+    mesh(g, box(0.2, 0.09, 0.28), C.wheatDeep, -0.16, 3.98, 2.82, { rz: -0.2, cast: false });
+    mesh(g, box(0.2, 0.1, 0.3), C.wheat, 0.16, 3.96, 2.79, { rz: 0.15, cast: false });
+    mesh(g, box(0.98, 0.98, 0.08), C.cream, -1.95, 4.35, 2.72);
+    mesh(g, box(0.76, 0.76, 0.1), windowMaterial(), -1.95, 4.35, 2.77);
+    mesh(g, box(0.76, 0.05, 0.12), C.cream, -1.95, 4.35, 2.79);
+    mesh(g, box(0.05, 0.76, 0.12), C.cream, -1.95, 4.35, 2.79);
+
+    // 门洞暗部 + 门框
+    mesh(g, box(6.3, 2.82, 0.06), 0x4A3426, 0, 1.41, 2.735, { cast: false, receive: false });
+    mesh(g, box(0.24, 2.94, 0.22), C.woodDark, -3.12, 1.47, 2.76);
+    mesh(g, box(0.24, 2.94, 0.22), C.woodDark, 3.12, 1.47, 2.76);
+    mesh(g, box(6.48, 0.26, 0.24), C.woodDark, 0, 2.93, 2.76);
+
+    // 两扇带 Z 形木条的板门：左门半开，右门留一条缝
+    var doorL = new THREE.Group();
+    doorL.position.set(-3.0, 0, 2.8);
+    doorL.rotation.y = -0.65;
+    g.add(doorL);
+    mesh(doorL, box(2.9, 2.72, 0.16), C.cream, 1.45, 1.36, 0);
+    mesh(doorL, box(2.7, 0.15, 0.08), C.wood, 1.45, 0.5, 0.1);
+    mesh(doorL, box(2.7, 0.15, 0.08), C.wood, 1.45, 2.2, 0.1);
+    mesh(doorL, box(3.25, 0.15, 0.08), C.wood, 1.45, 1.35, 0.1, { rz: 0.56 });
+    mesh(doorL, box(2.7, 0.15, 0.08), C.wood, 1.45, 0.5, -0.1);
+    mesh(doorL, box(2.7, 0.15, 0.08), C.wood, 1.45, 2.2, -0.1);
+    mesh(doorL, box(3.25, 0.15, 0.08), C.wood, 1.45, 1.35, -0.1, { rz: -0.56 });
+    mesh(doorL, box(0.16, 0.3, 0.06), C.ink, 0.16, 0.6, 0.11);
+    mesh(doorL, box(0.16, 0.3, 0.06), C.ink, 0.16, 2.1, 0.11);
+    mesh(doorL, box(0.1, 0.34, 0.12), C.ink, 2.78, 1.35, 0.12);
+
+    var doorR = new THREE.Group();
+    doorR.position.set(3.0, 0, 2.8);
+    doorR.rotation.y = 0.14;
+    g.add(doorR);
+    mesh(doorR, box(2.9, 2.72, 0.16), C.cream, -1.45, 1.36, 0);
+    mesh(doorR, box(2.7, 0.15, 0.08), C.wood, -1.45, 0.5, 0.1);
+    mesh(doorR, box(2.7, 0.15, 0.08), C.wood, -1.45, 2.2, 0.1);
+    mesh(doorR, box(3.25, 0.15, 0.08), C.wood, -1.45, 1.35, 0.1, { rz: -0.56 });
+    mesh(doorR, box(2.7, 0.15, 0.08), C.wood, -1.45, 0.5, -0.1);
+    mesh(doorR, box(2.7, 0.15, 0.08), C.wood, -1.45, 2.2, -0.1);
+    mesh(doorR, box(3.25, 0.15, 0.08), C.wood, -1.45, 1.35, -0.1, { rz: 0.56 });
+    mesh(doorR, box(0.16, 0.3, 0.06), C.ink, -0.16, 0.6, 0.11);
+    mesh(doorR, box(0.16, 0.3, 0.06), C.ink, -0.16, 2.1, 0.11);
+    mesh(doorR, box(0.1, 0.34, 0.12), C.ink, -2.78, 1.35, 0.12);
+
+    // 门里：干草垛 + 马鞍架
+    mesh(g, box(1.46, 0.68, 0.6), C.wheat, -0.9, 0.34, 2.82);
+    mesh(g, box(0.08, 0.72, 0.64), C.wheatDeep, -1.32, 0.34, 2.82);
+    mesh(g, box(0.08, 0.72, 0.64), C.wheatDeep, -0.48, 0.34, 2.82);
+    mesh(g, box(1.24, 0.56, 0.54), C.wheatDeep, -0.83, 0.96, 2.84, { ry: 0.06 });
+    mesh(g, box(1.05, 0.5, 0.5), C.wheat, -0.94, 1.49, 2.81, { ry: -0.05 });
+    mesh(g, box(0.1, 0.96, 0.1), C.woodDark, 1.34, 0.48, 2.84);
+    mesh(g, box(0.1, 0.96, 0.1), C.woodDark, 2.12, 0.48, 2.84);
+    mesh(g, box(0.98, 0.1, 0.1), C.woodDark, 1.73, 0.94, 2.84);
+    mesh(g, box(0.8, 0.28, 0.42), C.brown, 1.73, 1.1, 2.84);
+    mesh(g, box(0.54, 0.26, 0.06), C.woodDark, 1.73, 1.0, 3.06, { rx: 0.12 });
+    mesh(g, box(0.54, 0.26, 0.06), C.woodDark, 1.73, 1.0, 2.62, { rx: -0.12 });
+
+    // 门楣马蹄铁
+    var shoe = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.055, 6, 14, Math.PI * 1.5), material(0x6E6A63));
+    shoe.position.set(0, 3.3, 2.82);
+    shoe.rotation.z = Math.PI * 0.75;
+    shoe.castShadow = true;
+    g.add(shoe);
+
+    // 门口马灯（夜里会亮）
+    mesh(g, box(0.06, 0.06, 0.72), C.ink, 3.58, 2.92, 3.04);
+    mesh(g, box(0.06, 0.3, 0.06), C.ink, 3.58, 2.78, 3.38);
+    mesh(g, box(0.3, 0.42, 0.3), lampMaterial(), 3.58, 2.49, 3.38);
+    mesh(g, cone(0.24, 0.22, 4), C.ink, 3.58, 2.78, 3.38);
+    mesh(g, box(0.34, 0.06, 0.34), C.ink, 3.58, 2.26, 3.38);
+
+    return g;
+  }
+
+  function makeStableYard() {
+    var g = new THREE.Group();
+    var x0 = -5.5, x1 = 5.5, z0 = 3.8, z1 = 13.0;
+
+    var fence = new THREE.Group();
+    fence.userData.wordId = 'fence';
+    g.add(fence);
+
+    var seen = {};
+    function post(x, z) {
+      var key = x.toFixed(2) + '|' + z.toFixed(2);
+      if (seen[key]) return;
+      seen[key] = 1;
+      mesh(fence, box(0.17, 1.45, 0.17), C.woodDark, x, 0.72, z);
+    }
+    function railX(z, xa, xb) {
+      var cx = (xa + xb) / 2;
+      var len = Math.abs(xb - xa);
+      mesh(fence, box(len, 0.1, 0.1), C.wood, cx, 0.42, z);
+      mesh(fence, box(len, 0.1, 0.1), C.wood, cx, 0.82, z);
+      mesh(fence, box(len, 0.1, 0.1), C.wood, cx, 1.22, z);
+      var n = Math.max(1, Math.round(len / 2.1));
+      for (var i = 0; i <= n; i++) post(xa + (xb - xa) * i / n, z);
+    }
+    function railZ(x, za, zb) {
+      var cz = (za + zb) / 2;
+      var len = Math.abs(zb - za);
+      mesh(fence, box(0.1, 0.1, len), C.wood, x, 0.42, cz);
+      mesh(fence, box(0.1, 0.1, len), C.wood, x, 0.82, cz);
+      mesh(fence, box(0.1, 0.1, len), C.wood, x, 1.22, cz);
+      var n = Math.max(1, Math.round(len / 2.1));
+      for (var i = 0; i <= n; i++) post(x, za + (zb - za) * i / n);
+    }
+
+    // 三面围栏，正对马厩门的一侧留出宽牧场口
+    railX(z1, x0, x1);
+    railZ(x0, z0, z1);
+    railZ(x1, z0, z1);
+    railX(z0, x0, -3.2);
+    railX(z0, 3.2, x1);
+
+    // 推开的小木门（靠在牧场口一侧）
+    var gate = new THREE.Group();
+    gate.position.set(-3.2, 0, z0);
+    gate.rotation.y = -0.9;
+    fence.add(gate);
+    mesh(gate, box(1.35, 1.3, 0.14), C.wood, 0.68, 0.7, 0);
+    mesh(gate, box(1.35, 0.1, 0.07), C.woodDark, 0.68, 0.42, 0.09);
+    mesh(gate, box(1.35, 0.1, 0.07), C.woodDark, 0.68, 1.16, 0.09);
+    mesh(gate, box(1.72, 0.1, 0.07), C.woodDark, 0.68, 0.8, 0.09, { rz: 0.55 });
+
+    // 木水槽
+    var trough = new THREE.Group();
+    trough.position.set(3.7, 0, 5.1);
+    g.add(trough);
+    mesh(trough, box(1.9, 0.5, 0.8), C.wood, 0, 0.25, 0);
+    mesh(trough, box(1.68, 0.06, 0.6), C.water, 0, 0.53, 0);
+    mesh(trough, box(2.06, 0.1, 0.12), C.woodDark, 0, 0.58, -0.44);
+    mesh(trough, box(2.06, 0.1, 0.12), C.woodDark, 0, 0.58, 0.44);
+    mesh(trough, box(0.12, 0.1, 0.86), C.woodDark, -1.0, 0.58, 0);
+    mesh(trough, box(0.12, 0.1, 0.86), C.woodDark, 1.0, 0.58, 0);
+
+    // 草料架
+    var rack = new THREE.Group();
+    rack.position.set(4.6, 0, 8.9);
+    g.add(rack);
+    mesh(rack, box(0.12, 1.5, 0.12), C.woodDark, -0.56, 0.74, 0.3, { rz: 0.16 });
+    mesh(rack, box(0.12, 1.5, 0.12), C.woodDark, 0.56, 0.74, 0.3, { rz: -0.16 });
+    mesh(rack, box(0.12, 1.5, 0.12), C.woodDark, -0.56, 0.74, -0.3, { rz: 0.16 });
+    mesh(rack, box(0.12, 1.5, 0.12), C.woodDark, 0.56, 0.74, -0.3, { rz: -0.16 });
+    mesh(rack, box(1.36, 0.12, 0.12), C.wood, 0, 1.24, 0);
+    mesh(rack, box(1.1, 0.5, 0.5), C.wheat, 0, 0.95, 0);
+    mesh(rack, box(1.0, 0.12, 0.44), C.wheatDeep, 0, 1.24, 0);
+
+    // 干草垛（点它打开 hay 单词卡）
+    var bales = new THREE.Group();
+    bales.position.set(-4.6, 0, 11.5);
+    bales.userData.wordId = 'hay';
+    g.add(bales);
+    mesh(bales, box(1.5, 0.72, 0.9), C.wheat, 0, 0.36, 0);
+    mesh(bales, box(0.1, 0.76, 0.94), C.wheatDeep, -0.42, 0.36, 0);
+    mesh(bales, box(0.1, 0.76, 0.94), C.wheatDeep, 0.42, 0.36, 0);
+    mesh(bales, box(1.42, 0.62, 0.82), C.wheatDeep, 0.14, 1.03, 0.06, { ry: 0.1 });
+    mesh(bales, box(0.09, 0.66, 0.86), C.wheat, -0.32, 1.03, 0.06);
+    mesh(bales, box(0.09, 0.66, 0.86), C.wheat, 0.48, 1.03, 0.06);
+
+    // 门口的小木桶
+    var bucket = new THREE.Group();
+    bucket.position.set(4.5, 0, 3.4);
+    g.add(bucket);
+    mesh(bucket, cyl(0.24, 0.19, 0.48, 8), C.wood, 0, 0.24, 0);
+    mesh(bucket, cyl(0.25, 0.25, 0.07, 8), C.woodDark, 0, 0.47, 0);
+    mesh(bucket, new THREE.TorusGeometry(0.2, 0.02, 4, 10, Math.PI), C.ink, 0, 0.5, 0);
+
+    // 斜靠在马厩东墙的草叉
+    var fork = new THREE.Group();
+    fork.position.set(4.55, 0, 1.4);
+    fork.rotation.z = 0.12;
+    g.add(fork);
+    mesh(fork, cyl(0.035, 0.045, 2.3, 5), C.wood, 0, 1.15, 0);
+    mesh(fork, box(0.42, 0.06, 0.06), C.gray, 0, 2.2, 0);
+    mesh(fork, box(0.05, 0.34, 0.05), C.gray, -0.18, 2.36, 0);
+    mesh(fork, box(0.05, 0.34, 0.05), C.gray, 0, 2.38, 0);
+    mesh(fork, box(0.05, 0.34, 0.05), C.gray, 0.18, 2.36, 0);
+
     return g;
   }
 
@@ -644,41 +873,103 @@
   function makeHorse() {
     var g = new THREE.Group();
     var coat = 0x9A6B42;
+    var coatLight = 0xB07E52;
     var mane = 0x46301F;
     var hoof = 0x3A2F26;
-    // 身体
-    mesh(g, box(1.05, 1.05, 2.25), coat, 0, 1.55, 0);
-    // 高脖子 + 沿颈背的一排鬃毛
-    mesh(g, box(0.52, 1.4, 0.6), coat, 0, 2.2, 0.95, { rx: 0.3 });
+    var sock = 0xFFF6E8;
+
+    function blob(parent, r, sx, sy, sz, color, x, y, z, opts) {
+      var m = mesh(parent, sph(r, 12, 9), color, x, y, z, opts);
+      m.scale.set(sx, sy, sz);
+      return m;
+    }
+
+    // 圆润的躯干：胸腔 + 圆臀 + 后腿肉垫
+    blob(g, 0.62, 0.9, 0.86, 1.7, coat, 0, 1.52, -0.04);
+    blob(g, 0.5, 0.88, 0.9, 0.85, coatLight, 0, 1.5, 0.68);
+    blob(g, 0.5, 0.94, 0.88, 0.92, coat, 0, 1.56, -0.82);
+    blob(g, 0.3, 0.86, 0.95, 1.0, coat, -0.42, 1.42, -0.76);
+    blob(g, 0.3, 0.86, 0.95, 1.0, coat, 0.42, 1.42, -0.76);
+
+    // 脖子（锥台）+ 沿颈背的鬃毛
+    var neck = new THREE.Group();
+    neck.position.set(0, 2.3, 0.9);
+    neck.rotation.x = 0.62;
+    g.add(neck);
+    mesh(neck, cyl(0.23, 0.36, 1.05, 7), coat, 0, 0, 0);
     for (var mi = 0; mi < 6; mi++) {
-      mesh(g, box(0.14, 0.28, 0.2), mane, 0, 2.82 - mi * 0.24, 0.8 - mi * 0.055);
+      blob(neck, 0.11, 0.55, 1.45, 0.45, mane, 0, -0.42 + mi * 0.16, -0.24);
     }
-    // 头 + 白鼻梁 + 深色口鼻 + 眼睛 + 耳朵（挂到 head 轴，便于低头吃草）
+
+    // 头（挂在 head 轴上，便于低头吃草/喝水）
     var head = new THREE.Group();
-    head.position.set(0, 2.45, 0.95);
+    head.position.set(0, 2.76, 1.22);
     g.add(head);
-    var headParts = [];
-    headParts.push(mesh(g, box(0.52, 0.5, 0.86), coat, 0, 2.88, 1.42));
-    headParts.push(mesh(g, box(0.14, 0.36, 0.09), C.cream, 0, 2.94, 1.85));
-    headParts.push(mesh(g, box(0.4, 0.32, 0.24), 0x5F4A33, 0, 2.74, 1.86));
-    headParts.push(mesh(g, box(0.12, 0.1, 0.06), C.ink, -0.2, 2.96, 1.86));
-    headParts.push(mesh(g, box(0.12, 0.1, 0.06), C.ink, 0.2, 2.96, 1.86));
-    headParts.push(mesh(g, cone(0.09, 0.28, 4), coat, -0.19, 3.22, 1.42));
-    headParts.push(mesh(g, cone(0.09, 0.28, 4), coat, 0.19, 3.22, 1.42));
-    for (var hp = 0; hp < headParts.length; hp++) head.attach(headParts[hp]);
-    // 长腿 + 深色蹄 + 前腿白袜
-    for (var i = 0; i < 4; i++) {
-      var xs = i % 2 === 0 ? -0.42 : 0.42;
-      var zs = i < 2 ? 0.82 : -0.82;
-      mesh(g, cyl(0.1, 0.1, 1.7, 5), coat, xs, 0.85, zs);
-      mesh(g, cyl(0.12, 0.12, 0.14, 5), hoof, xs, 0.07, zs);
+    blob(head, 0.3, 0.9, 0.95, 1.18, coat, 0, 0.02, 0.05);
+    blob(head, 0.2, 0.88, 0.72, 1.3, coatLight, 0, -0.1, 0.46);
+    blob(head, 0.1, 1.0, 0.62, 0.55, 0x5F4A33, 0, -0.15, 0.7);
+    blob(head, 0.03, 1, 0.8, 0.6, 0x2B2118, -0.055, -0.12, 0.75, { cast: false });
+    blob(head, 0.03, 1, 0.8, 0.6, 0x2B2118, 0.055, -0.12, 0.75, { cast: false });
+    // 白鼻梁 + 眼睛 + 额前刘海
+    blob(head, 0.075, 0.5, 1.5, 0.6, sock, 0, 0.04, 0.38, { cast: false });
+    blob(head, 0.042, 1, 1, 0.8, 0x241C15, -0.24, 0.08, 0.24, { cast: false });
+    blob(head, 0.042, 1, 1, 0.8, 0x241C15, 0.24, 0.08, 0.24, { cast: false });
+    blob(head, 0.09, 0.9, 0.7, 0.5, mane, 0, 0.27, 0.16);
+    blob(head, 0.065, 0.8, 0.9, 0.45, mane, 0, 0.23, 0.27);
+
+    // 耳朵做成独立关节，可以抖
+    var earL = new THREE.Group();
+    earL.position.set(-0.14, 0.25, 0.0);
+    earL.rotation.set(-0.14, 0, 0.22);
+    head.add(earL);
+    mesh(earL, cone(0.09, 0.32, 5), coat, 0, 0.16, 0);
+    mesh(earL, cone(0.045, 0.18, 5), 0x6A4A32, 0, 0.12, 0.035, { cast: false });
+
+    var earR = new THREE.Group();
+    earR.position.set(0.14, 0.25, 0.0);
+    earR.rotation.set(-0.14, 0, -0.22);
+    head.add(earR);
+    mesh(earR, cone(0.09, 0.32, 5), coat, 0, 0.16, 0);
+    mesh(earR, cone(0.045, 0.18, 5), 0x6A4A32, 0, 0.12, 0.035, { cast: false });
+
+    // 带关节的腿 + 深色蹄 + 前腿白袜
+    function makeLeg(x, z, front) {
+      var leg = new THREE.Group();
+      leg.position.set(x, 1.15, z);
+      g.add(leg);
+      mesh(leg, cyl(front ? 0.085 : 0.1, front ? 0.06 : 0.068, 0.55, 6), coat, 0, -0.27, 0);
+      mesh(leg, cyl(0.058, 0.05, 0.5, 6), coat, 0, -0.78, 0);
+      if (front) mesh(leg, cyl(0.06, 0.06, 0.2, 6), sock, 0, -0.92, 0);
+      mesh(leg, cyl(0.095, 0.11, 0.14, 6), hoof, 0, -1.08, 0);
+      return leg;
     }
-    mesh(g, cyl(0.11, 0.11, 0.4, 5), C.cream, -0.42, 0.35, 0.82);
-    mesh(g, cyl(0.11, 0.11, 0.4, 5), C.cream, 0.42, 0.35, 0.82);
-    // 深色长尾
-    var tail = mesh(g, cyl(0.07, 0.11, 1.15, 5), mane, 0, 1.75, -1.18, { rx: 0.4 });
-    mesh(tail, sph(0.13, 5, 4), mane, 0, -0.6, 0);
-    g.userData.idle = { kind: 'horse', tail: tail, head: head, phase: 3.0, body: g };
+    var legFL = makeLeg(-0.32, 0.68, true);
+    var legFR = makeLeg(0.32, 0.68, true);
+    var legBL = makeLeg(-0.34, -0.72, false);
+    var legBR = makeLeg(0.34, -0.72, false);
+
+    // 分段尾巴（挂在 tail 轴上，可甩动）
+    var tail = new THREE.Group();
+    tail.position.set(0, 2.0, -1.14);
+    tail.rotation.x = 0.62;
+    g.add(tail);
+    mesh(tail, cyl(0.07, 0.11, 0.55, 5), mane, 0, -0.24, 0);
+    mesh(tail, cyl(0.05, 0.08, 0.5, 5), mane, 0, -0.66, -0.01);
+    blob(tail, 0.14, 0.8, 1.7, 0.85, mane, 0, -1.02, -0.02);
+    mesh(tail, cyl(0.035, 0.055, 0.5, 5), mane, -0.09, -0.82, -0.02, { rz: -0.16 });
+    mesh(tail, cyl(0.035, 0.055, 0.5, 5), mane, 0.09, -0.82, -0.02, { rz: 0.16 });
+
+    g.userData.idle = {
+      kind: 'horse',
+      tail: tail,
+      head: head,
+      earL: earL,
+      earR: earR,
+      legs: [legFL, legFR, legBL, legBR],
+      headBaseY: 2.76,
+      phase: 3.0,
+      body: g
+    };
     return g;
   }
 
@@ -733,8 +1024,16 @@
     mesh(g, box(0.1, 0.14, 0.1), C.red, 0, 1.14, 0.12);
     mesh(g, cone(0.08, 0.18, 4), C.orange, 0, 0.9, 0.48, { rx: Math.PI / 2 });
     mesh(g, box(0.08, 0.12, 0.06), C.red, 0, 0.78, 0.44);
-    mesh(g, cyl(0.03, 0.03, 0.4, 4), C.orange, -0.12, 0.2, 0);
-    mesh(g, cyl(0.03, 0.03, 0.4, 4), C.orange, 0.12, 0.2, 0);
+    function makeChickenLeg(x) {
+      var leg = new THREE.Group();
+      leg.position.set(x, 0.4, 0);
+      g.add(leg);
+      mesh(leg, cyl(0.03, 0.03, 0.4, 4), C.orange, 0, -0.2, 0);
+      mesh(leg, box(0.12, 0.04, 0.16), C.orange, 0, -0.4, 0.04);
+      return leg;
+    }
+    var legL = makeChickenLeg(-0.12);
+    var legR = makeChickenLeg(0.12);
     if (rooster) {
       mesh(g, box(0.12, 0.5, 0.4), 0x5E8FB8, 0, 0.72, -0.36, { rx: -0.5 });
       mesh(g, box(0.12, 0.42, 0.34), 0xC8553D, 0, 0.8, -0.5, { rx: -0.7 });
@@ -742,7 +1041,7 @@
     } else {
       mesh(g, box(0.3, 0.26, 0.1), C.creamDeep, 0, 0.6, -0.34, { rx: -0.6 });
     }
-    g.userData.idle = { kind: rooster ? 'rooster' : 'chicken', phase: rooster ? 5.1 : 1.7, body: g };
+    g.userData.idle = { kind: rooster ? 'rooster' : 'chicken', legs: [legL, legR], phase: rooster ? 5.1 : 1.7, body: g };
     return g;
   }
 
@@ -1004,29 +1303,48 @@
     stripeRing(-0.18, 0.575, 0.285);
     stripeRing(0, 0.625, 0.31);
     stripeRing(0.18, 0.575, 0.285);
-    // 头枕在前爪上：眯眼弧线 + 奶油色口鼻 + 粉鼻头 + 胡须
-    mesh(g, sph(0.27, 10, 8), fur, 0, 0.42, 0.5);
+    // 头枕在前爪上：头单独成组，可以抬头、睁眼、打哈欠
+    var head = new THREE.Group();
+    head.position.set(0, 0.38, 0.42);
+    g.add(head);
+    mesh(head, sph(0.27, 10, 8), fur, 0, 0.04, 0.08);
     var pawL = mesh(g, sph(0.12, 8, 6), belly, -0.1, 0.14, 0.62);
     pawL.scale.set(1.05, 0.7, 1.35);
     var pawR = mesh(g, sph(0.12, 8, 6), belly, 0.1, 0.14, 0.62);
     pawR.scale.set(1.05, 0.7, 1.35);
-    mesh(g, cone(0.1, 0.2, 4), fur, -0.16, 0.64, 0.48);
-    mesh(g, cone(0.1, 0.2, 4), fur, 0.16, 0.64, 0.48);
-    mesh(g, cone(0.055, 0.12, 4), 0xE79A9C, -0.16, 0.66, 0.5);
-    mesh(g, cone(0.055, 0.12, 4), 0xE79A9C, 0.16, 0.66, 0.5);
-    var muzzle = mesh(g, sph(0.09, 8, 6), belly, 0, 0.37, 0.7);
+    mesh(head, cone(0.1, 0.2, 4), fur, -0.16, 0.26, 0.06);
+    mesh(head, cone(0.1, 0.2, 4), fur, 0.16, 0.26, 0.06);
+    mesh(head, cone(0.055, 0.12, 4), 0xE79A9C, -0.16, 0.28, 0.08);
+    mesh(head, cone(0.055, 0.12, 4), 0xE79A9C, 0.16, 0.28, 0.08);
+    var muzzle = mesh(head, sph(0.09, 8, 6), belly, 0, -0.01, 0.28);
     muzzle.scale.set(1.25, 0.72, 0.65);
-    var lazyEyeL = mesh(g, new THREE.TorusGeometry(0.05, 0.008, 5, 12, Math.PI), C.ink, -0.11, 0.45, 0.752, { cast: false });
+    // 睡觉时的眯眼弧线
+    var lazyEyeL = mesh(head, new THREE.TorusGeometry(0.05, 0.008, 5, 12, Math.PI), C.ink, -0.11, 0.07, 0.332, { cast: false });
     lazyEyeL.rotation.y = -0.25;
-    var lazyEyeR = mesh(g, new THREE.TorusGeometry(0.05, 0.008, 5, 12, Math.PI), C.ink, 0.11, 0.45, 0.752, { cast: false });
+    var lazyEyeR = mesh(head, new THREE.TorusGeometry(0.05, 0.008, 5, 12, Math.PI), C.ink, 0.11, 0.07, 0.332, { cast: false });
     lazyEyeR.rotation.y = 0.25;
-    var lazyNose = mesh(g, sph(0.032, 8, 6), C.pink, 0, 0.38, 0.79, { cast: false });
+    // 睡醒后睁开的眼睛 + 高光
+    var openEyeL = mesh(head, sph(0.045, 8, 6), C.ink, -0.11, 0.08, 0.34, { cast: false });
+    openEyeL.scale.set(1, 1.1, 0.55);
+    openEyeL.visible = false;
+    var openEyeR = mesh(head, sph(0.045, 8, 6), C.ink, 0.11, 0.08, 0.34, { cast: false });
+    openEyeR.scale.set(1, 1.1, 0.55);
+    openEyeR.visible = false;
+    var glintL = mesh(head, sph(0.013, 6, 5), C.white, -0.095, 0.1, 0.375, { cast: false });
+    glintL.visible = false;
+    var glintR = mesh(head, sph(0.013, 6, 5), C.white, 0.095, 0.1, 0.375, { cast: false });
+    glintR.visible = false;
+    var lazyNose = mesh(head, sph(0.032, 8, 6), C.pink, 0, 0, 0.37, { cast: false });
     lazyNose.scale.set(1.15, 0.8, 0.7);
-    mesh(g, box(0.045, 0.012, 0.012), C.ink, 0, 0.345, 0.765, { cast: false });
+    mesh(head, box(0.045, 0.012, 0.012), C.ink, 0, -0.035, 0.345, { cast: false });
+    // 打哈欠时露出的粉色小嘴
+    var yawn = mesh(head, sph(0.055, 8, 6), 0xE79A9C, 0, -0.04, 0.36, { cast: false });
+    yawn.scale.set(0.9, 0.35, 0.45);
+    yawn.visible = false;
     for (var lws = -1; lws <= 1; lws += 2) {
       for (var lwi = 0; lwi < 3; lwi++) {
-        mesh(g, box(0.2, 0.007, 0.007), C.cream,
-          lws * 0.19, 0.36 - lwi * 0.02, 0.72,
+        mesh(head, box(0.2, 0.007, 0.007), C.cream,
+          lws * 0.19, -0.02 - lwi * 0.02, 0.3,
           { rz: lws * (0.2 - lwi * 0.18), cast: false });
       }
     }
@@ -1043,7 +1361,18 @@
     ]);
     mesh(tail, new THREE.TubeGeometry(tailCurve, 20, 0.068, 6, false), fur, 0, 0, 0);
     mesh(tail, sph(0.07, 8, 6), stripe, 0.44, -0.07, 0.52);
-    g.userData.idle = { kind: 'lazy_cat', tail: tail, phase: 0.8, body: g };
+    g.userData.idle = {
+      kind: 'lazy_cat',
+      tail: tail,
+      head: head,
+      eyesClosed: [lazyEyeL, lazyEyeR],
+      eyesOpen: [openEyeL, openEyeR, glintL, glintR],
+      yawn: yawn,
+      paws: [pawL, pawR],
+      pawZ: 0.62,
+      phase: 0.8,
+      body: g
+    };
     return g;
   }
 
@@ -1387,7 +1716,37 @@
 
     var stable = placeFromLayout('stable', makeStable());
     root.add(stable);
-    register('stable', stable, 6.6);
+    register('stable', stable, 8.8);
+
+    // 马厩前踩实的土地 + 小牧场
+    var stablePad = new THREE.Mesh(new THREE.CircleGeometry(1, 20), material(C.soil));
+    stablePad.rotation.x = -Math.PI / 2;
+    stablePad.scale.set(7.6, 6.4, 1);
+    stablePad.position.set(D.layout.stable.x, 0.022, D.layout.stable.z + 7.4);
+    stablePad.receiveShadow = true;
+    root.add(stablePad);
+
+    var stableYard = makeStableYard();
+    stableYard.position.set(D.layout.stable.x, 0, D.layout.stable.z);
+    root.add(stableYard);
+
+    // 牧场里的马：与牧场动物群共享 horse 单词卡，单独一份 idle 动画
+    var stableHorse = makeHorse();
+    stableHorse.position.set(D.layout.stable.x + 0.2, 0, D.layout.stable.z + 9.5);
+    stableHorse.rotation.y = Math.PI + 0.32;
+    stableHorse.scale.setScalar(0.9);
+    stableHorse.userData.wordId = 'horse';
+    stableHorse.userData.stableHorse = true;
+    stableHorse.userData.stableHome = {
+      x: stableHorse.position.x,
+      z: stableHorse.position.z,
+      yaw: stableHorse.rotation.y
+    };
+    stableHorse.userData.stableSpots = {
+      hay: { x: D.layout.stable.x + 3.0, z: D.layout.stable.z + 8.4, yaw: Math.atan2(1.6, 0.5) },
+      trough: { x: D.layout.stable.x + 3.7, z: D.layout.stable.z + 6.2, yaw: Math.PI }
+    };
+    root.add(stableHorse);
 
     var greenhouse = placeFromLayout('greenhouse', makeGreenhouse());
     root.add(greenhouse);
@@ -1633,6 +1992,7 @@
     lazyCat.position.set(-59.5, 0, 17.5);
     lazyCat.rotation.y = 2.4;
     lazyCat.userData.wordId = 'cat';
+    lazyCat.userData.lazyCat = true;
     root.add(lazyCat);
 
     var hopRabbit = makeHopRabbit();
@@ -1643,10 +2003,12 @@
     root.add(hopRabbit);
 
     var chicken = placeFromLayout('chicken', makeChicken(false));
+    chicken.userData.coopBird = true;
     root.add(chicken);
     register('chicken', chicken, 1.3);
 
     var rooster = placeFromLayout('rooster', makeChicken(true));
+    rooster.userData.coopBird = true;
     root.add(rooster);
     register('rooster', rooster, 1.4);
 
@@ -1798,7 +2160,9 @@
       windowMats: windowMats,
       lampMats: lampMats,
       carrotGarden: carrotGarden,
-      grainFarmer: grainFarmer
+      grainFarmer: grainFarmer,
+      stableHorse: stableHorse,
+      lazyCat: lazyCat
     };
   }
 
