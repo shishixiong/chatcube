@@ -8,6 +8,7 @@
     { id: 'farmhouse', word: 'farmhouse', phonetic: '/ˈfɑːrmhaʊs/', zh: '农舍', kidDefinition: '一家人住的房子', example: 'The farmhouse is warm.', category: 'places', zone: 'farmyard_zone' },
     { id: 'barn', word: 'barn', phonetic: '/bɑːrn/', zh: '谷仓', kidDefinition: '装干草和粮食的红房子', example: 'Hay is in the barn.', category: 'places', zone: 'farmyard_zone' },
     { id: 'chicken_coop', word: 'chicken coop', phonetic: '/ˈtʃɪkɪn kuːp/', zh: '鸡舍', kidDefinition: '母鸡住的小屋', example: 'The hen sleeps in the coop.', category: 'places', zone: 'farmyard_zone' },
+    { id: 'sheep_pen', word: 'sheep pen', phonetic: '/ʃiːp pen/', zh: '羊圈', kidDefinition: '羊儿住的围栏', example: 'The sheep sleep in the sheep pen.', category: 'places', zone: 'pasture_zone' },
     { id: 'stable', word: 'stable', phonetic: '/ˈsteɪbl/', zh: '马厩', kidDefinition: '马儿休息的家', example: 'The horse is in the stable.', category: 'places', zone: 'farmyard_zone' },
     { id: 'silo', word: 'silo', phonetic: '/ˈsaɪloʊ/', zh: '筒仓', kidDefinition: '又高又圆的粮仓', example: 'The silo is very tall.', category: 'places', zone: 'farmyard_zone' },
     { id: 'windmill', word: 'windmill', phonetic: '/ˈwɪndmɪl/', zh: '风车', kidDefinition: '风一吹就转的高塔', example: 'The windmill turns in the wind.', category: 'places', zone: 'farmyard_zone' },
@@ -23,6 +24,7 @@
     { id: 'goat', word: 'goat', phonetic: '/ɡoʊt/', zh: '山羊', kidDefinition: '有角和胡须的山羊', example: 'The goat eats leaves.', category: 'animals', zone: 'pasture_zone' },
     { id: 'chicken', word: 'chicken', phonetic: '/ˈtʃɪkɪn/', zh: '母鸡', kidDefinition: '会下蛋的鸡', example: 'The chicken lays eggs.', category: 'animals', zone: 'farmyard_zone' },
     { id: 'rooster', word: 'rooster', phonetic: '/ˈruːstər/', zh: '公鸡', kidDefinition: '早上会打鸣的鸡', example: 'The rooster wakes us up.', category: 'animals', zone: 'farmyard_zone' },
+    { id: 'chick', word: 'chick', phonetic: '/tʃɪk/', zh: '小鸡', kidDefinition: '刚出生的小鸡宝宝', example: 'The chick is small and yellow.', category: 'animals', zone: 'farmyard_zone' },
     { id: 'duck', word: 'duck', phonetic: '/dʌk/', zh: '鸭子', kidDefinition: '会游泳的扁嘴鸟', example: 'The duck swims in the pond.', category: 'animals', zone: 'orchard_pond_zone' },
     { id: 'goose', word: 'goose', phonetic: '/ɡuːs/', zh: '鹅', kidDefinition: '脖子长长的水鸟', example: 'The goose has a long neck.', category: 'animals', zone: 'orchard_pond_zone' },
     { id: 'rabbit', word: 'rabbit', phonetic: '/ˈræbɪt/', zh: '兔子', kidDefinition: '长耳朵爱吃萝卜', example: 'The rabbit hops away.', category: 'animals', zone: 'farmyard_zone' },
@@ -85,7 +87,7 @@
     overview: { target: [0, 2, 0], radius: 150, theta: 0.80, phi: 0.96, focus: ['farmer', 'wheat', 'cow', 'apple'] },
     farmyard_zone: { target: [-32, 4, -20], radius: 68, theta: 0.62, phi: 0.95, focus: ['barn', 'chicken', 'pig', 'tractor'] },
     field_zone: { target: [38, 3, -24], radius: 66, theta: 0.70, phi: 0.92, focus: ['wheat', 'corn', 'sunflower', 'greenhouse'] },
-    pasture_zone: { target: [-30, 3, 24], radius: 70, theta: 0.90, phi: 0.95, focus: ['cow', 'sheep', 'horse', 'goat', 'hill'] },
+    pasture_zone: { target: [-30, 3, 24], radius: 70, theta: 0.90, phi: 0.95, focus: ['cow', 'sheep', 'horse', 'goat', 'hill', 'sheep_pen'] },
     orchard_pond_zone: { target: [38, 2, 26], radius: 62, theta: 0.80, phi: 0.92, focus: ['pond', 'duck', 'apple', 'flower'] }
   };
 
@@ -96,6 +98,7 @@
     barn: { x: -34, z: -28, ry: 0.06 },
     chicken_coop: { x: -20, z: -26, ry: 0.22 },
     stable: { x: -48, z: -34, ry: 0 },
+    sheep_pen: { x: -34, z: 24, ry: 0.12 },
     silo: { x: -22, z: -32, ry: 0 },
     windmill: { x: -14, z: -22, ry: 0 },
     greenhouse: { x: 36, z: -36, ry: 0.04 },

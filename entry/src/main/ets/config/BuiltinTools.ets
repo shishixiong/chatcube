@@ -4220,7 +4220,7 @@ function createCityEnglishToolConfig(): ToolConfig {
 
 // ===== farm_english 工具 =====
 // 3D 阳光农场英语探索（讲解型）：140m × 110m 的低多边形农场——环形土路串起农舍区、田地区、牧场区、
-// 果园池塘，50 个可点击对象（地点 10 / 动物 14 / 农作物 10 / 农机 8 / 自然 5 / 人物 3）可点开单词卡
+// 果园池塘，50+ 个可点击对象（地点 11 / 动物 15 / 农作物 10 / 农机 8 / 自然 5 / 人物 3，含 3 只小鸡和 1 个羊圈；表可增长）可点开单词卡
 // （英文 / 音标 / 中文 / 儿童解释 / 例句 / TTS 发音），支持 5 个分区镜头。
 // 参考 open-design 原型 sunny-farm。
 // 交互由前端 FarmEnglishCard（Web 容器）处理，后台 ToolExecutionService.handleFarmEnglish 拦截。
@@ -4228,6 +4228,8 @@ function createCityEnglishToolConfig(): ToolConfig {
 interface FarmEnglishArgs {
   focus?: string
   words?: string[]
+  time_of_day?: string
+  weather?: string
   skill_key: string
 }
 
@@ -4241,6 +4243,8 @@ class FarmEnglishExecutor implements ToolExecutor {
         opened: true,
         focus: params.focus ?? 'overview',
         words: params.words ?? [],
+        time_of_day: params.time_of_day ?? '',
+        weather: params.weather ?? '',
         skill_key: 'english_vocab'
       })
     } catch (error) {
@@ -4253,6 +4257,16 @@ function createFarmEnglishToolDefinition(): ToolDefinition {
   const rawSchemaJson: string = `{
     "type": "object",
     "properties": {
+      "time_of_day": {
+        "type": "string",
+        "enum": ["day", "night"],
+        "description": "可选。这次农场是什么时间：day=白天，night=晚上。老师应先调用 get_time_info，按本地小时判断（06:00–17:59 传 day，其余传 night）。不传时卡片按设备当前时间自动判断。"
+      },
+      "weather": {
+        "type": "string",
+        "enum": ["sunny", "rainy"],
+        "description": "可选。这次农场的天气：sunny=晴天（默认），rainy=雨天。只在孩子明确提到天气（「今天下雨了」「外面是晴天」）或课堂需要对比时才传 rainy；不知道就留空，不要编造真实天气。"
+      },
       "focus": {
         "type": "string",
         "enum": ["overview", "farmyard_zone", "field_zone", "pasture_zone", "orchard_pond_zone"],
@@ -4261,7 +4275,7 @@ function createFarmEnglishToolDefinition(): ToolDefinition {
       "words": {
         "type": "array",
         "items": { "type": "string" },
-        "description": "可选。本次想重点教的单词 id，最多 8 个，传了会直接选中第一个词的单词卡。合法 id：地点 farmhouse barn chicken_coop stable silo windmill greenhouse well gate fence；动物 cow pig sheep horse goat chicken rooster duck goose rabbit cat dog bee bird；农作物 wheat corn potato carrot tomato pumpkin apple strawberry sunflower hay；农机 tractor trailer plow harvester wheelbarrow watering_can shovel pitchfork；自然 tree grass flower pond hill；人物 farmer child grandma。"
+        "description": "可选。本次想重点教的单词 id，最多 8 个，传了会直接选中第一个词的单词卡。合法 id：地点 farmhouse barn chicken_coop sheep_pen stable silo windmill greenhouse well gate fence；动物 cow pig sheep horse goat chicken rooster chick duck goose rabbit cat dog bee bird；农作物 wheat corn potato carrot tomato pumpkin apple strawberry sunflower hay；农机 tractor trailer plow harvester wheelbarrow watering_can shovel pitchfork；自然 tree grass flower pond hill；人物 farmer child grandma。"
       },
       "skill_key": {
         "type": "string",
@@ -4277,7 +4291,7 @@ function createFarmEnglishToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     FARM_ENGLISH_TOOL_ID,
-    'Open the 3D sunny farm (阳光农场 3D 英语探索): a rotatable low-poly farm with a ring road, five camera zones (overview, farmyard, field, pasture, orchard pond) and farm life in motion — a tractor pulling a trailer, a farmer, a child and a dog walking the road, windmill blades turning, crops swaying, animals idling, pond ripples and bees hovering. It contains 50 tappable objects in total — places (farmhouse, barn, chicken coop, stable, silo, windmill, greenhouse, well, gate, fence), animals (cow, pig, sheep, horse, goat, chicken, rooster, duck, goose, rabbit, cat, dog, bee, bird), crops (wheat, corn, potato, carrot, tomato, pumpkin, apple, strawberry, sunflower, hay), machines (tractor, trailer, plow, harvester, wheelbarrow, watering can, shovel, pitchfork), nature (tree, grass, flower, pond, hill) and people (farmer, child, grandma). Tapping an object opens a kid-friendly word card with the English word, phonetic, Chinese meaning, a one-line kid definition, an example sentence and a TTS pronunciation button. Use this INSTEAD of describing a farm scene in plain text when teaching farm, animal, crop, machine or nature vocabulary. Pass words (max 8 ids) to open a specific word card; pass focus (overview, farmyard_zone, field_zone, pasture_zone or orchard_pond_zone) to fly to a zone. After the receipt, follow up with english_quiz read_aloud to check 2-3 target words and award stars — farm_english itself awards no stars.',
+    'Open the 3D sunny farm (阳光农场 3D 英语探索): a rotatable low-poly farm with a ring road, five camera zones (overview, farmyard, field, pasture, orchard pond) and farm life in motion — a tractor pulling a trailer, a farmer, a child and a dog walking the road, windmill blades turning, crops swaying, animals idling, pond ripples and bees hovering. It contains 50+ tappable objects (the word table grows over time) — places (farmhouse, barn, chicken coop, sheep pen, stable, silo, windmill, greenhouse, well, gate, fence), animals (cow, pig, sheep, horse, goat, chicken, rooster, chick, duck, goose, rabbit, cat, dog, bee, bird), crops (wheat, corn, potato, carrot, tomato, pumpkin, apple, strawberry, sunflower, hay), machines (tractor, trailer, plow, harvester, wheelbarrow, watering can, shovel, pitchfork), nature (tree, grass, flower, pond, hill) and people (farmer, child, grandma). Tapping an object opens a kid-friendly word card with the English word, phonetic, Chinese meaning, a one-line kid definition, an example sentence and a TTS pronunciation button. Use this INSTEAD of describing a farm scene in plain text when teaching farm, animal, crop, machine or nature vocabulary. Pass words (max 8 ids) to open a specific word card; pass focus (overview, farmyard_zone, field_zone, pasture_zone or orchard_pond_zone) to fly to a zone. After the receipt, follow up with english_quiz read_aloud to check 2-3 target words and award stars — farm_english itself awards no stars. You may pass time_of_day (day/night) and weather (sunny/rainy) to match the lesson context; night lights up the farm and sends the hens to the coop, rain brings rain streaks and sheltering animals. These affect the scene only — no extra words and no stars.',
     parameters
   )
 
@@ -4288,7 +4302,7 @@ function createFarmEnglishToolConfig(): ToolConfig {
   return new ToolConfig(
     FARM_ENGLISH_TOOL_ID,
     '阳光农场 3D 英语探索',
-    '走进会动的 3D 农场：农舍、谷仓、奶牛、小麦、拖拉机、池塘，点一点听英文发音、看单词卡，认识 50 个农场单词。',
+    '走进会动的 3D 农场：农舍、谷仓、奶牛、小鸡、小麦、拖拉机、池塘，点一点听英文发音、看单词卡，认识 50+ 个农场单词。',
     null,
     true,
     false,

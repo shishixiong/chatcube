@@ -27,17 +27,19 @@ import { ServiceRegistry } from '../../services/ServiceRegistry'
 import { getAppUiState } from '../../state/AppUiState'
 import { withColorAlpha } from '../../utils/ColorAlphaUtils'
 import {
+  FARM_WORD_IDS,
   FarmEnglishValidationResult,
   resolveFarmEnglishView,
+  resolveFarmTimeOfDay,
+  resolveFarmWeather,
   validateFarmEnglishArgs
 } from '../../utils/FarmEnglishValidation'
 
 // 与 mermaid / document-parser / room3d / city3d 同法：rawfile 里的本地页面用 resource:// 加载，
 // 页面内相对路径（assets/three.min.js 等）由 ArkWeb 按同源解析。
 const FARM_ENGLISH_PAGE_URL: string = 'resource://rawfile/farm3d/index.html'
-// 与 rawfile/farm3d/assets/farm-data.js 的单词总数保持一致
-// （地点 10 + 动物 14 + 农作物 10 + 农机 8 + 自然 5 + 人物 3）
-const FARM_OBJECT_TOTAL: number = 50
+// 与 rawfile/farm3d/assets/farm-data.js 的单词表保持一致；按可增长表长度动态计算
+const FARM_WORD_TOTAL: number = FARM_WORD_IDS.length
 
 /** 单词朗读语速：三个引擎（system/minimax/stepfun）通用范围 [0.5, 2]，0.8 略慢便于孩子跟读 */
 const FARM_WORD_TTS_SPEED: number = 0.8
@@ -54,16 +56,20 @@ export interface FarmEnglishAnswerPayload {
   focus: string
   skill_key: string
   cancelled: boolean
+  time_of_day: string
+  weather: string
 }
 
 export interface FarmEnglishArgsView {
   valid: boolean
   focus: string
   words: string[]
+  timeOfDay: string
+  weather: string
 }
 
 function createArgsView(): FarmEnglishArgsView {
-  const view: FarmEnglishArgsView = { valid: false, focus: 'overview', words: [] }
+  const view: FarmEnglishArgsView = { valid: false, focus: 'overview', words: [], timeOfDay: '', weather: '' }
   return view
 }
 
@@ -73,6 +79,8 @@ export function parseFarmEnglishArgs(raw: string): FarmEnglishArgsView {
   view.valid = result.ok
   view.focus = result.focus
   view.words = result.words
+  view.timeOfDay = result.timeOfDay
+  view.weather = result.weather
   return view
 }
 
@@ -145,6 +153,7 @@ export struct FarmEnglishCard {
   @Local speaking: boolean = false
   @Local hasCompleted: boolean = false
   @Local nightOn: boolean = false
+  @Local weatherOn: boolean = false
 
   private controller: webview.WebviewController = new webview.WebviewController()
   private bridge: FarmNativeBridge = new FarmNativeBridge()
@@ -184,6 +193,8 @@ export struct FarmEnglishCard {
   aboutToAppear(): void {
     this.uiContext = this.getUIContext()
     this.argsView = parseFarmEnglishArgs(this.toolCall.arguments)
+    this.nightOn = resolveFarmTimeOfDay(this.argsView.timeOfDay, new Date().getHours()) === 'night'
+    this.weatherOn = resolveFarmWeather(this.argsView.weather) === 'rainy'
     this.onRegisterDismissPayload((): string => this.buildDismissJson())
     this.bridge.speakHandler = (text: string, zh: string): boolean => this.speakWord(text, zh)
     this.bridge.stopHandler = (): void => this.stopSpeak()
@@ -192,6 +203,7 @@ export struct FarmEnglishCard {
         this.clearSceneWatchdog()
         this.sceneFailed = false
         this.pageReady = true
+        this.applySceneMode()
         this.applyFocusWords()
       })
     }
@@ -426,12 +438,31 @@ export struct FarmEnglishCard {
       })
   }
 
+  private applySceneMode(): void {
+    const night = this.nightOn ? 'true' : 'false'
+    const rain = this.weatherOn ? 'true' : 'false'
+    const script = `(function(){try{var app=window.FarmApp;if(!app){return;}` +
+      `app.setNight(${night},true);app.setWeather(${rain},true);}catch(e){}})();`
+    this.controller.runJavaScript(script).catch((e: Error): void => {
+      console.error('FarmEnglishCard', `apply scene mode failed: ${e.message}`)
+    })
+  }
+
   private toggleNight(): void {
     this.nightOn = !this.nightOn
     const on = this.nightOn ? 'true' : 'false'
     this.runWeb(`(function(){try{var app=window.FarmApp;if(app){app.setNight(${on});}}catch(e){}})();`)
       .catch((e: Error): void => {
         console.error('FarmEnglishCard', 'set night failed: ' + e.message)
+      })
+  }
+
+  private toggleWeather(): void {
+    this.weatherOn = !this.weatherOn
+    const on = this.weatherOn ? 'true' : 'false'
+    this.runWeb(`(function(){try{var app=window.FarmApp;if(app){app.setWeather(${on});}}catch(e){}})();`)
+      .catch((e: Error): void => {
+        console.error('FarmEnglishCard', 'set weather failed: ' + e.message)
       })
   }
 
@@ -460,7 +491,9 @@ export struct FarmEnglishCard {
       words: words,
       focus: this.argsView.focus,
       skill_key: 'english_vocab',
-      cancelled: cancelled
+      cancelled: cancelled,
+      time_of_day: this.nightOn ? 'night' : 'day',
+      weather: this.weatherOn ? 'rainy' : 'sunny'
     }
     return payload
   }
@@ -489,9 +522,9 @@ export struct FarmEnglishCard {
 
   private get headerSubtitle(): string {
     if (this.sessionIds.length > 0) {
-      return `本次 ${this.sessionIds.length} 个 · 农场收集 ${this.discoveredIds.length} / ${FARM_OBJECT_TOTAL}`
+      return `本次 ${this.sessionIds.length} 个 · 农场收集 ${this.discoveredIds.length} / ${FARM_WORD_TOTAL}`
     }
-    return `农场收集 ${this.discoveredIds.length} / ${FARM_OBJECT_TOTAL} · 点一点农场听英文`
+    return `农场收集 ${this.discoveredIds.length} / ${FARM_WORD_TOTAL} · 点一点农场听英文`
   }
 
   private get headerActionLabel(): string {
@@ -545,6 +578,17 @@ export struct FarmEnglishCard {
       .backgroundColor(withColorAlpha(this.themePrimary, '14'))
       .onClick(() => {
         this.toggleNight()
+      })
+
+      Button({ type: ButtonType.Circle }) {
+        Text(this.weatherOn ? '☀️' : '🌧️')
+          .fontSize(13)
+      }
+      .width(30)
+      .height(30)
+      .backgroundColor(withColorAlpha(this.themePrimary, '14'))
+      .onClick(() => {
+        this.toggleWeather()
       })
 
       Button({ type: ButtonType.Capsule }) {

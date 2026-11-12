@@ -3197,7 +3197,9 @@ export struct ChatPage {
                     words: [],
                     focus: 'overview',
                     skill_key: 'english_vocab',
-                    cancelled: false
+                    cancelled: false,
+                    time_of_day: 'day',
+                    weather: 'sunny'
                   }
                   resultJson = JSON.stringify(dismissResult)
                 }

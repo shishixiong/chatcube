@@ -23,6 +23,18 @@
     dirColor: 0xFFB577,
     dirI: 0.20
   };
+  var RAIN_DAY = {
+    sky: 0x9AA9B4, fog: 0x9AA9B4, hemiSky: 0xB9C6CC, hemiGround: 0x7B8668,
+    hemiI: 0.50, dirColor: 0xC9D4DC, dirI: 0.35
+  };
+  var RAIN_NIGHT = {
+    sky: 0x1E2230, fog: 0x232838, hemiSky: 0x515A70, hemiGround: 0x2B3428,
+    hemiI: 0.26, dirColor: 0x9AA6C4, dirI: 0.12
+  };
+  var RAIN_COUNT = 700;
+  var RAIN_AREA_X = 70;
+  var RAIN_AREA_Z = 55;
+  var RAIN_TOP = 38;
 
   var scene = null;
   var camera = null;
@@ -50,6 +62,14 @@
 
   var night = 0;
   var nightTarget = 0;
+  var rain = 0;
+  var rainTarget = 0;
+  var rainMesh = null;
+  var rainMaterial = null;
+  var rainDrops = [];
+  var starField = null;
+  var sunDisc = null;
+  var moonDisc = null;
   var reduceMotion = false;
   try {
     reduceMotion = !!(global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -59,6 +79,10 @@
   var selectedId = null;
   var selectedObj = null;
   var selectedBase = 1;
+  var FOLLOW_SELECTION_IDS = [
+    'tractor', 'trailer', 'farmer', 'child', 'dog', 'rabbit', 'harvester', 'grandma', 'sheep', 'goat',
+    'chicken', 'rooster', 'chick', 'horse', 'duck', 'goose', 'cat', 'bee', 'bird'
+  ];
 
   var labelsVisible = false;
 
@@ -66,6 +90,10 @@
   var beeBase = null;
   var fireflyBase = [];
   var rabbitAuto = true;
+  var fieldWork = null;
+  var homeward = null;
+  var sheepPen = null;
+  var horseHome = null;
 
   var tmpV = new THREE.Vector3();
   var tmpS = new THREE.Vector3();
@@ -128,6 +156,102 @@
     }
   }
 
+  function createRain() {
+    var positions = new Float32Array(RAIN_COUNT * 6);
+    rainDrops = [];
+    for (var i = 0; i < RAIN_COUNT; i++) {
+      rainDrops.push({
+        x: (Math.random() - 0.5) * 2 * RAIN_AREA_X,
+        y: Math.random() * RAIN_TOP,
+        z: (Math.random() - 0.5) * 2 * RAIN_AREA_Z,
+        speed: 24 + Math.random() * 8,
+        len: 0.55
+      });
+    }
+    var geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    rainMaterial = new THREE.LineBasicMaterial({
+      color: 0xCFE0EC,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false
+    });
+    rainMesh = new THREE.LineSegments(geo, rainMaterial);
+    rainMesh.frustumCulled = false;
+    rainMesh.visible = false;
+    scene.add(rainMesh);
+  }
+
+  function createSkyBodies() {
+    var starPositions = new Float32Array(500 * 3);
+    for (var i = 0; i < 500; i++) {
+      var theta = Math.random() * Math.PI * 2;
+      var phi = Math.acos(0.08 + Math.random() * 0.92);
+      var rr = 420;
+      starPositions[i * 3] = rr * Math.sin(phi) * Math.cos(theta);
+      starPositions[i * 3 + 1] = rr * Math.cos(phi);
+      starPositions[i * 3 + 2] = rr * Math.sin(phi) * Math.sin(theta);
+    }
+    var starGeo = new THREE.BufferGeometry();
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    var starMat = new THREE.PointsMaterial({
+      color: 0xFFFFFF,
+      size: 1.6,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      fog: false
+    });
+    starField = new THREE.Points(starGeo, starMat);
+    starField.visible = false;
+    starField.renderOrder = -2;
+    scene.add(starField);
+
+    sunDisc = new THREE.Mesh(
+      new THREE.SphereGeometry(12, 12, 10),
+      new THREE.MeshBasicMaterial({ color: 0xFFF2C4, fog: false })
+    );
+    sunDisc.position.set(180, 160, -240);
+    sunDisc.visible = false;
+    sunDisc.renderOrder = -2;
+    scene.add(sunDisc);
+
+    moonDisc = new THREE.Mesh(
+      new THREE.SphereGeometry(9, 12, 10),
+      new THREE.MeshBasicMaterial({ color: 0xF6F1D5, fog: false })
+    );
+    moonDisc.position.set(-180, 150, -240);
+    moonDisc.visible = false;
+    moonDisc.renderOrder = -2;
+    scene.add(moonDisc);
+  }
+
+  function createPuddles() {
+    var spots = [
+      { x: -20, z: -10, rx: 2.4, rz: 1.5 },
+      { x: 6, z: 8, rx: 1.8, rz: 1.2 },
+      { x: 30, z: -12, rx: 2.6, rz: 1.7 },
+      { x: -38, z: 6, rx: 2.0, rz: 1.4 },
+      { x: 14, z: 26, rx: 2.2, rz: 1.6 },
+      { x: 44, z: 20, rx: 1.7, rz: 1.1 }
+    ];
+    var mat = new THREE.MeshBasicMaterial({
+      color: 0xBFD8E8,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false
+    });
+    for (var i = 0; i < spots.length; i++) {
+      var m = new THREE.Mesh(new THREE.CircleGeometry(1, 20), mat);
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(spots[i].x, 0.02, spots[i].z);
+      m.scale.set(spots[i].rx, spots[i].rz, 1);
+      m.visible = true;
+      scene.add(m);
+    }
+    built.puddleMat = mat;
+  }
+
   S.isReady = function () { return !!started; };
 
   S.init = function (canvas, options) {
@@ -183,6 +307,10 @@
     buildRabbitTrips();
     buildHorseRoutine();
     buildCoopBirdRoutine();
+    buildFieldWorkRoutine();
+    buildHomewardRoutine();
+    buildSheepPenRoutine();
+    buildHorseHomeRoutine();
     buildLazyCatRoutine();
     buildGrainCycle();
     beeBase = built.bee.position.clone();
@@ -191,6 +319,9 @@
     }
     createRing();
     createRipples();
+    createRain();
+    createSkyBodies();
+    createPuddles();
 
     if (global.FarmAgents && global.FarmAgents.init) {
       global.FarmAgents.init({
@@ -218,7 +349,7 @@
     bindEvents();
     applyView('overview', true);
     placeActors(0);
-    applyNightColors(0);
+    applySceneColors(0, 0);
 
     S.resize();
     started = true;
@@ -351,13 +482,21 @@
     var hits = raycaster.intersectObjects(built.pickRoots, true);
     var id = null;
     var target = null;
-    var point = hits.length ? hits[0].point : null;
-    if (hits.length) {
-      var obj = hits[0].object;
+    var point = null;
+    for (var hi = 0; hi < hits.length; hi++) {
+      var obj = hits[hi].object;
+      var visible = true;
+      var walk = obj;
+      while (walk) {
+        if (walk.visible === false) { visible = false; break; }
+        walk = walk.parent;
+      }
+      if (!visible) continue;
       while (obj) {
         if (obj.userData && obj.userData.wordId) { id = obj.userData.wordId; target = obj; break; }
         obj = obj.parent;
       }
+      if (id) { point = hits[hi].point; break; }
     }
     if (hooks.onPick) hooks.onPick(id, target, point);
   }
@@ -466,14 +605,51 @@
     }
   }
 
-  S.setNight = function (on) {
-    nightTarget = on ? 1 : 0;
-    if (global.FarmAgents && global.FarmAgents.isReady && global.FarmAgents.isReady()) {
+  S.setNight = function (on, instant) {
+    var next = on ? 1 : 0;
+    var changed = next !== nightTarget;
+    nightTarget = next;
+    if (instant) {
+      night = nightTarget;
+      applySceneColors(night, rain);
+    }
+    if (changed && global.FarmAgents && global.FarmAgents.isReady && global.FarmAgents.isReady() &&
+      global.FarmAgents.onNightChange) {
       global.FarmAgents.onNightChange(!!on);
     }
   };
 
   S.getNight = function () { return nightTarget > 0.5; };
+
+  S.setWeather = function (on, instant) {
+    var next = on ? 1 : 0;
+    var changed = next !== rainTarget;
+    rainTarget = next;
+    if (instant) {
+      rain = rainTarget;
+      applySceneColors(night, rain);
+    }
+    if (changed && global.FarmAgents && global.FarmAgents.isReady && global.FarmAgents.isReady() &&
+      global.FarmAgents.onWeatherChange) {
+      global.FarmAgents.onWeatherChange(!!on);
+    }
+  };
+
+  S.getWeather = function () { return rainTarget > 0.5; };
+
+  S.getRenderStats = function () {
+    var info = renderer && renderer.info ? renderer.info : null;
+    return {
+      calls: info ? info.render.calls : 0,
+      triangles: info ? info.render.triangles : 0,
+      geometries: info ? info.memory.geometries : 0,
+      textures: info ? info.memory.textures : 0,
+      meshes: built ? built.meshCount : 0,
+      frame: frameCount,
+      night: Math.round(night * 100) / 100,
+      rain: Math.round(rain * 100) / 100
+    };
+  };
 
   S.select = function (id, overrideRoot) {
     if (!built) return false;
@@ -548,6 +724,7 @@
     for (var i = 0; i < built.labels.length; i++) {
       var l = built.labels[i];
       if (!l.root) continue;
+      if (l.root.visible === false) continue;
       if (l.anchor) tmpV.copy(l.anchor);
       else {
         l.root.getWorldPosition(tmpV);
@@ -598,7 +775,7 @@
     var actors = built.actors;
     for (var i = 0; i < actors.length; i++) {
       var a = actors[i];
-      if (a.held) continue;
+      if (a.held || a.homeMode) continue;
       a.angle += a.speed * dt;
       var x = Math.cos(a.angle) * 24.8;
       var z = Math.sin(a.angle) * 18.3;
@@ -611,9 +788,9 @@
       var walker = built.actors[2];
       var walker2 = built.actors[3];
       var dog = built.actors[4];
-      if (walker && !walker.held) walker.obj.position.y = 0.05 + Math.abs(Math.sin(elapsed * 4.2)) * 0.06;
-      if (walker2 && !walker2.held) walker2.obj.position.y = 0.05 + Math.abs(Math.sin(elapsed * 4.6 + 1)) * 0.06;
-      if (dog && !dog.held) dog.obj.position.y = 0.05 + Math.abs(Math.sin(elapsed * 6.0 + 2)) * 0.08;
+      if (walker && !walker.held && !walker.homeMode) walker.obj.position.y = 0.05 + Math.abs(Math.sin(elapsed * 4.2)) * 0.06;
+      if (walker2 && !walker2.held && !walker2.homeMode) walker2.obj.position.y = 0.05 + Math.abs(Math.sin(elapsed * 4.6 + 1)) * 0.06;
+      if (dog && !dog.held && !dog.homeMode) dog.obj.position.y = 0.05 + Math.abs(Math.sin(elapsed * 6.0 + 2)) * 0.08;
     }
   }
 
@@ -1013,6 +1190,8 @@
   var CHICKEN_WALK_SPEED = 0.62;
   var coopBirdAuto = true;
   var coopBirdRoutines = [];
+  var wasForceNight = false;
+  var pendingCrow = false;
   var coopBirdWormMat = null;
 
   function makeCoopWorm() {
@@ -1095,6 +1274,8 @@
 
   function buildCoopBirdRoutine() {
     coopBirdRoutines = [];
+    wasForceNight = false;
+    pendingCrow = false;
     if (!built || !built.objects || !D.layout.chicken_coop) return;
     var coop = D.layout.chicken_coop;
     var ry = coop.ry || 0;
@@ -1105,24 +1286,23 @@
     }
     var door = localPoint(0, 1.82);
     var stage = localPoint(0, 3.15);
-    var ids = ['chicken', 'rooster'];
-    for (var i = 0; i < ids.length; i++) {
-      var entry = built.objects[ids[i]];
-      if (!entry || !entry.root || !entry.root.userData.idle) continue;
-      var root = entry.root;
+
+    function pushCoopRoutine(id, root, shelter, enterChance, order) {
+      if (!root || !root.userData || !root.userData.idle) return;
       root.userData.coopBird = true;
       coopBirdRoutines.push({
-        id: ids[i],
+        id: id,
         root: root,
         cfg: root.userData.idle,
         baseY: root.position.y,
         home: { x: root.position.x, y: root.position.y, z: root.position.z, yaw: root.rotation.y },
         door: door,
         stage: stage,
+        shelter: shelter,
         center: localPoint(0, 4.4),
         rx: 4.0,
         rz: 1.9,
-        enterChance: ids[i] === 'chicken' ? 0.2 : 0.08,
+        enterChance: enterChance,
         state: 'wait',
         timer: 1.5 + Math.random() * 3,
         target: null,
@@ -1134,22 +1314,719 @@
         fromZ: 0,
         toX: 0,
         toZ: 0,
+        forceDelay: order * 0.8,
+        roostedForNight: false,
+        wasForced: false,
         worm: makeCoopWorm(),
         wormTimer: 0
       });
     }
+
+    var ids = ['chicken', 'rooster'];
+    var shelters = [localPoint(-1.6, 2.6), localPoint(1.7, 2.2)];
+    for (var i = 0; i < ids.length; i++) {
+      var entry = built.objects[ids[i]];
+      if (!entry || !entry.root) continue;
+      pushCoopRoutine(ids[i], entry.root, shelters[i], i === 0 ? 0.2 : 0.08, coopBirdRoutines.length);
+    }
+
+    var chickRoots = built.chickRoots || [];
+    var chickShelters = [localPoint(-1.9, 2.15), localPoint(-1.0, 2.25), localPoint(1.3, 1.95)];
+    for (var ci = 0; ci < chickRoots.length; ci++) {
+      pushCoopRoutine('chick', chickRoots[ci], chickShelters[ci % chickShelters.length], 0.12,
+        coopBirdRoutines.length);
+    }
     coopBirdAuto = true;
+  }
+
+  var FIELD_WORK_SPEED = 1.8;
+
+  function buildFieldWorkRoutine() {
+    fieldWork = null;
+    if (!built || !built.objects || !built.objects.harvester) return;
+    var root = built.objects.harvester.root;
+    var waypoints = [
+      { x: 58, z: -14 }, { x: 58, z: -30 }, { x: 40, z: -30 }, { x: 40, z: -14 }
+    ];
+    var count = 24;
+    var positions = new Float32Array(count * 3);
+    for (var i = 0; i < count; i++) positions[i * 3 + 1] = -10;
+    var geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    var dustMat = new THREE.PointsMaterial({
+      color: 0xD8C29A,
+      size: 0.75,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      sizeAttenuation: true
+    });
+    var dust = new THREE.Points(geo, dustMat);
+    dust.frustumCulled = false;
+    dust.visible = false;
+    scene.add(dust);
+    fieldWork = {
+      root: root,
+      home: { x: root.position.x, z: root.position.z, yaw: root.rotation.y },
+      waypoints: waypoints,
+      index: 0,
+      dust: dust,
+      dustMat: dustMat,
+      dustPos: positions,
+      dustLife: [],
+      dustTimer: 0
+    };
+    for (var j = 0; j < count; j++) {
+      fieldWork.dustLife.push({ x: 0, y: -10, z: 0, vy: 0, life: 0 });
+    }
+  }
+
+  function updateButterflies(t) {
+    var list = built.butterflies || [];
+    var hidden = nightTarget > 0.5 || rainTarget > 0.5 || reduceMotion;
+    for (var i = 0; i < list.length; i++) {
+      var b = list[i];
+      var obj = b.obj;
+      if (hidden) {
+        obj.visible = false;
+        continue;
+      }
+      obj.visible = true;
+      var tt = t * b.speed + b.phase;
+      obj.position.x = b.x + Math.sin(tt) * b.r;
+      obj.position.z = b.z + Math.cos(tt * 0.8) * b.r * 0.7;
+      obj.position.y = 1.15 + Math.sin(tt * 2.3) * 0.22;
+      obj.rotation.y = tt * 0.7;
+      var flap = Math.sin(t * 16 + b.phase) * 0.45;
+      obj.userData.wings.left.rotation.z = flap;
+      obj.userData.wings.right.rotation.z = -flap;
+    }
+  }
+
+  function updateDragonflies(t) {
+    var list = built.dragonflies || [];
+    var hidden = nightTarget > 0.5 || rainTarget > 0.5 || reduceMotion;
+    for (var i = 0; i < list.length; i++) {
+      var d = list[i];
+      var obj = d.obj;
+      if (hidden) {
+        obj.visible = false;
+        continue;
+      }
+      obj.visible = true;
+      var tt = t * d.speed + d.phase;
+      obj.position.x = d.x + Math.sin(tt) * d.r;
+      obj.position.z = d.z + Math.cos(tt * 0.9) * d.r * 0.7;
+      obj.position.y = 1.35 + Math.sin(tt * 1.8) * 0.18;
+      obj.rotation.y = tt * 0.5;
+      var flap = Math.sin(t * 22 + d.phase) * 0.55;
+      obj.userData.wings.left.rotation.z = 0.35 + flap;
+      obj.userData.wings.right.rotation.z = -0.35 - flap;
+    }
+  }
+
+  function updateDucklings(dt, t) {
+    var list = built.ducklings || [];
+    var duck = built.duckRoot;
+    if (!duck || !list.length) return;
+    var hidden = nightTarget > 0.5;
+    for (var i = 0; i < list.length; i++) {
+      var dl = list[i];
+      dl.visible = !hidden;
+      if (hidden) continue;
+      var yaw = duck.rotation.y;
+      var back = 0.9 + i * 0.75;
+      var side = i % 2 === 0 ? -0.35 : 0.35;
+      var bx = duck.position.x - Math.sin(yaw) * back + Math.cos(yaw) * side;
+      var bz = duck.position.z - Math.cos(yaw) * back - Math.sin(yaw) * side;
+      var k = Math.min(1, dt * 3.2);
+      dl.position.x += (bx - dl.position.x) * k;
+      dl.position.z += (bz - dl.position.z) * k;
+      dl.position.y = Math.max(0.1, duck.position.y - 0.02) + Math.abs(Math.sin(t * 3.4 + i)) * 0.02;
+      dl.rotation.y = yaw;
+    }
+  }
+
+  function updateFieldWork(dt, now) {
+    var fw = fieldWork;
+    if (!fw) return;
+    var root = fw.root;
+    var parked = nightTarget > 0.5 || rainTarget > 0.5 || reduceMotion;
+    if (parked) {
+      var hx = fw.home.x - root.position.x;
+      var hz = fw.home.z - root.position.z;
+      var hd = Math.sqrt(hx * hx + hz * hz);
+      if (hd > 0.08) {
+        var hs = Math.min(hd, FIELD_WORK_SPEED * dt);
+        root.position.x += hx / hd * hs;
+        root.position.z += hz / hd * hs;
+        root.rotation.y = Math.atan2(hx, hz);
+      } else {
+        root.position.x = fw.home.x;
+        root.position.z = fw.home.z;
+        root.rotation.y = fw.home.yaw;
+      }
+      root.position.y = 0;
+      fw.dustMat.opacity = 0;
+      fw.dust.visible = false;
+      return;
+    }
+
+    var wp = fw.waypoints[fw.index];
+    var dx = wp.x - root.position.x;
+    var dz = wp.z - root.position.z;
+    var dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist < 0.6) {
+      fw.index = (fw.index + 1) % fw.waypoints.length;
+      wp = fw.waypoints[fw.index];
+      dx = wp.x - root.position.x;
+      dz = wp.z - root.position.z;
+      dist = Math.sqrt(dx * dx + dz * dz);
+    }
+    if (dist > 0.001) {
+      var step = FIELD_WORK_SPEED * dt;
+      root.position.x += dx / dist * step;
+      root.position.z += dz / dist * step;
+      root.rotation.y = Math.atan2(dx, dz);
+    }
+    root.position.y = 0.02 + Math.sin(now * 9) * 0.012;
+
+    fw.dustMat.opacity = 0.45;
+    fw.dust.visible = true;
+    fw.dustTimer -= dt;
+    if (fw.dustTimer <= 0) {
+      fw.dustTimer = 0.12;
+      var fwdX = Math.sin(root.rotation.y);
+      var fwdZ = Math.cos(root.rotation.y);
+      for (var d = 0; d < fw.dustLife.length; d++) {
+        var part = fw.dustLife[d];
+        if (part.life > 0) continue;
+        part.x = root.position.x - fwdX * 2.2 + (Math.random() - 0.5) * 1.4;
+        part.y = 0.35 + Math.random() * 0.5;
+        part.z = root.position.z - fwdZ * 2.2 + (Math.random() - 0.5) * 1.4;
+        part.vy = 0.5 + Math.random() * 0.6;
+        part.life = 1;
+        break;
+      }
+    }
+    for (var j = 0; j < fw.dustLife.length; j++) {
+      var p = fw.dustLife[j];
+      if (p.life > 0) {
+        p.life -= dt * 0.8;
+        p.y += p.vy * dt;
+        p.vy *= 0.96;
+        if (p.life <= 0) {
+          p.life = 0;
+          p.y = -10;
+        }
+      }
+      var idx = j * 3;
+      fw.dustPos[idx] = p.x;
+      fw.dustPos[idx + 1] = p.life > 0 ? p.y : -10;
+      fw.dustPos[idx + 2] = p.z;
+    }
+    fw.dust.geometry.attributes.position.needsUpdate = true;
+  }
+
+  var FARMHOUSE = D.layout.farmhouse;
+  var FH_C = Math.cos(FARMHOUSE.ry || 0);
+  var FH_S = Math.sin(FARMHOUSE.ry || 0);
+
+  function farmhousePoint(lx, lz) {
+    return {
+      x: FARMHOUSE.x + lx * FH_C + lz * FH_S,
+      z: FARMHOUSE.z - lx * FH_S + lz * FH_C
+    };
+  }
+
+  var HOME_APPROACH = farmhousePoint(0, 6.1);
+  var HOME_DOOR = farmhousePoint(0, 3.7);
+  var HOME_INSIDE = farmhousePoint(0, 1.8);
+  var HOME_SPEED = 3.0;
+  var DOOR_OPEN_ANGLE = 1.5;
+  var DOOR_SPEED = 2.4;
+
+  function buildHomewardRoutine() {
+    homeward = { cast: [], door: null, doorOpen: false, entryBusy: false, exitBusy: false };
+    var farmhouse = built.objects.farmhouse;
+    if (farmhouse && farmhouse.root && farmhouse.root.userData && farmhouse.root.userData.door) {
+      homeward.door = farmhouse.root.userData.door;
+    }
+    var defs = [
+      { id: 'farmer', kind: 'ring', staging: farmhousePoint(1.6, 5.7) },
+      { id: 'child', kind: 'ring', staging: farmhousePoint(2.7, 5.7) },
+      { id: 'grandma', kind: 'base', staging: farmhousePoint(-2.8, 5.7) },
+      { id: 'dog', kind: 'ring', staging: farmhousePoint(3.8, 5.7) },
+      { id: 'cat', kind: 'base', staging: farmhousePoint(-1.2, 5.7) }
+    ];
+    for (var i = 0; i < defs.length; i++) {
+      var def = defs[i];
+      var root = null;
+      var ringActor = null;
+      var base = null;
+      if (def.kind === 'ring') {
+        for (var j = 0; j < built.actors.length; j++) {
+          if (built.actors[j].id === def.id) {
+            ringActor = built.actors[j];
+            root = ringActor.obj;
+            break;
+          }
+        }
+      } else {
+        var entry = built.objects[def.id];
+        if (entry && entry.root) {
+          root = entry.root;
+          base = { x: root.position.x, z: root.position.z };
+        }
+      }
+      if (!root) continue;
+      if (ringActor) ringActor.homeMode = '';
+      homeward.cast.push({
+        id: def.id,
+        kind: def.kind,
+        root: root,
+        ringActor: ringActor,
+        staging: def.staging,
+        base: base,
+        mode: '',
+        stage: 0
+      });
+    }
+  }
+
+  function moveHomeward(root, tx, tz, speed, dt) {
+    var dx = tx - root.position.x;
+    var dz = tz - root.position.z;
+    var d = Math.sqrt(dx * dx + dz * dz);
+    if (d < 0.14) {
+      root.position.x = tx;
+      root.position.z = tz;
+      return true;
+    }
+    var step = Math.min(d, speed * dt);
+    root.position.x += dx / d * step;
+    root.position.z += dz / d * step;
+    root.rotation.y = Math.atan2(dx, dz);
+    return false;
+  }
+
+  function doorIsOpenEnough() {
+    if (!homeward.door) return true;
+    return homeward.door.rotation.y > 0.95;
+  }
+
+  function updateHomewardDoor(dt) {
+    var door = homeward.door;
+    if (!door) return;
+    var target = homeward.doorOpen ? DOOR_OPEN_ANGLE : 0;
+    var current = door.rotation.y;
+    var step = DOOR_SPEED * dt;
+    if (Math.abs(target - current) <= step) {
+      door.rotation.y = target;
+    } else {
+      door.rotation.y += target > current ? step : -step;
+    }
+  }
+
+  function humanWaitingAtDoor() {
+    for (var i = 0; i < homeward.cast.length; i++) {
+      var c = homeward.cast[i];
+      if ((c.id === 'farmer' || c.id === 'child' || c.id === 'grandma') &&
+        (c.mode === 'waitDoor' || c.mode === 'entering' || c.mode === 'inside')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function updateHomeward(dt) {
+    if (!homeward) return;
+    var goHome = nightTarget > 0.5 || rainTarget > 0.5;
+    var cast = homeward.cast;
+    var i;
+    var c;
+
+    if (goHome) {
+      for (i = 0; i < cast.length; i++) {
+        c = cast[i];
+        if (c.mode === 'exiting' || c.mode === 'toReturn') {
+          c.mode = 'toStaging';
+        }
+        if (c.mode === '' || c.mode === 'toStaging') {
+          c.mode = 'toStaging';
+          c.root.visible = true;
+          if (moveHomeward(c.root, c.staging.x, c.staging.z, HOME_SPEED, dt)) {
+            c.mode = 'waitDoor';
+            c.root.rotation.y = Math.atan2(HOME_DOOR.x - c.staging.x, HOME_DOOR.z - c.staging.z);
+          }
+        }
+      }
+      if (!homeward.doorOpen && humanWaitingAtDoor()) {
+        homeward.doorOpen = true;
+      }
+      if (homeward.doorOpen && doorIsOpenEnough()) {
+        if (!homeward.entryBusy) {
+          for (i = 0; i < cast.length; i++) {
+            c = cast[i];
+            if (c.mode === 'waitDoor') {
+              c.mode = 'entering';
+              c.stage = 0;
+              homeward.entryBusy = true;
+              break;
+            }
+          }
+        }
+        for (i = 0; i < cast.length; i++) {
+          c = cast[i];
+          if (c.mode !== 'entering') continue;
+          if (c.stage === 0) {
+            if (moveHomeward(c.root, HOME_APPROACH.x, HOME_APPROACH.z, HOME_SPEED, dt)) {
+              c.stage = 1;
+            }
+          } else if (c.stage === 1) {
+            if (moveHomeward(c.root, HOME_DOOR.x, HOME_DOOR.z, HOME_SPEED, dt)) {
+              c.stage = 2;
+            }
+          } else if (moveHomeward(c.root, HOME_INSIDE.x, HOME_INSIDE.z, HOME_SPEED, dt)) {
+            c.root.visible = false;
+            c.mode = 'inside';
+            homeward.entryBusy = false;
+          }
+        }
+      }
+      var allInside = true;
+      for (i = 0; i < cast.length; i++) {
+        if (cast[i].mode !== 'inside') {
+          allInside = false;
+          break;
+        }
+      }
+      if (allInside) homeward.doorOpen = false;
+    } else {
+      var anyInside = false;
+      var anyEntering = false;
+      for (i = 0; i < cast.length; i++) {
+        c = cast[i];
+        if (c.mode === 'inside' || c.mode === 'exiting') anyInside = true;
+        if (c.mode === 'entering') anyEntering = true;
+      }
+      if (anyInside || anyEntering) homeward.doorOpen = true;
+      if (homeward.doorOpen && doorIsOpenEnough()) {
+        if (!homeward.exitBusy) {
+          for (i = 0; i < cast.length; i++) {
+            c = cast[i];
+            if (c.mode === 'inside') {
+              c.mode = 'exiting';
+              c.stage = 0;
+              c.root.visible = true;
+              c.root.position.x = HOME_INSIDE.x;
+              c.root.position.z = HOME_INSIDE.z;
+              homeward.exitBusy = true;
+              break;
+            }
+          }
+        }
+        for (i = 0; i < cast.length; i++) {
+          c = cast[i];
+          if (c.mode !== 'exiting') continue;
+          if (c.stage === 0) {
+            if (moveHomeward(c.root, HOME_DOOR.x, HOME_DOOR.z, HOME_SPEED, dt)) {
+              c.stage = 1;
+            }
+          } else if (c.stage === 1) {
+            if (moveHomeward(c.root, HOME_APPROACH.x, HOME_APPROACH.z, HOME_SPEED, dt)) {
+              c.stage = 2;
+            }
+          } else if (moveHomeward(c.root, c.staging.x, c.staging.z, HOME_SPEED, dt)) {
+            c.mode = 'toReturn';
+            homeward.exitBusy = false;
+          }
+        }
+      }
+      for (i = 0; i < cast.length; i++) {
+        c = cast[i];
+        if (c.mode === 'toStaging' || c.mode === 'waitDoor' || c.mode === 'entering') {
+          c.mode = 'toReturn';
+          c.root.visible = true;
+        }
+      }
+      var stillInside = false;
+      var blockedDoorway = false;
+      for (i = 0; i < cast.length; i++) {
+        if (cast[i].mode === 'inside' || cast[i].mode === 'exiting') {
+          stillInside = true;
+        }
+        if (cast[i].mode === 'toReturn') {
+          var ddx = cast[i].root.position.x - HOME_DOOR.x;
+          var ddz = cast[i].root.position.z - HOME_DOOR.z;
+          if (Math.sqrt(ddx * ddx + ddz * ddz) < 1.4) blockedDoorway = true;
+        }
+      }
+      if (!stillInside && !blockedDoorway) homeward.doorOpen = false;
+      for (i = 0; i < cast.length; i++) {
+        c = cast[i];
+        if (c.mode !== 'toReturn') continue;
+        if (c.kind === 'ring') {
+          var ang = Math.atan2(c.root.position.z / 18.3, c.root.position.x / 24.8);
+          var tx = Math.cos(ang) * 24.8;
+          var tz = Math.sin(ang) * 18.3;
+          if (moveHomeward(c.root, tx, tz, HOME_SPEED, dt)) {
+            c.ringActor.angle = ang;
+            c.mode = '';
+          }
+        } else if (moveHomeward(c.root, c.base.x, c.base.z, HOME_SPEED * 0.8, dt)) {
+          c.mode = '';
+        }
+      }
+    }
+
+    for (i = 0; i < cast.length; i++) {
+      c = cast[i];
+      if (!c.ringActor) continue;
+      c.ringActor.homeMode = c.mode === '' ? '' : (goHome ? 'toHouse' : 'toRing');
+    }
+    updateHomewardDoor(dt);
+  }
+
+  var SHEEP_PEN_HOMES = [
+    [-3.2, 1.4], [-1.6, 1.6], [0.0, 1.4], [1.8, 1.6],
+    [3.2, 1.2], [-2.8, -1.4], [-0.8, -1.6], [1.4, -1.4]
+  ];
+
+  function buildSheepPenRoutine() {
+    sheepPen = { cast: [], gate: null, gateOpen: false };
+    var pen = D.layout.sheep_pen;
+    if (!pen || !built.sheepRoots) return;
+    var cs = Math.cos(pen.ry || 0);
+    var sn = Math.sin(pen.ry || 0);
+    function penPoint(lx, lz) {
+      return { x: pen.x + lx * cs + lz * sn, z: pen.z - lx * sn + lz * cs };
+    }
+    var entry = built.objects.sheep_pen;
+    if (entry && entry.root && entry.root.userData && entry.root.userData.gate) {
+      sheepPen.gate = entry.root.userData.gate;
+      sheepPen.gateClosedX = sheepPen.gate.position.x;
+      sheepPen.gateOpenX = sheepPen.gateClosedX + 1.9;
+    }
+    var animals = (built.sheepRoots || []).concat(built.goatRoots || []);
+    for (var i = 0; i < animals.length; i++) {
+      var root = animals[i];
+      var home = SHEEP_PEN_HOMES[i % SHEEP_PEN_HOMES.length];
+      sheepPen.cast.push({
+        root: root,
+        base: { x: root.position.x, z: root.position.z },
+        approach: penPoint(-0.9 + i * 0.25, 4.8),
+        insideGate: penPoint(0, 3.0),
+        home: penPoint(home[0], home[1]),
+        mode: ''
+      });
+    }
+  }
+
+  function updateSheepPen(dt) {
+    var pen = sheepPen;
+    if (!pen) return;
+    var goHome = nightTarget > 0.5 || rainTarget > 0.5;
+    var cast = pen.cast;
+    var i;
+    var c;
+    if (goHome) {
+      for (i = 0; i < cast.length; i++) {
+        c = cast[i];
+        c.root.visible = true;
+        if (c.mode === '' || c.mode === 'toBase' || c.mode === 'toGateOut' || c.mode === 'toInsideOut') {
+          c.mode = 'toGate';
+        }
+        if (c.mode === 'toGate') {
+          if (moveHomeward(c.root, c.approach.x, c.approach.z, HOME_SPEED * 0.7, dt)) {
+            c.mode = 'toInside';
+          }
+        } else if (c.mode === 'toInside') {
+          if (moveHomeward(c.root, c.insideGate.x, c.insideGate.z, HOME_SPEED * 0.55, dt)) {
+            c.mode = 'toPen';
+          }
+        } else if (c.mode === 'toPen') {
+          if (moveHomeward(c.root, c.home.x, c.home.z, HOME_SPEED * 0.55, dt)) {
+            c.mode = 'inside';
+          }
+        }
+      }
+    } else {
+      for (i = 0; i < cast.length; i++) {
+        c = cast[i];
+        if (c.mode === 'toGate') c.mode = 'toBase';
+        if (c.mode === 'inside' || c.mode === 'toPen' || c.mode === 'toInside') {
+          c.mode = 'toInsideOut';
+        }
+        if (c.mode === 'toInsideOut') {
+          if (moveHomeward(c.root, c.insideGate.x, c.insideGate.z, HOME_SPEED * 0.55, dt)) {
+            c.mode = 'toGateOut';
+          }
+        } else if (c.mode === 'toGateOut') {
+          if (moveHomeward(c.root, c.approach.x, c.approach.z, HOME_SPEED * 0.6, dt)) {
+            c.mode = 'toBase';
+          }
+        } else if (c.mode === 'toBase') {
+          if (moveHomeward(c.root, c.base.x, c.base.z, HOME_SPEED * 0.7, dt)) {
+            c.mode = '';
+          }
+        }
+      }
+    }
+    var allInside = true;
+    var anyInsideOrOut = false;
+    for (i = 0; i < cast.length; i++) {
+      if (cast[i].mode !== 'inside') allInside = false;
+      if (cast[i].mode === 'inside' || cast[i].mode === 'toInsideOut' || cast[i].mode === 'toGateOut') {
+        anyInsideOrOut = true;
+      }
+    }
+    pen.gateOpen = goHome ? !allInside : anyInsideOrOut;
+    if (pen.gate) {
+      var targetX = pen.gateOpen ? pen.gateOpenX : pen.gateClosedX;
+      var gdx = targetX - pen.gate.position.x;
+      var gstep = 2.4 * dt;
+      if (Math.abs(gdx) <= gstep) pen.gate.position.x = targetX;
+      else pen.gate.position.x += gdx > 0 ? gstep : -gstep;
+    }
+  }
+
+  var HORSE_STABLE_SPOTS = [
+    { x: -50.6, z: -29.6, yaw: Math.PI },
+    { x: -45.4, z: -29.6, yaw: Math.PI }
+  ];
+  var HORSE_STABLE_GATE = { x: -41.0, z: -26.0 };
+
+  function buildHorseHomeRoutine() {
+    horseHome = { cast: [] };
+    var roots = built.horseRoots || [];
+    for (var i = 0; i < roots.length; i++) {
+      horseHome.cast.push({
+        root: roots[i],
+        base: { x: roots[i].position.x, z: roots[i].position.z },
+        spot: HORSE_STABLE_SPOTS[i % HORSE_STABLE_SPOTS.length],
+        gate: HORSE_STABLE_GATE,
+        mode: '',
+        stage: 0
+      });
+    }
+  }
+
+  function updateHorseHome(dt) {
+    var hh = horseHome;
+    if (!hh) return;
+    var goHome = nightTarget > 0.5 || rainTarget > 0.5;
+    for (var i = 0; i < hh.cast.length; i++) {
+      var c = hh.cast[i];
+      if (goHome) {
+        if (c.mode === '' || c.mode === 'toBase' || c.mode === 'toGateOut') c.mode = 'toGate';
+        if (c.mode === 'toGate') {
+          if (moveHomeward(c.root, c.gate.x, c.gate.z, 4.2, dt)) c.mode = 'toStable';
+        } else if (c.mode === 'toStable') {
+          if (moveHomeward(c.root, c.spot.x, c.spot.z, 3.6, dt)) {
+            c.mode = 'atStable';
+            c.root.rotation.y = c.spot.yaw;
+          }
+        }
+      } else {
+        if (c.mode === 'atStable' || c.mode === 'toStable') c.mode = 'toGateOut';
+        if (c.mode === 'toGateOut') {
+          if (moveHomeward(c.root, c.gate.x, c.gate.z, 3.6, dt)) c.mode = 'toBase';
+        } else if (c.mode === 'toBase') {
+          if (moveHomeward(c.root, c.base.x, c.base.z, 4.2, dt)) c.mode = '';
+        }
+      }
+    }
+  }
+
+  function startCoopExit(r) {
+    r.root.visible = true;
+    r.root.position.set(r.door.x, r.baseY, r.door.z);
+    r.root.scale.setScalar(0.58);
+    r.root.rotation.set(0, r.faceYaw, 0);
+    r.fromX = r.door.x;
+    r.fromZ = r.door.z;
+    r.toX = r.stage.x;
+    r.toZ = r.stage.z;
+    r.travelT = 0;
+    r.travelDur = 0.7;
+    r.state = 'exit';
   }
 
   function updateCoopBirds(dt, now) {
     if (!coopBirdRoutines.length) return;
-    if (!coopBirdAuto) return;
-    var sleeping = nightTarget > 0.5 || reduceMotion;
+    var forceNight = nightTarget > 0.5;
+    var forceRain = !forceNight && rainTarget > 0.5;
+    if (forceNight && !wasForceNight) {
+      for (var fi = 0; fi < coopBirdRoutines.length; fi++) {
+        coopBirdRoutines[fi].forceDelay = fi * 0.8;
+      }
+    }
+    wasForceNight = forceNight;
+
     for (var i = 0; i < coopBirdRoutines.length; i++) {
       var r = coopBirdRoutines[i];
       var root = r.root;
       var cfg = r.cfg;
-      if (sleeping) {
+
+      if (forceNight) {
+        r.worm.visible = false;
+        r.wasForced = true;
+        if (r.state === 'inside') {
+          root.visible = false;
+          r.roostedForNight = true;
+          continue;
+        }
+        if (r.state !== 'toCoop' && r.state !== 'enter') {
+          if (r.forceDelay > 0) {
+            r.forceDelay -= dt;
+            continue;
+          }
+          r.target = r.stage;
+          r.faceYaw = Math.atan2(r.door.x - r.stage.x, r.door.z - r.stage.z);
+          r.state = 'toCoop';
+        }
+      } else if (forceRain) {
+        r.worm.visible = false;
+        r.wasForced = true;
+        if (r.state === 'inside') {
+          startCoopExit(r);
+          continue;
+        }
+        if (r.state !== 'toShelter' && r.state !== 'shelter' && r.state !== 'exit' && r.state !== 'enter') {
+          r.target = r.shelter;
+          r.faceYaw = Math.atan2(r.shelter.x - root.position.x, r.shelter.z - root.position.z);
+          r.state = 'toShelter';
+        }
+      } else {
+        if (r.state === 'shelter') {
+          r.state = 'wait';
+          r.timer = 0.5;
+          root.rotation.x = 0;
+          root.rotation.z = 0;
+          r.wasForced = false;
+        }
+        if (r.state === 'toShelter') {
+          r.state = 'wait';
+          r.timer = 0.5;
+          root.rotation.x = 0;
+          root.rotation.z = 0;
+          r.wasForced = false;
+        }
+        if (r.state === 'inside' && r.wasForced) {
+          r.wasForced = false;
+          startCoopExit(r);
+          continue;
+        }
+        if (r.wasForced && r.state !== 'toCoop' && r.state !== 'enter') {
+          r.wasForced = false;
+        }
+      }
+
+      if (!coopBirdAuto && !forceNight && !forceRain) {
+        continue;
+      }
+      if (reduceMotion && !forceNight && !forceRain) {
         resetCoopBird(r);
         continue;
       }
@@ -1178,7 +2055,7 @@
             r.state = 'walk';
           }
         }
-      } else if (r.state === 'walk' || r.state === 'toCoop') {
+      } else if (r.state === 'walk' || r.state === 'toCoop' || r.state === 'toShelter') {
         var dx = r.target.x - root.position.x;
         var dz = r.target.z - root.position.z;
         var dist = Math.sqrt(dx * dx + dz * dz);
@@ -1196,6 +2073,10 @@
             r.toZ = r.door.z;
             r.travelT = 0;
             r.travelDur = 0.65;
+          } else if (r.state === 'toShelter') {
+            r.state = 'shelter';
+            root.rotation.x = 0.18;
+            root.rotation.z = 0;
           } else if (Math.random() < 0.65) {
             startCoopPeck(r);
           } else {
@@ -1228,6 +2109,11 @@
           r.state = 'wait';
           r.timer = 1.2 + Math.random() * 3;
         }
+      } else if (r.state === 'shelter') {
+        root.rotation.x = 0.18;
+        root.rotation.z = reduceMotion ? 0 : Math.sin(now * 18 + cfg.phase) * 0.012;
+        root.position.y = r.baseY;
+        coopLegsRest(cfg);
       } else if (r.state === 'enter' || r.state === 'exit') {
         r.travelT = Math.min(r.travelDur, r.travelT + dt);
         var k = r.travelT / r.travelDur;
@@ -1249,11 +2135,20 @@
             root.scale.setScalar(1);
             r.state = 'inside';
             r.timer = 3 + Math.random() * 3.5;
+            if (forceNight) {
+              r.roostedForNight = true;
+            }
           } else {
             root.scale.setScalar(1);
             root.position.y = r.baseY;
             r.state = 'wait';
             r.timer = 1.5 + Math.random() * 3;
+            if (r.roostedForNight) {
+              r.roostedForNight = false;
+              if (r.id === 'rooster' && rainTarget < 0.5 && !reduceMotion) {
+                pendingCrow = true;
+              }
+            }
           }
         }
       } else if (r.state === 'inside') {
@@ -1274,14 +2169,17 @@
         }
       }
     }
+
+    if (pendingCrow && global.FarmAgents && global.FarmAgents.isStoryActive &&
+      !global.FarmAgents.isStoryActive() && global.FarmAgents.trigger) {
+      pendingCrow = false;
+      global.FarmAgents.trigger('rooster_crow');
+    }
   }
 
   // 故事接管鸡舍的小鸡时暂停自动巡游；恢复时回到原位重新等待
   S.setCoopBirdsAuto = function (on) {
     coopBirdAuto = !!on;
-    for (var i = 0; i < coopBirdRoutines.length; i++) {
-      resetCoopBird(coopBirdRoutines[i]);
-    }
     return true;
   };
 
@@ -1771,8 +2669,10 @@
       var baseY = it.baseY == null ? o.position.y : it.baseY;
       if (cfg.kind === 'cow') {
         if (cfg.tail) cfg.tail.rotation.x = 0.5 + Math.sin(t * 2.1 + cfg.phase) * 0.22;
+        if (cfg.head) cfg.head.rotation.x = 0.06 + Math.max(0, Math.sin(t * 0.5 + cfg.phase)) * 0.26;
         o.position.y = baseY + Math.sin(t * 1.7 + cfg.phase) * 0.02;
       } else if (cfg.kind === 'sheep') {
+        if (cfg.head) cfg.head.rotation.x = 0.06 + Math.max(0, Math.sin(t * 0.45 + cfg.phase)) * 0.34;
         o.position.y = baseY + Math.sin(t * 1.5 + cfg.phase) * 0.02;
         o.rotation.z = Math.sin(t * 0.9 + cfg.phase) * 0.015;
       } else if (cfg.kind === 'horse') {
@@ -1789,8 +2689,9 @@
         o.rotation.z = Math.sin(t * 1.8 + cfg.phase) * 0.02;
         if (cfg.tail) cfg.tail.rotation.z = Math.sin(t * 2.6 + cfg.phase) * 0.14;
       } else if (cfg.kind === 'goat') {
+        if (cfg.head) cfg.head.rotation.x = 0.05 + Math.max(0, Math.sin(t * 0.52 + cfg.phase)) * 0.3;
         o.rotation.z = Math.sin(t * 1.1 + cfg.phase) * 0.018;
-      } else if (cfg.kind === 'chicken' || cfg.kind === 'rooster') {
+      } else if (cfg.kind === 'chicken' || cfg.kind === 'rooster' || cfg.kind === 'chick') {
         o.position.y = baseY + Math.abs(Math.sin(t * 3.4 + cfg.phase)) * 0.05;
         o.rotation.z = Math.sin(t * 2.0 + cfg.phase) * 0.02;
       } else if (cfg.kind === 'duck' || cfg.kind === 'goose') {
@@ -1831,6 +2732,10 @@
 
     updateHorseRoutine(dt, t);
     updateCoopBirds(dt, t);
+    updateFieldWork(dt, t);
+    updateButterflies(t);
+    updateDragonflies(t);
+    updateDucklings(dt, t);
     updateLazyCat(dt, t);
 
     if (built.bee) {
@@ -1854,22 +2759,50 @@
       rp.mesh.material.opacity = (1 - k) * 0.4;
     }
 
+    if (night !== nightTarget) {
+      var step = dt / 1.2;
+      if (Math.abs(nightTarget - night) <= step) night = nightTarget;
+      else night += (nightTarget > night ? step : -step);
+      applySceneColors(night, rain);
+    }
+
+    if (rain !== rainTarget) {
+      var rainStep = dt / 1.5;
+      if (Math.abs(rainTarget - rain) <= rainStep) rain = rainTarget;
+      else rain += (rainTarget > rain ? rainStep : -rainStep);
+      applySceneColors(night, rain);
+    }
+
     for (var f = 0; f < built.fireflies.length; f++) {
       var fl = built.fireflies[f];
       var fb = fireflyBase[f];
       fl.obj.position.x = fb.x + Math.sin(t * 0.5 + fb.phase) * fb.r;
       fl.obj.position.z = fb.z + Math.cos(t * 0.42 + fb.phase) * fb.r;
       fl.obj.position.y = fb.y + Math.sin(t * 1.6 + fb.phase) * 0.35;
-      fl.obj.visible = night > 0.08;
+      fl.obj.visible = night > 0.08 && rain < 0.5;
     }
-    built.fireflyMat.opacity = night * 0.9;
-    built.fireflyGroup.visible = night > 0.05;
+    built.fireflyMat.opacity = night * 0.9 * (1 - rain);
+    built.fireflyGroup.visible = night > 0.05 && rain < 0.5;
 
-    if (night !== nightTarget) {
-      var step = dt / 1.2;
-      if (Math.abs(nightTarget - night) <= step) night = nightTarget;
-      else night += (nightTarget > night ? step : -step);
-      applyNightColors(night);
+    if (rain < 0.01) {
+      rainMesh.visible = false;
+    } else {
+      rainMesh.visible = true;
+      rainMaterial.opacity = 0.55 * rain;
+      var rainArr = rainMesh.geometry.attributes.position.array;
+      for (var ri = 0; ri < RAIN_COUNT; ri++) {
+        var d = rainDrops[ri];
+        d.y -= d.speed * dt;
+        if (d.y < 0) d.y = RAIN_TOP;
+        var idx = ri * 6;
+        rainArr[idx] = d.x;
+        rainArr[idx + 1] = d.y;
+        rainArr[idx + 2] = d.z;
+        rainArr[idx + 3] = d.x - 0.12;
+        rainArr[idx + 4] = d.y + d.len + 0.35 * rain;
+        rainArr[idx + 5] = d.z;
+      }
+      rainMesh.geometry.attributes.position.needsUpdate = true;
     }
 
     if (selectedObj && ring && ring.visible) {
@@ -1881,7 +2814,7 @@
         var hs = selectedObj.userData.homeScale || 1;
         selectedObj.scale.setScalar(hs * (1.02 + 0.012 * Math.sin(t * 4.2)));
       }
-      if (selectedId === 'tractor' || selectedId === 'trailer' || selectedId === 'farmer' || selectedId === 'child' || selectedId === 'dog' || selectedId === 'rabbit') {
+      if (FOLLOW_SELECTION_IDS.indexOf(selectedId) >= 0) {
         selectedObj.getWorldPosition(tmpV);
         ring.position.x = tmpV.x;
         ring.position.z = tmpV.z;
@@ -1892,23 +2825,53 @@
       global.FarmAgents.update(dt, reduceMotion ? 0 : dt, t);
     }
 
+    updateHomeward(dt);
+    updateSheepPen(dt);
+    updateHorseHome(dt);
     placeActors(reduceMotion ? 0 : dt);
   }
 
-  function applyNightColors(n) {
-    scene.background.copy(daySkyColor).lerp(nightSkyColor, n);
-    scene.fog.color.copy(dayFogColor).lerp(nightFogColor, n);
-    hemi.color.copy(dayHemiSky).lerp(nightHemiSky, n);
-    hemi.groundColor.copy(dayHemiGround).lerp(nightHemiGround, n);
-    hemi.intensity = DAY.hemiI + (NIGHT.hemiI - DAY.hemiI) * n;
-    dir.color.copy(dayDir).lerp(nightDir, n);
-    dir.intensity = DAY.dirI + (NIGHT.dirI - DAY.dirI) * n;
+  function lerpC(a, b, t) { return a.clone().lerp(b, t); }
+
+  function applySceneColors(n, r) {
+    if (!built || !scene) return;
+    var rainPal = n > 0.5 ? RAIN_NIGHT : RAIN_DAY;
+    var sky = lerpC(daySkyColor, nightSkyColor, n).lerp(new THREE.Color(rainPal.sky), r);
+    var fog = lerpC(dayFogColor, nightFogColor, n).lerp(new THREE.Color(rainPal.fog), r);
+    scene.background.copy(sky);
+    scene.fog.color.copy(fog);
+    scene.fog.near = 110 - 20 * r;
+    scene.fog.far = 310 - 90 * r;
+    hemi.color.copy(lerpC(dayHemiSky, nightHemiSky, n).lerp(new THREE.Color(rainPal.hemiSky), r * 0.75));
+    hemi.groundColor.copy(lerpC(dayHemiGround, nightHemiGround, n).lerp(new THREE.Color(rainPal.hemiGround), r * 0.75));
+    hemi.intensity = (DAY.hemiI + (NIGHT.hemiI - DAY.hemiI) * n) * (1 - 0.28 * r);
+    dir.color.copy(lerpC(dayDir, nightDir, n).lerp(new THREE.Color(rainPal.dirColor), r * 0.7));
+    dir.intensity = (DAY.dirI + (NIGHT.dirI - DAY.dirI) * n) * (1 - 0.65 * r);
     for (var i = 0; i < built.windowMats.length; i++) {
       built.windowMats[i].emissiveIntensity = n * 1.15;
     }
     for (var j = 0; j < built.lampMats.length; j++) {
       built.lampMats[j].emissiveIntensity = n * 1.5;
     }
+    if (built.coopLamp) built.coopLamp.intensity = 6.5 * n * (1 - 0.25 * r);
+    if (built.groundMat) {
+      built.groundMat.color.copy(new THREE.Color(0x8FBF6A).lerp(new THREE.Color(0x5E8347), r * 0.7));
+      built.groundMat.shininess = 18 * r;
+    }
+    if (built.cloudMats) {
+      for (var c = 0; c < built.cloudMats.length; c++) {
+        built.cloudMats[c].color.copy(new THREE.Color(0xFFFDF6).lerp(new THREE.Color(0x8E99A3), r * 0.85));
+        built.cloudMats[c].opacity = 0.92 + 0.05 * r;
+      }
+    }
+    if (built.puddleMat) built.puddleMat.opacity = 0.35 * r;
+    if (starField) {
+      starField.visible = n > 0.02 && r < 0.5;
+      starField.material.opacity = 0.9 * n * (1 - r);
+    }
+    if (sunDisc) sunDisc.visible = n < 0.5 && r < 0.55;
+    if (moonDisc) moonDisc.visible = n > 0.05 && r < 0.6;
+    if (built.bee) built.bee.visible = r < 0.5;
   }
 
   function loop() {

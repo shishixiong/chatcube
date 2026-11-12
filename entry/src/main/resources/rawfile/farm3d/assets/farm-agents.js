@@ -152,6 +152,9 @@
   var nightOn = false;
   var sleepK = 0;
   var wasAsleep = false;
+  var rainOn = false;
+  var rainK = 0;
+  var wasRainPose = false;
   var nowMs = 0;
   var lastProject = 0;
   var lastSpeakAt = 0;
@@ -262,11 +265,13 @@
     for (var j = 0; j < idles.length; j++) {
       var rec = makeSleepAgent(idles[j].root, idles[j].cfg);
       if (!rec) continue;
+      if (rec.root.userData && rec.root.userData.coopBird) continue;
       sleepList.push(rec);
       seen.push(rec.root);
     }
     for (var k = 0; k < agentOrder.length; k++) {
       if (seen.indexOf(agentOrder[k].root) < 0) {
+        if (agentOrder[k].root.userData && agentOrder[k].root.userData.coopBird) continue;
         sleepList.push(agentOrder[k]);
         seen.push(agentOrder[k].root);
       }
@@ -485,19 +490,7 @@
   }
 
   function releaseResources(s) {
-    if (s.rabbit) {
-      if (nightOn) host.setRabbitAuto(false);
-      else host.setRabbitAuto(true);
-    }
-    if (s.stableHorse && host.setHorseAuto) host.setHorseAuto(!nightOn);
-    if (s.coopBirds && host.setCoopBirdsAuto) host.setCoopBirdsAuto(!nightOn);
-    if (s.heldActors) {
-      for (var i = 0; i < s.heldActors.length; i++) {
-        var id = s.heldActors[i];
-        // 夜间人物/狗保持冻结，白天回到环上继续走
-        host.holdActor(id, nightOn);
-      }
-    }
+    recomputeEnvironment();
   }
 
   function startStory(kind, opts) {
@@ -811,6 +804,69 @@
     wasAsleep = false;
   }
 
+  // ---------- 雨天环境 ----------
+
+  function recomputeEnvironment() {
+    var held = nightOn || rainOn;
+    if (host.setHorseAuto) host.setHorseAuto(!nightOn && !rainOn);
+    if (host.setRabbitAuto) host.setRabbitAuto(!nightOn && !rainOn);
+    if (host.setCoopBirdsAuto) host.setCoopBirdsAuto(!nightOn && !rainOn);
+    host.holdActor('farmer', held);
+    host.holdActor('child', held);
+    host.holdActor('dog', held);
+  }
+
+  function rainKind(a) {
+    if (!a) return '';
+    if (a.idle && a.idle.kind) return a.idle.kind;
+    return a.id || '';
+  }
+
+  function applyRainPose(k, t) {
+    for (var i = 0; i < sleepList.length; i++) {
+      var a = sleepList[i];
+      if (!a || !a.root) continue;
+      var kind = rainKind(a);
+      if (kind === 'chicken' || kind === 'rooster' || kind === 'duck' || kind === 'goose') continue;
+      if (kind === 'bee' || kind === 'bird') {
+        a.root.visible = k < 0.5;
+        continue;
+      }
+      var phase = (a.idle && a.idle.phase) ? a.idle.phase : 0;
+      if (kind === 'cow' || kind === 'sheep' || kind === 'horse' || kind === 'goat') {
+        if (a.head) a.head.rotation.x = a.baseHeadX + 0.3 * k;
+        a.root.position.y = a.basePos.y - 0.03 * k;
+        a.root.rotation.z = a.baseRot.z + Math.sin(t * 6 + phase) * 0.01 * k;
+      } else if (kind === 'pig') {
+        if (a.head) a.head.rotation.x = a.baseHeadX + 0.22 * k;
+      } else if (kind === 'cat' || kind === 'lazy_cat') {
+        if (a.head) a.head.rotation.x = a.baseHeadX + 0.2 * k;
+      } else if (kind === 'rabbit' || kind === 'rabbit_graze') {
+        if (a.head) a.head.rotation.x = a.baseHeadX + 0.2 * k;
+        if (a.earL) a.earL.rotation.z = 0.12 + (0.3 + 0.2 * k);
+        if (a.earR) a.earR.rotation.z = -0.12 - (0.3 + 0.2 * k);
+      } else if (kind === 'dog' || kind === 'farmer' || kind === 'child' || kind === 'grandma' ||
+        kind === 'walk') {
+        a.root.rotation.x = a.baseRot.x + 0.05 * k;
+        a.root.position.y = Math.max(0.02, a.basePos.y - 0.02 * k);
+      }
+    }
+  }
+
+  function restoreRainPose() {
+    for (var i = 0; i < sleepList.length; i++) {
+      var a = sleepList[i];
+      if (!a) continue;
+      if (a.head) a.head.rotation.x = a.baseHeadX;
+      if (a.earL) a.earL.rotation.z = a.baseEarLZ;
+      if (a.earR) a.earR.rotation.z = a.baseEarRZ;
+      a.root.rotation.x = a.baseRot.x;
+      a.root.rotation.z = a.baseRot.z;
+      a.root.visible = true;
+      if (!a.actorId) a.root.position.y = a.basePos.y;
+    }
+  }
+
   // ---------- 调度 ----------
 
   function agentOnScreen(a) {
@@ -828,6 +884,9 @@
     var def = STORIES[kind];
     if (!def) return false;
     if (def.manual) return false;
+    if (rainOn && (kind === 'chicken_peck' || kind === 'grandma_feed' || kind === 'rooster_crow')) {
+      return false;
+    }
     if (def.grainLock && host.getGrainState().active) return false;
     var a = agents[def.agent];
     if (!a) return false;
@@ -874,7 +933,7 @@
     }
     if (zoneTimer > 0) {
       zoneTimer -= realDt;
-      if (zoneTimer <= 0 && !nightOn && !host.isReduceMotion()) {
+      if (zoneTimer <= 0 && !nightOn && !rainOn && !host.isReduceMotion()) {
         if (story) {
           // 正在跑别的故事（例如点击互动），稍后再补一次分区故事
           zoneTimer = 2;
@@ -884,7 +943,7 @@
         }
       }
     }
-    if (nightOn || host.isReduceMotion()) return;
+    if (nightOn || rainOn || host.isReduceMotion()) return;
     if (story) return;
     if (tickTimer > 0) {
       tickTimer -= realDt;
@@ -948,6 +1007,8 @@
   };
 
   A.isAgent = function (id) { return !!CLICK_KIND[id]; };
+  A.isRaining = function () { return rainOn; };
+  A.isStoryActive = function () { return !!story; };
 
   A.update = function (realDt, motionDt, t) {
     if (!ready || !host) return;
@@ -962,6 +1023,17 @@
       sleepK = Math.max(0, sleepK - realDt / 0.8);
       if (sleepK <= 0) restoreFromSleep();
       else applySleep(sleepK, t);
+    }
+
+    var wantRain = rainOn && !nightOn;
+    if (wantRain) rainK = Math.min(1, rainK + realDt / 0.8);
+    else rainK = Math.max(0, rainK - realDt / 0.8);
+    if (rainK > 0 && !nightOn) {
+      applyRainPose(rainK, t);
+      wasRainPose = true;
+    } else if (wasRainPose && !nightOn) {
+      restoreRainPose();
+      wasRainPose = false;
     }
 
     // 故事姿势在睡姿之后写入，保证夜间点击动物时能“醒一下”做反应
@@ -979,6 +1051,37 @@
 
   A.interact = function (id, root) {
     if (!ready) return false;
+    if ((rainOn || nightOn) &&
+      (id === 'farmer' || id === 'child' || id === 'dog' || id === 'cat' || id === 'grandma' ||
+        id === 'horse' || id === 'sheep' || id === 'goat')) {
+      var homeAgent = agentFor(id, root) || agents[id];
+      if (homeAgent) {
+        var homeLine;
+        if (id === 'horse') {
+          homeLine = rainOn
+            ? { zh: '下雨啦，我回马厩啦。', en: 'Rain! Back to the stable.' }
+            : { zh: '天黑啦，我回马厩睡觉。', en: 'It is dark. Back to the stable.' };
+        } else if (id === 'sheep' || id === 'goat') {
+          homeLine = { zh: '我们要进羊圈啦。', en: 'We are going into the pen.' };
+        } else {
+          homeLine = rainOn
+            ? { zh: '下雨啦，我们回农舍啦。', en: 'Rain! We are going home.' }
+            : { zh: '天黑啦，我们回农舍睡觉。', en: 'It is dark. We are going home.' };
+        }
+        showBubble('click:' + id, homeAgent, homeLine.zh, homeLine.en, 2600);
+      }
+      return true;
+    }
+    if (id === 'chicken' || id === 'rooster' || id === 'grandma') {
+      if (rainOn) {
+        var shelterAgent = agentFor(id, root) || agents.chicken || agents.rooster;
+        if (shelterAgent) {
+          showBubble('click:' + id, shelterAgent, '我在躲雨呢。', 'I am hiding from the rain.', 2600);
+        }
+        return true;
+      }
+      if (nightOn) return false;
+    }
     var kind = CLICK_KIND[id];
     if (!kind) return false;
     var a = agentFor(id, root);
@@ -1014,34 +1117,42 @@
     if (on === nightOn) return;
     nightOn = on;
     cancelStory();
-    if (host.setHorseAuto) host.setHorseAuto(!on);
-    if (host.setCoopBirdsAuto) host.setCoopBirdsAuto(!on);
+    recomputeEnvironment();
     if (on) {
-      host.setRabbitAuto(false);
       var rabbit = agents.rabbit;
       if (rabbit) {
         rabbit.root.position.set(rabbit.basePos.x, rabbit.basePos.y, rabbit.basePos.z);
         rabbit.root.rotation.y = rabbit.baseRot.y;
         if (rabbit.head) rabbit.head.rotation.x = rabbit.baseHeadX;
       }
-      host.holdActor('farmer', true);
-      host.holdActor('child', true);
-      host.holdActor('dog', true);
       var anchor = agents.cat || agents.chicken || agents.rabbit;
       if (anchor) {
-        showBubble('night', anchor, '月亮出来啦，我要睡觉了。', 'The moon is up. Time to sleep.', 5200);
+        showBubble('night', anchor, '天黑啦，大家都回农舍啦。', 'It is dark. Everyone is going home.', 5200);
         if (bubbleMap.night) bubbleMap.night.preferVisible = true;
       }
     } else {
-      host.setRabbitAuto(true);
-      host.holdActor('farmer', false);
-      host.holdActor('child', false);
-      host.holdActor('dog', false);
       restoreFromSleep();
       sleepK = 0;
-      // 天亮优先打一次鸣，再恢复轮播
-      if (!host.isReduceMotion()) startStory('rooster_crow', {});
       tickTimer = TICK_MIN * 0.6;
+    }
+  };
+
+  A.onWeatherChange = function (on) {
+    if (!ready) return;
+    on = !!on;
+    if (on === rainOn) return;
+    rainOn = on;
+    cancelStory();
+    recomputeEnvironment();
+    var anchor = agents.cat || agents.chicken || agents.rabbit;
+    if (anchor) {
+      if (on) {
+        showBubble('weather', anchor, '下雨啦，大家都回农舍啦。',
+          'It is raining. Everyone is going home.', 5200);
+      } else {
+        showBubble('weather', anchor, nightOn ? '雨停啦。' : '雨停啦，太阳出来喽。',
+          'The rain stopped.', 4200);
+      }
     }
   };
 
@@ -1070,5 +1181,8 @@
     sleepK = 0;
     nightOn = false;
     wasAsleep = false;
+    rainOn = false;
+    rainK = 0;
+    wasRainPose = false;
   };
 })(window);

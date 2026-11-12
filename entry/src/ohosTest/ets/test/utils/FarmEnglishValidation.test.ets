@@ -1,5 +1,11 @@
 import { describe, it, expect } from '@ohos/hypium'
-import { FARM_OBJECT_IDS, resolveFarmEnglishView, validateFarmEnglishArgs } from '../../../../main/ets/utils/FarmEnglishValidation'
+import {
+  FARM_WORD_IDS,
+  resolveFarmEnglishView,
+  resolveFarmTimeOfDay,
+  resolveFarmWeather,
+  validateFarmEnglishArgs
+} from '../../../../main/ets/utils/FarmEnglishValidation'
 
 /**
  * FarmEnglishValidation 单元测试（farm_english 3D 阳光农场英语探索, 2026-11-06）
@@ -51,7 +57,7 @@ export default function farmEnglishValidationTest() {
       const unknown = validateFarmEnglishArgs('{"skill_key":"english_vocab","words":["cow","spaceship"]}')
       expect(unknown.ok).assertFalse()
       expect(unknown.error.indexOf('spaceship') >= 0).assertTrue()
-      const nine = FARM_OBJECT_IDS.slice(0, 9)
+      const nine = FARM_WORD_IDS.slice(0, 9)
       const r = validateFarmEnglishArgs('{"skill_key":"english_vocab","words":["' + nine.join('","') + '"]}')
       expect(r.ok).assertFalse()
     })
@@ -64,19 +70,25 @@ export default function farmEnglishValidationTest() {
       expect(validateFarmEnglishArgs('{"skill_key":"english_vocab","words":[1,2]}').ok).assertFalse()
     })
 
-    it('covers 50 unique farm objects', 0, () => {
-      expect(FARM_OBJECT_IDS.length).assertEqual(50)
-      for (let i = 0; i < FARM_OBJECT_IDS.length; i++) {
-        expect(FARM_OBJECT_IDS.indexOf(FARM_OBJECT_IDS[i])).assertEqual(i)
+    it('keeps the word-id table unique and growable', 0, () => {
+      expect(FARM_WORD_IDS.indexOf('chick') >= 0).assertTrue()
+      for (let i = 0; i < FARM_WORD_IDS.length; i++) {
+        expect(FARM_WORD_IDS.indexOf(FARM_WORD_IDS[i])).assertEqual(i)
       }
+    })
+
+    it('accepts chick as a word id', 0, () => {
+      const r = validateFarmEnglishArgs('{"skill_key":"english_vocab","words":["chick","chicken"]}')
+      expect(r.ok).assertTrue()
+      expect(r.words.length).assertEqual(2)
     })
 
     it('includes every category sample', 0, () => {
       const samples = [
-        // places 10
-        'farmhouse', 'barn', 'chicken_coop', 'stable', 'silo', 'windmill', 'greenhouse', 'well', 'gate', 'fence',
-        // animals 14
-        'cow', 'pig', 'sheep', 'horse', 'goat', 'chicken', 'rooster', 'duck', 'goose', 'rabbit', 'cat', 'dog', 'bee', 'bird',
+        // places 11
+        'farmhouse', 'barn', 'chicken_coop', 'sheep_pen', 'stable', 'silo', 'windmill', 'greenhouse', 'well', 'gate', 'fence',
+        // animals 15
+        'cow', 'pig', 'sheep', 'horse', 'goat', 'chicken', 'rooster', 'chick', 'duck', 'goose', 'rabbit', 'cat', 'dog', 'bee', 'bird',
         // crops 10
         'wheat', 'corn', 'potato', 'carrot', 'tomato', 'pumpkin', 'apple', 'strawberry', 'sunflower', 'hay',
         // machines 8
@@ -86,10 +98,57 @@ export default function farmEnglishValidationTest() {
         // people 3
         'farmer', 'child', 'grandma'
       ]
-      expect(samples.length).assertEqual(50)
       for (let i = 0; i < samples.length; i++) {
-        expect(FARM_OBJECT_IDS.indexOf(samples[i]) >= 0).assertTrue()
+        expect(FARM_WORD_IDS.indexOf(samples[i]) >= 0).assertTrue()
       }
+    })
+    it('accepts valid time_of_day and weather', 0, () => {
+      const night = validateFarmEnglishArgs('{"skill_key":"english_vocab","time_of_day":"night","weather":"rainy"}')
+      expect(night.ok).assertTrue()
+      expect(night.timeOfDay).assertEqual('night')
+      expect(night.weather).assertEqual('rainy')
+      const day = validateFarmEnglishArgs('{"skill_key":"english_vocab","time_of_day":"day","weather":"sunny"}')
+      expect(day.ok).assertTrue()
+      expect(day.timeOfDay).assertEqual('day')
+      expect(day.weather).assertEqual('sunny')
+    })
+
+    it('defaults scene fields and rejects illegal values', 0, () => {
+      const plain = validateFarmEnglishArgs('{"skill_key":"english_vocab"}')
+      expect(plain.ok).assertTrue()
+      expect(plain.timeOfDay).assertEqual('')
+      expect(plain.weather).assertEqual('')
+      const bads = [
+        '{"skill_key":"english_vocab","time_of_day":"dusk"}',
+        '{"skill_key":"english_vocab","time_of_day":"DAY"}',
+        '{"skill_key":"english_vocab","time_of_day":1}',
+        '{"skill_key":"english_vocab","weather":"rain"}',
+        '{"skill_key":"english_vocab","weather":"Rainy"}',
+        '{"skill_key":"english_vocab","weather":true}'
+      ]
+      for (let i = 0; i < bads.length; i++) {
+        expect(validateFarmEnglishArgs(bads[i]).ok).assertFalse()
+      }
+    })
+  })
+
+  describe('resolveFarmScene', () => {
+    it('resolves explicit and device-hour time of day', 0, () => {
+      expect(resolveFarmTimeOfDay('night', 12)).assertEqual('night')
+      expect(resolveFarmTimeOfDay('day', 23)).assertEqual('day')
+      expect(resolveFarmTimeOfDay('', 5)).assertEqual('night')
+      expect(resolveFarmTimeOfDay('', 6)).assertEqual('day')
+      expect(resolveFarmTimeOfDay('', 12)).assertEqual('day')
+      expect(resolveFarmTimeOfDay('', 17)).assertEqual('day')
+      expect(resolveFarmTimeOfDay('', 18)).assertEqual('night')
+      expect(resolveFarmTimeOfDay('', 23)).assertEqual('night')
+    })
+
+    it('defaults weather to sunny and honors rainy', 0, () => {
+      expect(resolveFarmWeather('')).assertEqual('sunny')
+      expect(resolveFarmWeather('sunny')).assertEqual('sunny')
+      expect(resolveFarmWeather('rainy')).assertEqual('rainy')
+      expect(resolveFarmWeather('RAINY')).assertEqual('sunny')
     })
   })
 

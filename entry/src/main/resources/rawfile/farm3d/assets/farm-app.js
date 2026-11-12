@@ -7,6 +7,7 @@
   var ICONS = {
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/>',
     moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/>',
+    rain: '<path d="M7 15.5a4.5 4.5 0 0 1 .6-8.96A5.5 5.5 0 0 1 18.2 8.6 3.7 3.7 0 0 1 18 15.5Z"/><path d="M8 19l-1 2M12 19l-1 2M16 19l-1 2"/>',
     book: '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5V5.5Z"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20v3H6.5"/>',
     tag: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"/><circle cx="7.5" cy="7.5" r="1.4"/>',
     reset: '<path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3.5 4.5V10H9"/>',
@@ -40,12 +41,18 @@
     discovered: {},
     idList: [],
     night: false,
+    rain: false,
     host: false,
     labels: false,
     panel: 'collapsed',
     query: '',
-    cat: 'all'
+    cat: 'all',
+    stats: false
   };
+  try {
+    state.stats = /[?&]stats=1/.test(global.location.search) ||
+      global.localStorage.getItem('farm.stats') === '1';
+  } catch (e) {}
 
   var dom = {};
   var sceneOk = false;
@@ -56,6 +63,7 @@
   var focusTimer = 0;
   var labelEls = {};
   var labelTick = 0;
+  var statsTick = 0;
   var lastFocus = null;
 
   var byIdMap = {};
@@ -136,7 +144,7 @@
 
   function cacheDom() {
     var ids = [
-      'app', 'webTopbar', 'nightBtn', 'nightLabel', 'vocabBtn', 'stage', 'farmCanvas',
+      'app', 'webTopbar', 'nightBtn', 'nightLabel', 'rainBtn', 'rainLabel', 'vocabBtn', 'stage', 'farmCanvas', 'metaPill',
       'zoneTabs', 'labelsBtn', 'resetBtn', 'labelLayer', 'bubbleLayer', 'sceneToast', 'loadScreen', 'failCard',
       'failVocabBtn', 'failRetryBtn', 'panel', 'panelGrab', 'panelToggle', 'panelZone',
       'panelCount', 'panelPeek', 'panelBody', 'emptyState', 'wordCard', 'cardCat', 'cardIndex',
@@ -403,16 +411,32 @@
     else openPanel();
   }
 
-  function applyNight(on) {
-    state.night = !!on;
-    if (sceneOk && global.FarmScene) global.FarmScene.setNight(state.night);
+  function applyNight(on, instant) {
+    var next = !!on;
+    var changed = next !== state.night;
+    state.night = next;
+    if (sceneOk && global.FarmScene) global.FarmScene.setNight(state.night, !!instant);
     if (dom.nightBtn) dom.nightBtn.setAttribute('aria-pressed', state.night ? 'true' : 'false');
-    if (dom.nightLabel) dom.nightLabel.textContent = state.night ? '白天' : '黄昏';
+    if (dom.nightLabel) dom.nightLabel.textContent = state.night ? '白天' : '晚上';
     if (dom.nightBtn) {
-      dom.nightBtn.innerHTML = icon(state.night ? 'sun' : 'moon') + '<span id="nightLabel" class="btn-label">' + (state.night ? '白天' : '黄昏') + '</span>';
+      dom.nightBtn.innerHTML = icon(state.night ? 'sun' : 'moon') + '<span id="nightLabel" class="btn-label">' + (state.night ? '白天' : '晚上') + '</span>';
       dom.nightLabel = $('nightLabel');
     }
-    showToast(state.night ? '黄昏模式：灯亮起来了' : '回到白天');
+    if (changed && !instant) showToast(state.night ? '晚上模式：灯亮起来了' : '回到白天');
+  }
+
+  function applyWeather(on, instant) {
+    var next = !!on;
+    var changed = next !== state.rain;
+    state.rain = next;
+    if (sceneOk && global.FarmScene) global.FarmScene.setWeather(state.rain, !!instant);
+    if (dom.rainBtn) dom.rainBtn.setAttribute('aria-pressed', state.rain ? 'true' : 'false');
+    if (dom.rainBtn) {
+      dom.rainBtn.innerHTML = icon(state.rain ? 'sun' : 'rain') +
+        '<span id="rainLabel" class="btn-label">' + (state.rain ? '晴天' : '下雨') + '</span>';
+      dom.rainLabel = $('rainLabel');
+    }
+    if (changed && !instant) showToast(state.rain ? '下雨啦，小鸡躲进鸡舍里了' : '雨停啦，太阳出来喽');
   }
 
   var toastTimer = 0;
@@ -497,6 +521,12 @@
   function frameTick() {
     var now = Date.now();
     if (global.FarmAgents && global.FarmAgents.frame) global.FarmAgents.frame(now);
+    if (state.stats && now - statsTick > 5000) {
+      statsTick = now;
+      try {
+        console.log('[farm-stats] ' + JSON.stringify(global.FarmApp.stats()));
+      } catch (e) {}
+    }
     if (!state.labels) return;
     if (now - labelTick < 90) return;
     labelTick = now;
@@ -663,6 +693,7 @@
 
   function bindUI() {
     if (dom.nightBtn) dom.nightBtn.addEventListener('click', function () { applyNight(!state.night); });
+    if (dom.rainBtn) dom.rainBtn.addEventListener('click', function () { applyWeather(!state.rain); });
     if (dom.vocabBtn) dom.vocabBtn.addEventListener('click', openVocab);
     if (dom.labelsBtn) dom.labelsBtn.addEventListener('click', toggleLabels);
     if (dom.resetBtn) {
@@ -784,8 +815,26 @@
     setView: function (name) { apiCall(apiSetView, [name]); },
     select: function (id) { apiCall(apiSelect, [id]); },
     openVocab: function () { apiCall(openVocab, []); },
-    setNight: function (v) { apiCall(applyNight, [v]); },
-    resetView: function () { apiCall(apiResetView, []); }
+    setNight: function (v, instant) { apiCall(applyNight, [v, instant]); },
+    setWeather: function (v, instant) { apiCall(applyWeather, [v, instant]); },
+    resetView: function () { apiCall(apiResetView, []); },
+    stats: function () {
+      var out = { objects: D.objects.length };
+      if (sceneOk && global.FarmScene && global.FarmScene.getRenderStats) {
+        var s = global.FarmScene.getRenderStats();
+        for (var k in s) {
+          if (s.hasOwnProperty(k)) out[k] = s[k];
+        }
+      }
+      return out;
+    },
+    setStats: function (v) {
+      state.stats = !!v;
+      try {
+        if (state.stats) global.localStorage.setItem('farm.stats', '1');
+        else global.localStorage.removeItem('farm.stats');
+      } catch (e) {}
+    }
   };
 
   function boot() {
@@ -798,6 +847,7 @@
     }
     buildLookup();
     cacheDom();
+    if (dom.metaPill) dom.metaPill.textContent = '5 个区域 · ' + D.objects.length + ' 个单词';
     loadProgress();
     buildZoneTabs();
     buildPassport();
@@ -813,7 +863,8 @@
         global.FarmScene.resize();
         attachAgentUI();
         if (state.labels) global.FarmScene.setLabelsVisible(true);
-        if (state.night) global.FarmScene.setNight(true);
+        if (state.night) global.FarmScene.setNight(true, true);
+        if (state.rain) global.FarmScene.setWeather(true, true);
       }
       hideLoad();
       flushQueue();

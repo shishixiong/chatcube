@@ -10,7 +10,9 @@
  *  - skill_key 必须恰为 english_vocab
  *  - focus 可选，枚举 overview / farmyard_zone / field_zone / pasture_zone / orchard_pond_zone，
  *    兼容别名 all（归一化为 overview）
- *  - words 可选，最多 8 个，且必须命中阳光农场里的 50 个单词 id
+ *  - time_of_day 可选，枚举 day / night；缺省返回空串（卡片按设备小时判断）
+ *  - weather 可选，枚举 sunny / rainy；缺省返回空串（卡片按晴天处理）
+ *  - words 可选，最多 8 个，且必须命中阳光农场里当前登记的单词 id（表可增长）
  */
 
 export interface FarmEnglishValidationResult {
@@ -18,15 +20,18 @@ export interface FarmEnglishValidationResult {
   error: string
   focus: string
   words: string[]
+  timeOfDay: string
+  weather: string
 }
 
-/** 阳光农场里 50 个可点击单词的 id，与 rawfile/farm3d/assets/farm-data.js 一一对应
- *  （地点 10 + 动物 14 + 农作物 10 + 农机 8 + 自然 5 + 人物 3）。 */
-export const FARM_OBJECT_IDS: string[] = [
-  // places（10）
+/** 阳光农场里可点击单词的 id，与 rawfile/farm3d/assets/farm-data.js 一一对应
+ *  （地点 11 + 动物 15 + 农作物 10 + 农机 8 + 自然 5 + 人物 3 = 52，可继续增长）。 */
+export const FARM_WORD_IDS: string[] = [
+  // places（11）
   'farmhouse',
   'barn',
   'chicken_coop',
+  'sheep_pen',
   'stable',
   'silo',
   'windmill',
@@ -42,6 +47,7 @@ export const FARM_OBJECT_IDS: string[] = [
   'goat',
   'chicken',
   'rooster',
+  'chick',
   'duck',
   'goose',
   'rabbit',
@@ -96,7 +102,14 @@ export function resolveFarmEnglishView(focus: string): string {
 }
 
 function fail(msg: string): FarmEnglishValidationResult {
-  const r: FarmEnglishValidationResult = { ok: false, error: msg, focus: 'overview', words: [] }
+  const r: FarmEnglishValidationResult = {
+    ok: false,
+    error: msg,
+    focus: 'overview',
+    words: [],
+    timeOfDay: '',
+    weather: ''
+  }
   return r
 }
 
@@ -137,6 +150,30 @@ export function validateFarmEnglishArgs(args: string): FarmEnglishValidationResu
     }
   }
 
+  let timeOfDay = ''
+  const timeRaw = parsed['time_of_day']
+  if (timeRaw !== undefined && timeRaw !== null) {
+    if (typeof timeRaw !== 'string') {
+      return fail('farm_english 的 time_of_day 必须是字符串：day / night')
+    }
+    timeOfDay = (timeRaw as string).trim()
+    if (timeOfDay !== '' && timeOfDay !== 'day' && timeOfDay !== 'night') {
+      return fail(`farm_english 的 time_of_day「${timeOfDay}」无效，只能是 day / night`)
+    }
+  }
+
+  let weather = ''
+  const weatherRaw = parsed['weather']
+  if (weatherRaw !== undefined && weatherRaw !== null) {
+    if (typeof weatherRaw !== 'string') {
+      return fail('farm_english 的 weather 必须是字符串：sunny / rainy')
+    }
+    weather = (weatherRaw as string).trim()
+    if (weather !== '' && weather !== 'sunny' && weather !== 'rainy') {
+      return fail(`farm_english 的 weather「${weather}」无效，只能是 sunny / rainy`)
+    }
+  }
+
   const words: string[] = []
   const wordsRaw = parsed['words']
   if (wordsRaw !== undefined && wordsRaw !== null) {
@@ -156,8 +193,8 @@ export function validateFarmEnglishArgs(args: string): FarmEnglishValidationResu
       if (id === '') {
         continue
       }
-      if (FARM_OBJECT_IDS.indexOf(id) < 0) {
-        return fail(`farm_english 的 words 里「${id}」不是阳光农场里的单词 id，合法 id：${FARM_OBJECT_IDS.join(' ')}`)
+      if (FARM_WORD_IDS.indexOf(id) < 0) {
+        return fail(`farm_english 的 words 里「${id}」不是阳光农场里的单词 id，合法 id：${FARM_WORD_IDS.join(' ')}`)
       }
       if (words.indexOf(id) < 0) {
         words.push(id)
@@ -165,6 +202,27 @@ export function validateFarmEnglishArgs(args: string): FarmEnglishValidationResu
     }
   }
 
-  const result: FarmEnglishValidationResult = { ok: true, error: '', focus: focus, words: words }
+  const result: FarmEnglishValidationResult = {
+    ok: true,
+    error: '',
+    focus: focus,
+    words: words,
+    timeOfDay: timeOfDay,
+    weather: weather
+  }
   return result
+}
+
+/** 显式参数优先；缺省时 06:00–17:59 为 day，其余为 night。 */
+export function resolveFarmTimeOfDay(arg: string, hour: number): string {
+  const value = arg ? arg.trim() : ''
+  if (value === 'day' || value === 'night') {
+    return value
+  }
+  return hour >= 6 && hour < 18 ? 'day' : 'night'
+}
+
+/** 缺省 / 非法值回落到 sunny（校验层已挡非法值，这里做防御）。 */
+export function resolveFarmWeather(arg: string): string {
+  return arg && arg.trim() === 'rainy' ? 'rainy' : 'sunny'
 }
