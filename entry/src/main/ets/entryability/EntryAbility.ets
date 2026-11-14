@@ -16,13 +16,15 @@ import { SystemTtsEngine } from '../services/tts/SystemTtsEngine';
 import { MiMoTtsEngine } from '../services/tts/MiMoTtsEngine';
 import { MiniMaxTtsEngine } from '../services/tts/MiniMaxTtsEngine';
 import { StepFunTtsEngine } from '../services/tts/StepFunTtsEngine';
+import { DeepSeekTtsEngine } from '../services/tts/DeepSeekTtsEngine';
 import {
   MIMO_TTS_CONFIG,
   MINIMAX_TTS_CONFIG,
   MIMO_TTS_VOICES,
   MINIMAX_TTS_VOICES,
   STEPFUN_TTS_CONFIG,
-  STEPFUN_TTS_VOICES
+  STEPFUN_TTS_VOICES,
+  DEEPSEEK_TTS_VOICES
 } from '../config/TtsConfig';
 
 const DOMAIN = 0x0000;
@@ -214,6 +216,18 @@ export default class EntryAbility extends UIAbility {
           defaultVoiceId: STEPFUN_TTS_CONFIG.voice
         },
         factory: () => new StepFunTtsEngine()
+      });
+      registerTtsEngine({
+        profile: {
+          id: 'deepseek',
+          displayName: 'DeepSeek 语音',
+          description: 'DeepSeek TTS（海星 / 暗潮），复用 DeepSeek API Key，需要联网',
+          requiresApiKey: true,
+          iconSymbol: 'sys.symbol.waveform',
+          voices: DEEPSEEK_TTS_VOICES,
+          defaultVoiceId: 'stella'
+        },
+        factory: () => new DeepSeekTtsEngine()
       });
       hilog.info(DOMAIN, 'testTag', 'TTS engines registered successfully');
 

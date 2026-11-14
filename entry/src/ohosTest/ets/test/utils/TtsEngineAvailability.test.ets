@@ -30,6 +30,15 @@ const minimaxProfile: TtsEngineProfile = {
   voices: [],
   defaultVoiceId: 'cartoon_pig'
 }
+const deepseekProfile: TtsEngineProfile = {
+  id: 'deepseek',
+  displayName: 'DeepSeek 语音',
+  description: '使用 DeepSeek TTS 在线朗读',
+  requiresApiKey: true,
+  iconSymbol: 'sys.symbol.waveform',
+  voices: [],
+  defaultVoiceId: 'stella'
+}
 
 function makeProvider(id: string, apiKey: string): ModelProvider {
   // ModelProvider 构造签名: (id, name, type, iconSymbol, brandColor, baseUrl?, apiStyle?)
@@ -91,6 +100,28 @@ export default function ttsEngineAvailabilityTest() {
       const result = evaluateTtsEngineAvailability(
         minimaxProfile, [makeProvider('openai', 'sk-ooo')]
       )
+      expect(result.isEnabled).assertFalse()
+    })
+
+    it('deepseek is disabled when no providers configured', 0, () => {
+      const result = evaluateTtsEngineAvailability(deepseekProfile, [])
+      expect(result.isEnabled).assertFalse()
+      expect(result.unavailableReason).assertContain('DeepSeek')
+    })
+
+    it('deepseek is disabled when DeepSeek exists but no apiKey', 0, () => {
+      const result = evaluateTtsEngineAvailability(deepseekProfile, [makeProvider('deepseek', '')])
+      expect(result.isEnabled).assertFalse()
+    })
+
+    it('deepseek is enabled when DeepSeek has apiKey', 0, () => {
+      const result = evaluateTtsEngineAvailability(deepseekProfile, [makeProvider('deepseek', 'sk-ds')])
+      expect(result.isEnabled).assertTrue()
+      expect(result.unavailableReason).assertEqual('')
+    })
+
+    it('deepseek is disabled when only other providers have apiKey', 0, () => {
+      const result = evaluateTtsEngineAvailability(deepseekProfile, [makeProvider('openai', 'sk-ooo')])
       expect(result.isEnabled).assertFalse()
     })
   })

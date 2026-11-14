@@ -1,6 +1,11 @@
 import { TtsEngineProfile, TtsEngineAvailability } from '../models/TtsEngineProfile'
 import { ModelProvider } from '../models/ChatModels'
-import { MIMO_TTS_PROVIDER_ID, STEPFUN_TTS_PROVIDER_ID } from '../config/TtsConfig'
+import {
+  MIMO_TTS_PROVIDER_ID,
+  STEPFUN_TTS_PROVIDER_ID,
+  DEEPSEEK_TTS_PROVIDER_ID
+} from '../config/TtsConfig'
+import { findProviderApiKey } from './TtsProviderKeyUtils'
 
 // 纯函数: 给一个 profile + 当前 providers, 评估运行时可用性
 export function evaluateTtsEngineAvailability(
@@ -36,6 +41,15 @@ export function evaluateTtsEngineAvailability(
         isEnabled: false,
         unavailableReason: '未配置 StepFun API Key, 不可用'
       }
+    }
+  }
+
+  // deepseek 复用 DeepSeek provider
+  if (profile.id === 'deepseek' && findProviderApiKey(providers, DEEPSEEK_TTS_PROVIDER_ID) === '') {
+    return {
+      profile,
+      isEnabled: false,
+      unavailableReason: '未配置 DeepSeek API Key, 不可用'
     }
   }
 

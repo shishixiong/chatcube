@@ -1,7 +1,7 @@
 import { TtsVoice } from '../models/TtsEngineProfile'
 
 // TTS 引擎 ID 联合, 与 TtsEngineRegistry 共享
-export type TtsEngineId = 'system' | 'mimo' | 'minimax' | 'stepfun'
+export type TtsEngineId = 'system' | 'mimo' | 'minimax' | 'stepfun' | 'deepseek'
 
 // 注册表都 miss 时的 fallback 引擎
 export const TTS_FALLBACK_ENGINE_ID: TtsEngineId = 'system'
@@ -121,3 +121,28 @@ export const STEPFUN_TTS_CONFIG: StepFunTtsConfig = {
 
 // StepFun /v1/audio/speech 的 input 字符上限, 超长文本由 StepFunTtsTextUtils 按句切分
 export const STEPFUN_MAX_INPUT_CHARS: number = 1000
+
+// deepseek 引擎绑定的 provider id (复用已有的 DeepSeek 预设服务商)
+export const DEEPSEEK_TTS_PROVIDER_ID: string = 'deepseek'
+
+// DeepSeek 引擎支持的音色列表 (官方仅两种, 语种自动识别)
+export const DEEPSEEK_TTS_VOICES: TtsVoice[] = [
+  { id: 'stella', name: '海星', language: '中文', gender: '女性' },
+  { id: 'tide', name: '暗潮', language: '中文', gender: '男性' }
+]
+
+// DeepSeek 语音合成配置 (HTTP 整段 /v1/tools/tts, 默认返回 wav)
+interface DeepSeekTtsConfig {
+  apiUrl: string
+  voice: string
+  audioFormat: string
+}
+
+export const DEEPSEEK_TTS_CONFIG: DeepSeekTtsConfig = {
+  apiUrl: 'https://api.deepseek.com/v1/tools/tts',
+  voice: 'stella',
+  audioFormat: 'wav'
+}
+
+// 单段文本上限 (UTF-16 单元)。全中文最坏按 2 倍计费 = 4000 计费字符, 低于 10000 上限
+export const DEEPSEEK_MAX_INPUT_CHARS: number = 2000
