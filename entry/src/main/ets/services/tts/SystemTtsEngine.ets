@@ -84,12 +84,20 @@ export class SystemTtsEngine implements ITtsEngine {
       const speakListener: textToSpeech.SpeakListener = {
         onStart: (requestId: string) => {
           console.info('TTS onStart: %{public}s', requestId);
+          if (requestId !== this.currentRequestId) {
+            // 迟到的旧请求事件：新一次朗读已经接管，直接丢弃，否则会把新朗读提前截断
+            return;
+          }
           if (this.currentCallback?.onStart) {
             this.currentCallback.onStart();
           }
         },
         onComplete: (requestId: string) => {
           console.info('TTS onComplete: %{public}s', requestId);
+          if (requestId !== this.currentRequestId) {
+            // 迟到的旧请求事件：新一次朗读已经接管，直接丢弃，否则会把新朗读提前截断
+            return;
+          }
           this.speaking = false;
           this.currentRequestId = '';
           if (this.currentCallback?.onComplete) {
@@ -98,6 +106,10 @@ export class SystemTtsEngine implements ITtsEngine {
         },
         onStop: (requestId: string, response: textToSpeech.StopResponse) => {
           console.info('TTS onStop: %{public}s, response: %{public}d', requestId, response);
+          if (requestId !== this.currentRequestId) {
+            // 迟到的旧请求事件：新一次朗读已经接管，直接丢弃，否则会把新朗读提前截断
+            return;
+          }
           this.speaking = false;
           this.currentRequestId = '';
           if (this.currentCallback?.onComplete) {
@@ -107,6 +119,10 @@ export class SystemTtsEngine implements ITtsEngine {
         onError: (requestId: string, errorCode: number, errorMessage: string) => {
           console.error('TTS onError: %{public}s, code: %{public}d, msg: %{public}s',
             requestId, errorCode, errorMessage);
+          if (requestId !== this.currentRequestId) {
+            // 迟到的旧请求事件：新一次朗读已经接管，直接丢弃，否则会把新朗读提前截断
+            return;
+          }
           this.speaking = false;
           this.currentRequestId = '';
           if (this.currentCallback?.onError) {
@@ -147,7 +163,8 @@ export class SystemTtsEngine implements ITtsEngine {
   }
 
   stop(): void {
-    if (this.speaking && this.engine) {
+    // 不能只看 speaking 标志：迟到的 onStop 会把它置 false，标志一旦失真就再也停不下来
+    if (this.engine) {
       try {
         this.engine.stop();
         console.info('TTS stopped');

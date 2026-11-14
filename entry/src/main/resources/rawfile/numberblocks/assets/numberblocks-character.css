@@ -1,0 +1,78 @@
+/* 3D 层级 */
+.anchor{position:absolute;left:50%;transform-style:preserve-3d}
+.rig,.bob,.cube,.face,.limb,.juggle{transform-style:preserve-3d;position:absolute}
+.rig,.bob{left:0;top:0}
+.bob{animation:bob 2.4s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-14px)}}
+.shadow{position:absolute;left:50%;height:28px;border-radius:50%;
+  background:radial-gradient(rgba(0,0,0,.28),transparent 70%);animation:sh 2.4s ease-in-out infinite}
+@keyframes sh{50%{transform:scale(.8);opacity:.6}}
+
+.face{inset:0;border-radius:6px;box-shadow:inset 0 0 0 2px rgba(255,255,255,.12),inset -8px -8px 18px rgba(0,0,0,.12)}
+.limb{transform-origin:50% 0}
+.plane{position:absolute;inset:0}
+.plane svg{width:100%;height:100%;display:block}
+.decal{position:absolute}
+.num{position:absolute;text-align:center;font-size:60px;font-weight:900;line-height:1;color:#111;white-space:nowrap}
+.frame{position:absolute;inset:0;border:3px solid #d9232e;border-radius:6px}
+
+/* 眼睛通用 */
+.pupil{position:absolute;left:50%;top:50%;border-radius:50%;background:#111;
+  transform:translate(-50%,-50%) translate(calc(var(--px,0)*var(--m,1)*1px),calc(var(--py,0)*var(--m,1)*1px))}
+.pupil::after{content:'';position:absolute;width:32%;height:32%;left:18%;top:16%;background:#fff;border-radius:50%}
+.lid{position:absolute;inset:0;transform-origin:top;transform:scaleY(0);animation:blink 4.5s infinite}
+@keyframes blink{0%,90%,100%{transform:scaleY(0)}94%{transform:scaleY(1)}}
+.lens{position:absolute;border-radius:50%;background:#fff;overflow:hidden;border:var(--bw,6px) solid var(--rim,#000)}
+.lens.sq{border-radius:12px}
+.lens .pupil{width:40%;height:auto;aspect-ratio:1}
+.lens .lid{background:var(--lid)}
+.lens .half{position:absolute;left:0;right:0;top:0;height:45%;background:var(--lid);border-bottom:3px solid rgba(0,0,0,.35)}
+.bridge{position:absolute;height:5px;border-radius:3px}
+
+/* 嘴巴通用 */
+.mouth{position:absolute;left:50%;background:#5c0d2a;border:solid var(--lip);
+  border-radius:6px 6px 50% 50%/6px 6px 100% 100%;overflow:hidden}
+.mouth::before{content:'';position:absolute;left:0;right:0;top:0;height:28%;background:#fff;z-index:1}
+.mouth .tongue{position:absolute;left:50%;bottom:-25%;width:56%;height:62%;transform:translateX(-50%);background:#ff7d96;border-radius:50%}
+
+/* 1 专用 */
+.eye1{position:absolute;left:50%;top:16px;width:72px;height:72px;margin-left:-36px;border-radius:50%;
+  background:#a3121a;padding:8px;box-shadow:0 3px 0 rgba(0,0,0,.15)}
+.eye1 .white{width:100%;height:100%;border-radius:50%;background:#fff;position:relative;overflow:hidden}
+.eye1 .pupil{width:28px;height:28px}
+.eye1 .lid{background:#e8262b}
+.mouth1{position:absolute;left:50%;top:94px;width:56px;height:26px;margin-left:-28px;background:#4a070b;
+  border-radius:4px 4px 30px 30px;overflow:hidden}
+.mouth1::before{content:'';position:absolute;left:4px;right:4px;top:0;height:7px;background:#fff;border-radius:0 0 3px 3px}
+.mouth1::after{content:'';position:absolute;left:50%;bottom:-6px;width:30px;height:16px;margin-left:-15px;background:#ff6b81;border-radius:50%}
+
+/* 4 眉毛和嘴 */
+.brow{position:absolute;border-radius:4px;box-shadow:0 3px 0 rgba(0,0,0,.15);
+  background:linear-gradient(90deg,#2a6b25 47%,#1c4f18 47% 53%,#2a6b25 53%)}
+.mouth4{position:absolute;background:#2f7a29;border-radius:4px 4px 26px 26px;box-shadow:inset 0 -4px 0 #1f5a1b}
+
+/* 骰子点 */
+.dot{position:absolute;left:50%;top:50%;width:34%;aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;
+  background:rgba(170,165,240,.85);box-shadow:inset 0 2px 3px rgba(0,0,0,.15)}
+
+/* 3 抛球 */
+.juggle{animation:juggle 1.1s ease-in-out infinite}
+@keyframes juggle{0%,100%{transform:translateY(0)}50%{transform:translateY(-24px)}}
+
+/* 13 飘在身后的黄块 */
+.drift{animation:drift 3.2s ease-in-out infinite}
+@keyframes drift{0%,100%{transform:translateY(0) rotateZ(0)}50%{transform:translateY(-10px) rotateZ(5deg)}}
+
+/* 14 滑板 */
+.board{animation:board 1.2s ease-in-out infinite alternate}
+@keyframes board{from{transform:rotateZ(-14deg)}to{transform:rotateZ(-4deg)}}
+
+/* 手套：挥手 / 静止 */
+.hand{position:absolute;width:52px;height:52px;transform-origin:50% 50%;animation:wave .9s ease-in-out infinite alternate}
+.hand.still{animation:none;transform:rotateZ(calc(var(--r)*1deg))}
+@keyframes wave{from{transform:rotateZ(calc(var(--r)*1deg - 14deg))}to{transform:rotateZ(calc(var(--r)*1deg + 14deg))}}
+
+/* 触手 */
+.tent{position:absolute;animation:tent 1.8s ease-in-out infinite alternate}
+.tent svg{width:100%;height:100%;display:block;overflow:visible}
+@keyframes tent{from{transform:rotateZ(calc(var(--r)*1deg - 7deg))}to{transform:rotateZ(calc(var(--r)*1deg + 7deg))}}

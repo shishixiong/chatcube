@@ -151,6 +151,7 @@ import { MapPuzzleCard, MapPuzzleResult } from '../components/map/MapPuzzleCard'
 import { RoomEnglishAnswerPayload, RoomEnglishCard } from '../components/room/RoomEnglishCard'
 import { CityEnglishAnswerPayload, CityEnglishCard } from '../components/city/CityEnglishCard'
 import { FarmEnglishAnswerPayload, FarmEnglishCard } from '../components/farm/FarmEnglishCard'
+import { NumberBlocksAnswerPayload, NumberBlocksCard } from '../components/numberblocks/NumberBlocksCard'
 import { MusicEarCard } from '../components/MusicEarCard'
 import { MapQuizCard } from '../components/map/MapQuizCard'
 import { MapQuizAnswerPayload, parseMapQuizArgs } from '../components/map/MapQuizTypes'
@@ -346,6 +347,9 @@ export struct ChatPage {
   @Local showFarmEnglishSheet: boolean = false
   @Local farmEnglishToolCall: ToolCall = new ToolCall()
   @Local farmEnglishAnswered: boolean = false
+  @Local showNumberBlocksSheet: boolean = false
+  @Local numberBlocksToolCall: ToolCall = new ToolCall()
+  @Local numberBlocksAnswered: boolean = false
   @Local showMusicEarSheet: boolean = false
   @Local musicEarToolCall: ToolCall = new ToolCall()
   // 3D 探索卡挂载时注册的回执 provider：下拉收起 sheet 时调用，拿到「此刻 = 完成本课」的
@@ -353,6 +357,7 @@ export struct ChatPage {
   private roomEnglishDismissPayload: (() => string) | null = null
   private cityEnglishDismissPayload: (() => string) | null = null
   private farmEnglishDismissPayload: (() => string) | null = null
+  private numberBlocksDismissPayload: (() => string) | null = null
   @Local toolExecutionApprovalName: string = ''
   @Local showStarSheet: boolean = false
   // 星星浮层触发信号: 每次 onStarEarnedTickChanged 自增, StarBurstOverlay 通过 @Monitor 监听
@@ -2608,6 +2613,12 @@ export struct ChatPage {
             this.farmEnglishDismissPayload = null
             this.showFarmEnglishSheet = true
           },
+          onOpenNumberBlocksSheet: (toolCall: ToolCall): void => {
+            this.numberBlocksToolCall = toolCall
+            this.numberBlocksAnswered = false
+            this.numberBlocksDismissPayload = null
+            this.showNumberBlocksSheet = true
+          },
           onOpenMusicEarSheet: (toolCall: ToolCall): void => {
             this.musicEarToolCall = toolCall
             this.showMusicEarSheet = true
@@ -3207,6 +3218,42 @@ export struct ChatPage {
                 this.handleAskUserAnswer(this.farmEnglishToolCall.id, resultJson)
               }
               this.showFarmEnglishSheet = false
+            }
+          })
+
+        Column()
+          .width(0)
+          .height(0)
+          .bindSheet($$this.showNumberBlocksSheet, this.NumberBlocksSheetBuilder(), {
+            height: SheetSize.LARGE,
+            dragBar: true,
+            showClose: true,
+            blurStyle: BlurStyle.Thick,
+            backgroundColor: this.themeBackground,
+            preferType: SheetType.BOTTOM,
+            onDisappear: () => {
+              if (this.showNumberBlocksSheet && !this.numberBlocksAnswered) {
+                const provider = this.numberBlocksDismissPayload
+                let resultJson: string = ''
+                if (provider !== null) {
+                  resultJson = provider()
+                }
+                if (resultJson === '') {
+                  const dismissResult: NumberBlocksAnswerPayload = {
+                    completed: false,
+                    explored_count: 0,
+                    numbers: [],
+                    focus: 1,
+                    mode: 'display',
+                    skill_key: 'math_counting',
+                    cancelled: false
+                  }
+                  resultJson = JSON.stringify(dismissResult)
+                }
+                this.numberBlocksAnswered = true
+                this.handleAskUserAnswer(this.numberBlocksToolCall.id, resultJson)
+              }
+              this.showNumberBlocksSheet = false
             }
           })
 
@@ -3841,6 +3888,27 @@ export struct ChatPage {
       },
       onRegisterDismissPayload: (provider: () => string): void => {
         this.farmEnglishDismissPayload = provider
+      }
+    })
+  }
+
+  @Builder
+  NumberBlocksSheetBuilder() {
+    NumberBlocksCard({
+      toolCall: this.numberBlocksToolCall,
+      isAnswered: false,
+      answeredPayload: '',
+      largeSize: true,
+      onAnswer: (toolCallId: string, answerJson: string): void => {
+        this.numberBlocksAnswered = true
+        this.handleAskUserAnswer(toolCallId, answerJson)
+        this.showNumberBlocksSheet = false
+      },
+      onRequestClose: (): void => {
+        this.showNumberBlocksSheet = false
+      },
+      onRegisterDismissPayload: (provider: () => string): void => {
+        this.numberBlocksDismissPayload = provider
       }
     })
   }

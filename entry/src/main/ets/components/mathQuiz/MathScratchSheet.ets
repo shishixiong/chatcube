@@ -18,8 +18,10 @@ import { MathColumnPaperBoard } from './MathColumnPaperBoard'
 
 @ComponentV2
 export struct MathScratchSheet {
-  /** 竖式布局; null = 仅手写 tab (防御分支, 正常入口已由 canShowScratch 保证非空) */
+  /** 竖式布局; null = 仅手写 tab (× ÷ / 应用题 / 图形 / 比较 / 时间等无竖式可排的题型) */
   @Param layout: ColumnPaperLayout | null = null
+  /** 题目提示文字 (layout 为 null 时显示; 有竖式时用 layout.expressionText) */
+  @Param promptText: string = ''
   @Event onClose: () => void = () => {}
 
   /** 0 = 手写草稿, 1 = 竖式计算 */
@@ -37,7 +39,10 @@ export struct MathScratchSheet {
   }
 
   private get expressionText(): string {
-    return this.layout !== null ? this.layout.expressionText : ''
+    if (this.layout !== null && this.layout.expressionText !== '') {
+      return this.layout.expressionText
+    }
+    return this.promptText
   }
 
   private get hasColumn(): boolean {

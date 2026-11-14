@@ -1,0 +1,4 @@
+/* 宿主（ArkWeb）模式：隐藏网页自带的品牌栏（本页 v1 无品牌栏，
+   保留这个钩子与 room3d / city3d / farm3d 的 setHostMode 约定一致）。 */
+body.host .brand-bar { display: none; }
+body.host { background: #eef2f7; }

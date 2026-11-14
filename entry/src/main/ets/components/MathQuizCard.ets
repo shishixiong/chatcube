@@ -27,6 +27,7 @@ import {
   isCorrectAnswer
 } from '../utils/MathQuizGame'
 import { ColumnPaperLayout, parseChainExpression, computeColumnPaperLayout } from '../utils/MathColumnPaperLayout'
+import { hashSeedFromString, shuffleQuizOptions, shuffleStringOptions } from '../utils/QuizOptionShuffle'
 import { MathScratchSheet } from './mathQuiz/MathScratchSheet'
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import { PreferenceKeys } from '../services/PreferencesService'
@@ -88,7 +89,13 @@ export struct MathQuizCard {
 
   aboutToAppear(): void {
     // 解析一次题目数据, 后续渲染直接读取 this.quiz, 避免在 build 路径反复 JSON.parse
-    this.quiz = parseMathQuiz(this.toolCall.arguments)
+    const parsed = parseMathQuiz(this.toolCall.arguments)
+    // 选项顺序确定性洗牌: LLM 即使被告知「打乱顺序」也习惯把正确答案放第一个,
+    // 渲染层强制按 toolCall.id 种子洗牌 (同一题每次渲染顺序稳定, 不随重渲染跳动)。
+    const seed = hashSeedFromString(this.toolCall.id)
+    parsed.options = shuffleQuizOptions(parsed.options, seed)
+    parsed.operatorOptions = shuffleStringOptions(parsed.operatorOptions, seed)
+    this.quiz = parsed
     // 如果是已回答状态, 从 answeredPayload 中恢复选中项和结果
     if (this.isAnswered) {
       const prev = parseMathQuizAnswer(this.answeredPayload)
@@ -211,8 +218,9 @@ export struct MathQuizCard {
     this.onAnswer(this.toolCall.id, JSON.stringify(payload))
   }
 
-  // 草稿纸可用性: 仅 arithmetic 非应用题 + 表达式可解析为 +− 链 + 每步竖式合法 (中间过程非负)。
-  // wordProblem 拒绝 (题干含答案语义, 摆竖式会泄题); × ÷ 题不排竖式。
+  // 草稿纸可用性: +− 链式算术题可解析出竖式布局时, 草稿纸额外提供「竖式计算」tab。
+  // 返回 null 不代表没有草稿纸 (所有题型都有手写草稿), 只代表无可排竖式。
+  // wordProblem 拒绝排竖式 (题干含答案语义, 摆竖式会泄题); × ÷ 题不排竖式。
   private computeScratchLayout(): ColumnPaperLayout | null {
     if (this.quiz.type !== 'arithmetic' || this.quiz.wordProblem || this.quiz.expression === '') {
       return null
@@ -222,6 +230,25 @@ export struct MathQuizCard {
       return null
     }
     return computeColumnPaperLayout(chain.nums, chain.ops)
+  }
+
+  // 草稿纸顶部的题目提示 (无竖式布局时显示; 有竖式时用 layout.expressionText)。
+  // 应用题只显示题干 —— 隐藏的 expression 摆出来等于泄题。
+  private scratchPromptText(): string {
+    const quiz = this.quiz
+    if (quiz.type === 'arithmetic') {
+      return quiz.wordProblem ? quiz.question : (quiz.expression !== '' ? quiz.expression : quiz.question)
+    }
+    if (quiz.type === 'comparison') {
+      return `${quiz.leftValue} ○ ${quiz.rightValue}`
+    }
+    if (quiz.type === 'time') {
+      return quiz.question !== '' ? quiz.question : '现在是几点呀?'
+    }
+    if (quiz.type === 'elapsed_time') {
+      return quiz.question !== '' ? quiz.question : '从开始到结束, 经过多久呀?'
+    }
+    return quiz.question
   }
 
   private handleRetry(): void {
@@ -449,6 +476,7 @@ export struct MathQuizCard {
   ScratchSheetBuilder() {
     MathScratchSheet({
       layout: this.scratchLayout,
+      promptText: this.scratchPromptText(),
       onClose: (): void => {
         this.showScratchSheet = false
       }
@@ -463,7 +491,7 @@ export struct MathQuizCard {
         .fontSize(14)
       Text(this.scratchLayout !== null
         ? '再想想～ 可以点「草稿纸」列竖式试试'
-        : '再想想～ 换一个答案试试')
+        : '再想想～ 可以点「草稿纸」算一算试试')
         .fontSize(13)
         .fontWeight(FontWeight.Medium)
         .fontColor(this.themePrimary)
@@ -529,9 +557,39 @@ export struct MathQuizCard {
     } else {
       this.ArithmeticContent()
     }
+    // 草稿纸入口: 所有 math_quiz 题型统一提供 (2026-11-14 起)。+− 链式算式可额外切到
+    // 「竖式计算」tab (scratchLayout 非空); 应用题 / × ÷ / 图形 / 比较 / 时间只有手写草稿。
+    // 应用题不显示算式 (只显示题干), 避免把隐藏的算式摆到孩子面前泄题。
+    this.ScratchEntry()
     // 两次机会流: 第 1 次答错后的行内提示 (第 2 次答错走 shell 标准反馈)
     if (this.showHint && !this.showResult && !this.isAnswered) {
       this.HintRow()
+    }
+  }
+
+  @Builder
+  ScratchEntry() {
+    if (!this.showResult && !this.isAnswered) {
+      Row() {
+        Row({ space: 6 }) {
+          Text('✏️')
+            .fontSize(14)
+          Text('草稿纸')
+            .fontSize(13)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.themePrimary)
+        }
+        .height(34)
+        .padding({ left: 14, right: 14 })
+        .borderRadius(17)
+        .border({ width: 1.5, color: withColorAlpha(this.themePrimary, '66') })
+        .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '24' : '0D'))
+        .onClick(() => {
+          this.showScratchSheet = true
+        })
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
     }
   }
 
@@ -580,31 +638,6 @@ export struct MathQuizCard {
           .width('100%')
           .justifyContent(FlexAlign.Center)
           .margin({ top: 2, bottom: 2 })
-        }
-
-        // 草稿纸入口: 仅 +− 链式算术题 (竖式布局可解析) 且未作答时显示;
-        // wordProblem / × ÷ 题 / 非 arithmetic 题型不渲染 (不泄题 + 无竖式可排)
-        if (this.scratchLayout !== null && !this.showResult && !this.isAnswered) {
-          Row() {
-            Row({ space: 6 }) {
-              Text('✏️')
-                .fontSize(14)
-              Text('草稿纸')
-                .fontSize(13)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.themePrimary)
-            }
-            .height(34)
-            .padding({ left: 14, right: 14 })
-            .borderRadius(17)
-            .border({ width: 1.5, color: withColorAlpha(this.themePrimary, '66') })
-            .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '24' : '0D'))
-            .onClick(() => {
-              this.showScratchSheet = true
-            })
-          }
-          .width('100%')
-          .justifyContent(FlexAlign.Start)
         }
 
         // 选项按钮: 2 列 Grid 自动换行, 任意选项数都能整齐排列

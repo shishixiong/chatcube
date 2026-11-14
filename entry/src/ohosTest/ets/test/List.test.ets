@@ -13,6 +13,7 @@ import roomEnglishValidationTest from './utils/RoomEnglishValidation.test';
 import roomEnglishLessonTest from './utils/RoomEnglishLesson.test';
 import cityEnglishValidationTest from './utils/CityEnglishValidation.test';
 import farmEnglishValidationTest from './utils/FarmEnglishValidation.test';
+import numberBlocksValidationTest from './utils/NumberBlocksValidation.test';
 import kidsSubjectUtilsTest from './utils/KidsSubjectUtils.test';
 import learningLedgerModelsTest from './utils/LearningLedgerModels.test';
 import ledgerExtractUtilsTest from './utils/LedgerExtractUtils.test';
@@ -58,6 +59,7 @@ export default function testsuite() {
   roomEnglishLessonTest();
   cityEnglishValidationTest();
   farmEnglishValidationTest();
+  numberBlocksValidationTest();
   kidsSubjectUtilsTest();
   learningLedgerModelsTest();
   ledgerExtractUtilsTest();

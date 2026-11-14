@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased · 认数字 Numberblocks（number_blocks）
+
+小星老师和数学老师多了一张「把数字摆出来给孩子看」的卡：20 个方块小人排成长廊，孩子自己点，点开就能转、能听。
+
+### 新增
+
+- `number_blocks` 工具（讲解型，不授星）：参数 `numbers`（1–20，只标记「今天的重点」，长廊恒为 20 格）、`focus`（打开时呼吸高亮哪一格）、`mode`（v1 只有 `display`）
+- Web 场景 `rawfile/numberblocks/`：纯 CSS 3D，零第三方依赖。1–20 的角色造型从参考稿原样移植，长廊 5×4 全部静止；舞台保留呼吸浮动、眨眼、3 号抛球、13 号飘块、14 号滑板、8 号触手
+- 舞台交互：拖拽无限横转 / 纵向 ±60°、快扫切相邻数字（慢拖只旋转）、点一下重播、底部 1–20 数字条、▶ 自动巡游按 `numbers` 顺序每 2.4 秒念一个，触摸即停
+- 朗读走原生 TTS（ArkWeb 没有 `speechSynthesis`）：先中文「十三」再英文「thirteen」，语速 0.8
+- 「已看」= 舞台出现过一次；本次 sheet 内有效，原生集合只增不减，页面重载只做并集
+- 预校验 `utils/NumberBlocksValidation.ets` + 10 条 hypium 单测；坏参数以 `should_retry` 回传 LLM
+- 锁给小星老师与数学老师（`DEFAULT_ASSISTANT_LOCKED_TOOL_IDS` / `KIDS_MATH_LOCKED_TOOL_IDS`），各配一段提示词
+
 ## Unreleased · 3D 探索卡收起即完成
 
 `room_english` / `city_english` / `farm_english` 的全屏卡片下拉收起后，聊天里不再出现「工具调用已取消」，而是按当前进度正常交卷，老师接着收尾总结。

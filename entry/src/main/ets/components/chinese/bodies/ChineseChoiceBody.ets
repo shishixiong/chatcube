@@ -17,6 +17,7 @@ import {
   ChineseQuizAnswerPayload, ChineseQuizMode, ChineseQuizModeArgs, chineseModeDisplayName,
   parseChineseQuizModeArgs
 } from '../ModeTypes'
+import { hashSeedFromString, shuffleStringOptions } from '../../../utils/QuizOptionShuffle'
 
 @ComponentV2
 export struct ChineseChoiceBody {
@@ -55,7 +56,9 @@ export struct ChineseChoiceBody {
     this.mode = args.mode
     this.stem = args.stem
     this.character = args.character
-    this.options = args.options
+    // 选项顺序按 toolCall.id 种子确定性洗牌: LLM 习惯把正确答案放第一个,
+    // schema 里的「打乱顺序」约束不可靠, 渲染层强制保证。
+    this.options = shuffleStringOptions(args.options, hashSeedFromString(this.toolCall.id))
     this.correctAnswer = args.answer
     this.skillKey = args.skillKey
     this.shellConfig = {

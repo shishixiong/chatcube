@@ -52,7 +52,8 @@ import {
   MAP_PUZZLE_TOOL_ID,
   ROOM_ENGLISH_TOOL_ID,
   CITY_ENGLISH_TOOL_ID,
-  FARM_ENGLISH_TOOL_ID
+  FARM_ENGLISH_TOOL_ID,
+  NUMBER_BLOCKS_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { getPinyinCharsJoined } from './PinyinData'
 import { getStrokeOrderCharsJoined } from './StrokeOrderData'
@@ -4315,6 +4316,83 @@ function createFarmEnglishToolConfig(): ToolConfig {
 }
 
 
+interface NumberBlocksArgs {
+  numbers?: number[]
+  focus?: number
+  mode?: string
+}
+
+class NumberBlocksExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // number_blocks 的交互由前端 NumberBlocksCard 组件处理。
+    // 后台由 ToolExecutionService.handleNumberBlocks 拦截处理。
+    try {
+      const params = JSON.parse(_args) as NumberBlocksArgs
+      return JSON.stringify({
+        opened: true,
+        numbers: params.numbers ?? [],
+        focus: params.focus ?? 1,
+        mode: params.mode ?? 'display',
+        skill_key: 'math_counting'
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`number_blocks error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createNumberBlocksToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "numbers": {
+        "type": "array",
+        "items": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "description": "今天重点认识的数字, 1-20。长廊永远展示全部 20 个, 这些数字额外挂重点标记, 自动巡游只走这些; 不填 = 全部。"
+      },
+      "focus": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 20,
+        "description": "打开时长廊里高亮一次的格子, 不自动进舞台; 不填 = numbers 第一个。"
+      },
+      "mode": {
+        "type": "string",
+        "enum": ["display"],
+        "description": "v1 固定 display（认数字）。不要传其它值。"
+      }
+    }
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    NUMBER_BLOCKS_TOOL_ID,
+    'Open the Numberblocks number playground (数字乐园): twenty cheerful characters from 1 to 20, each built out of colorful 3D cubes — a tall tower for 5, a dice face for 6, a rainbow column for 7, an octopus for 8. The child sees a twenty-cell thumbnail gallery and picks whichever number they want; the chosen character steps onto a big stage where it can be dragged to rotate, bobs and blinks, and the number is read aloud in Chinese then English. Use this INSTEAD of describing numbers in plain text when the child is learning to recognize numbers, counting to 20, or asks what a number looks like. Pass numbers (integers 1-20) to mark today focus numbers — the gallery always shows all 20; pass focus to highlight one cell when the page opens. This is a teaching card: it grades nothing and awards no stars. Follow up with math_quiz or picture_vocab to check recognition and award stars.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createNumberBlocksToolConfig(): ToolConfig {
+  return new ToolConfig(
+    NUMBER_BLOCKS_TOOL_ID,
+    '认数字 Numberblocks',
+    '看看 20 个数字方块小人长什么样，点一点听数字，认识 1-20。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    NUMBER_BLOCKS_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
 // 注册所有内置工具
 export function registerBuiltinTools(): void {
   const registry = getToolRegistry()
@@ -4727,6 +4805,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(NUMBER_BLOCKS_TOOL_ID)) {
+    const numberBlocksTool = new RegisteredTool(
+      NUMBER_BLOCKS_TOOL_ID,
+      createNumberBlocksToolConfig(),
+      createNumberBlocksToolDefinition(),
+      new NumberBlocksExecutor()
+    )
+    registry.registerTool(numberBlocksTool)
+    registeredNow += 1
+  }
+
   console.info(
     'BuiltinTools',
     `Builtin tools ready: total=${registry.getToolCount()}, newlyRegistered=${registeredNow}`
@@ -4735,5 +4824,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, MUSIC_EAR_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID, MAP_CARD_TOOL_ID, MAP_QUIZ_TOOL_ID, MAP_PUZZLE_TOOL_ID, ROOM_ENGLISH_TOOL_ID, CITY_ENGLISH_TOOL_ID, FARM_ENGLISH_TOOL_ID, PLAY_CARTOON_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, MUSIC_EAR_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID, MAP_CARD_TOOL_ID, MAP_QUIZ_TOOL_ID, MAP_PUZZLE_TOOL_ID, ROOM_ENGLISH_TOOL_ID, CITY_ENGLISH_TOOL_ID, FARM_ENGLISH_TOOL_ID, NUMBER_BLOCKS_TOOL_ID, PLAY_CARTOON_TOOL_ID]
 }

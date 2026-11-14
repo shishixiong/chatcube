@@ -16,6 +16,7 @@ import { validateRoomEnglishArgs } from '../utils/RoomEnglishValidation'
 import { validateCityEnglishArgs } from '../utils/CityEnglishValidation'
 import { validateMusicEarArgs } from '../utils/MusicEarValidation'
 import { validateFarmEnglishArgs } from '../utils/FarmEnglishValidation'
+import { validateNumberBlocksArgs } from '../utils/NumberBlocksValidation'
 import { getToolRegistry, RegisteredTool, ToolRegistry } from './ToolRegistry'
 import {
   ASK_USER_TOOL_ID,
@@ -68,6 +69,7 @@ import {
   isRoomEnglishFunctionName,
   isCityEnglishFunctionName,
   isFarmEnglishFunctionName,
+  isNumberBlocksFunctionName,
   isMapQuizFunctionName,
   isMapPuzzleFunctionName,
   MAP_CARD_TOOL_ID,
@@ -76,6 +78,7 @@ import {
   ROOM_ENGLISH_TOOL_ID,
   CITY_ENGLISH_TOOL_ID,
   FARM_ENGLISH_TOOL_ID,
+  NUMBER_BLOCKS_TOOL_ID,
   PLAY_CARTOON_TOOL_ID,
   isScrapeWebFunctionName,
   isSearchWebFunctionName,
@@ -2189,6 +2192,97 @@ export class ToolExecutionService {
     )
   }
 
+  // number_blocks 特殊路径: 认数字 Numberblocks（讲解型）。
+  // 前端 NumberBlocksCard 用 Web 容器承载 20 个 CSS 3D 方块小人, 收集孩子看过的数字;
+  // 点「我学会了」完成回执。讲解型工具: 不授星——星星由后续 math_quiz / picture_vocab 给。
+  private async handleNumberBlocks(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = NUMBER_BLOCKS_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '认数字 Numberblocks'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 0. 预校验: mode / focus / numbers 必须是 1-20 的整数集合
+    const cardValidation = validateNumberBlocksArgs(toolCall.arguments)
+    if (!cardValidation.ok) {
+      console.warn('ToolExecutionService', `number_blocks validation failed: ${cardValidation.error}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: 'validation_failed',
+          message: cardValidation.error,
+          should_retry: true
+        }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    // 1. 立即设置 pending 状态, 让卡片立即出现
+    toolCall.approvalState = 'pending'
+    this.recordLedgerServed('number_blocks', toolCall, context)
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = NUMBER_BLOCKS_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `number_blocks answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `number_blocks 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'number_blocks cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未完成认数字' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `number_blocks answered: ${toolCall.id}`)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
   // 地图数据加载: 缓存优先, miss 时经 EntryAbility 注入的 context 读 rawfile。
   // 失败返回 null → 校验层按「数据未就绪」硬拒, AI should_retry。
   /**
@@ -3893,6 +3987,12 @@ export class ToolExecutionService {
     // 阳光农场 3D 英语探索讲解卡, 由 FarmEnglishCard 收集「我学会了」完成回执。
     if (isFarmEnglishFunctionName(normalizedFunctionName)) {
       return await this.handleFarmEnglish(toolCall, context)
+    }
+
+    // === number_blocks 特殊路径 ===
+    // 认数字 Numberblocks 讲解卡, 由 NumberBlocksCard 收集「我学会了」完成回执。
+    if (isNumberBlocksFunctionName(normalizedFunctionName)) {
+      return await this.handleNumberBlocks(toolCall, context)
     }
 
     // 通过函数名获取工具 ID

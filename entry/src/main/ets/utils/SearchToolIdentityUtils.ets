@@ -54,6 +54,9 @@ export const FARM_ENGLISH_TOOL_ID: string = 'farm_english'
 // 本地动画片播放（2026-11-10）：只给 kids_games。全屏横屏播放，
 // 单次连续 20 分钟 / 每天 60 分钟硬闸，不授星。
 export const PLAY_CARTOON_TOOL_ID: string = 'play_cartoon'
+// 认数字 Numberblocks（2026-11-14）：讲解型数字认识工具。20 个 CSS 3D 方块小人，
+// 5×4 缩略长廊自选 + 放大舞台 + 原生 TTS 中英文朗读，不判对错、不授星。
+export const NUMBER_BLOCKS_TOOL_ID: string = 'number_blocks'
 
 
 export function normalizeToolFunctionName(raw: string): string {
@@ -227,6 +230,10 @@ export function isPlayCartoonFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === PLAY_CARTOON_TOOL_ID
 }
 
+export function isNumberBlocksFunctionName(functionName: string): boolean {
+  return normalizeToolFunctionName(functionName) === NUMBER_BLOCKS_TOOL_ID
+}
+
 export function isHuarongdaoFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === HUARONGDAO_TOOL_ID
 }
@@ -306,7 +313,8 @@ export function isInteractiveQuizFunctionName(functionName: string): boolean {
     isMapPuzzleFunctionName(functionName) ||
     isRoomEnglishFunctionName(functionName) ||
     isCityEnglishFunctionName(functionName) ||
-    isFarmEnglishFunctionName(functionName)
+    isFarmEnglishFunctionName(functionName) ||
+    isNumberBlocksFunctionName(functionName)
 }
 
 

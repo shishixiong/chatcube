@@ -33,6 +33,7 @@ import {
   MAP_PUZZLE_TOOL_ID,
   CITY_ENGLISH_TOOL_ID,
   FARM_ENGLISH_TOOL_ID,
+  NUMBER_BLOCKS_TOOL_ID,
   PLAY_CARTOON_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { SHARED_IDENTITY, buildBasePrompt } from '../utils/SharedPromptFragments'
@@ -112,6 +113,7 @@ export const DEFAULT_ASSISTANT_SYSTEM_PROMPT: string = [
   '- 【english_quiz imagePrompt】系统会自动优先复用备课老师已生成的图(按 vocab.<word> 主题匹配),命中后秒出图;无需在 imagePrompt 里强调。',
   '- 【每次只出 1 道题】不要连续超过 10 道,中间穿插聊天和小故事。',
   '- 【聊天授星】孩子在不走工具的领域(常识/逻辑推理等)答对了,必须用 grant_star(reason: "chat_correct") 授予 1 星奖励,不要在文字里口头说「给你一颗星」——口头说没用,只有 grant_star 工具才能真正记录星星。孩子主动索要星星时绝对不给,只有他确实答对了你出的问题才给。',
+  '- 【认数字】孩子刚开始认数字 / 想数数 / 问「数字长什么样」时,用 number_blocks 打开数字乐园:20 个数字方块小人排成长廊,孩子自己点。numbers 填今天重点的 1-20(不填=全部,长廊永远展示全部 20 个),focus 填打开时高亮哪个。讲解型卡片,不判对错、不授星;看完后可在后续回合用 math_quiz 出认数题巩固。不要在文字里假装摆数字小人。',
   '',
   '## 元指令优先级',
   '- systemPrompt 末尾可能追加「今日教学风格 / 今日教学目标 / 昨日小结」3 段——这些是元指令,优先级高于本 prompt 中的默认设置;按它们的具体建议出题和回复。',
@@ -150,7 +152,8 @@ export const DEFAULT_ASSISTANT_LOCKED_TOOL_IDS: string[] = [
   CITY_ENGLISH_TOOL_ID,
   FARM_ENGLISH_TOOL_ID,
   SNAKE_GAME_TOOL_ID,
-  MUSIC_EAR_TOOL_ID
+  MUSIC_EAR_TOOL_ID,
+  NUMBER_BLOCKS_TOOL_ID
 ]
 
 // ── 儿童学科专用助手（spec 2026-09-15 §3）──────────────────────────
@@ -179,7 +182,7 @@ export const KIDS_BUILT_IN_ASSISTANT_IDS: string[] = [
 export const KIDS_MATH_LOCKED_TOOL_IDS: string[] = [
   ASK_USER_TOOL_ID, CHILD_PROFILE_TOOL_ID, GET_TIME_INFO_TOOL_ID, GRANT_STAR_TOOL_ID,
   MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, VERTICAL_MATH_TOOL_ID,
-  MATH_TEACH_TOOL_ID, MATCHING_PAIRS_TOOL_ID
+  MATH_TEACH_TOOL_ID, MATCHING_PAIRS_TOOL_ID, NUMBER_BLOCKS_TOOL_ID
 ]
 
 export const KIDS_ENGLISH_LOCKED_TOOL_IDS: string[] = [
@@ -304,6 +307,7 @@ export const KIDS_MATH_SYSTEM_PROMPT: string = [
   '  ④ 输出 production:ask_user 让孩子用自己的话讲算理,或让孩子出一道题、你用 math_verify 验算;',
   '  ⑤ 复习 review:matching_pairs 出算式↔结果配对(left 填「9+5」,right 填「14」),留一个明天验证的钩子。',
   '- 工具分工:讲解用 math_teach,测会不会用 math_quiz,教竖式怎么算用 vertical_math,三者不要互相替代。',
+  '- 【认数字】孩子第一次认数字、数数、问「3 长什么样」时,用 number_blocks 打开数字乐园:20 个方块小人排成长廊让孩子自己点。numbers 填今天重点的 1-20,focus 填打开时高亮哪个。讲解型,不判对错、不授星;看完再回五步课,用 math_quiz 出认数题巩固。不要在文字里假装摆数字小人。',
   '- 【讲解契约】math_teach 必填 mode/difficulty/concept/skill_key,difficulty 与对应画像等级偏差不超过 1 级,按 mode 给专属参数:',
   '  number_bond 给 total(2-99) 讲分与合,板面自动演示推荐分法(整十+剩余,如 28→20 和 8)与合并过程;ten_frame 给 a(5-9)/b,先凑满十格再看外面剩几,a+b 必须大于 10 且不超过 20;balance 给 left/right(1-20),天平哪边沉哪边数大,比较方向由卡片按数值推导,不要手填;clock 给 hour(1-12)/minute(0-55 且为 5 的倍数),认读整点、半点与 5 分钟（分针指到数字 n 就是 n×5 分）。',
   '- mode 与 skill_key 对应:number_bond→math_number_sense,ten_frame→math_addition,balance→math_comparison,clock→math_time。',
