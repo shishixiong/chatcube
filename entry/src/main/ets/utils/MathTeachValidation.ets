@@ -5,16 +5,18 @@
  * 演示后必练（规则 5 是 prompt 契约，此处不机器校验）。
  */
 
+import { SHAPE_COUNTABLE } from './MathTeachShapeProps'
+
 export interface MathTeachValidationResult {
   ok: boolean
   error: string
 }
 
 const TEACH_MODES: string[] = ['number_bond', 'ten_frame', 'break_ten', 'place_value',
-  'number_line', 'balance', 'clock']
+  'number_line', 'balance', 'clock', 'shape_props', 'fraction_intro']
 const SKILL_KEYS: string[] = ['math_number_sense', 'math_counting', 'math_addition',
-  'math_subtraction', 'math_multiply', 'math_divide', 'math_shapes', 'math_comparison',
-  'math_time', 'math_word_problem']
+  'math_subtraction', 'math_multiply', 'math_divide', 'math_shapes', 'math_fractions',
+  'math_comparison', 'math_time', 'math_word_problem']
 const STAGES: string[] = ['warm_up', 'presentation', 'practice', 'production', 'review']
 
 function fail(msg: string): MathTeachValidationResult {
@@ -67,7 +69,7 @@ export function validateMathTeachArgs(rawArgs: string,
   }
   const skillKey: string = getString(args, 'skill_key')
   if (SKILL_KEYS.indexOf(skillKey) < 0) {
-    return fail('skill_key 必须是数学画像 10 维之一（math_ 开头），收到「' + skillKey + '」')
+    return fail('skill_key 必须是数学画像 11 维之一（math_ 开头），收到「' + skillKey + '」')
   }
   const stage: string = getString(args, 'stage')
   if (stage !== '' && STAGES.indexOf(stage) < 0) {
@@ -169,6 +171,30 @@ function validateModeArgs(mode: string, args: Record<string, Object>): MathTeach
     if (!inRange(hour, 1, 12)) { return fail('clock 的 hour 必须是 1-12 的整数') }
     if (!inRange(minute, 0, 55) || minute % 5 !== 0) {
       return fail('clock 的 minute 必须是 0-55 的 5 分钟步长整数（0/5/10/.../55）')
+    }
+  } else if (mode === 'shape_props') {
+    const shape: string = getString(args, 'shape')
+    if (SHAPE_COUNTABLE.indexOf(shape) < 0) {
+      return fail('shape_props 只数直边图形的边角：triangle/square/rectangle/pentagon' +
+        '（⚠️ 严禁 circle/star/heart，圆没有直的边，星形心形边角数不清）')
+    }
+  } else if (mode === 'fraction_intro') {
+    const formRaw: string = getString(args, 'form')
+    const form: string = formRaw === '' ? 'pizza' : formRaw
+    if (form !== 'pizza' && form !== 'bar') {
+      return fail('fraction_intro 的 form 必须是 pizza（披萨）或 bar（分数条），缺省 pizza')
+    }
+    const parts: number = getNumber(args, 'parts')
+    if (!inRange(parts, 2, 8)) {
+      return fail('fraction_intro 的 parts 必须是 2-8 的整数（等分的份数，也就是分母）')
+    }
+    const shaded: number = getNumber(args, 'shaded')
+    if (!inRange(shaded, 1, 7)) {
+      return fail('fraction_intro 的 shaded 必须是整数，至少要取 1 份' +
+        '（⚠️ 严禁 shaded 不小于 parts，取满全部份数是整体 1，超出分数初步认识范围）')
+    }
+    if (shaded >= parts) {
+      return fail('取满全部份数是整体 1，超出分数初步认识范围（⚠️ 严禁 shaded ≥ parts）')
     }
   }
   return pass()

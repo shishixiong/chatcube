@@ -201,5 +201,55 @@ export default function mathTeachValidationTest() {
       expect(validateMathTeachArgs(asJson(badStart), null).ok).assertFalse()
       expect(validateMathTeachArgs(asJson(badStep), null).ok).assertFalse()
     })
+    it('shape_props四个可数图形收_不可数图形拒', 0, () => {
+      const shapes: string[] = ['triangle', 'square', 'rectangle', 'pentagon']
+      for (let i = 0; i < shapes.length; i++) {
+        const ok: Record<string, Object> = baseArgs('shape_props')
+        ok['shape'] = shapes[i]
+        ok['skill_key'] = 'math_shapes'
+        expect(validateMathTeachArgs(asJson(ok), null).ok).assertTrue()
+      }
+      const bads: string[] = ['circle', 'star', 'heart', 'oval', '']
+      for (let i = 0; i < bads.length; i++) {
+        const bad: Record<string, Object> = baseArgs('shape_props')
+        bad['shape'] = bads[i]
+        bad['skill_key'] = 'math_shapes'
+        expect(validateMathTeachArgs(asJson(bad), null).ok).assertFalse()
+      }
+      const missing: Record<string, Object> = baseArgs('shape_props')
+      missing['skill_key'] = 'math_shapes'
+      expect(validateMathTeachArgs(asJson(missing), null).ok).assertFalse()
+    })
+    it('fraction_intro份数与分子边界', 0, () => {
+      const ok1: Record<string, Object> = baseArgs('fraction_intro')
+      ok1['parts'] = 2; ok1['shaded'] = 1; ok1['skill_key'] = 'math_fractions'
+      expect(validateMathTeachArgs(asJson(ok1), null).ok).assertTrue()
+      const ok2: Record<string, Object> = baseArgs('fraction_intro')
+      ok2['parts'] = 8; ok2['shaded'] = 7; ok2['skill_key'] = 'math_fractions'; ok2['form'] = 'bar'
+      expect(validateMathTeachArgs(asJson(ok2), null).ok).assertTrue()
+      const full: Record<string, Object> = baseArgs('fraction_intro')
+      full['parts'] = 4; full['shaded'] = 4; full['skill_key'] = 'math_fractions'
+      expect(validateMathTeachArgs(asJson(full), null).ok).assertFalse()
+      const zero: Record<string, Object> = baseArgs('fraction_intro')
+      zero['parts'] = 4; zero['shaded'] = 0; zero['skill_key'] = 'math_fractions'
+      expect(validateMathTeachArgs(asJson(zero), null).ok).assertFalse()
+    })
+    it('fraction_intro参数范围与form白名单', 0, () => {
+      const p1: Record<string, Object> = baseArgs('fraction_intro')
+      p1['parts'] = 1; p1['shaded'] = 1; p1['skill_key'] = 'math_fractions'
+      expect(validateMathTeachArgs(asJson(p1), null).ok).assertFalse()
+      const p9: Record<string, Object> = baseArgs('fraction_intro')
+      p9['parts'] = 9; p9['shaded'] = 1; p9['skill_key'] = 'math_fractions'
+      expect(validateMathTeachArgs(asJson(p9), null).ok).assertFalse()
+      const badForm: Record<string, Object> = baseArgs('fraction_intro')
+      badForm['parts'] = 4; badForm['shaded'] = 3; badForm['form'] = 'cake'; badForm['skill_key'] = 'math_fractions'
+      expect(validateMathTeachArgs(asJson(badForm), null).ok).assertFalse()
+      const dfltForm: Record<string, Object> = baseArgs('fraction_intro')
+      dfltForm['parts'] = 4; dfltForm['shaded'] = 3; dfltForm['skill_key'] = 'math_fractions'
+      expect(validateMathTeachArgs(asJson(dfltForm), null).ok).assertTrue()
+      const badSkill: Record<string, Object> = baseArgs('fraction_intro')
+      badSkill['parts'] = 4; badSkill['shaded'] = 3; badSkill['skill_key'] = 'english_vocab'
+      expect(validateMathTeachArgs(asJson(badSkill), null).ok).assertFalse()
+    })
   })
 }

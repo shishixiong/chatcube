@@ -5,7 +5,7 @@
  * 持久化在 services/MathQuizHistoryService.ets + DatabaseService。
  */
 
-export type MathQuizTrack = 'add' | 'sub' | 'muldiv' | 'compare' | 'clock' | 'elapsed' | 'shape' | 'none'
+export type MathQuizTrack = 'add' | 'sub' | 'muldiv' | 'compare' | 'clock' | 'elapsed' | 'shape' | 'fraction' | 'none'
 
 export type MathQuizPurpose = 'practice' | 'warm_up' | 'review'
 
@@ -39,6 +39,16 @@ export interface MathQuizLevelInput {
   startMinute: number
   endHour: number
   endMinute: number
+  // shape 专用: shapeAsk = name / sides / corners; shapeTarget = 目标图形
+  shapeAsk: string
+  shapeTarget: string
+  // 认名题去重键要用正确答案（英文形状名）
+  correctAnswer: string
+  // fraction 专用: fracAsk = identify / compare; 份数与分子
+  fracAsk: string
+  fracParts: number
+  fracShaded: number
+  fracShaded2: number
 }
 
 export interface MathQuizLevelInfo {

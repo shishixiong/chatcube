@@ -17,7 +17,7 @@
 import { ToolCall } from '../models/ChatModels'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import {
-  KIDS_BORDER, KIDS_CHINESE_INK, KIDS_FG, KIDS_MATH, KIDS_MATH_INK, KIDS_MUTED, KIDS_SURFACE
+  KIDS_BORDER, KIDS_CHINESE_INK, KIDS_FG, KIDS_MATH, KIDS_MATH_INK, KIDS_MUTED, KIDS_SURFACE, KIDS_ACCENT
 } from './kids/KidsBrandTokens'
 import { CardShell } from './cardshell/CardShell'
 import { CardShellConfig } from './cardshell/CardShellTypes'
@@ -38,6 +38,10 @@ import { MathScratchSheet } from './mathQuiz/MathScratchSheet'
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import { PreferenceKeys } from '../services/PreferencesService'
 import { ClockFaceView } from './mathTeach/ClockFaceView'
+import { shapePropsVertices } from '../utils/MathTeachShapeProps'
+import {
+  fractionSectorCommands, fractionReadout
+} from '../utils/MathTeachFractionIntro'
 
 @ComponentV2
 export struct MathQuizCard {
@@ -50,7 +54,9 @@ export struct MathQuizCard {
     type: 'arithmetic', question: '', expression: '', correctAnswer: 0,
     options: [], skillKey: '', wordProblem: false, leftValue: 0, rightValue: 0, operatorOptions: [],
     clockHour: 0, clockMinute: 0,
-    startHour: 0, startMinute: 0, endHour: 0, endMinute: 0
+    startHour: 0, startMinute: 0, endHour: 0, endMinute: 0,
+    shapeAsk: 'name', shapeTarget: '', fracAsk: 'identify', fracForm: 'pizza',
+    fracParts: 0, fracShaded: 0, fracShaded2: 0
   }
   // arithmetic 用 number 选项; shape/comparison/time 用 string 选项
   @Local selectedOption: string | number = -1
@@ -245,6 +251,12 @@ export struct MathQuizCard {
     }
     if (quiz.type === 'elapsed_time') {
       return quiz.question !== '' ? quiz.question : '从开始到结束, 经过多久呀?'
+    }
+    if (quiz.type === 'fraction') {
+      if (quiz.fracAsk === 'compare') {
+        return `${quiz.fracShaded}/${quiz.fracParts} ○ ${quiz.fracShaded2}/${quiz.fracParts}`
+      }
+      return quiz.question !== '' ? quiz.question : '涂色部分是几分之几呀?'
     }
     return quiz.question
   }
@@ -522,9 +534,12 @@ export struct MathQuizCard {
 
   @Builder
   QuizContent() {
-    // 5 种题型分发: arithmetic (原算术+应用题) / shape (图形) / comparison (比较) / time (时间-读) / elapsed_time (时间-经过)
+    // 6 种题型分发: arithmetic (原算术+应用题) / shape (图形: 认名·数边·数角) / comparison (比较) /
+    // time (时间-读) / elapsed_time (时间-经过) / fraction (分数: 看图选分数·同分母比大小)
     if (this.quiz.type === 'shape') {
       this.ShapeContent()
+    } else if (this.quiz.type === 'fraction') {
+      this.FractionContent()
     } else if (this.quiz.type === 'comparison') {
       this.ComparisonContent()
     } else if (this.quiz.type === 'time') {
@@ -646,32 +661,27 @@ export struct MathQuizCard {
   // ---- 图形认知 (math_shapes) ----
 
   @Builder
-  ShapePrimitive(shape: string) {
-    // 圆/方/长方形用 ArkUI 原生; 其余用文字符号。暖白面上统一数学蓝实心图形
+  ShapePrimitive(shape: string, size: number = 48) {
+    // 圆/方/长方形用 ArkUI 原生; 三角形/五边形用 Polygon 精确绘边（边角可数）;
+    // star/heart 保留文字符号（非凸图形，不在数边角白名单内）
     if (shape === 'circle') {
-      Circle().width(48).height(48).fill(KIDS_MATH)
+      Circle().width(size).height(size).fill(KIDS_MATH)
     } else if (shape === 'square') {
-      Rect().width(48).height(48).fill(KIDS_MATH).radius(4)
+      Rect().width(size).height(size).fill(KIDS_MATH).radius(4)
     } else if (shape === 'rectangle') {
-      Rect().width(64).height(36).fill(KIDS_MATH).radius(3)
-    } else if (shape === 'triangle') {
-      Text('△')
-        .fontSize(46)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(KIDS_MATH_INK)
-    } else if (shape === 'pentagon') {
-      Text('⬠')
-        .fontSize(44)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(KIDS_MATH_INK)
+      Rect().width(size * 1.33).height(size * 0.75).fill(KIDS_MATH).radius(3)
+    } else if (shape === 'triangle' || shape === 'pentagon') {
+      Polygon({ width: size, height: size })
+        .points(shapePropsVertices(shape, size))
+        .fill(KIDS_MATH)
     } else if (shape === 'star') {
       Text('★')
-        .fontSize(46)
+        .fontSize(size * 0.96)
         .fontWeight(FontWeight.Bold)
         .fontColor(KIDS_MATH_INK)
     } else if (shape === 'heart') {
       Text('♥')
-        .fontSize(44)
+        .fontSize(size * 0.92)
         .fontWeight(FontWeight.Bold)
         .fontColor(KIDS_MATH_INK)
     } else {
@@ -713,21 +723,206 @@ export struct MathQuizCard {
           .width('100%')
       }
 
-      if (this.quiz.options.length > 0) {
-        Column({ space: 10 }) {
-          Grid() {
-            ForEach(this.quiz.options, (opt: string | number, idx: number) => {
-              GridItem() {
-                this.ShapeOptionButton(String(opt))
-              }
-            }, (opt: string | number, idx: number) => `shape_${idx}_${opt}`)
+      if (this.quiz.shapeAsk === 'name') {
+        if (this.quiz.options.length > 0) {
+          Column({ space: 10 }) {
+            Grid() {
+              ForEach(this.quiz.options, (opt: string | number, idx: number) => {
+                GridItem() {
+                  this.ShapeOptionButton(String(opt))
+                }
+              }, (opt: string | number, idx: number) => `shape_${idx}_${opt}`)
+            }
+            .columnsTemplate('1fr 1fr')
+            .columnsGap(10)
+            .rowsGap(10)
+            .width('100%')
           }
-          .columnsTemplate('1fr 1fr')
-          .columnsGap(10)
-          .rowsGap(10)
           .width('100%')
         }
+      } else {
+        // 数边 / 数角: 题干上方展示目标图形（精确可数），下方是数字选项
+        Row() {
+          this.ShapePrimitive(this.quiz.shapeTarget, 96)
+        }
         .width('100%')
+        .justifyContent(FlexAlign.Center)
+
+        if (this.quiz.options.length > 0) {
+          Column({ space: 10 }) {
+            Grid() {
+              ForEach(this.quiz.options, (opt: string | number, idx: number) => {
+                GridItem() {
+                  this.OptionButton(opt)
+                }
+              }, (opt: string | number, idx: number) => `shape_num_${idx}_${opt}`)
+            }
+            .columnsTemplate('1fr 1fr')
+            .columnsGap(10)
+            .rowsGap(10)
+            .width('100%')
+          }
+          .width('100%')
+        }
+      }
+    }
+    .width('100%')
+    .padding(12)
+    .backgroundColor(this.getCardBackgroundColor())
+    .borderRadius(12)
+    .border({ width: 1, color: withColorAlpha(KIDS_MATH, '30'), radius: 12 })
+  }
+
+  // ---- 分数初步认识 (math_fractions) ----
+
+  private seqOf(n: number): number[] {
+    const arr: number[] = []
+    for (let i = 0; i < n; i++) {
+      arr.push(i)
+    }
+    return arr
+  }
+
+  private fracNum(frac: string): string {
+    const idx: number = frac.indexOf('/')
+    return idx < 0 ? frac : frac.substring(0, idx)
+  }
+
+  private fracDen(frac: string): string {
+    const idx: number = frac.indexOf('/')
+    return idx < 0 ? '' : frac.substring(idx + 1)
+  }
+
+  @Builder
+  FractionFigure(form: string, parts: number, shaded: number, size: number) {
+    if (form === 'bar') {
+      Stack() {
+        // 分数条: 等分长条, 涂色份实心橙
+        ForEach(this.seqOf(parts), (i: number) => {
+          Rect({ width: size / parts, height: 48 })
+            .fill(i < shaded ? KIDS_ACCENT : KIDS_SURFACE)
+            .stroke(KIDS_BORDER)
+            .strokeWidth(1.5)
+            .position({ x: (size / parts) * i, y: 0 })
+        }, (i: number) => 'fb' + i.toString() + '_' + shaded.toString())
+      }
+      .width(size).height(48)
+    } else {
+      Stack() {
+        // 披萨: parts 个扇形（M/L/A/Z），涂色份实心橙
+        ForEach(this.seqOf(parts), (i: number) => {
+          Path()
+            .width('100%').height('100%')
+            .commands(fractionSectorCommands(parts, i, size))
+            .fill(i < shaded ? KIDS_ACCENT : KIDS_SURFACE)
+            .stroke(KIDS_BORDER)
+            .strokeWidth(1.5)
+        }, (i: number) => 'fs' + i.toString() + '_' + parts.toString() + '_' + shaded.toString())
+      }
+      .width(size).height(size)
+    }
+  }
+
+  @Builder
+  FractionOptionButton(frac: string) {
+    Stack({ alignContent: Alignment.Center }) {
+      Column({ space: 2 }) {
+        Text(this.fracNum(frac))
+          .fontSize(22).fontWeight(FontWeight.Bold)
+          .fontColor(this.getOptionTextColor(frac))
+        Divider()
+          .width(24).strokeWidth(2)
+          .color(this.getOptionTextColor(frac))
+        Text(this.fracDen(frac))
+          .fontSize(22).fontWeight(FontWeight.Bold)
+          .fontColor(this.getOptionTextColor(frac))
+      }
+      .alignItems(HorizontalAlign.Center)
+    }
+    .width('100%')
+    .height(76)
+    .backgroundColor(this.getOptionBackground(frac))
+    .borderRadius(12)
+    .border({
+      width: this.getOptionBorderWidth(frac),
+      color: this.getOptionBorderColor(frac),
+      radius: 12
+    })
+    .onClick(() => {
+      this.handleSelectOption(frac)
+    })
+    .animation({ duration: 150, curve: Curve.EaseOut })
+  }
+
+  @Builder
+  FractionContent() {
+    Column({ space: 12 }) {
+      if (this.quiz.question !== '') {
+        Text(this.quiz.question)
+          .fontSize(15)
+          .fontColor(KIDS_FG)
+          .width('100%')
+      }
+
+      if (this.quiz.fracAsk === 'compare') {
+        // 同分母比大小: 两图并排 + 各自分数标签 + 中间 ○
+        Row({ space: 6 }) {
+          Column({ space: 6 }) {
+            this.FractionFigure(this.quiz.fracForm, this.quiz.fracParts, this.quiz.fracShaded, 92)
+            Text(fractionReadout(this.quiz.fracParts, this.quiz.fracShaded))
+              .fontSize(15).fontWeight(FontWeight.Bold).fontColor(KIDS_MATH_INK)
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Center)
+
+          Text(this.selectedOption !== -1 ? String(this.selectedOption) : '○')
+            .fontSize(30).fontWeight(FontWeight.Bold)
+            .fontColor(this.selectedOption !== -1 ? KIDS_MATH_INK : KIDS_MUTED)
+
+          Column({ space: 6 }) {
+            this.FractionFigure(this.quiz.fracForm, this.quiz.fracParts, this.quiz.fracShaded2, 92)
+            Text(fractionReadout(this.quiz.fracParts, this.quiz.fracShaded2))
+              .fontSize(15).fontWeight(FontWeight.Bold).fontColor(KIDS_MATH_INK)
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Center)
+        }
+        .width('100%')
+        .justifyContent(FlexAlign.Center)
+        .alignItems(VerticalAlign.Center)
+
+        if (this.quiz.operatorOptions.length > 0) {
+          Row({ space: 10 }) {
+            ForEach(this.quiz.operatorOptions, (op: string | number) => {
+              this.OperatorButton(String(op))
+            }, (op: string | number) => `frac_op_${op}`)
+          }
+          .width('100%')
+        }
+      } else {
+        // 看图选分数
+        Row() {
+          this.FractionFigure(this.quiz.fracForm, this.quiz.fracParts, this.quiz.fracShaded, 148)
+        }
+        .width('100%')
+        .justifyContent(FlexAlign.Center)
+
+        if (this.quiz.options.length > 0) {
+          Column({ space: 10 }) {
+            Grid() {
+              ForEach(this.quiz.options, (opt: string | number, idx: number) => {
+                GridItem() {
+                  this.FractionOptionButton(String(opt))
+                }
+              }, (opt: string | number, idx: number) => `frac_opt_${idx}_${opt}`)
+            }
+            .columnsTemplate('1fr 1fr')
+            .columnsGap(10)
+            .rowsGap(10)
+            .width('100%')
+          }
+          .width('100%')
+        }
       }
     }
     .width('100%')

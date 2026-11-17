@@ -35,7 +35,7 @@ export const MIN_PLANNER_COUNTS: MinPlannerCounts = {
   chinese: 2
 }
 
-/** math 项 dimension 白名单（10 个, 必须与 ChildProfileService.SKILL_DEFINITIONS 一致） */
+/** math 项 dimension 白名单（11 个, 必须与 ChildProfileService.SKILL_DEFINITIONS 一致） */
 export const VALID_MATH_DIMENSIONS: ReadonlyArray<string> = [
   'math_counting',
   'math_number_sense',
@@ -44,6 +44,7 @@ export const VALID_MATH_DIMENSIONS: ReadonlyArray<string> = [
   'math_multiply',
   'math_divide',
   'math_shapes',
+  'math_fractions',
   'math_comparison',
   'math_time',
   'math_word_problem'

@@ -9,7 +9,35 @@ import { validateMathQuizArgs } from '../../../../main/ets/utils/MathQuizValidat
  * CLI `hvigorw test` 不可用 (pre-existing scaffold mismatch, 详见 MEMORY.md)
  */
 
-function buildArgs(overrides: Record<string, Object>): string {
+// 显式声明的参数夹具接口: ArkTS 禁止把无类型对象字面量传给 Record/Object（arkts-no-untyped-obj-literals）
+interface QuizArgsFixture {
+  type?: string
+  question?: string
+  expression?: string
+  correct_answer?: string | number
+  options?: Array<string | number>
+  skill_key?: string
+  purpose?: string
+  word_problem?: boolean
+  shape_ask?: string
+  shape?: string
+  fraction_ask?: string
+  frac_form?: string
+  frac_parts?: number
+  frac_shaded?: number
+  frac_shaded2?: number
+  left_value?: number
+  right_value?: number
+  operator_options?: string[]
+  clock_hour?: number
+  clock_minute?: number
+  start_hour?: number
+  start_minute?: number
+  end_hour?: number
+  end_minute?: number
+}
+
+function buildArgs(overrides: QuizArgsFixture): string {
   return JSON.stringify(overrides)
 }
 
@@ -81,6 +109,51 @@ export default function mathQuizValidationTest() {
         start_hour: 11, start_minute: 30, end_hour: 1, end_minute: 30,
         correct_answer: '2 小时',
         options: ['2 小时', '1 小时', '30 分', '3 小时']
+      }))
+      expect(r.ok).assertTrue()
+    })
+
+    it('shape: 数边 (shape_ask=sides) 答案与图形一致, 合法', 0, () => {
+      const r = validateMathQuizArgs(buildArgs({
+        type: 'shape', question: '正方形有几条边?', skill_key: 'math_shapes',
+        shape_ask: 'sides', shape: 'square', correct_answer: 4,
+        options: [3, 4, 5, 6]
+      }))
+      expect(r.ok).assertTrue()
+    })
+
+    it('shape: 数角 (shape_ask=corners) 答案与图形一致, 合法', 0, () => {
+      const r = validateMathQuizArgs(buildArgs({
+        type: 'shape', question: '五边形有几个角?', skill_key: 'math_shapes',
+        shape_ask: 'corners', shape: 'pentagon', correct_answer: 5,
+        options: [3, 4, 5, 6]
+      }))
+      expect(r.ok).assertTrue()
+    })
+
+    it('fraction: identify 答案与 frac_shaded/frac_parts 一致, 合法', 0, () => {
+      const r = validateMathQuizArgs(buildArgs({
+        type: 'fraction', question: '涂色部分是几分之几?', skill_key: 'math_fractions',
+        fraction_ask: 'identify', frac_form: 'pizza', frac_parts: 4, frac_shaded: 3,
+        correct_answer: '3/4', options: ['1/4', '3/4', '2/4', '4/4']
+      }))
+      expect(r.ok).assertTrue()
+    })
+
+    it('fraction: compare 同分母比分子方向正确, 合法', 0, () => {
+      const r = validateMathQuizArgs(buildArgs({
+        type: 'fraction', question: '2/5 和 3/5 哪个大?', skill_key: 'math_fractions',
+        fraction_ask: 'compare', frac_parts: 5, frac_shaded: 2, frac_shaded2: 3,
+        correct_answer: '<', operator_options: ['>', '<', '='], options: []
+      }))
+      expect(r.ok).assertTrue()
+    })
+
+    it('fraction: compare 两边同样多时答案是「=」, 合法', 0, () => {
+      const r = validateMathQuizArgs(buildArgs({
+        type: 'fraction', question: '2/6 和 2/6 比一比', skill_key: 'math_fractions',
+        fraction_ask: 'compare', frac_parts: 6, frac_shaded: 2, frac_shaded2: 2,
+        correct_answer: '=', options: []
       }))
       expect(r.ok).assertTrue()
     })
@@ -210,6 +283,91 @@ export default function mathQuizValidationTest() {
       }))
       expect(r.ok).assertFalse()
       expect(r.error.includes('不是合法运算符')).assertTrue()
+    })
+
+    it('shape: sides 答案错 (square 说 5 条边), 拒绝并指出真值', 0, () => {
+      const r = validateMathQuizArgs(buildArgs({
+        type: 'shape', question: '正方形有几条边?', shape_ask: 'sides', shape: 'square',
+        correct_answer: 5, options: [3, 4, 5, 6]
+      }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('边数是 4')).assertTrue()
+    })
+
+    it('shape: sides 用 circle, 拒绝', 0, () => {
+      const r = validateMathQuizArgs(buildArgs({
+        type: 'shape', question: '圆形有几条边?', shape_ask: 'sides', shape: 'circle',
+        correct_answer: 1, options: [0, 1, 2, 3]
+      }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('circle')).assertTrue()
+    })
+
+    it('shape: 数边题选项缺真值, 拒绝', 0, () => {
+      const r = validateMathQuizArgs(buildArgs({
+        type: 'shape', question: 'q', shape_ask: 'sides', shape: 'triangle',
+        correct_answer: 3, options: [4, 5, 6]
+      }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('不在选项里')).assertTrue()
+    })
+
+    it('fraction: 图是 3/4 但答案写 2/4, 拒绝', 0, () => {
+      const r = validateMathQuizArgs(buildArgs({
+        type: 'fraction', question: 'q', fraction_ask: 'identify',
+        frac_parts: 4, frac_shaded: 3, correct_answer: '2/4',
+        options: ['2/4', '3/4', '1/4']
+      }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('3/4')).assertTrue()
+    })
+
+    it('fraction: identify 选项缺正确分数, 拒绝', 0, () => {
+      const r = validateMathQuizArgs(buildArgs({
+        type: 'fraction', question: 'q', fraction_ask: 'identify',
+        frac_parts: 4, frac_shaded: 3, correct_answer: '3/4',
+        options: ['1/4', '2/4', '1/2']
+      }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('不在选项里')).assertTrue()
+    })
+
+    it('fraction: frac_parts 越界 (9), 拒绝', 0, () => {
+      const r = validateMathQuizArgs(buildArgs({
+        type: 'fraction', question: 'q', fraction_ask: 'identify',
+        frac_parts: 9, frac_shaded: 1, correct_answer: '1/9',
+        options: ['1/9', '1/8']
+      }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('2-8')).assertTrue()
+    })
+
+    it('fraction: frac_shaded 取满 (整体 1), 拒绝', 0, () => {
+      const r = validateMathQuizArgs(buildArgs({
+        type: 'fraction', question: 'q', fraction_ask: 'identify',
+        frac_parts: 4, frac_shaded: 4, correct_answer: '4/4',
+        options: ['1/4', '4/4']
+      }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('整体 1')).assertTrue()
+    })
+
+    it('fraction: compare 方向反了, 拒绝', 0, () => {
+      const r = validateMathQuizArgs(buildArgs({
+        type: 'fraction', question: 'q', fraction_ask: 'compare',
+        frac_parts: 5, frac_shaded: 2, frac_shaded2: 3, correct_answer: '>', options: []
+      }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('方向错误')).assertTrue()
+    })
+
+    it('fraction: compare 的 frac_shaded2 越界, 拒绝', 0, () => {
+      const r = validateMathQuizArgs(buildArgs({
+        type: 'fraction', question: 'q', fraction_ask: 'compare',
+        frac_parts: 4, frac_shaded: 2, frac_shaded2: 4, correct_answer: '<', options: []
+      }))
+      expect(r.ok).assertFalse()
+      expect(r.error.includes('frac_shaded2')).assertTrue()
     })
   })
 

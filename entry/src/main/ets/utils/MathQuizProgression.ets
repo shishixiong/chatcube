@@ -7,10 +7,11 @@
  */
 
 import {
-  computeElapsedDuration, normalizeExpressionText, normalizeQuizType, sanitizeExpression, tokenizeExpression,
-  tryEvaluateExpression
+  computeElapsedDuration, normalizeExpressionText, normalizeFractionAsk, normalizeQuizType, normalizeShapeAsk,
+  normalizeShapeName, sanitizeExpression, tokenizeExpression, tryEvaluateExpression
 } from './MathQuizGame'
 import type { ExpressionToken } from './MathQuizGame'
+import { shapePropsCorners, shapePropsSides, isCountableShape } from './MathTeachShapeProps'
 import type {
   MathQuizGateDecision, MathQuizGateInput, MathQuizLevelInfo, MathQuizLevelInput, MathQuizLevelSpec,
   MathQuizProgressHint, MathQuizProgressReason, MathQuizProgressRow, MathQuizProgressStatus,
@@ -111,12 +112,31 @@ const ELAPSED_ROWS: LevelRow[] = [
   row(4, '跨 2 小时以上或跨 12 点', 0, 0, 0, 'any', '跨 ≥2 小时，或跨 12 点', '11:30 → 1:15')
 ]
 
+/** 图形特征轨 5 级——认名 → 数边 → 数角（carryRule 复用为提问方式语义）。 */
+const SHAPE_ROWS: LevelRow[] = [
+  row(1, '认图形名字', 0, 0, 0, 'any', 'shape_ask=name（缺省），7 种图形认名', '哪个是圆形？'),
+  row(2, '数边（3–4 边）', 4, 0, 0, 'none', 'shape_ask=sides，shape 为 triangle/square/rectangle', '正方形有几条边？'),
+  row(3, '数边（5 边）', 5, 0, 0, 'none', 'shape_ask=sides，shape 为 pentagon', '五边形有几条边？'),
+  row(4, '数角（3–4 角）', 4, 0, 0, 'required', 'shape_ask=corners，shape 为 triangle/square/rectangle', '三角形有几个角？'),
+  row(5, '数角（5 角）', 5, 0, 0, 'required', 'shape_ask=corners，shape 为 pentagon', '五边形有几个角？')
+]
+
+/** 分数轨 5 级——几分之一 → 几分之几 → 同分母比较。 */
+const FRACTION_ROWS: LevelRow[] = [
+  row(1, '几分之一（分母 2–4）', 4, 0, 0, 'any', 'fraction_ask=identify，frac_shaded=1，frac_parts 2–4', '涂色部分是几分之一？(1/2)'),
+  row(2, '几分之一（分母 5–8）', 8, 0, 0, 'any', 'fraction_ask=identify，frac_shaded=1，frac_parts 5–8', '涂色部分是几分之一？(1/8)'),
+  row(3, '几分之几（分母 2–4）', 4, 0, 0, 'any', 'fraction_ask=identify，frac_shaded≥2，frac_parts 2–4', '涂色部分是几分之几？(3/4)'),
+  row(4, '几分之几（分母 5–8）', 8, 0, 0, 'any', 'fraction_ask=identify，frac_shaded≥2，frac_parts 5–8', '涂色部分是几分之几？(5/6)'),
+  row(5, '同分母分数比大小', 8, 0, 0, 'any', 'fraction_ask=compare，同分母比分子', '2/5 ○ 3/5')
+]
+
 const SKILL_ALIASES: Record<string, string> = {
   'addition': 'math_addition',
   'subtraction': 'math_subtraction',
   'multiply': 'math_multiply',
   'divide': 'math_divide',
   'shapes': 'math_shapes',
+  'fractions': 'math_fractions',
   'comparison': 'math_comparison',
   'time': 'math_time',
   'counting': 'math_counting',
@@ -129,6 +149,7 @@ const SKILL_ALIASES: Record<string, string> = {
   'math_multiply': 'math_multiply',
   'math_divide': 'math_divide',
   'math_shapes': 'math_shapes',
+  'math_fractions': 'math_fractions',
   'math_comparison': 'math_comparison',
   'math_time': 'math_time',
   'math_word_problem': 'math_word_problem'
@@ -140,6 +161,9 @@ const MUL_INIT: number[] = [1, 1, 3, 5, 6, 7]
 const DIV_INIT: number[] = [1, 1, 8, 9, 10, 10]
 const COMPARE_INIT: number[] = [1, 2, 3, 4, 5, 6]
 const TIME_INIT: number[] = [1, 1, 2, 2, 3, 4]
+// 下标 = 画像 level 0-5；0（未评估）落在 L1
+const SHAPE_INIT: number[] = [1, 1, 2, 3, 4, 5]
+const FRACTION_INIT: number[] = [1, 1, 2, 3, 4, 5]
 
 export function normalizePurpose(raw: string): MathQuizPurpose {
   const text: string = typeof raw === 'string' ? raw.trim().toLowerCase() : ''
@@ -178,6 +202,19 @@ export function normalizeExpressionKey(input: MathQuizLevelInput): string {
   if (input.quizType === 'elapsed_time') {
     return `elapsed:${input.startHour}:${input.startMinute}-${input.endHour}:${input.endMinute}`
   }
+  if (input.quizType === 'shape') {
+    const ask: string = normalizeShapeAsk(input.shapeAsk)
+    if (ask === 'name') {
+      return `shape:name:${normalizeShapeName(input.correctAnswer)}`
+    }
+    return `shape:${ask}:${input.shapeTarget}`
+  }
+  if (input.quizType === 'fraction') {
+    if (normalizeFractionAsk(input.fracAsk) === 'compare') {
+      return `frac:${input.fracParts}:${input.fracShaded}:${input.fracShaded2}`
+    }
+    return `frac:${input.fracParts}:${input.fracShaded}`
+  }
   const sanitized: string = sanitizeExpression(normalizeExpressionText(input.expression))
   if (sanitized === '') {
     return ''
@@ -194,6 +231,22 @@ export function buildMathQuizRecordExpression(input: MathQuizLevelInput): string
   }
   if (input.quizType === 'elapsed_time') {
     return `${input.startHour}:${pad2(input.startMinute)} → ${input.endHour}:${pad2(input.endMinute)}`
+  }
+  if (input.quizType === 'shape') {
+    const ask: string = normalizeShapeAsk(input.shapeAsk)
+    if (ask === 'sides') {
+      return `${input.shapeTarget} 边数`
+    }
+    if (ask === 'corners') {
+      return `${input.shapeTarget} 角数`
+    }
+    return `认图形:${input.correctAnswer}`
+  }
+  if (input.quizType === 'fraction') {
+    if (normalizeFractionAsk(input.fracAsk) === 'compare') {
+      return `${input.fracShaded}/${input.fracParts} ? ${input.fracShaded2}/${input.fracParts}`
+    }
+    return `${input.fracShaded}/${input.fracParts}`
   }
   return input.expression
 }
@@ -214,6 +267,12 @@ export function getMaxLevel(track: MathQuizTrack): number {
   if (track === 'elapsed') {
     return ELAPSED_ROWS.length
   }
+  if (track === 'shape') {
+    return SHAPE_ROWS.length
+  }
+  if (track === 'fraction') {
+    return FRACTION_ROWS.length
+  }
   return 0
 }
 
@@ -232,6 +291,12 @@ function rowsForTrack(track: MathQuizTrack): LevelRow[] {
   }
   if (track === 'elapsed') {
     return ELAPSED_ROWS
+  }
+  if (track === 'shape') {
+    return SHAPE_ROWS
+  }
+  if (track === 'fraction') {
+    return FRACTION_ROWS
   }
   return []
 }
@@ -277,6 +342,9 @@ export function getTrackLabel(track: MathQuizTrack): string {
   }
   if (track === 'shape') {
     return '图形'
+  }
+  if (track === 'fraction') {
+    return '分数'
   }
   return '数数'
 }
@@ -358,6 +426,12 @@ export function initialLevelForTrack(track: MathQuizTrack, levels: Record<string
   if (track === 'clock' || track === 'elapsed') {
     return TIME_INIT[readLevel(levels, 'math_time')]
   }
+  if (track === 'shape') {
+    return SHAPE_INIT[readLevel(levels, 'math_shapes')]
+  }
+  if (track === 'fraction') {
+    return FRACTION_INIT[readLevel(levels, 'math_fractions')]
+  }
   return 0
 }
 
@@ -398,7 +472,14 @@ export function buildMathQuizLevelInput(raw: Record<string, Object>): MathQuizLe
     startHour: rawNumber(raw, 'start_hour'),
     startMinute: rawNumber(raw, 'start_minute'),
     endHour: rawNumber(raw, 'end_hour'),
-    endMinute: rawNumber(raw, 'end_minute')
+    endMinute: rawNumber(raw, 'end_minute'),
+    shapeAsk: rawString(raw, 'shape_ask'),
+    shapeTarget: rawString(raw, 'shape'),
+    correctAnswer: String(raw['correct_answer'] ?? ''),
+    fracAsk: rawString(raw, 'fraction_ask'),
+    fracParts: rawNumber(raw, 'frac_parts'),
+    fracShaded: rawNumber(raw, 'frac_shaded'),
+    fracShaded2: rawNumber(raw, 'frac_shaded2')
   }
   return input
 }
@@ -429,7 +510,8 @@ function okInfo(track: MathQuizTrack, level: number, input: MathQuizLevelInput):
 }
 
 function errInfo(track: MathQuizTrack, message: string, input: MathQuizLevelInput): MathQuizLevelInfo {
-  const key: string = (track === 'none' || track === 'shape') ? '' : normalizeExpressionKey(input)
+  // 已判级的轨道（含 shape / fraction）也带上去重键，错误记录同样参与窗口去重
+  const key: string = track === 'none' ? '' : normalizeExpressionKey(input)
   const info: MathQuizLevelInfo = {
     track: track, level: 0, gate: true, spec: null, expressionKey: key, error: message
   }
@@ -754,6 +836,52 @@ function classifyComparison(input: MathQuizLevelInput): MathQuizLevelInfo {
   return okInfo('compare', level, input)
 }
 
+const SHAPE_ERROR: string = 'circle/star/heart 不适合数边角（圆没有直的边，星形心形边角数不清），' +
+  'shape 只能是 triangle/square/rectangle/pentagon'
+const FRACTION_RANGE_ERROR: string = '分数题的分母必须是 2–8 的整数（frac_parts），' +
+  '分子必须是 1 到 分母−1（frac_shaded / frac_shaded2）'
+
+function classifyShape(input: MathQuizLevelInput): MathQuizLevelInfo {
+  const ask: string = normalizeShapeAsk(input.shapeAsk)
+  if (ask === 'name') {
+    return okInfo('shape', 1, input)
+  }
+  const shape: string = input.shapeTarget.trim()
+  if (!isCountableShape(shape)) {
+    return errInfo('shape', SHAPE_ERROR, input)
+  }
+  const truth: number = ask === 'sides' ? shapePropsSides(shape) : shapePropsCorners(shape)
+  if (truth === 0) {
+    return errInfo('shape', SHAPE_ERROR, input)
+  }
+  if (ask === 'sides') {
+    return okInfo('shape', shape === 'pentagon' ? 3 : 2, input)
+  }
+  return okInfo('shape', shape === 'pentagon' ? 5 : 4, input)
+}
+
+function classifyFraction(input: MathQuizLevelInput): MathQuizLevelInfo {
+  const parts: number = input.fracParts
+  const shaded: number = input.fracShaded
+  if (!isBetween(parts, 2, 8)) {
+    return errInfo('fraction', FRACTION_RANGE_ERROR, input)
+  }
+  if (!isBetween(shaded, 1, parts - 1)) {
+    return errInfo('fraction', FRACTION_RANGE_ERROR, input)
+  }
+  if (normalizeFractionAsk(input.fracAsk) === 'compare') {
+    const shaded2: number = input.fracShaded2
+    if (!isBetween(shaded2, 1, parts - 1)) {
+      return errInfo('fraction', FRACTION_RANGE_ERROR, input)
+    }
+    return okInfo('fraction', 5, input)
+  }
+  if (shaded === 1) {
+    return okInfo('fraction', parts <= 4 ? 1 : 2, input)
+  }
+  return okInfo('fraction', parts <= 4 ? 3 : 4, input)
+}
+
 function classifyArithmetic(input: MathQuizLevelInput): MathQuizLevelInfo {
   const skill: string = normalizeSkillKey(input.skillKey)
   const expr: string = normalizeExpressionText(input.expression)
@@ -824,6 +952,8 @@ export function resolveMathQuizLevel(input: MathQuizLevelInput): MathQuizLevelIn
   let mismatched: boolean = false
   if (skill === 'math_shapes') {
     mismatched = quizType !== 'shape'
+  } else if (skill === 'math_fractions') {
+    mismatched = quizType !== 'fraction'
   } else if (skill === 'math_comparison') {
     mismatched = quizType !== 'comparison'
   } else if (skill === 'math_time') {
@@ -837,10 +967,10 @@ export function resolveMathQuizLevel(input: MathQuizLevelInput): MathQuizLevelIn
   }
 
   if (quizType === 'shape') {
-    const shapeInfo: MathQuizLevelInfo = {
-      track: 'shape', level: 0, gate: false, spec: null, expressionKey: '', error: ''
-    }
-    return shapeInfo
+    return classifyShape(input)
+  }
+  if (quizType === 'fraction') {
+    return classifyFraction(input)
   }
   if (quizType === 'comparison') {
     return classifyComparison(input)
@@ -1011,6 +1141,30 @@ export function estimateLevelKeySpace(track: MathQuizTrack, level: number): numb
       return 64   // 多位数乘除，估值
     }
     return 44     // 1 参与或 max ∈ {2,5,10} 的乘法对
+  }
+  if (track === 'shape') {
+    if (level === 1) {
+      return 7    // 7 种图形认名
+    }
+    if (level === 2 || level === 4) {
+      return 3    // triangle / square / rectangle
+    }
+    return 1      // pentagon 数边 / 数角
+  }
+  if (track === 'fraction') {
+    if (level === 1) {
+      return 3    // parts 2–4 × shaded=1
+    }
+    if (level === 2) {
+      return 4    // parts 5–8 × shaded=1
+    }
+    if (level === 3) {
+      return 3    // parts 3–4 且 shaded≥2
+    }
+    if (level === 4) {
+      return 18   // parts 5–8：3+4+5+6
+    }
+    return 140    // compare 有序对 Σ(parts−1)² (parts 2..8)
   }
   return 100      // 加减 / 比较 / 经过时间: 键空间远大于回查窗口
 }

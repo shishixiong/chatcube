@@ -35,16 +35,19 @@
 .mouth::before{content:'';position:absolute;left:0;right:0;top:0;height:28%;background:#fff;z-index:1}
 .mouth .tongue{position:absolute;left:50%;bottom:-25%;width:56%;height:62%;transform:translateX(-50%);background:#ff7d96;border-radius:50%}
 
-/* 1 专用 */
-.eye1{position:absolute;left:50%;top:16px;width:72px;height:72px;margin-left:-36px;border-radius:50%;
-  background:#a3121a;padding:8px;box-shadow:0 3px 0 rgba(0,0,0,.15)}
+/* 1 专用：深红眼窝大单眼 + 厚唇露齿笑 */
+.eye1{position:absolute;left:50%;top:10px;width:80px;height:80px;margin-left:-40px;border-radius:50%;
+  background:#a3121a;padding:9px;box-shadow:0 3px 0 rgba(0,0,0,.15)}
 .eye1 .white{width:100%;height:100%;border-radius:50%;background:#fff;position:relative;overflow:hidden}
-.eye1 .pupil{width:28px;height:28px}
+.eye1 .pupil{width:30px;height:30px}
 .eye1 .lid{background:#e8262b}
-.mouth1{position:absolute;left:50%;top:94px;width:56px;height:26px;margin-left:-28px;background:#4a070b;
-  border-radius:4px 4px 30px 30px;overflow:hidden}
-.mouth1::before{content:'';position:absolute;left:4px;right:4px;top:0;height:7px;background:#fff;border-radius:0 0 3px 3px}
-.mouth1::after{content:'';position:absolute;left:50%;bottom:-6px;width:30px;height:16px;margin-left:-15px;background:#ff6b81;border-radius:50%}
+.mouth1{position:absolute;left:50%;top:94px;width:62px;height:26px;margin-left:-31px;background:#4a070b;
+  border:4px solid #a3121a;border-top-width:2px;border-radius:6px 6px 32px 32px;overflow:hidden}
+.mouth1::before{content:'';position:absolute;left:4px;right:4px;top:0;height:8px;background:#fff;border-radius:0 0 3px 3px}
+.mouth1::after{content:'';position:absolute;left:50%;bottom:-7px;width:32px;height:16px;margin-left:-16px;background:#ff6b81;border-radius:50%}
+
+/* 2 专用：眼镜镜腿 */
+.temple{position:absolute;top:29px;width:14px;height:7px;border-radius:4px;background:#8e3e91}
 
 /* 4 眉毛和嘴 */
 .brow{position:absolute;border-radius:4px;box-shadow:0 3px 0 rgba(0,0,0,.15);

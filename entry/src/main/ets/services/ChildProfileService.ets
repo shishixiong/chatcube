@@ -49,6 +49,7 @@ const SKILL_DEFINITIONS: [string, string][] = [
   ['math_multiply', '乘法'],
   ['math_divide', '除法'],
   ['math_shapes', '图形认知'],
+  ['math_fractions', '分数'],
   ['math_comparison', '比较排序'],
   ['math_time', '时间认知'],
   ['math_word_problem', '解决问题'],

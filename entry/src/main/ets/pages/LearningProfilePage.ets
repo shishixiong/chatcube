@@ -45,6 +45,7 @@ const SKILL_GROUPS: LearningSkillGroup[] = [
       'math_multiply',
       'math_divide',
       'math_shapes',
+      'math_fractions',
       'math_comparison',
       'math_time',
       'math_word_problem'

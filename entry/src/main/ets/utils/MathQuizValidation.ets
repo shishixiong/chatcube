@@ -12,15 +12,22 @@
  * 纯外观问题 (question 文案缺失 / difficulty 怪异) 不在校验范围。
  *  1. arithmetic: expression 可计算时权威复算答案 (math_verify 同款引擎, 复算值与
  *     correct_answer 不一致即拒绝); 期望答案必须在数字 options 里
- *  2. shape: correct_answer / options 都是白名单形状名, 正确答案在选项里
+ *  2. shape: 认名(correct_answer / options 都是白名单形状名) / 数边数角
+ *     (正确答案是数字, 与图形真值一致)
  *  3. comparison: left/right_value 是数字; correct_answer 是数学真值运算符 (方向校验)
  *  4. time: correct_answer 的 H:MM 与 clock_hour/clock_minute 一致
  *  5. elapsed_time: correct_answer 的时长与 start/end 四字段计算结果一致
+ *  6. fraction: 看图选分数的答案与 frac_parts/frac_shaded 一致; 同分母比较方向校验
  */
 
 import {
   normalizeQuizType,
   normalizeShapeName,
+  normalizeShapeAsk,
+  normalizeFractionAsk,
+  normalizeFractionNumber,
+  normalizeFractionString,
+  fractionCompareTruth,
   normalizeOperator,
   normalizeClockHour,
   normalizeClockMinute,
@@ -33,6 +40,7 @@ import {
   sanitizeExpression,
   tokenizeExpression
 } from './MathQuizGame'
+import { shapePropsSides, shapePropsCorners, isCountableShape } from './MathTeachShapeProps'
 
 export interface MathQuizValidationResult {
   ok: boolean
@@ -58,6 +66,28 @@ function collectNumberOptions(parsed: Record<string, Object>): number[] {
       const v = arr[i]
       if (typeof v === 'number') {
         result.push(v as number)
+      }
+    }
+  }
+  return result
+}
+
+// shape 数边/数角题: 数字项, 同时接受数字型字符串（与 parseMathQuiz 的覆写口径一致）
+function collectShapeNumberOptions(parsed: Record<string, Object>): number[] {
+  const result: number[] = []
+  const raw = parsed['options']
+  if (Array.isArray(raw)) {
+    const arr = raw as Object[]
+    for (let i = 0; i < arr.length; i++) {
+      const v = arr[i]
+      if (typeof v === 'number') {
+        result.push(v as number)
+      } else if (typeof v === 'string') {
+        const text: string = (v as string).trim()
+        const n: number = Number(text)
+        if (text !== '' && Number.isFinite(n)) {
+          result.push(n)
+        }
       }
     }
   }
@@ -159,6 +189,47 @@ function validateArithmetic(parsed: Record<string, Object>): MathQuizValidationR
 }
 
 function validateShape(parsed: Record<string, Object>): MathQuizValidationResult {
+  const askRaw: Object | undefined = parsed['shape_ask']
+  const ask: string = normalizeShapeAsk(typeof askRaw === 'string' ? (askRaw as string) : '')
+  if (ask === 'name') {
+    return validateShapeName(parsed)
+  }
+  const askZh: string = ask === 'sides' ? '边' : '角'
+  const rawShape: Object | undefined = parsed['shape']
+  const shape: string = typeof rawShape === 'string' ? (rawShape as string).trim() : ''
+  if (!isCountableShape(shape)) {
+    return fail(`shape 数${askZh}题的目标图形必须是 triangle/square/rectangle/pentagon 之一` +
+      `（⚠️ 严禁 circle/star/heart，圆没有直的边，星形心形边角数不清），收到「${shape}」`)
+  }
+  const truth: number = ask === 'sides' ? shapePropsSides(shape) : shapePropsCorners(shape)
+  const rawCorrect: Object | undefined = parsed['correct_answer']
+  let declared: number | null = null
+  if (typeof rawCorrect === 'number') {
+    declared = rawCorrect as number
+  } else if (typeof rawCorrect === 'string') {
+    const text: string = (rawCorrect as string).trim()
+    const n: number = Number(text)
+    if (text !== '' && Number.isFinite(n)) {
+      declared = n
+    }
+  }
+  if (declared === null) {
+    return fail(`shape 数${askZh}题的 correct_answer 必须是数字（该图形有 ${truth} 个${askZh}），请修正后重新出题`)
+  }
+  if (declared !== truth) {
+    return fail(`${shape} 的${askZh}数是 ${truth}，你给的 correct_answer 是 ${declared}，请修正后重新出题`)
+  }
+  const options = collectShapeNumberOptions(parsed)
+  if (options.length < 2) {
+    return fail(`shape 数${askZh}题至少需要 2 个数字选项（options），请补充后重新出题`)
+  }
+  if (!containsNumber(options, truth)) {
+    return fail(`shape 数${askZh}题的正确答案 ${truth} 不在选项里，请把正确答案放进 options 后重新出题`)
+  }
+  return pass()
+}
+
+function validateShapeName(parsed: Record<string, Object>): MathQuizValidationResult {
   const rawCorrect = parsed['correct_answer']
   if (typeof rawCorrect !== 'string') {
     return fail('shape 题的 correct_answer 必须是英文形状名字符串 (circle/square/triangle/rectangle/pentagon/star/heart)')
@@ -173,6 +244,78 @@ function validateShape(parsed: Record<string, Object>): MathQuizValidationResult
   }
   if (!containsString(options, correct)) {
     return fail(`shape 题的正确答案 ${correct} 不在选项里, 请把正确答案放进 options 后重新出题`)
+  }
+  return pass()
+}
+
+function validateFraction(parsed: Record<string, Object>): MathQuizValidationResult {
+  const askRaw: Object | undefined = parsed['fraction_ask']
+  const ask: string = normalizeFractionAsk(typeof askRaw === 'string' ? (askRaw as string) : '')
+  const parts: number = normalizeFractionNumber(parsed['frac_parts'])
+  if (parts < 2 || parts > 8) {
+    return fail('fraction 题的 frac_parts 必须是 2-8 的整数（等分的份数，也就是分母）')
+  }
+  const shaded: number = normalizeFractionNumber(parsed['frac_shaded'])
+  if (shaded < 1) {
+    return fail('fraction 题的 frac_shaded 至少要取 1 份')
+  }
+  if (shaded >= parts) {
+    return fail('frac_shaded 取满全部份数是整体 1，超出分数初步认识范围（⚠️ 严禁 frac_shaded ≥ frac_parts）')
+  }
+  if (ask === 'compare') {
+    const shaded2: number = normalizeFractionNumber(parsed['frac_shaded2'])
+    if (shaded2 < 1 || shaded2 >= parts) {
+      return fail(`fraction 比较题的 frac_shaded2 必须是 1 到 ${parts - 1} 的整数（同分母比大小的右边分子）`)
+    }
+    const rawCorrect: Object | undefined = parsed['correct_answer']
+    if (typeof rawCorrect !== 'string') {
+      return fail('fraction 比较题的 correct_answer 必须是比较运算符字符串 (> / < / =)')
+    }
+    const op: string = normalizeOperator((rawCorrect as string).trim())
+    if (op === '') {
+      return fail(`fraction 比较题的 correct_answer「${rawCorrect}」不是合法运算符, 应为 > / < / = 之一`)
+    }
+    const truth: string = fractionCompareTruth(shaded, shaded2)
+    if (op !== truth) {
+      return fail(`fraction 比较题答案方向错误: ${shaded}/${parts} 与 ${shaded2}/${parts} 同分母，` +
+        `比分子 ${shaded} 和 ${shaded2}，正确运算符是「${truth}」，你给的是「${op}」`)
+    }
+    const opsRaw: Object | undefined = parsed['operator_options']
+    if (opsRaw !== undefined && Array.isArray(opsRaw)) {
+      const arr = opsRaw as Object[]
+      const normalizedOps: string[] = []
+      for (let i = 0; i < arr.length; i++) {
+        const v = arr[i]
+        if (typeof v === 'string') {
+          const n = normalizeOperator(v as string)
+          if (n !== '') {
+            normalizedOps.push(n)
+          }
+        }
+      }
+      if (!containsString(normalizedOps, truth)) {
+        return fail(`fraction 比较题的 operator_options 里没有正确运算符「${truth}」，请把它放进选项后重新出题`)
+      }
+    }
+    return pass()
+  }
+  const rawCorrect: Object | undefined = parsed['correct_answer']
+  const correct: string = normalizeFractionString(
+    typeof rawCorrect === 'string' ? (rawCorrect as string) : String(rawCorrect ?? ''))
+  if (correct === '') {
+    return fail(`fraction 题的 correct_answer「${rawCorrect}」不是合法的分数字符串，应形如「${shaded}/${parts}」`)
+  }
+  const expected: string = `${shaded}/${parts}`
+  if (correct !== expected) {
+    return fail(`fraction 题答案与图不一致: 平均分成 ${parts} 份取 ${shaded} 份是「${expected}」，` +
+      `你给的是「${correct}」，请修正后重新出题`)
+  }
+  const options = collectNormalizedStringOptions(parsed, normalizeFractionString)
+  if (options.length < 2) {
+    return fail('fraction 看图题至少需要 2 个合法的分数字符串选项（如「1/4」「3/4」），请补充后重新出题')
+  }
+  if (!containsString(options, expected)) {
+    return fail(`fraction 题的正确答案 ${expected} 不在选项里，请把正确答案放进 options 后重新出题`)
   }
   return pass()
 }
@@ -297,6 +440,9 @@ export function validateMathQuizArgs(args: string): MathQuizValidationResult {
   const quizType = normalizeQuizType(((parsed['type'] as string) ?? 'arithmetic'))
   if (quizType === 'shape') {
     return validateShape(parsed)
+  }
+  if (quizType === 'fraction') {
+    return validateFraction(parsed)
   }
   if (quizType === 'comparison') {
     return validateComparison(parsed)

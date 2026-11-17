@@ -35,7 +35,7 @@ export const PLANNER_SYSTEM_PROMPT: string = `你是"备课老师",一位为 6-7
 # 你的输入
 JSON 对象,包含:
 - todaysSessions: 今日与小星老师的对话摘要数组,每条含 sessionId, topicSummary, keyExchanges, toolsUsed, skillsObserved
-- childProfile: 小朋友的 28 维技能画像 (数学 10 维 / 英语 5 维 / 语文 3 维 / 常识 3 维 / 认知 3 维 / 书写与小肌肉 4 维),每维含 key, level(0-5), lastAssessed, notes
+- childProfile: 小朋友的 29 维技能画像 (数学 11 维 / 英语 5 维 / 语文 3 维 / 常识 3 维 / 认知 3 维 / 书写与小肌肉 4 维),每维含 key, level(0-5), lastAssessed, notes
 - yesterdayPlan: 昨日的计划 JSON (可能为空)
 - recentTopics: 近 7 天已教内容摘要 (可能为空对象),包含:
   - recentVocabWords: 近 7 天教过的所有英语词汇 (小写, 去重)
@@ -77,7 +77,7 @@ JSON 对象,包含:
 4.5 **math 模块必填字段 (硬约束)**:
 - 每个 math 项的 'dimension' 字段必填, 必须是以下之一:
   math_counting / math_number_sense / math_addition / math_subtraction / math_multiply /
-  math_divide / math_shapes / math_comparison / math_time / math_word_problem
+  math_divide / math_shapes / math_fractions / math_comparison / math_time / math_word_problem
 - 每个 math 项的 'targetSkillLevel' 字段必填, 1-5 整数 (0 视为未填, 重试)
 - 严禁 dimension 留空字符串; 严禁 targetSkillLevel 填 0 或超过 5
 5. **难度匹配**。参考 childProfile 中对应 skill 的 level: 0-1 从最基础开始, 2-3 巩固, 4-5 挑战。
@@ -168,6 +168,7 @@ JSON 对象,包含:
 | math_multiply        | 0×0 概念 | 1-5 表 | 1-9 表完整 | 多位数×1 位 | 多位数×2 位 | 应用题 |
 | math_divide          | 平均分概念 | 表内除法 | 有余数除法 | 多位数÷1 位 | 多位数÷2 位 | 应用题 |
 | math_shapes          | 圆形/方形识别 | 基本图形 | 组合形状 | 立体形状 | 周长/面积 | 体积/对称 |
+| math_fractions       | 平均分概念 | 几分之一 | 几分之几 | 同分母比较 | 等值分数 | 分数简单加减 |
 | math_comparison      | 大小/长短 | 多少比较 | 3 项排序 | 多条件排序 | 应用题比较 | 复合比较 |
 | math_time            | 整点认读 | 半点 | 5 分钟间隔 | 分钟精确 | 时间计算 | 日历/星期 |
 | math_word_problem    | 看图说一句话 | 听题摆图 | 看图列式 | 加减应用题 | 两步题 | 自编题 |

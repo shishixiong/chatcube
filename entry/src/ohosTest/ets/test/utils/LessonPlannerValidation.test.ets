@@ -88,11 +88,11 @@ export default function lessonPlannerValidationTest() {
   })
 
   describe('VALID_MATH_DIMENSIONS 常量', () => {
-    it('白名单 10 个 math 维度, 与 SKILL_DEFINITIONS 一致', 0, () => {
-      expect(VALID_MATH_DIMENSIONS.length).assertEqual(10)
+    it('白名单 11 个 math 维度, 与 SKILL_DEFINITIONS 一致', 0, () => {
+      expect(VALID_MATH_DIMENSIONS.length).assertEqual(11)
       const expected = [
         'math_counting', 'math_number_sense', 'math_addition', 'math_subtraction', 'math_multiply',
-        'math_divide', 'math_shapes', 'math_comparison', 'math_time', 'math_word_problem'
+        'math_divide', 'math_shapes', 'math_fractions', 'math_comparison', 'math_time', 'math_word_problem'
       ]
       for (let i = 0; i < expected.length; i++) {
         expect(VALID_MATH_DIMENSIONS.indexOf(expected[i]) >= 0).assertTrue()

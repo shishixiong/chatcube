@@ -1287,7 +1287,7 @@ function createChildProfileToolDefinition(): ToolDefinition {
           "properties": {
             "key": {
               "type": "string",
-              "description": "Skill dimension key: math_counting, math_number_sense, math_addition, math_subtraction, math_multiply, math_divide, math_shapes, math_comparison, math_time, math_word_problem, english_alphabet, english_vocab, english_sentence, english_phonics, english_reading, general_nature, general_social, general_life, logic_thinking, observation, spatial_reasoning, fine_motor, english_writing, chinese_writing, pinyin, chinese_vocab, chinese_reading, categorization"
+              "description": "Skill dimension key: math_counting, math_number_sense, math_addition, math_subtraction, math_multiply, math_divide, math_shapes, math_fractions, math_comparison, math_time, math_word_problem, english_alphabet, english_vocab, english_sentence, english_phonics, english_reading, general_nature, general_social, general_life, logic_thinking, observation, spatial_reasoning, fine_motor, english_writing, chinese_writing, pinyin, chinese_vocab, chinese_reading, categorization"
             },
             "level": {
               "type": "number",
@@ -1332,7 +1332,7 @@ function createChildProfileToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     CHILD_PROFILE_TOOL_ID,
-    'Read or update the child\'s learning profile. Call \'read\' at the START of each conversation to understand the child\'s current level across math, English, general knowledge, and cognitive dimensions. Call \'update\' after observing the child\'s actual performance on a topic to track their progress. Levels are 0-5 (0=unassessed, 5=mastery). Always update based on demonstrated ability, not guesses. Available skill keys: math_counting, math_number_sense, math_addition, math_subtraction, math_multiply, math_divide, math_shapes, math_comparison, math_time, math_word_problem, english_alphabet, english_vocab, english_sentence, english_phonics, english_reading, general_nature, general_social, general_life, logic_thinking, observation, spatial_reasoning, fine_motor, english_writing, chinese_writing, pinyin, chinese_vocab, chinese_reading, categorization.',
+    'Read or update the child\'s learning profile. Call \'read\' at the START of each conversation to understand the child\'s current level across math, English, general knowledge, and cognitive dimensions. Call \'update\' after observing the child\'s actual performance on a topic to track their progress. Levels are 0-5 (0=unassessed, 5=mastery). Always update based on demonstrated ability, not guesses. Available skill keys: math_counting, math_number_sense, math_addition, math_subtraction, math_multiply, math_divide, math_shapes, math_fractions, math_comparison, math_time, math_word_problem, english_alphabet, english_vocab, english_sentence, english_phonics, english_reading, general_nature, general_social, general_life, logic_thinking, observation, spatial_reasoning, fine_motor, english_writing, chinese_writing, pinyin, chinese_vocab, chinese_reading, categorization.',
     parameters
   )
 
@@ -1447,7 +1447,7 @@ function createMathVerifyToolConfig(): ToolConfig {
 // 数学游戏工具：让小星老师以互动卡片形式出数学题, 小朋友在屏幕上点选答案。
 
 interface MathQuizArgs {
-  type?: 'arithmetic' | 'shape' | 'comparison' | 'time' | 'elapsed_time'
+  type?: 'arithmetic' | 'shape' | 'comparison' | 'time' | 'elapsed_time' | 'fraction'
   question: string
   expression?: string
   correct_answer: string | number
@@ -1469,6 +1469,15 @@ interface MathQuizArgs {
   start_minute?: number
   end_hour?: number
   end_minute?: number
+  // shape 专用: name 认名 / sides 数边 / corners 数角
+  shape_ask?: 'name' | 'sides' | 'corners'
+  shape?: string
+  // fraction 专用
+  fraction_ask?: 'identify' | 'compare'
+  frac_form?: 'pizza' | 'bar'
+  frac_parts?: number
+  frac_shaded?: number
+  frac_shaded2?: number
 }
 
 class MathQuizResult {
@@ -1497,7 +1506,7 @@ class MathQuizExecutor implements ToolExecutor {
     // 如果工具被直接调用(没有前端交互), 返回提示信息。
     try {
       const params = JSON.parse(_args) as MathQuizArgs
-      // arithmetic 类型 correct_answer 期望 number; 其他 4 种 type 期望 string.
+      // arithmetic 类型 correct_answer 期望 number; 其他 type 期望 string 或数字（shape 数边角用数字）.
       // 后端只透传, 真实答案由前端 onAnswer 提交, 不做语义校验。
       const isArithmetic = (params.type ?? 'arithmetic') === 'arithmetic'
       const correct: string | number =
@@ -1517,8 +1526,8 @@ function createMathQuizToolDefinition(): ToolDefinition {
     "properties": {
       "type": {
         "type": "string",
-        "enum": ["arithmetic", "shape", "comparison", "time", "elapsed_time"],
-        "description": "题目类型. arithmetic=算术(add/sub/mul/div/counting/word_problem), shape=图形认知, comparison=大小比较, time=时间认知-读时间 (必须同时传 clock_hour 和 clock_minute), elapsed_time=时间认知-计时经过 (必须同时传 start_hour/start_minute/end_hour/end_minute, correct_answer 是时长字符串 e.g. 「1 小时 30 分」). 缺省视为 arithmetic."
+        "enum": ["arithmetic", "shape", "comparison", "time", "elapsed_time", "fraction"],
+        "description": "题目类型. arithmetic=算术(add/sub/mul/div/counting/word_problem), shape=图形认知(认名/数边/数角, 由 shape_ask 决定), comparison=大小比较, time=时间认知-读时间 (必须同时传 clock_hour 和 clock_minute), elapsed_time=时间认知-计时经过 (必须同时传 start_hour/start_minute/end_hour/end_minute, correct_answer 是时长字符串 e.g. 「1 小时 30 分」), fraction=分数初步认识(看图选分数/同分母比大小, 由 fraction_ask 决定). 缺省视为 arithmetic."
       },
       "question": {
         "type": "string",
@@ -1571,18 +1580,56 @@ function createMathQuizToolDefinition(): ToolDefinition {
         "multipleOf": 5,
         "description": "elapsed_time 专用: 结束钟面的分钟数 (5 分钟步长, 0/5/10/15/20/25/30/35/40/45/50/55)."
       },
+      "shape_ask": {
+        "type": "string",
+        "enum": ["name", "sides", "corners"],
+        "description": "shape 专用: name=认名字(缺省, 7 种图形 7 选 1), sides=数边(correct_answer 是数字, options 是数字选项), corners=数角(同上). sides/corners 必须再传 shape."
+      },
+      "shape": {
+        "type": "string",
+        "enum": ["triangle", "square", "rectangle", "pentagon"],
+        "description": "shape 的 sides/corners 专用: 目标图形. 只数直边图形(⚠️ 严禁 circle/star/heart, 圆没有直的边, 星形心形边角数不清). name 认名时忽略本字段, 7 种图形都在 options 里."
+      },
+      "fraction_ask": {
+        "type": "string",
+        "enum": ["identify", "compare"],
+        "description": "fraction 专用: identify=看图选分数(缺省, correct_answer/options 是分数字符串如「3/4」), compare=同分母分数比大小(correct_answer 是运算符, 用 operator_options)."
+      },
+      "frac_form": {
+        "type": "string",
+        "enum": ["pizza", "bar"],
+        "description": "fraction 专用: 图形载体 pizza=披萨扇形(缺省) / bar=分数条(等分长条)."
+      },
+      "frac_parts": {
+        "type": "integer",
+        "minimum": 2,
+        "maximum": 8,
+        "description": "fraction 专用: 平均分的份数(分母), 2-8 整数. compare 时两边同分母."
+      },
+      "frac_shaded": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 7,
+        "description": "fraction 专用: 涂色份数(分子), 1 到 frac_parts−1 的整数. compare 时是左边分子. ⚠️ 严禁 frac_shaded ≥ frac_parts(取满是整体 1, 不是本课范围)."
+      },
+      "frac_shaded2": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 7,
+        "description": "fraction 的 compare 专用: 右边分子, 1 到 frac_parts−1 的整数. 与 frac_shaded 相等时正确答案是「=」(同样多)."
+      },
       "correct_answer": {
         "type": ["string", "number"],
-        "description": "正确答案. arithmetic=数字 e.g. 5. shape=英文形状名 e.g. circle / square / triangle. comparison=比较运算符 e.g. 「>」. time=数字时钟字符串 e.g. 「3:30」 或 「12:00」, 必须与 clock_hour/clock_minute 一致, 5 分钟步长. elapsed_time=时长字符串 e.g. 「1 小时 30 分」 或 「30 分」, 必须与 start_hour/start_minute/end_hour/end_minute 计算结果一致."
+        "description": "正确答案. arithmetic=数字 e.g. 5. shape(认名)=英文形状名 e.g. circle / square / triangle; shape_ask=sides/corners=数字(边数/角数). comparison=比较运算符 e.g. 「>」. time=数字时钟字符串 e.g. 「3:30」 或 「12:00」, 必须与 clock_hour/clock_minute 一致, 5 分钟步长. elapsed_time=时长字符串 e.g. 「1 小时 30 分」 或 「30 分」, 必须与 start_hour/start_minute/end_hour/end_minute 计算结果一致. fraction(identify)=分数字符串 e.g. 「3/4」, 必须等于 frac_shaded/frac_parts; fraction(compare)=运算符, 必须使 左分子 ○ 右分子 成立."
       },
       "options": {
         "type": "array",
         "items": { "type": ["string", "number"] },
-        "description": "3-4 个选项. arithmetic 用数字; shape 用英文形状名; time 用数字时钟字符串 (H:MM, 5 分钟步长); elapsed_time 用时长字符串 (X 小时 Y 分 格式). comparison 一般留空, 用 operator_options 替代. 必须包含正确答案, 打乱顺序."
+        "description": "3-4 个选项. arithmetic 用数字; shape(认名) 用英文形状名; shape_ask=sides/corners 用数字(3-6); time 用数字时钟字符串 (H:MM, 5 分钟步长); elapsed_time 用时长字符串 (X 小时 Y 分 格式); fraction(identify) 用分数字符串(如「1/4」「3/4」, 建议干扰项同分母). comparison 一般留空, 用 operator_options 替代; fraction(compare) 留空, 用 operator_options. 必须包含正确答案, 打乱顺序."
       },
       "skill_key": {
         "type": "string",
-        "description": "强烈建议填写; 决定难度轨与画像维度; 优先用 math_addition / math_subtraction / math_multiply / math_divide / math_comparison / math_time / math_word_problem / math_counting / math_number_sense / math_shapes. 历史短名 (addition / subtraction / multiply / divide / shapes / comparison / time / counting / number_sense / word_problem) 会被自动归一; 未知值按空处理并由算式推断."
+        "description": "强烈建议填写; 决定难度轨与画像维度; 优先用 math_addition / math_subtraction / math_multiply / math_divide / math_comparison / math_time / math_word_problem / math_counting / math_number_sense / math_shapes / math_fractions. shape 题配 math_shapes, fraction 题配 math_fractions. 历史短名 (addition / subtraction / multiply / divide / shapes / fractions / comparison / time / counting / number_sense / word_problem) 会被自动归一; 未知值按空处理并由算式推断."
       },
       "purpose": {
         "type": "string",
@@ -1611,7 +1658,7 @@ function createMathQuizToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     MATH_QUIZ_TOOL_ID,
-    'Present a math quiz to the child as an interactive game card on screen. Use this INSTEAD of writing math problems in plain text. Set the type field: arithmetic=加减乘除算术题 (含应用题), shape=图形认知, comparison=大小比较, time=时间认知-读时间, elapsed_time=时间认知-计时经过. Provide 3-4 options including the correct answer. For comparison, fill left_value/right_value and operator_options, leave options empty. For time questions, also fill clock_hour (1-12) and clock_minute (5-minute step: 0/5/.../55) so the card can render an analog clock face. For arithmetic word problems, set word_problem=true and write the scenario in question (e.g. 「桌上有 3 个苹果, 再放 2 个, 一共几个呀」) and also fill the hidden expression. For elapsed_time questions, set type=elapsed_time and fill start_hour (1-12), start_minute (5-min step), end_hour (1-12), end_minute (5-min step). The correct_answer and options are duration strings like 「1 小时 30 分」,「30 分」,「2 小时」. Set purpose (default practice) and skill_key; practice questions must match the child current target level returned by child_profile.mathProgress or the difficulty_gate retry payload.',
+    'Present a math quiz to the child as an interactive game card on screen. Use this INSTEAD of writing math problems in plain text. Set the type field: arithmetic=加减乘除算术题 (含应用题), shape=图形认知 (认名/数边/数角, 由 shape_ask 决定), comparison=大小比较, time=时间认知-读时间, elapsed_time=时间认知-计时经过, fraction=分数初步认识 (看图选分数/同分母比大小, 由 fraction_ask 决定). Provide 3-4 options including the correct answer. For comparison, fill left_value/right_value and operator_options, leave options empty. For time questions, also fill clock_hour (1-12) and clock_minute (5-minute step: 0/5/.../55) so the card can render an analog clock face. For arithmetic word problems, set word_problem=true and write the scenario in question (e.g. 「桌上有 3 个苹果, 再放 2 个, 一共几个呀」) and also fill the hidden expression. For elapsed_time questions, set type=elapsed_time and fill start_hour (1-12), start_minute (5-min step), end_hour (1-12), end_minute (5-min step). The correct_answer and options are duration strings like 「1 小时 30 分」,「30 分」,「2 小时」. For shape sides/corners questions, set shape_ask=sides/corners plus shape (triangle/square/rectangle/pentagon), correct_answer and options are numbers. For fraction identify questions, fill frac_parts (2-8), frac_shaded (1..parts-1) and frac_form (pizza/bar), correct_answer and options are fraction strings like 「3/4」. For fraction compare questions, also fill frac_shaded2 and use operator_options (大于 / 小于 / 等于 三个符号). Set purpose (default practice) and skill_key; practice questions must match the child current target level returned by child_profile.mathProgress or the difficulty_gate retry payload.',
     parameters
   )
 
@@ -1635,7 +1682,7 @@ function createMathQuizToolConfig(): ToolConfig {
 }
 
 // ===== math_teach 工具 =====
-// 数学讲解板：先摆一摆再讲算理的交互教具, 七种 mode 七选一。
+// 数学讲解板：先摆一摆再讲算理的交互教具, 九种 mode 九选一。
 // 真实交互在 ToolExecutionService.handleMathTeach 特殊路径, 由前端讲解板卡片处理。
 
 class MathTeachExecutor implements ToolExecutor {
@@ -1650,7 +1697,7 @@ function createMathTeachToolDefinition(): ToolDefinition {
   const rawSchemaJson: string = `{
     "type": "object",
     "properties": {
-      "mode": {"type": "string", "enum": ["number_bond","ten_frame","break_ten","place_value","number_line","balance","clock"], "description": "讲解板类型七选一。number_bond 数的分与合（skill_key 配 math_number_sense）/ ten_frame 十格阵凑十（math_addition）/ break_ten 破十减法（math_subtraction）/ place_value 小棒与数位（math_counting）/ number_line 数轴跳一跳（op=add 配 math_addition，op=sub 配 math_subtraction）/ balance 天平比大小（math_comparison）/ clock 时钟拨一拨认读（math_time）"},
+      "mode": {"type": "string", "enum": ["number_bond","ten_frame","break_ten","place_value","number_line","balance","clock","shape_props","fraction_intro"], "description": "讲解板类型九选一。number_bond 数的分与合（skill_key 配 math_number_sense）/ ten_frame 十格阵凑十（math_addition）/ break_ten 破十减法（math_subtraction）/ place_value 小棒与数位（math_counting）/ number_line 数轴跳一跳（op=add 配 math_addition，op=sub 配 math_subtraction）/ balance 天平比大小（math_comparison）/ clock 时钟拨一拨认读（math_time）/ shape_props 图形特征数边数角（math_shapes，必须给 shape：triangle/square/rectangle/pentagon）/ fraction_intro 分数初步认识（math_fractions，必须给 parts/shaded/form）"},
       "stage": {"type": "string", "enum": ["warm_up","presentation","practice","production","review"], "description": "五步课当前环节标签，缺省 presentation。只影响卡片头部显示，不影响玩法"},
       "difficulty": {"type": "number", "description": "难度 1-5 整数，须与画像等级偏差不超过 1；画像该维度 level 为 0（未评估）时可自选"},
       "concept": {"type": "string", "description": "给孩子看的一句话知识点标题，如「凑十法：先凑成 10 再加」"},
@@ -1667,7 +1714,11 @@ function createMathTeachToolDefinition(): ToolDefinition {
       "left": {"type": "number", "description": "balance 专用：天平左盘数，1-99999 整数（万位以内，可教万以内数的大小比较）"},
       "right": {"type": "number", "description": "balance 专用：天平右盘数，1-99999 整数（万位以内，可教万以内数的大小比较）"},
       "hour": {"type": "number", "description": "clock 专用：时针位置，1-12 整数"},
-      "minute": {"type": "number", "description": "clock 专用：分针位置，0-55 且为 5 的倍数（0=整点，30=半点，其余指 5 分钟刻度）"}
+      "minute": {"type": "number", "description": "clock 专用：分针位置，0-55 且为 5 的倍数（0=整点，30=半点，其余指 5 分钟刻度）"},
+      "shape": {"type": "string", "enum": ["triangle","square","rectangle","pentagon"], "description": "shape_props 专用：要数边角的目标图形。只数直边图形（⚠️ 严禁 circle/star/heart，圆没有直的边，星形心形边角数不清）；边数和角数由卡片自动算出，不用填"},
+      "parts": {"type": "number", "description": "fraction_intro 专用：平均分成几份（分母），2-8 整数"},
+      "shaded": {"type": "number", "description": "fraction_intro 专用：取几份（分子），1 到 parts−1 的整数（⚠️ 严禁 shaded 不小于 parts，取满全部份数是整体 1，不是本课范围）"},
+      "form": {"type": "string", "enum": ["pizza","bar"], "description": "fraction_intro 专用：载体形式，pizza 披萨扇形（缺省）/ bar 分数条"}
     },
     "required": ["mode", "difficulty", "concept", "skill_key"]
   }`
@@ -1677,7 +1728,7 @@ function createMathTeachToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     MATH_TEACH_TOOL_ID,
-    '数学讲解板：先摆一摆再讲算理的交互教具。孩子先在讲解板上动手操作看懂算理，之后你再出操练题。七种 mode 七选一，每种 mode 有专属参数。调用前必须先 child_profile(action:read) 读画像，difficulty 与对应 skill_key 的画像等级偏差不超过 1 级。讲解完成后孩子会按「我学会了」回传 {mode, skill_key, stage, completed, interactions}，收到回执后按五步课协议继续出操练题（math_quiz）。⚠️ 严禁连续出题不讲解；⚠️ 严禁讲解参数与算理矛盾（声明凑十却出不用凑十的题）；⚠️ 严禁在 ten_frame 里讲不进位加法（和必须大于 10 才用这块板）；⚠️ 严禁不需要退位的减法（减数不大于被减数个位，如 15−3）使用 break_ten；⚠️ 严禁 number_line op=sub 时 step 不大于 start 的个位（跳不过 10 就不需要破十）；⚠️ 严禁 place_value action=unbundle 时 tens=0（没有捆可拆）。',
+    '数学讲解板：先摆一摆再讲算理的交互教具。孩子先在讲解板上动手操作看懂算理，之后你再出操练题。九种 mode 九选一，每种 mode 有专属参数。调用前必须先 child_profile(action:read) 读画像，difficulty 与对应 skill_key 的画像等级偏差不超过 1 级。讲解完成后孩子会按「我学会了」回传 {mode, skill_key, stage, completed, interactions}，收到回执后按五步课协议继续出操练题（math_quiz）。⚠️ 严禁连续出题不讲解；⚠️ 严禁讲解参数与算理矛盾（声明凑十却出不用凑十的题）；⚠️ 严禁在 ten_frame 里讲不进位加法（和必须大于 10 才用这块板）；⚠️ 严禁不需要退位的减法（减数不大于被减数个位，如 15−3）使用 break_ten；⚠️ 严禁 number_line op=sub 时 step 不大于 start 的个位（跳不过 10 就不需要破十）；⚠️ 严禁 place_value action=unbundle 时 tens=0（没有捆可拆）；⚠️ 严禁 circle/star/heart 使用 shape_props（圆没有直的边，星形心形边角数不清）；⚠️ 严禁 fraction_intro 的 shaded 不小于 parts（取满全部份数是整体 1，不是本课范围）；⚠️ 严禁用分数描述不是平均分的东西（份数必须同样大）。',
     parameters
   )
 
@@ -1688,7 +1739,7 @@ function createMathTeachToolConfig(): ToolConfig {
   return new ToolConfig(
     MATH_TEACH_TOOL_ID,
     '数学讲解板',
-    '先摆一摆再讲算理的交互教具讲解板, 小朋友在讲解板上动手操作。',
+    '数学讲解板：先摆一摆再讲算理的交互教具, 小朋友在讲解板上动手操作（含图形特征与分数初步认识）。',
     null,
     true,
     false,

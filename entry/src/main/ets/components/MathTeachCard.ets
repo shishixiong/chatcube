@@ -1,7 +1,7 @@
 /**
  * MathTeachCard - 数学讲解板互动卡片（math_teach 工具）
  *
- * 解析 toolCall.arguments 中的讲解参数（7 种 mode），分发到对应讲解板组件；
+ * 解析 toolCall.arguments 中的讲解参数（9 种 mode），分发到对应讲解板组件；
  * 孩子在板内动手操作（onInteract 计数），达到门槛后可点「我学会了 · 继续」
  * 提交 MathTeachResult。无对错判定，完成即成功。
  *
@@ -22,6 +22,8 @@ import { PlaceValueBoard } from './mathTeach/PlaceValueBoard'
 import { NumberLineBoard } from './mathTeach/NumberLineBoard'
 import { BalanceBoard } from './mathTeach/BalanceBoard'
 import { ClockBoard } from './mathTeach/ClockBoard'
+import { ShapePropsBoard } from './mathTeach/ShapePropsBoard'
+import { FractionIntroBoard } from './mathTeach/FractionIntroBoard'
 
 export interface MathTeachResult {
   mode: string
@@ -51,6 +53,10 @@ interface MathTeachArgsView {
   right: number
   hour: number
   minute: number
+  shape: string
+  parts: number
+  shaded: number
+  form: string
 }
 
 const TEACH_MODES_ZH: Record<string, string> = {
@@ -60,7 +66,9 @@ const TEACH_MODES_ZH: Record<string, string> = {
   'place_value': '小棒与数位',
   'number_line': '数轴跳一跳',
   'balance': '天平比大小',
-  'clock': '时钟拨一拨'
+  'clock': '时钟拨一拨',
+  'shape_props': '图形特征',
+  'fraction_intro': '分数初步认识'
 }
 
 const STAGE_ZH: Record<string, string> = {
@@ -90,7 +98,8 @@ function createDefaultArgsView(): MathTeachArgsView {
   const view: MathTeachArgsView = {
     valid: false, mode: '', stage: 'presentation', difficulty: 1, concept: '', skill_key: '',
     total: 9, a: 9, b: 5, tens: 2, ones: 8, action: 'bundle', start: 9, step: 5, op: 'add',
-    left: 9, right: 5, hour: 9, minute: 0
+    left: 9, right: 5, hour: 9, minute: 0,
+    shape: 'square', parts: 4, shaded: 3, form: 'pizza'
   }
   return view
 }
@@ -127,6 +136,10 @@ export function parseMathTeachArgs(raw: string): MathTeachArgsView {
     view.right = getNum(obj, 'right', 5)
     view.hour = getNum(obj, 'hour', 9)
     view.minute = getNum(obj, 'minute', 0)
+    view.shape = getStr(obj, 'shape', 'square')
+    view.parts = getNum(obj, 'parts', 4)
+    view.shaded = getNum(obj, 'shaded', 3)
+    view.form = getStr(obj, 'form', 'pizza')
   } catch (_e) {
     return view
   }
@@ -178,6 +191,10 @@ export struct MathTeachCard {
     if (this.argsView.mode === 'number_line') { return 2 }
     // clock 时钟拨一拨：认一认图例 / 拖拽松手 / 步进 / 步长切换 / 引导步进 各计一次（见 ClockBoard）
     if (this.argsView.mode === 'clock') { return 4 }
+    // shape_props 图形特征三步演示课：认一认 / 数边 / 数角 各计一次（见 ShapePropsBoard）
+    if (this.argsView.mode === 'shape_props') { return 3 }
+    // fraction_intro 分数初步认识两步演示课：平均分 / 取几份 各计一次（见 FractionIntroBoard）
+    if (this.argsView.mode === 'fraction_intro') { return 2 }
     return 1
   }
 
@@ -281,6 +298,30 @@ export struct MathTeachCard {
       BalanceBoard({ left: this.argsView.left, right: this.argsView.right, readonly: this.isAnswered, onInteract: () => { this.countInteract() } })
     } else if (this.argsView.mode === 'clock') {
       ClockBoard({ hour: this.argsView.hour, minute: this.argsView.minute, readonly: this.isAnswered, onInteract: () => { this.countInteract() } })
+    } else if (this.argsView.mode === 'shape_props') {
+      ShapePropsBoard({
+        shape: this.argsView.shape,
+        readonly: this.isAnswered,
+        onInteract: () => {
+          this.countInteract()
+        },
+        onFinish: () => {
+          this.submit()
+        }
+      })
+    } else if (this.argsView.mode === 'fraction_intro') {
+      FractionIntroBoard({
+        parts: this.argsView.parts,
+        shaded: this.argsView.shaded,
+        form: this.argsView.form,
+        readonly: this.isAnswered,
+        onInteract: () => {
+          this.countInteract()
+        },
+        onFinish: () => {
+          this.submit()
+        }
+      })
     }
   }
 

@@ -24,9 +24,10 @@ import type {
   MathQuizRecordInsert, MathQuizRecordRow, MathQuizTarget, MathQuizTrack
 } from '../models/MathQuizProgressionModels'
 
-const SUMMARY_TRACKS: MathQuizTrack[] = ['add', 'sub', 'muldiv', 'compare', 'clock', 'elapsed']
+const SUMMARY_TRACKS: MathQuizTrack[] = ['add', 'sub', 'muldiv', 'compare', 'clock', 'elapsed', 'shape', 'fraction']
 const SUMMARY_PROFILE_KEYS: string[] =
-  ['math_addition', 'math_subtraction', 'math_multiply', 'math_divide', 'math_comparison', 'math_time']
+  ['math_addition', 'math_subtraction', 'math_multiply', 'math_divide', 'math_comparison', 'math_time',
+    'math_shapes', 'math_fractions']
 const TAG: string = 'MathQuizHistoryService'
 
 export class MathQuizHistoryService {
@@ -206,7 +207,7 @@ export class MathQuizHistoryService {
   }
 
   /**
-   * 孩子画像摘要：六个可度量轨道的当前等级、本级进度与下一目标。
+   * 孩子画像摘要：八个可度量轨道的当前等级、本级进度与下一目标。
    */
   async getProgressSummary(): Promise<ChildProfileMathProgress[]> {
     try {

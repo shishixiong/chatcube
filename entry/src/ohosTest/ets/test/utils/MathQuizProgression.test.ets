@@ -1,7 +1,7 @@
 import { describe, it, expect } from '@ohos/hypium'
 import {
   applyMathQuizProgress, buildMathQuizProgressHint, buildMathQuizRecordExpression, buildTarget,
-  evaluateMathQuizGate, getLevelSpec, getMaxLevel, getTrackLabel, initialLevelForTrack,
+  estimateLevelKeySpace, evaluateMathQuizGate, getLevelSpec, getMaxLevel, getTrackLabel, initialLevelForTrack,
   normalizeExpressionKey, normalizePurpose, normalizeSkillKey, resolveMathQuizLevel
 } from '../../../../main/ets/utils/MathQuizProgression'
 import type {
@@ -13,7 +13,9 @@ function arithmetic(expression: string, skillKey: string = ''): MathQuizLevelInp
   const input: MathQuizLevelInput = {
     quizType: 'arithmetic', expression: expression, wordProblem: false, skillKey: skillKey,
     leftValue: 0, rightValue: 0, clockHour: 0, clockMinute: 0,
-    startHour: 0, startMinute: 0, endHour: 0, endMinute: 0
+    startHour: 0, startMinute: 0, endHour: 0, endMinute: 0,
+    shapeAsk: '', shapeTarget: '', correctAnswer: '',
+    fracAsk: '', fracParts: 0, fracShaded: 0, fracShaded2: 0
   }
   return input
 }
@@ -22,7 +24,9 @@ function comparison(left: number, right: number): MathQuizLevelInput {
   const input: MathQuizLevelInput = {
     quizType: 'comparison', expression: '', wordProblem: false, skillKey: '',
     leftValue: left, rightValue: right, clockHour: 0, clockMinute: 0,
-    startHour: 0, startMinute: 0, endHour: 0, endMinute: 0
+    startHour: 0, startMinute: 0, endHour: 0, endMinute: 0,
+    shapeAsk: '', shapeTarget: '', correctAnswer: '',
+    fracAsk: '', fracParts: 0, fracShaded: 0, fracShaded2: 0
   }
   return input
 }
@@ -31,7 +35,9 @@ function clock(hour: number, minute: number): MathQuizLevelInput {
   const input: MathQuizLevelInput = {
     quizType: 'time', expression: '', wordProblem: false, skillKey: '',
     leftValue: 0, rightValue: 0, clockHour: hour, clockMinute: minute,
-    startHour: 0, startMinute: 0, endHour: 0, endMinute: 0
+    startHour: 0, startMinute: 0, endHour: 0, endMinute: 0,
+    shapeAsk: '', shapeTarget: '', correctAnswer: '',
+    fracAsk: '', fracParts: 0, fracShaded: 0, fracShaded2: 0
   }
   return input
 }
@@ -40,7 +46,31 @@ function elapsed(sh: number, sm: number, eh: number, em: number): MathQuizLevelI
   const input: MathQuizLevelInput = {
     quizType: 'elapsed_time', expression: '', wordProblem: false, skillKey: '',
     leftValue: 0, rightValue: 0, clockHour: 0, clockMinute: 0,
-    startHour: sh, startMinute: sm, endHour: eh, endMinute: em
+    startHour: sh, startMinute: sm, endHour: eh, endMinute: em,
+    shapeAsk: '', shapeTarget: '', correctAnswer: '',
+    fracAsk: '', fracParts: 0, fracShaded: 0, fracShaded2: 0
+  }
+  return input
+}
+
+function shapeQuiz(ask: string, shape: string = '', correct: string = ''): MathQuizLevelInput {
+  const input: MathQuizLevelInput = {
+    quizType: 'shape', expression: '', wordProblem: false, skillKey: 'math_shapes',
+    leftValue: 0, rightValue: 0, clockHour: 0, clockMinute: 0,
+    startHour: 0, startMinute: 0, endHour: 0, endMinute: 0,
+    shapeAsk: ask, shapeTarget: shape, correctAnswer: correct,
+    fracAsk: '', fracParts: 0, fracShaded: 0, fracShaded2: 0
+  }
+  return input
+}
+
+function fractionQuiz(ask: string, parts: number, shaded: number, shaded2: number = 0): MathQuizLevelInput {
+  const input: MathQuizLevelInput = {
+    quizType: 'fraction', expression: '', wordProblem: false, skillKey: 'math_fractions',
+    leftValue: 0, rightValue: 0, clockHour: 0, clockMinute: 0,
+    startHour: 0, startMinute: 0, endHour: 0, endMinute: 0,
+    shapeAsk: '', shapeTarget: '', correctAnswer: '',
+    fracAsk: ask, fracParts: parts, fracShaded: shaded, fracShaded2: shaded2
   }
   return input
 }
@@ -302,15 +332,112 @@ export default function mathQuizProgressionTest() {
       const shape = resolveMathQuizLevel(arithmetic('', 'math_shapes'))
       expect(shape.gate).assertTrue()
       expect(shape.error.length > 0).assertTrue()
-      const shapeInput: MathQuizLevelInput = {
-        quizType: 'shape', expression: '', wordProblem: false, skillKey: 'math_shapes',
-        leftValue: 0, rightValue: 0, clockHour: 0, clockMinute: 0,
-        startHour: 0, startMinute: 0, endHour: 0, endMinute: 0
-      }
-      const shapeOk = resolveMathQuizLevel(shapeInput)
+      const shapeOk = resolveMathQuizLevel(shapeQuiz('name', '', 'circle'))
       expect(shapeOk.track).assertEqual('shape')
-      expect(shapeOk.gate).assertFalse()
+      expect(shapeOk.gate).assertTrue()
+      expect(shapeOk.level).assertEqual(1)
+      expect(shapeOk.error).assertEqual('')
       expect(resolveMathQuizLevel(arithmetic('3 + 2', 'math_shapes')).error.length > 0).assertTrue()
+    })
+  })
+
+  describe('resolveMathQuizLevel shape/fraction', () => {
+    it('classifies the shape ladder name → sides → corners', 0, () => {
+      expect(resolveMathQuizLevel(shapeQuiz('name', '', 'circle')).level).assertEqual(1)
+      expect(resolveMathQuizLevel(shapeQuiz('sides', 'square')).level).assertEqual(2)
+      expect(resolveMathQuizLevel(shapeQuiz('sides', 'triangle')).level).assertEqual(2)
+      expect(resolveMathQuizLevel(shapeQuiz('sides', 'rectangle')).level).assertEqual(2)
+      expect(resolveMathQuizLevel(shapeQuiz('sides', 'pentagon')).level).assertEqual(3)
+      expect(resolveMathQuizLevel(shapeQuiz('corners', 'triangle')).level).assertEqual(4)
+      expect(resolveMathQuizLevel(shapeQuiz('corners', 'square')).level).assertEqual(4)
+      expect(resolveMathQuizLevel(shapeQuiz('corners', 'pentagon')).level).assertEqual(5)
+      const bad = resolveMathQuizLevel(shapeQuiz('sides', 'circle'))
+      expect(bad.error.length > 0).assertTrue()
+      expect(resolveMathQuizLevel(shapeQuiz('corners', 'heart')).error.length > 0).assertTrue()
+    })
+
+    it('classifies the fraction ladder identify → compare', 0, () => {
+      expect(resolveMathQuizLevel(fractionQuiz('identify', 2, 1)).level).assertEqual(1)
+      expect(resolveMathQuizLevel(fractionQuiz('identify', 4, 1)).level).assertEqual(1)
+      expect(resolveMathQuizLevel(fractionQuiz('identify', 5, 1)).level).assertEqual(2)
+      expect(resolveMathQuizLevel(fractionQuiz('identify', 8, 1)).level).assertEqual(2)
+      expect(resolveMathQuizLevel(fractionQuiz('identify', 3, 2)).level).assertEqual(3)
+      expect(resolveMathQuizLevel(fractionQuiz('identify', 4, 3)).level).assertEqual(3)
+      expect(resolveMathQuizLevel(fractionQuiz('identify', 5, 2)).level).assertEqual(4)
+      expect(resolveMathQuizLevel(fractionQuiz('identify', 8, 7)).level).assertEqual(4)
+      expect(resolveMathQuizLevel(fractionQuiz('compare', 5, 2, 3)).level).assertEqual(5)
+      expect(resolveMathQuizLevel(fractionQuiz('compare', 2, 1, 1)).level).assertEqual(5)
+      expect(resolveMathQuizLevel(fractionQuiz('identify', 9, 1)).error.length > 0).assertTrue()
+      expect(resolveMathQuizLevel(fractionQuiz('identify', 4, 4)).error.length > 0).assertTrue()
+      expect(resolveMathQuizLevel(fractionQuiz('compare', 4, 2, 4)).error.length > 0).assertTrue()
+    })
+
+    it('builds shape/fraction dedupe keys and record expressions', 0, () => {
+      expect(normalizeExpressionKey(shapeQuiz('name', '', 'circle'))).assertEqual('shape:name:circle')
+      expect(normalizeExpressionKey(shapeQuiz('sides', 'pentagon'))).assertEqual('shape:sides:pentagon')
+      expect(normalizeExpressionKey(shapeQuiz('corners', 'square'))).assertEqual('shape:corners:square')
+      expect(normalizeExpressionKey(fractionQuiz('identify', 4, 3))).assertEqual('frac:4:3')
+      expect(normalizeExpressionKey(fractionQuiz('compare', 5, 2, 3))).assertEqual('frac:5:2:3')
+      expect(buildMathQuizRecordExpression(shapeQuiz('name', '', 'circle'))).assertEqual('认图形:circle')
+      expect(buildMathQuizRecordExpression(shapeQuiz('sides', 'pentagon'))).assertEqual('pentagon 边数')
+      expect(buildMathQuizRecordExpression(shapeQuiz('corners', 'pentagon'))).assertEqual('pentagon 角数')
+      expect(buildMathQuizRecordExpression(fractionQuiz('identify', 4, 3))).assertEqual('3/4')
+      expect(buildMathQuizRecordExpression(fractionQuiz('compare', 5, 2, 3))).assertEqual('2/5 ? 3/5')
+    })
+
+    it('estimates the small shape/fraction key spaces', 0, () => {
+      expect(estimateLevelKeySpace('shape', 1)).assertEqual(7)
+      expect(estimateLevelKeySpace('shape', 2)).assertEqual(3)
+      expect(estimateLevelKeySpace('shape', 3)).assertEqual(1)
+      expect(estimateLevelKeySpace('shape', 4)).assertEqual(3)
+      expect(estimateLevelKeySpace('shape', 5)).assertEqual(1)
+      expect(estimateLevelKeySpace('fraction', 1)).assertEqual(3)
+      expect(estimateLevelKeySpace('fraction', 2)).assertEqual(4)
+      expect(estimateLevelKeySpace('fraction', 3)).assertEqual(3)
+      expect(estimateLevelKeySpace('fraction', 4)).assertEqual(18)
+      expect(estimateLevelKeySpace('fraction', 5)).assertEqual(140)
+    })
+
+    it('maps profile levels and track metadata for shape/fraction', 0, () => {
+      const shape3: Record<string, number> = { 'math_shapes': 3 }
+      expect(initialLevelForTrack('shape', shape3)).assertEqual(3)
+      const frac4: Record<string, number> = { 'math_fractions': 4 }
+      expect(initialLevelForTrack('fraction', frac4)).assertEqual(4)
+      const empty: Record<string, number> = {}
+      expect(initialLevelForTrack('shape', empty)).assertEqual(1)
+      expect(initialLevelForTrack('fraction', empty)).assertEqual(1)
+      expect(getMaxLevel('shape')).assertEqual(5)
+      expect(getMaxLevel('fraction')).assertEqual(5)
+      expect(getTrackLabel('fraction')).assertEqual('分数')
+      expect(getTrackLabel('shape')).assertEqual('图形')
+      expect(normalizeSkillKey('fractions')).assertEqual('math_fractions')
+    })
+
+    it('enforces skill/type consistency for the new tracks', 0, () => {
+      expect(resolveMathQuizLevel(arithmetic('3 + 2', 'math_fractions')).error.length > 0).assertTrue()
+      expect(resolveMathQuizLevel(fractionQuiz('identify', 4, 3)).error).assertEqual('')
+      const mismatch: MathQuizLevelInput = fractionQuiz('identify', 4, 3)
+      mismatch.skillKey = 'math_shapes'
+      expect(resolveMathQuizLevel(mismatch).error.length > 0).assertTrue()
+    })
+
+    it('gates shape/fraction practice by target level', 0, () => {
+      const frac4 = resolveMathQuizLevel(fractionQuiz('identify', 5, 2))
+      expect(frac4.level).assertEqual(4)
+      expect(evaluateMathQuizGate(gateInput(frac4, 'practice', 1, [], 0, 's1')).error)
+        .assertEqual('difficulty_gate')
+      const frac1 = resolveMathQuizLevel(fractionQuiz('identify', 4, 1))
+      expect(evaluateMathQuizGate(gateInput(frac1, 'practice', 1, [], 0, 's1')).allowed).assertTrue()
+
+      const shapeName = resolveMathQuizLevel(shapeQuiz('name', '', 'circle'))
+      expect(evaluateMathQuizGate(gateInput(shapeName, 'practice', 3, [], 0, 's1')).error)
+        .assertEqual('difficulty_gate')
+      expect(evaluateMathQuizGate(gateInput(shapeName, 'warm_up', 3, [], 0, 's1')).allowed).assertTrue()
+
+      // 小键空间（shape L3 只有 pentagon 一种）用尽后自动放行重复，防锁死
+      const pentagonSides = resolveMathQuizLevel(shapeQuiz('sides', 'pentagon'))
+      expect(evaluateMathQuizGate(gateInput(pentagonSides, 'practice', 3,
+        [pentagonSides.expressionKey], 0, 's1')).allowed).assertTrue()
     })
   })
 

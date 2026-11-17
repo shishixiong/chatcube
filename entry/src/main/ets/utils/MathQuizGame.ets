@@ -6,14 +6,16 @@
  */
 
 import { evaluateMathExpression } from './MathExpressionParser'
+import { shapePropsSides, shapePropsCorners, isCountableShape } from './MathTeachShapeProps'
 
-// 题型联合: 5 种 math_quiz 子题型
+// 题型联合: 6 种 math_quiz 子题型
 // - arithmetic     算术(add/sub/mul/div/counting/word_problem)
-// - shape          图形认知(math_shapes)
+// - shape          图形认知(math_shapes: 认名 / 数边 / 数角)
 // - comparison     大小比较(math_comparison)
 // - time           时间认知-读时间(math_time)
 // - elapsed_time   时间认知-计时经过(math_time)
-export type QuizType = 'arithmetic' | 'shape' | 'comparison' | 'time' | 'elapsed_time'
+// - fraction       分数初步认识(math_fractions: 看图选分数 / 同分母比大小)
+export type QuizType = 'arithmetic' | 'shape' | 'comparison' | 'time' | 'elapsed_time' | 'fraction'
 
 export interface MathQuizQuestion {
   type: QuizType
@@ -38,6 +40,18 @@ export interface MathQuizQuestion {
   startMinute: number
   endHour: number
   endMinute: number
+  // shape 专用; shapeAsk = name(认名) / sides(数边) / corners(数角)，缺省 name
+  shapeAsk: string
+  // shape 的 sides/corners 专用: 目标图形（triangle/square/rectangle/pentagon）
+  shapeTarget: string
+  // fraction 专用; fracAsk = identify(看图选分数) / compare(同分母比大小)，缺省 identify
+  fracAsk: string
+  // fraction 专用; fracForm = pizza / bar，缺省 pizza
+  fracForm: string
+  // fraction 专用; 0 = 未提供
+  fracParts: number
+  fracShaded: number
+  fracShaded2: number
 }
 
 export interface MathQuizAnswerPayload {
@@ -141,7 +155,14 @@ export function parseMathQuiz(argsJson: string): MathQuizQuestion {
     startHour: 0,
     startMinute: 0,
     endHour: 0,
-    endMinute: 0
+    endMinute: 0,
+    shapeAsk: 'name',
+    shapeTarget: '',
+    fracAsk: 'identify',
+    fracForm: 'pizza',
+    fracParts: 0,
+    fracShaded: 0,
+    fracShaded2: 0
   }
   try {
     const parsed = JSON.parse(argsJson) as Record<string, Object>
@@ -179,20 +200,102 @@ export function parseMathQuiz(argsJson: string): MathQuizQuestion {
         }
       }
     } else if (result.type === 'shape') {
-      // 图形认知: correct_answer / options 都是英文形状名
-      const rawCorrect = parsed['correct_answer']
-      result.correctAnswer = normalizeShapeName(typeof rawCorrect === 'string' ? rawCorrect : String(rawCorrect ?? ''))
-      const rawOptions = parsed['options']
-      if (Array.isArray(rawOptions)) {
-        const arr = rawOptions as Object[]
-        for (let i = 0; i < arr.length; i++) {
-          const val = arr[i]
-          if (typeof val === 'string') {
-            const n = normalizeShapeName(val)
-            if (n !== '') {
-              result.options.push(n)
+      // 图形认知三问: name 认名(原有行为) / sides 数边 / corners 数角
+      result.shapeAsk = normalizeShapeAsk((parsed['shape_ask'] as string) ?? '')
+      const rawShape: Object | undefined = parsed['shape']
+      const targetRaw: string = typeof rawShape === 'string' ? (rawShape as string).trim() : ''
+      const target: string = isCountableShape(targetRaw) ? targetRaw : ''
+      if (result.shapeAsk === 'name') {
+        // 认名: correct_answer / options 都是英文形状名
+        const rawCorrect = parsed['correct_answer']
+        result.correctAnswer = normalizeShapeName(typeof rawCorrect === 'string' ? rawCorrect : String(rawCorrect ?? ''))
+        const rawOptions = parsed['options']
+        if (Array.isArray(rawOptions)) {
+          const arr = rawOptions as Object[]
+          for (let i = 0; i < arr.length; i++) {
+            const val = arr[i]
+            if (typeof val === 'string') {
+              const n = normalizeShapeName(val)
+              if (n !== '') {
+                result.options.push(n)
+              }
             }
           }
+        }
+      } else {
+        // 数边 / 数角: correct_answer 是数字, 以图形真值权威覆写 (LLM 传错不误判分)
+        result.shapeTarget = target
+        const truth: number = result.shapeAsk === 'sides'
+          ? shapePropsSides(target) : shapePropsCorners(target)
+        result.correctAnswer = truth
+        const rawOptions = parsed['options']
+        if (Array.isArray(rawOptions)) {
+          const arr = rawOptions as Object[]
+          for (let i = 0; i < arr.length; i++) {
+            const val = arr[i]
+            if (typeof val === 'number') {
+              result.options.push(val as number)
+            } else if (typeof val === 'string') {
+              const text: string = (val as string).trim()
+              const n: number = Number(text)
+              if (text !== '' && Number.isFinite(n)) {
+                result.options.push(n)
+              }
+            }
+          }
+        }
+        // 兜底: AI 可能漏掉正确项; 若 options < 4 自动补上
+        if (truth > 0 && result.options.indexOf(truth) === -1 && result.options.length < 4) {
+          result.options.push(truth)
+        }
+      }
+    } else if (result.type === 'fraction') {
+      // 分数初步认识: identify 看图选分数 / compare 同分母比大小
+      result.fracAsk = normalizeFractionAsk((parsed['fraction_ask'] as string) ?? '')
+      result.fracForm = normalizeFracForm((parsed['frac_form'] as string) ?? '')
+      result.fracParts = normalizeFractionNumber(parsed['frac_parts'])
+      result.fracShaded = normalizeFractionNumber(parsed['frac_shaded'])
+      result.fracShaded2 = normalizeFractionNumber(parsed['frac_shaded2'])
+      const parts: number = result.fracParts
+      const shaded: number = result.fracShaded
+      if (result.fracAsk === 'compare') {
+        // 同分母比大小: correct_answer 是运算符, 以分子比较真值覆写 (镜像 comparison 方向校验)
+        result.correctAnswer = fractionCompareTruth(shaded, result.fracShaded2)
+        const ops = parsed['operator_options']
+        if (Array.isArray(ops)) {
+          const arr = ops as Object[]
+          for (let i = 0; i < arr.length; i++) {
+            const v = arr[i]
+            if (typeof v === 'string') {
+              const n = normalizeOperator(v)
+              if (n !== '') {
+                result.operatorOptions.push(n)
+              }
+            }
+          }
+        }
+        if (result.operatorOptions.length === 0) {
+          result.operatorOptions = ['>', '<', '=']
+        }
+      } else {
+        // identify: 正确分数 = shaded/parts, 选项归一化为「分子/分母」字符串
+        result.correctAnswer = `${shaded}/${parts}`
+        const rawOptions = parsed['options']
+        if (Array.isArray(rawOptions)) {
+          const arr = rawOptions as Object[]
+          for (let i = 0; i < arr.length; i++) {
+            const val = arr[i]
+            if (typeof val === 'string') {
+              const n = normalizeFractionString(val)
+              if (n !== '') {
+                result.options.push(n)
+              }
+            }
+          }
+        }
+        // 兜底: AI 漏掉正确项时自动补
+        if (result.options.indexOf(result.correctAnswer as string) === -1 && result.options.length < 4) {
+          result.options.push(result.correctAnswer as string)
         }
       }
     } else if (result.type === 'comparison') {
@@ -349,10 +452,71 @@ const SHAPE_WHITELIST: string[] =
   ['circle', 'square', 'triangle', 'rectangle', 'pentagon', 'star', 'heart']
 
 export function normalizeQuizType(raw: string): QuizType {
-  if (raw === 'shape' || raw === 'comparison' || raw === 'time' || raw === 'elapsed_time') {
+  if (raw === 'shape' || raw === 'comparison' || raw === 'time' || raw === 'elapsed_time'
+    || raw === 'fraction') {
     return raw
   }
   return 'arithmetic'
+}
+
+/** shape_ask 归一化: name 认名 / sides 数边 / corners 数角, 未知归 name（向后兼容） */
+export function normalizeShapeAsk(raw: string): string {
+  if (raw === 'sides' || raw === 'corners') {
+    return raw
+  }
+  return 'name'
+}
+
+/** fraction_ask 归一化: identify 看图选分数 / compare 同分母比大小, 未知归 identify */
+export function normalizeFractionAsk(raw: string): string {
+  return raw === 'compare' ? 'compare' : 'identify'
+}
+
+/** frac_form 归一化: pizza 披萨 / bar 分数条, 未知归 pizza */
+export function normalizeFracForm(raw: string): string {
+  return raw === 'bar' ? 'bar' : 'pizza'
+}
+
+/** 分数参数字段安全取整数（缺省/非法一律 0，由上层校验兜底） */
+export function normalizeFractionNumber(raw: Object | undefined): number {
+  if (typeof raw === 'number') {
+    const n: number = raw as number
+    return Number.isFinite(n) ? Math.floor(n) : 0
+  }
+  if (typeof raw === 'string') {
+    const text: string = (raw as string).trim()
+    const n: number = Number(text)
+    return text !== '' && Number.isFinite(n) ? Math.floor(n) : 0
+  }
+  return 0
+}
+
+/**
+ * 分数字符串归一化: 「3 / 4」→「3/4」。
+ * 只接受分子 ≥ 1、分母 ≥ 2 的整数真分数记号（不含假分数 / 带分数 / 整体 1），非法返回 ''。
+ */
+export function normalizeFractionString(raw: string): string {
+  const m = raw.trim().match(/^(\d+)\s*\/\s*(\d+)$/)
+  if (m === null) {
+    return ''
+  }
+  const numerator: number = parseInt(m[1], 10)
+  const denominator: number = parseInt(m[2], 10)
+  if (numerator < 1 || denominator < 2) {
+    return ''
+  }
+  return `${numerator}/${denominator}`
+}
+
+/** 同分母比大小真值: a > b → '>' / a < b → '<' / 相等 → '=' */
+export function fractionCompareTruth(left: number, right: number): string {
+  if (left > right) {
+    return '>'
+  }
+  if (left < right) {
+    return '<'
+  }
+  return '='
 }
 
 export function normalizeShapeName(raw: string): string {

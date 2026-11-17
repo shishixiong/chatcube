@@ -1,37 +1,43 @@
 /* ================= 角色定义 ================= */
 const CHARS = [
-  /* ---------- 1 ---------- */
+  /* ---------- 1【按截图：歪着的红方块 + 深红眼窝大单眼 + 露齿笑】 ---------- */
   { n:1, color:'#e8323f', top:250, sh:120, shw:150, build(b){
     const red  = {base:'#e8262b', light:'#ff5252', dark:'#b5161c'};
     const lc   = {color:'#b3141c', dark:'#7d0b10'};
-    const foot = {w:28, h:16, color:'#b3141c', light:'#d8333b'};
-    num(b,'1',-20,-150,12);
-    limb(b,{x:-60, y:-8, len:58, w:20, rot:122, ...lc});
-    limb(b,{x: 60, y: 5, len:55, w:20, rot:-25, ...lc});
-    limb(b,{x:-28, y:58, len:62, w:20, rot: 6, ...lc, foot});
-    limb(b,{x: 28, y:58, len:62, w:20, rot:-6, ...lc, foot});
-    const f = cube(b, 130, red, 0, 0);
+    const foot = {w:30, h:18, color:'#b3141c', light:'#d8333b'};
+    num(b,'1',-14,-158,14);
+    // 身体整体歪 9°：左臂朝左上挥、右臂垂在右侧；腿保持竖直
+    const g = el('div','cube',b,'left:0;top:0;transform:rotateZ(9deg)');
+    limb(g,{x:-62, y:-14, len:58, w:20, rot:113, ...lc});
+    limb(g,{x: 62, y:  2, len:55, w:20, rot:-16, ...lc});
+    limb(b,{x:-26, y:60, len:60, w:20, rot: 7, ...lc, foot});
+    limb(b,{x: 26, y:60, len:60, w:20, rot:-7, ...lc, foot});
+    const f = cube(g, 130, red, 0, 0);
     f.innerHTML = `<div class="eye1"><div class="white"><div class="pupil"></div><div class="lid"></div></div></div>
                    <div class="mouth1"></div>`;
   }},
 
-  /* ---------- 2 ---------- */
+  /* ---------- 2【按截图：顶块歪戴 + 紫圆眼镜带镜腿 + 白底橙球鞋】 ---------- */
   { n:2, color:'#f28c28', top:250, sh:146, shw:150, build(b){
     const org  = {base:'#f7941d', light:'#ffb352', dark:'#cf7410'};
     const lc   = {color:'#8a3b80', dark:'#5e2457'};
-    const shoe = {w:38, h:20, color:'#f7941d', light:'#ffc070'};
-    num(b,'2',-20,-170);
-    limb(b,{x:-46, y:-58, len:62, w:18, rot: 125, ...lc});
-    limb(b,{x: 46, y:-58, len:62, w:18, rot:-125, ...lc});
-    limb(b,{x:-22, y:92, len:48, w:18, rot: 4, ...lc, foot:shoe});
-    limb(b,{x: 22, y:92, len:48, w:18, rot:-4, ...lc, foot:shoe});
-    const t = cube(b, 100, org, 0, -50);
-    cube(b, 100, org, 0, 50);
+    const shoe = {w:40, h:22, color:'#f7941d', light:'#ffc070', sole:'#ffffff'};
+    num(b,'2',-16,-178,-4);
+    // 手臂从两块接缝处朝上外挥
+    limb(b,{x:-50, y:-8, len:62, w:18, rot: 122, ...lc});
+    limb(b,{x: 50, y:-8, len:62, w:18, rot:-122, ...lc});
+    limb(b,{x:-22, y:98, len:46, w:18, rot: 4, ...lc, foot:shoe});
+    limb(b,{x: 22, y:98, len:46, w:18, rot:-4, ...lc, foot:shoe});
+    cube(b, 100, org, 3, 52);
+    // 顶块逆时针歪 8° 并略偏左，眼镜跟着头一起歪
+    const g = el('div','cube',b,'left:0;top:0;transform:rotateZ(-8deg)');
+    const t = cube(g, 100, org, -5, -54);
     t.innerHTML =
+      `<div class="temple" style="left:-11px"></div><div class="temple" style="left:97px"></div>` +
       lens({x:3,  y:12, w:44, rim:'#8e3e91', bw:6, lid:org.base, m:.7}) +
       lens({x:53, y:12, w:44, rim:'#8e3e91', bw:6, lid:org.base, m:.7}) +
       bridge(44, 31, 12, '#8e3e91') +
-      mouth({top:64, w:36, h:20, lip:'#f06a95', bw:4});
+      mouth({top:62, w:38, h:22, lip:'#f06a95', bw:4, tongue:true});
   }},
 
   /* ---------- 3 ---------- */

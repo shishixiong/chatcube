@@ -107,9 +107,10 @@ function limb(parent, o){
     const f = o.foot;
     const ft = el('div','limb',end,
       `left:${w/2-f.w/2}px;top:${endLen-f.h*0.6}px;width:${f.w}px;height:${f.h}px;transform:rotateZ(${-absRot}deg)`);
+    const sole = f.sole ? `linear-gradient(0deg,${f.sole} 0 24%,rgba(255,255,255,0) 24%),` : '';
     for (const r of [0,90])
       el('div','plane',ft,`transform:rotateY(${r}deg);border-radius:50%;
-        background:radial-gradient(circle at 40% 35%,${f.light},${f.color} 70%)`);
+        background:${sole}radial-gradient(circle at 40% 35%,${f.light},${f.color} 70%)`);
   }
   if (o.hand){
     const h = el('div','hand' + (o.still ? ' still' : ''),end,
