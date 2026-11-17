@@ -145,6 +145,38 @@ export default function mathColumnPaperLayoutTest() {
       expect(b.resultCorrect[0]).assertEqual('2')
       expect(b.resultCorrect[1]).assertEqual('3')
     })
+
+    it('四位数减法: 6354 - 4565 = 1789, 连续借位链标记在 1/2/3 位', 0, () => {
+      const r = computeColumnPaperLayout([6354, 4565], ['-'])
+      expect(r !== null).assertTrue()
+      const b = r!.blocks[0]
+      expect(b.cols).assertEqual(4)
+      expect(b.markExpected[0]).assertEqual('')
+      expect(b.markExpected[1]).assertEqual('borrow')
+      expect(b.markExpected[2]).assertEqual('borrow')
+      expect(b.markExpected[3]).assertEqual('borrow')
+      expect(b.resultCorrect[0]).assertEqual('9')
+      expect(b.resultCorrect[1]).assertEqual('8')
+      expect(b.resultCorrect[2]).assertEqual('7')
+      expect(b.resultCorrect[3]).assertEqual('1')
+      expect(b.answerPlaces).assertEqual(4)
+    })
+
+    it('五位数加法进位到 6 列: 99999 + 1 = 100000', 0, () => {
+      const r = computeColumnPaperLayout([99999, 1], ['+'])
+      expect(r !== null).assertTrue()
+      const b = r!.blocks[0]
+      expect(b.cols).assertEqual(6)
+      expect(b.resultCorrect[5]).assertEqual('1')
+      expect(b.answerPlaces).assertEqual(6)
+    })
+
+    it('五位数 4 操作数连加: 99999×4 = 399996 仍在 6 列上限内, 合法', 0, () => {
+      const r = computeColumnPaperLayout([99999, 99999, 99999, 99999], ['+', '+', '+'])
+      expect(r !== null).assertTrue()
+      expect(r!.blocks[0].cols).assertEqual(6)
+      expect(r!.blocks[0].operands.length).assertEqual(4)
+    })
   })
 
   describe('computeColumnPaperLayout - 拒绝路径', () => {
@@ -160,8 +192,8 @@ export default function mathColumnPaperLayoutTest() {
       expect(computeColumnPaperLayout([47, 28], ['+', '-'])).assertNull()
     })
 
-    it('操作数超 999 返回 null', 0, () => {
-      expect(computeColumnPaperLayout([1000, 5], ['+'])).assertNull()
+    it('操作数超 99999 返回 null', 0, () => {
+      expect(computeColumnPaperLayout([100000, 5], ['+'])).assertNull()
     })
 
     it('操作数为负返回 null', 0, () => {

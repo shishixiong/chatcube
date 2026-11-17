@@ -44,8 +44,8 @@ export interface ColumnPaperLayout {
 }
 
 const MAX_OPERANDS: number = 4   // 1-3 步链式 = 2-4 个操作数
-const MAX_DIGITS: number = 4     // 999 + 999 × 3 = 3996 → 4 位封顶
-const MAX_OPERAND_VALUE: number = 999
+const MAX_DIGITS: number = 6     // 99999 + 99999 × 3 = 399996 → 6 位封顶
+const MAX_OPERAND_VALUE: number = 99999   // 与 MathQuizProgression 加减轨最高级 (十万位以内) 对齐
 
 /** 链式表达式解析结果 */
 export interface ChainExpression {
@@ -223,10 +223,10 @@ function buildSubBlock(a: number, b: number): ColumnBlock {
 /**
  * 计算竖式纸布局 (v2 分步块)。任何一项不满足即返回 null (MathQuizCard 据此隐藏草稿纸按钮):
  * - 操作数 2..4 个 (1-3 步), ops 数 = 操作数数 - 1, op 仅 +/-
- * - 每个输入操作数为 0..999 整数
+ * - 每个输入操作数为 0..99999 整数
  * - 纯加法链 → 单块多数竖式; 含减法 → 顺序两数块, 前块结果接后块被减数
  * - 每步减法要求 被减数 ≥ 减数 (中间过程非负), 否则 null
- * - 块内列数 ≤ 4
+ * - 块内列数 ≤ 6
  */
 export function computeColumnPaperLayout(nums: number[], ops: string[]): ColumnPaperLayout | null {
   if (nums.length < 2 || nums.length > MAX_OPERANDS) {
