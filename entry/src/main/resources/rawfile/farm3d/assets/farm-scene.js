@@ -8,20 +8,20 @@
   var DAY = {
     sky: 0xDDF3FF,
     fog: 0xDDF3FF,
-    hemiSky: 0xEAF7FF,
+    hemiSky: 0xDCF2FF,
     hemiGround: 0xA8C686,
-    hemiI: 0.66,
+    hemiI: 0.40,
     dirColor: 0xFFF3D6,
-    dirI: 0.72
+    dirI: 0.88
   };
   var NIGHT = {
     sky: 0x2B2745,
     fog: 0x332E4E,
     hemiSky: 0x6A6790,
     hemiGround: 0x35482F,
-    hemiI: 0.32,
+    hemiI: 0.44,
     dirColor: 0xFFB577,
-    dirI: 0.20
+    dirI: 0.34
   };
   var RAIN_DAY = {
     sky: 0x9AA9B4, fog: 0x9AA9B4, hemiSky: 0xB9C6CC, hemiGround: 0x7B8668,
@@ -70,6 +70,7 @@
   var starField = null;
   var sunDisc = null;
   var moonDisc = null;
+  var skyDome = null;
   var reduceMotion = false;
   try {
     reduceMotion = !!(global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -226,6 +227,33 @@
     scene.add(moonDisc);
   }
 
+  // 天空渐变球：纯色背景让场景像贴在纸上，加一层自上而下的渐变才有空间感。
+  // 用 CanvasTexture 而非 shader，兼容性最好，且能随昼夜改色（见 applySceneColors）。
+  function createSkyDome() {
+    // 无 DOM 环境（Node 侧构建校验脚本）跳过：没有 canvas 就没有渐变色，
+    // 场景退回纯色背景，不影响其余逻辑。
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    var cv = document.createElement('canvas');
+    cv.width = 8;
+    cv.height = 256;
+    var ctx = cv.getContext('2d');
+    var grad = ctx.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0.0, '#BFE6FA');
+    grad.addColorStop(0.42, '#D7F0FD');
+    grad.addColorStop(0.72, '#EAF8FE');
+    grad.addColorStop(1.0, '#F7FCFF');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 8, 256);
+    var tex = new THREE.CanvasTexture(cv);
+    if (THREE.sRGBEncoding !== undefined && 'encoding' in tex) tex.encoding = THREE.sRGBEncoding;
+    var mat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, fog: false, depthWrite: false });
+    var geo = new THREE.SphereGeometry(520, 24, 16);
+    var dome = new THREE.Mesh(geo, mat);
+    dome.renderOrder = -3;
+    scene.add(dome);
+    return { mesh: dome, tex: tex, mat: mat };
+  }
+
   function createPuddles() {
     var spots = [
       { x: -20, z: -10, rx: 2.4, rz: 1.5 },
@@ -278,6 +306,7 @@
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(DAY.sky);
+    scene.backgroundIntensity = 1;
     scene.fog = new THREE.Fog(DAY.fog, 110, 310);
 
     camera = new THREE.PerspectiveCamera(46, 1, 0.1, 720);
@@ -288,14 +317,15 @@
     dir = new THREE.DirectionalLight(DAY.dirColor, DAY.dirI);
     dir.position.set(58, 96, 44);
     dir.castShadow = true;
-    dir.shadow.mapSize.set(1024, 1024);
+    dir.shadow.mapSize.set(2048, 2048);
     dir.shadow.camera.left = -95;
     dir.shadow.camera.right = 95;
     dir.shadow.camera.top = 95;
     dir.shadow.camera.bottom = -95;
     dir.shadow.camera.near = 10;
     dir.shadow.camera.far = 280;
-    dir.shadow.bias = -0.0015;
+    dir.shadow.bias = -0.0008;
+    dir.shadow.normalBias = 0.03;
     scene.add(dir);
     scene.add(dir.target);
 
@@ -321,6 +351,7 @@
     createRipples();
     createRain();
     createSkyBodies();
+    skyDome = createSkyDome();
     createPuddles();
 
     if (global.FarmAgents && global.FarmAgents.init) {
@@ -347,11 +378,13 @@
 
     clock = new THREE.Clock();
     bindEvents();
+    // 先按真实画布尺寸算好 camera.aspect，再定初始机位：
+    // 否则竖屏判定会拿到 aspect=1 的默认值，竖屏补偿就完全不生效。
+    S.resize();
     applyView('overview', true);
     placeActors(0);
     applySceneColors(0, 0);
 
-    S.resize();
     started = true;
     start();
     if (hooks.onReady) hooks.onReady();
@@ -568,15 +601,49 @@
     return focusObject(id, root, point);
   };
 
+  // 竖屏（手机）时横向视场远小于纵向：同一半径下农场两侧会被裁掉。
+  // 处理办法不是单纯把相机拉远（那样农场会缩成一小条），而是：
+  //   1) 抬高俯仰角，让画面从"横向长条"变成"纵向梯田"式构图；
+  //   2) 再按宽高比补一点距离，保证左右边界刚好入画。
+  function isNarrow() {
+    var a = camera && camera.aspect ? camera.aspect : 1.6;
+    return a < 1.0;
+  }
+
+  function aspectRadiusScale() {
+    var a = camera && camera.aspect ? camera.aspect : 1.6;
+    var ref = 1.45;
+    if (a >= ref) return 1;
+    return Math.min(1.45, Math.pow(ref / a, 0.34));
+  }
+
+  function aspectPhi(basePhi) {
+    // 越窄的屏幕越往下压视角，农场沿纵深铺开，正好填满竖屏
+    if (!isNarrow()) return basePhi;
+    var a = camera.aspect;
+    var t = Math.min(1, (1.0 - a) / 0.55);
+    return clamp(basePhi + 0.16 * t, D.camera.minPhi, D.camera.maxPhi);
+  }
+
   function applyView(name, instant) {
     var v = D.views[name];
     if (!v) return;
     var to = {
       theta: v.theta,
-      phi: clamp(v.phi, D.camera.minPhi, D.camera.maxPhi),
-      radius: clamp(v.radius, D.camera.minRadius, D.camera.maxRadius),
+      phi: clamp(aspectPhi(v.phi), D.camera.minPhi, D.camera.maxPhi),
+      radius: clamp(v.radius * aspectRadiusScale(), D.camera.minRadius, D.camera.maxRadius),
       target: new THREE.Vector3(v.target[0], v.target[1], v.target[2])
     };
+    if (isNarrow()) {
+      // 农场沿 x 轴铺开（约 140 单位），沿 z 轴只有 110。
+      // 竖屏的空间在纵向，因此从"东南角"斜看，让 x 轴斜投影进竖屏对角线。
+      var a = camera.aspect;
+      var t2 = Math.min(1, (1.0 - a) / 0.62);
+      to.theta = v.theta + 0.52 * t2;
+      to.radius = clamp(v.radius * (1 + 0.24 * t2), D.camera.minRadius, D.camera.maxRadius);
+      to.target.x = v.target[0] * (1 - 0.35 * t2) + 4 * t2;
+      to.target.z = v.target[2] * (1 - 0.18 * t2) + 2 * t2;
+    }
     if (instant) {
       goal.theta = to.theta;
       goal.phi = to.phi;
@@ -2839,9 +2906,13 @@
     var sky = lerpC(daySkyColor, nightSkyColor, n).lerp(new THREE.Color(rainPal.sky), r);
     var fog = lerpC(dayFogColor, nightFogColor, n).lerp(new THREE.Color(rainPal.fog), r);
     scene.background.copy(sky);
+    if (skyDome) {
+      skyDome.mat.color.copy(lerpC(new THREE.Color(0xFFFFFF), new THREE.Color(0x8E8CB0), n))
+        .lerp(new THREE.Color(0x7C868F), r * 0.8);
+    }
     scene.fog.color.copy(fog);
-    scene.fog.near = 110 - 20 * r;
-    scene.fog.far = 310 - 90 * r;
+    scene.fog.near = 130 - 26 * r;
+    scene.fog.far = 360 - 110 * r;
     hemi.color.copy(lerpC(dayHemiSky, nightHemiSky, n).lerp(new THREE.Color(rainPal.hemiSky), r * 0.75));
     hemi.groundColor.copy(lerpC(dayHemiGround, nightHemiGround, n).lerp(new THREE.Color(rainPal.hemiGround), r * 0.75));
     hemi.intensity = (DAY.hemiI + (NIGHT.hemiI - DAY.hemiI) * n) * (1 - 0.28 * r);
@@ -2860,11 +2931,23 @@
     }
     if (built.cloudMats) {
       for (var c = 0; c < built.cloudMats.length; c++) {
-        built.cloudMats[c].color.copy(new THREE.Color(0xFFFDF6).lerp(new THREE.Color(0x8E99A3), r * 0.85));
-        built.cloudMats[c].opacity = 0.92 + 0.05 * r;
+        // 雨天云要变"厚"而不是变"黑"：深灰会让低多边形云看起来像漂浮的石头
+        var cloudCol = new THREE.Color(0xFFFDF6)
+          .lerp(new THREE.Color(0xE2E8EC), r * 0.7)
+          .lerp(new THREE.Color(0x8E93A8), n * 0.55);
+        built.cloudMats[c].color.copy(cloudCol);
+        built.cloudMats[c].emissive.copy(cloudCol);
+        built.cloudMats[c].emissiveIntensity = 0.72 * (1 - n * 0.15);
+        built.cloudMats[c].opacity = 0.94;
       }
     }
     if (built.puddleMat) built.puddleMat.opacity = 0.35 * r;
+    // 白天的草色差异在夜里毫无意义，只会变成一块块亮斑，随夜色淡出
+    if (built.patchMats) {
+      for (var pm = 0; pm < built.patchMats.length; pm++) {
+        built.patchMats[pm].opacity = (pm % 2 === 0 ? 0.30 : 0.34) * (1 - n * 0.92) * (1 - r * 0.55);
+      }
+    }
     if (starField) {
       starField.visible = n > 0.02 && r < 0.5;
       starField.material.opacity = 0.9 * n * (1 - r);

@@ -13,8 +13,8 @@
     grassDark: 0x76A857,
     wheat: 0xF2C14E,
     wheatDeep: 0xE0A93A,
-    barn: 0xC8553D,
-    barnDeep: 0xA8452F,
+    barn: 0xB65B45,
+    barnDeep: 0x99452F,
     soil: 0xC9A66B,
     soilDark: 0xB08F58,
     sky: 0xDDF3FF,
@@ -93,6 +93,23 @@
     });
     lampMats.push(m);
     return m;
+  }
+
+  // 带窗框的窗户：只有一块浅蓝方块时，近看像贴纸。
+  // 加一圈外框 + 中间十字窗棂 + 底部窗台，体量感立刻出来。
+  function windowUnit(parent, w, h, d, x, y, z, opts) {
+    opts = opts || {};
+    var frameCol = opts.frame || C.cream;
+    var t = 0.11;
+    var out = 0.05;
+    mesh(parent, box(w + t * 2, h + t * 2, d * 0.7), frameCol, x, y, z, { cast: false });
+    mesh(parent, box(w, h, d), windowMaterial(), x, y, z + d * 0.2, { cast: false });
+    // 十字窗棂
+    mesh(parent, box(0.06, h, d * 0.5), frameCol, x, y, z + d * 0.55, { cast: false });
+    mesh(parent, box(w, 0.06, d * 0.5), frameCol, x, y, z + d * 0.55, { cast: false });
+    // 窗台
+    mesh(parent, box(w + t * 2.6, 0.1, d + 0.22), opts.sill || frameCol, x, y - h / 2 - t, z + out, { cast: false });
+    return parent;
   }
 
   function mesh(parent, geo, color, x, y, z, opts) {
@@ -207,7 +224,10 @@
     shape.lineTo(w / 2, 0);
     shape.lineTo(0, h);
     shape.closePath();
-    var m = new THREE.Mesh(new THREE.ShapeGeometry(shape), material(color));
+    // 用挤出体而不是单面片：单面片在侧后方看会直接消失，露出屋顶内部黑洞
+    var geo = new THREE.ExtrudeGeometry(shape, { depth: 0.3, bevelEnabled: false });
+    geo.translate(0, 0, -0.15);
+    var m = new THREE.Mesh(geo, material(color));
     m.position.set(0, y, z);
     m.castShadow = true;
     m.receiveShadow = true;
@@ -224,9 +244,81 @@
     };
   }
 
+  // 程序化草地纹理：只在明暗上做文章（基色纯白），这样材质 color 仍然可以整体调色，
+  // 昼夜/雨天换色时纹理明暗依然保留，地面不再是"一块塑料板"。
+  function makeGrassTexture() {
+    // 无 DOM 环境（Node 侧构建校验脚本）直接跳过：没有 canvas 就没有纹理，
+    // 地面退回纯色，不影响几何与可点对象的校验。
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    var size = 1024;
+    var cv = document.createElement('canvas');
+    cv.width = cv.height = size;
+    var ctx = cv.getContext('2d');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, size, size);
+    var rnd = makeRng(90210);
+    // 大块明暗起伏
+    for (var i = 0; i < 130; i++) {
+      var r = 18 + rnd() * 52;
+      var cx = rnd() * size, cy = rnd() * size;
+      var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+      var dark = rnd() > 0.48;
+      g.addColorStop(0, dark ? 'rgba(15,40,15,0.10)' : 'rgba(255,255,235,0.13)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // 中频草皮团：近看时提供结构感，避免只有细噪点导致的"糊成一片"
+    for (var m = 0; m < 420; m++) {
+      var mr = 5 + rnd() * 15;
+      var mx = rnd() * size, my = rnd() * size;
+      var mg = ctx.createRadialGradient(mx, my, 0, mx, my, mr);
+      mg.addColorStop(0, rnd() > 0.5 ? 'rgba(40,80,32,0.13)' : 'rgba(250,255,230,0.15)');
+      mg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = mg;
+      ctx.beginPath();
+      ctx.arc(mx, my, mr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // 细草叶：短细线，方向随机
+    for (var j = 0; j < 14000; j++) {
+      var x = rnd() * size, y = rnd() * size;
+      var len = 1.4 + rnd() * 3.2;
+      var a = -Math.PI / 2 + (rnd() - 0.5) * 1.5;
+      ctx.strokeStyle = rnd() > 0.5 ? 'rgba(30,60,25,0.16)' : 'rgba(245,255,225,0.20)';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+      ctx.stroke();
+    }
+    var tex = new THREE.CanvasTexture(cv);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(1, 1);
+    tex.anisotropy = 8;
+    if (THREE.sRGBEncoding !== undefined && 'encoding' in tex) tex.encoding = THREE.sRGBEncoding;
+    return tex;
+  }
+
   function makeBarn() {
     var g = new THREE.Group();
     mesh(g, box(13, 6.2, 9.4), C.barn, 0, 3.1, 0);
+
+    // 木板墙：浅色细板条贴在正立面，红色大平板上有了竖向节奏就不呆板
+    for (var bp = 0; bp < 18; bp++) {
+      var bx = -6.3 + bp * 0.74;
+      mesh(g, box(0.045, 5.9, 0.03), 0xA9503B, bx, 3.1, 4.71, { cast: false });
+    }
+    // 墙角立柱 + 勒脚：给方盒一个结构框架
+    for (var cs = -1; cs <= 1; cs += 2) {
+      mesh(g, box(0.34, 6.3, 0.34), C.barnDeep, cs * 6.4, 3.15, 4.72);
+      mesh(g, box(0.34, 6.3, 0.34), C.barnDeep, cs * 6.4, 3.15, -4.72);
+    }
+    mesh(g, box(13.3, 0.34, 9.7), C.barnDeep, 0, 0.17, 0);
+
     gable(g, 14.6, 10.6, 3.6, C.barnDeep, 6.2);
     // 门框
     mesh(g, box(4.2, 0.36, 0.34), C.cream, 0, 4.62, 4.8);
@@ -253,8 +345,8 @@
     g.userData.doors = { left: doorL, right: doorR };
 
     mesh(g, box(13.4, 0.34, 0.22), C.cream, 0, 6.02, 4.84);
-    mesh(g, box(1.1, 1.1, 0.16), windowMaterial(), -5.2, 4.4, 4.78);
-    mesh(g, box(1.1, 1.1, 0.16), windowMaterial(), 5.2, 4.4, 4.78);
+    windowUnit(g, 1.1, 1.1, 0.16, -5.2, 4.4, 4.74);
+    windowUnit(g, 1.1, 1.1, 0.16, 5.2, 4.4, 4.74);
     mergeStaticGroup(g, [doorL, doorR], {});
     return g;
   }
@@ -262,6 +354,15 @@
   function makeFarmhouse() {
     var g = new THREE.Group();
     mesh(g, box(9.6, 4.4, 7.2), C.cream, 0, 2.2, 0);
+
+    // 横向护墙板：白色大墙面在斜射光下几乎没有明暗，加板缝才有体积感
+    for (var hp2 = 0; hp2 < 5; hp2++) {
+      var hy = 0.46 + hp2 * 0.74;
+      mesh(g, box(9.62, 0.028, 7.22), 0xF0E5CB, 0, hy, 0, { cast: false });
+    }
+    // 勒脚：底部一条深色石基，把房子"压"在地上
+    mesh(g, box(9.9, 0.44, 7.5), C.stone, 0, 0.22, 0);
+
     gable(g, 10.8, 8.4, 2.9, C.barn, 4.4);
     // 门洞暗部 + 可开合的木门（铰链在左侧，farm-scene.js 的回家/出门演出会转动它）
     mesh(g, box(1.5, 2.9, 0.06), C.ink, 0, 1.45, 3.62, { cast: false, receive: false });
@@ -271,8 +372,8 @@
     mesh(houseDoor, box(1.6, 3, 0.2), C.wood, -0.8, 1.5, 0);
     mesh(houseDoor, box(0.08, 0.5, 0.08), C.ink, -1.45, 1.45, 0.14, { cast: false });
     g.userData.door = houseDoor;
-    mesh(g, box(1.15, 1.15, 0.16), windowMaterial(), -2.7, 2.5, 3.62);
-    mesh(g, box(1.15, 1.15, 0.16), windowMaterial(), 2.7, 2.5, 3.62);
+    windowUnit(g, 1.15, 1.15, 0.16, -2.7, 2.5, 3.58, { sill: C.wood });
+    windowUnit(g, 1.15, 1.15, 0.16, 2.7, 2.5, 3.58, { sill: C.wood });
     mesh(g, box(0.9, 2.4, 0.9), C.stone, 2.5, 5.6, -1.2);
     mesh(g, box(0.9, 0.4, 1.2), 0x6A5A4A, 2.5, 6.9, -1.2);
     mesh(g, box(3.6, 0.22, 2.0), C.barnDeep, -1.3, 3.5, 4.5);
@@ -972,7 +1073,18 @@
 
   function makeCloud(scale) {
     var g = new THREE.Group();
-    var mat = material(C.white, { opacity: 0.92 });
+    // 云不能用受光的 Phong 材质：光照一弱就变成灰色石头。
+    // 用几乎不受光的自发光材质，颜色由 applySceneColors 统一调冷暖明暗。
+    // 注意 r128 的 MeshLambertMaterial 不支持 flatShading，低多边形感由
+    // SphereGeometry 的低分段数（7x5）本身提供。
+    var mat = new THREE.MeshLambertMaterial({
+      color: C.white,
+      emissive: new THREE.Color(0xFFFFFF),
+      emissiveIntensity: 0.72,
+      transparent: true,
+      opacity: 0.94,
+      fog: false
+    });
     mesh(g, sph(3.2 * scale, 7, 5), mat, 0, 0, 0, { cast: false, receive: false });
     mesh(g, sph(2.2 * scale, 7, 5), mat, 3.2 * scale, -0.4 * scale, 0.4 * scale, { cast: false, receive: false });
     mesh(g, sph(2.4 * scale, 7, 5), mat, -3.0 * scale, -0.3 * scale, -0.3 * scale, { cast: false, receive: false });
@@ -2001,24 +2113,44 @@
       return obj;
     }
 
-    var ground = new THREE.Mesh(new THREE.PlaneGeometry(140, 110), material(C.grass, { unique: true }));
+    // 地面做成一张大圆盘而不是方板：方板的直边在小屏幕上会露出"贴纸边"，
+    // 圆盘配合远处的雾，边缘自然溶进天色，看不出尽头。
+    var ground = new THREE.Mesh(new THREE.CircleGeometry(400, 72), material(C.grass, { unique: true }));
     ground.material.specular = new THREE.Color(0x9FB4C4);
+    var grassTex = makeGrassTexture();
+    if (grassTex) {
+      grassTex.repeat.set(52, 52);
+      ground.material.map = grassTex;
+    }
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     root.add(ground);
 
+    // 地表色差：只做很淡的深浅过渡，边缘用两层同心圆软化，避免出现"褪色圆贴纸"
     var patches = [
-      { x: -26, z: 30, r: 18, c: C.sage },
-      { x: 30, z: -30, r: 16, c: C.sage },
-      { x: 42, z: 34, r: 12, c: 0x9CC77C },
-      { x: 0, z: 0, r: 14, c: 0x9CC77C }
+      { x: -26, z: 30, r: 19, c: 0x93C06E },
+      { x: 30, z: -30, r: 17, c: 0x93C06E },
+      { x: 42, z: 34, r: 13, c: 0x9AC475 },
+      { x: 0, z: 0, r: 15, c: 0x9AC475 }
     ];
+    // 注意：色斑必须用受光材质。用 MeshBasicMaterial 时夜里不受光照影响，
+    // 会变成一块块发亮的绿色圆盘，非常刺眼。
+    var patchMats = [];
     for (var pi = 0; pi < patches.length; pi++) {
-      var patch = new THREE.Mesh(new THREE.CircleGeometry(patches[pi].r, 18), material(patches[pi].c));
+      var pp = patches[pi];
+      var softMat = new THREE.MeshLambertMaterial({ color: pp.c, transparent: true, opacity: 0.30, depthWrite: false });
+      var soft = new THREE.Mesh(new THREE.CircleGeometry(pp.r * 1.42, 24), softMat);
+      soft.rotation.x = -Math.PI / 2;
+      soft.position.set(pp.x, 0.008, pp.z);
+      soft.receiveShadow = false;
+      root.add(soft);
+      patchMats.push(softMat);
+      var patchMat = new THREE.MeshLambertMaterial({ color: pp.c, transparent: true, opacity: 0.34, depthWrite: false });
+      var patch = new THREE.Mesh(new THREE.CircleGeometry(pp.r, 24), patchMat);
       patch.rotation.x = -Math.PI / 2;
-      patch.position.set(patches[pi].x, 0.01, patches[pi].z);
-      patch.receiveShadow = true;
+      patch.position.set(pp.x, 0.012, pp.z);
       root.add(patch);
+      patchMats.push(patchMat);
     }
 
     var ring = new THREE.Mesh(new THREE.RingGeometry(0.84, 1, 64), material(C.soil));
@@ -2158,6 +2290,49 @@
       register('tree', tree, 6.4 * treeSpots[ti].s);
     }
 
+    // 远景：把地面边缘藏进丘陵里，避免农场像一块悬空的方形贴纸。
+    // 围栏外一圈低矮草丘，半径逐层外扩、颜色逐层偏冷，形成空气透视。
+    // 远山与远树全部塞进 farGroup 再合批——它们都是纯静态远景，
+    // 逐棵独立联网格会让 draw call 白涨一百多个。
+    var farGroup = new THREE.Group();
+    root.add(farGroup);
+    var rimRnd = makeRng(4242);
+
+    // 远山：两层低矮丘陵，只做剪影。颜色比农场草地更灰更淡，
+    // 配合雾形成空气透视；高度控制在 20 以内，绝不挡住农场主体。
+    var rimSpecs = [
+      { r: 52, h: 16, ring: 210, n: 18, color: 0x8FB273, y: -2.0 },
+      { r: 76, h: 24, ring: 290, n: 14, color: 0x9EB893, y: -4.0 }
+    ];
+    for (var rs = 0; rs < rimSpecs.length; rs++) {
+      var spec = rimSpecs[rs];
+      for (var ri2 = 0; ri2 < spec.n; ri2++) {
+        var ang = (ri2 / spec.n) * Math.PI * 2 + rs * 0.43;
+        var rad = spec.ring + (rimRnd() - 0.5) * 54;
+        var rr2 = spec.r * (0.78 + rimRnd() * 0.5);
+        var mh = makeHill(rr2, spec.h * (0.5 + rimRnd() * 0.7));
+        mh.material = material(spec.color);
+        mh.position.set(Math.cos(ang) * rad, spec.y, Math.sin(ang) * rad * 0.92);
+        mh.rotation.y = rimRnd() * Math.PI;
+        mh.castShadow = false;
+        mh.receiveShadow = false;
+        farGroup.add(mh);
+      }
+    }
+
+    // 中景：围栏外零散的远树，只在外圈稀疏点缀，填补草地与远山之间的空白
+    var farTreeRnd = makeRng(20250711);
+    for (var ft = 0; ft < 26; ft++) {
+      var fa = (ft / 26) * Math.PI * 2 + farTreeRnd() * 1.1;
+      var frd = 84 + farTreeRnd() * 62;
+      var ftree = makeTree(1.7 + farTreeRnd() * 1.2);
+      ftree.position.set(Math.cos(fa) * frd, 0, Math.sin(fa) * frd * 0.92);
+      ftree.rotation.y = farTreeRnd() * Math.PI;
+      ftree.traverse(function (o) { o.castShadow = false; o.receiveShadow = false; });
+      farGroup.add(ftree);
+    }
+    mergeStaticGroup(farGroup, [], {});
+
     var hill = makeHill(11, 6);
     hill.position.set(D.layout.hill.x, 0, D.layout.hill.z);
     root.add(hill);
@@ -2198,37 +2373,91 @@
     var grassGroup = new THREE.Group();
     grassGroup.position.set(0, 0, 0);
     root.add(grassGroup);
-    var tuftGeo = cone(0.22, 0.7, 4);
-    var tuftMat = material(C.grassDark);
-    var tuftMat2 = material(C.leaf);
-    var tuftsA = new THREE.InstancedMesh(tuftGeo, tuftMat, 70);
-    var tuftsB = new THREE.InstancedMesh(tuftGeo, tuftMat2, 70);
-    tuftsA.castShadow = false;
-    tuftsB.castShadow = false;
-    tuftsA.frustumCulled = false;
-    tuftsB.frustumCulled = false;
+    // 草簇：原来的细高锥体近看像一片绿色尖刺。改成"三四片斜叶"的组合，
+    // 每簇由 3 组 InstancedMesh 的薄叶叠出，向外倾斜才有被风吹过的松散感。
+    var bladeGeo = new THREE.PlaneGeometry(0.13, 0.38, 1, 1);
+    bladeGeo.translate(0, 0.19, 0);
+    var bladeMatA = material(C.grassDark);
+    var bladeMatB = material(C.leaf);
+    var bladeMatC = material(0x7FB85C);
+    var bladeMats = [bladeMatA, bladeMatB, bladeMatC];
+    var TUFT_COUNT = 260;
+    var tuftMeshes = [];
+    for (var bi = 0; bi < 3; bi++) {
+      var bm = new THREE.InstancedMesh(bladeGeo, bladeMats[bi], TUFT_COUNT);
+      bm.castShadow = false;
+      bm.receiveShadow = false;
+      bm.frustumCulled = false;
+      bm.material.side = THREE.DoubleSide;
+      grassGroup.add(bm);
+      tuftMeshes.push(bm);
+    }
     var tuftDummy = new THREE.Object3D();
     var tuftRnd = makeRng(4021);
-    for (var gi = 0; gi < 70; gi++) {
+    for (var gi = 0; gi < TUFT_COUNT; gi++) {
       var ga = tuftRnd() * Math.PI * 2;
-      var gr = 2 + tuftRnd() * 7;
+      var gr = 2.2 + tuftRnd() * 10.5;
       var gx = Math.cos(ga) * gr;
       var gz = Math.sin(ga) * gr;
-      var gs = 0.6 + tuftRnd() * 0.8;
-      tuftDummy.position.set(gx, 0.35 * gs, gz);
-      tuftDummy.rotation.set(0, tuftRnd() * Math.PI, 0);
-      tuftDummy.scale.set(gs, gs, gs);
-      tuftDummy.updateMatrix();
-      tuftsA.setMatrixAt(gi, tuftDummy.matrix);
-      tuftDummy.position.set(gx + 0.5, 0.3 * gs, gz - 0.4);
-      tuftDummy.updateMatrix();
-      tuftsB.setMatrixAt(gi, tuftDummy.matrix);
+      var gs = 0.7 + tuftRnd() * 0.6;
+      for (var bj = 0; bj < 3; bj++) {
+        var spread = bj * 2.1 + tuftRnd() * 0.5;
+        var lean = 0.18 + tuftRnd() * 0.4;
+        tuftDummy.position.set(gx + Math.cos(spread) * 0.09, 0, gz + Math.sin(spread) * 0.09);
+        tuftDummy.rotation.set(0, spread, 0);
+        tuftDummy.rotateX(-lean);
+        tuftDummy.scale.set(gs, gs * (0.85 + tuftRnd() * 0.4), gs);
+        tuftDummy.updateMatrix();
+        tuftMeshes[bj].setMatrixAt(gi, tuftDummy.matrix);
+      }
     }
-    tuftsA.instanceMatrix.needsUpdate = true;
-    tuftsB.instanceMatrix.needsUpdate = true;
-    grassGroup.add(tuftsA);
-    grassGroup.add(tuftsB);
+    for (var tk = 0; tk < tuftMeshes.length; tk++) tuftMeshes[tk].instanceMatrix.needsUpdate = true;
     register('grass', grassGroup, 1.4, { anchor: new THREE.Vector3(0, 1.2, 0), instanced: true });
+
+    // 地面点缀：草地全空会显得像一块地毯。撒一些不抢戏的小石子/碎草/野花，
+    // 让视线扫过时有一点细节，但数量克制，不影响可点的学习对象。
+    var litterRnd = makeRng(3357);
+    var pebbleGeo = new THREE.SphereGeometry(0.16, 5, 4);
+    var pebbleMat = material(0xBDB4A2);
+    var pebbles = new THREE.InstancedMesh(pebbleGeo, pebbleMat, 150);
+    pebbles.castShadow = false;
+    pebbles.receiveShadow = false;
+    pebbles.frustumCulled = false;
+    var litterDummy = new THREE.Object3D();
+    for (var li2 = 0; li2 < 150; li2++) {
+      var la = litterRnd() * Math.PI * 2;
+      var lr = 8 + litterRnd() * 46;
+      var ls = 0.5 + litterRnd() * 1.0;
+      litterDummy.position.set(Math.cos(la) * lr, 0.04 * ls, Math.sin(la) * lr * 0.85);
+      litterDummy.rotation.set(litterRnd() * 3, litterRnd() * 3, litterRnd() * 3);
+      litterDummy.scale.set(ls, ls * 0.62, ls);
+      litterDummy.updateMatrix();
+      pebbles.setMatrixAt(li2, litterDummy.matrix);
+    }
+    pebbles.instanceMatrix.needsUpdate = true;
+    root.add(pebbles);
+
+    // 野花簇：三色小点，只在外围草地，密度很低
+    var wildGeo = new THREE.SphereGeometry(0.12, 5, 4);
+    var wildColors = [0xF2C14E, 0xFFFDF6, 0xE7A6C4];
+    for (var wc = 0; wc < 3; wc++) {
+      var wm = new THREE.InstancedMesh(wildGeo, material(wildColors[wc]), 46);
+      wm.castShadow = false;
+      wm.receiveShadow = false;
+      wm.frustumCulled = false;
+      for (var wi = 0; wi < 46; wi++) {
+        var wa = litterRnd() * Math.PI * 2;
+        var wr = 14 + litterRnd() * 48;
+        var ws = 0.75 + litterRnd() * 0.7;
+        litterDummy.position.set(Math.cos(wa) * wr, 0.3 * ws, Math.sin(wa) * wr * 0.86);
+        litterDummy.rotation.set(0, litterRnd() * 3, 0);
+        litterDummy.scale.set(ws, ws, ws);
+        litterDummy.updateMatrix();
+        wm.setMatrixAt(wi, litterDummy.matrix);
+      }
+      wm.instanceMatrix.needsUpdate = true;
+      root.add(wm);
+    }
 
     function scatterField(id, parts, count, cx, cz, sx, sz, seed, opts) {
       opts = opts || {};
@@ -2236,6 +2465,38 @@
       group.position.set(cx, 0, cz);
       root.add(group);
       var rnd = makeRng(seed);
+
+      // 土壤垫层：农田要有自己的"地块"，否则作物像长在草坪上
+      if (opts.bed !== false) {
+        var bedPad = 1.5;
+        var bed = new THREE.Mesh(
+          new THREE.PlaneGeometry(sx + bedPad, sz + bedPad),
+          material(opts.bedColor || 0xA87F52)
+        );
+        bed.rotation.x = -Math.PI / 2;
+        bed.position.y = 0.018;
+        bed.receiveShadow = true;
+        group.add(bed);
+        // 垄沟：沿 z 方向的细条纹，深一点让它有翻耕过的颗粒感。
+        // 用 InstancedMesh 而不是一堆独立 Mesh——10 块田各 8 行就是 80 个额外 draw call。
+        var furrowRows = Math.max(3, Math.round(sz / 1.1));
+        var furrowGeo = new THREE.PlaneGeometry(sx + bedPad * 0.6, 0.34);
+        var furrows = new THREE.InstancedMesh(furrowGeo, material(0x997147), furrowRows);
+        furrows.castShadow = false;
+        furrows.receiveShadow = false;
+        furrows.frustumCulled = false;
+        var furrowDummy = new THREE.Object3D();
+        for (var f = 0; f < furrowRows; f++) {
+          furrowDummy.position.set(0, 0.024, -(sz / 2) + (sz / furrowRows) * (f + 0.5));
+          furrowDummy.rotation.set(-Math.PI / 2, 0, 0);
+          furrowDummy.scale.set(1, 1, 1);
+          furrowDummy.updateMatrix();
+          furrows.setMatrixAt(f, furrowDummy.matrix);
+        }
+        furrows.instanceMatrix.needsUpdate = true;
+        group.add(furrows);
+      }
+
       var meshes = [];
       for (var p = 0; p < parts.length; p++) {
         var im = new THREE.InstancedMesh(parts[p].geo, material(parts[p].color), count);
@@ -2246,10 +2507,21 @@
         meshes.push(im);
       }
       var dummy = new THREE.Object3D();
+      // 成行种植：农田的秩序感来自垄沟，随机撒点看起来像杂草
+      var rows = opts.rows || Math.max(2, Math.round(Math.sqrt(count / 1.6)));
+      var perRow = Math.ceil(count / rows);
+      var rowGap = sz / rows;
+      var colGap = sx / perRow;
       for (var i = 0; i < count; i++) {
-        var x = (rnd() - 0.5) * sx;
-        var z = (rnd() - 0.5) * sz;
-        var ry = rnd() * Math.PI * 2;
+        var ri = Math.floor(i / perRow);
+        var ci = i % perRow;
+        var jx = (rnd() - 0.5) * colGap * (opts.jitter == null ? 0.34 : opts.jitter);
+        var jz = (rnd() - 0.5) * rowGap * (opts.jitter == null ? 0.34 : opts.jitter);
+        var x = -sx / 2 + colGap * (ci + 0.5) + jx;
+        var z = -sz / 2 + rowGap * (ri + 0.5) + jz;
+        x += (opts.ox || 0);
+        z += (opts.oz || 0);
+        var ry = (rnd() - 0.5) * 0.5;
         var sc = 0.82 + rnd() * 0.38;
         for (var q = 0; q < parts.length; q++) {
           var part = parts[q];
@@ -2604,6 +2876,7 @@
       clouds: clouds,
       cloudMats: cloudMats,
       groundMat: ground.material,
+      patchMats: patchMats,
       bee: bee,
       fireflyGroup: fireflyGroup,
       fireflyMat: fireflyMat,
