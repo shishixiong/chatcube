@@ -7,12 +7,18 @@
  * - 数字选项按钮（小朋友点选答案）
  * - 提交后即时反馈对错
  *
+ * 视觉（2026-11-17 统一）: slot 内容对齐 math_teach 讲解板的儿童品牌风——
+ * KidsBrandTokens 数学蓝淡底 + 暖白选项面 + 实线描边, 无渐变无阴影;
+ * 恒定暖色绘本皮肤不随深色模式切换（与讲解板同契约）。外壳仍走 CardShell。
+ *
  * 参考 AskUserCard 模式: @ComponentV2 + @Event onAnswer 回调
  */
 
 import { ToolCall } from '../models/ChatModels'
-import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import {
+  KIDS_BORDER, KIDS_CHINESE_INK, KIDS_FG, KIDS_MATH, KIDS_MATH_INK, KIDS_MUTED, KIDS_SURFACE
+} from './kids/KidsBrandTokens'
 import { CardShell } from './cardshell/CardShell'
 import { CardShellConfig } from './cardshell/CardShellTypes'
 import { CardShellState } from './cardshell/CardShellState'
@@ -78,14 +84,6 @@ export struct MathQuizCard {
     correctAnswerLabel: '正确答案'
   }
   private shellState: CardShellState = new CardShellState()
-
-  private get themePrimary(): string {
-    return getAppUiState().themePrimary
-  }
-
-  private get isDarkMode(): boolean {
-    return getAppUiState().isDarkMode
-  }
 
   aboutToAppear(): void {
     // 解析一次题目数据, 后续渲染直接读取 this.quiz, 避免在 build 路径反复 JSON.parse
@@ -363,82 +361,62 @@ export struct MathQuizCard {
     return 'default'
   }
 
-  private getOptionGradient(opt: string | number, index: number): LinearGradient {
-    const state = this.getOptionState(opt)
-    if (state === 'correct' || state === 'revealed') {
-      return { angle: 180, colors: [['#22C55E', 0.0], [this.shadeHex('#22C55E', 0.7), 1.0]] }
-    }
-    if (state === 'wrong') {
-      return { angle: 180, colors: [['#FF9F43', 0.0], [this.shadeHex('#FF9F43', 0.7), 1.0]] }
-    }
-    if (this.isDarkMode) {
-      const top = this.themePrimary
-      return { angle: 180, colors: [[top, 0.0], [this.shadeHex(top, 0.78), 1.0]] }
-    }
-    const variant = index % 3
-    if (variant === 1) {
-      return { angle: 180, colors: [['#FCD34D', 0.0], ['#D97706', 1.0]] }
-    }
-    if (variant === 2) {
-      return { angle: 180, colors: [['#FBBF24', 0.0], ['#B45309', 1.0]] }
-    }
-    return { angle: 180, colors: [['#F59E0B', 0.0], ['#92400E', 1.0]] }
-  }
+  // ---- 儿童品牌选项状态色（对齐 math_teach TenFrameBoard 练习选项，2026-11-17 视觉统一）----
+  // 扁平暖白面 + 实线描边，无渐变无阴影；答错语文红、答对深绿、选中数学蓝。
+  // 恒定暖色绘本皮肤，不随深色模式切换（KidsBrandTokens 契约，与讲解板一致）。
 
-  private getOptionBorderColor(opt: string | number, index: number): ResourceColor {
+  private getOptionBackground(opt: string | number): string {
     const state = this.getOptionState(opt)
     if (state === 'correct' || state === 'revealed') {
-      return '#16A34A'
+      return withColorAlpha('#16704A', '12')
     }
     if (state === 'wrong') {
-      return '#E07A1F'
+      return withColorAlpha(KIDS_CHINESE_INK, '12')
     }
     if (state === 'selected') {
-      return this.themePrimary
+      return withColorAlpha(KIDS_MATH, '14')
     }
-    if (this.isDarkMode) {
-      return this.shadeHex(this.themePrimary, 0.5)
+    return KIDS_SURFACE
+  }
+
+  private getOptionBorderColor(opt: string | number): ResourceColor {
+    const state = this.getOptionState(opt)
+    if (state === 'correct' || state === 'revealed') {
+      return '#16704A'
     }
-    const variant = index % 3
-    if (variant === 1) return '#D97706'
-    if (variant === 2) return '#B45309'
-    return '#92400E'
+    if (state === 'wrong') {
+      return KIDS_CHINESE_INK
+    }
+    if (state === 'selected') {
+      return KIDS_MATH_INK
+    }
+    return KIDS_BORDER
+  }
+
+  private getOptionTextColor(opt: string | number): string {
+    const state = this.getOptionState(opt)
+    if (state === 'correct' || state === 'revealed') {
+      return '#16704A'
+    }
+    if (state === 'wrong') {
+      return KIDS_CHINESE_INK
+    }
+    if (state === 'selected') {
+      return KIDS_MATH_INK
+    }
+    return KIDS_FG
   }
 
   private getOptionBorderWidth(opt: string | number): number {
     const state = this.getOptionState(opt)
-    if (state === 'selected') return 2.5
-    if (state === 'correct' || state === 'revealed' || state === 'wrong') return 2
+    if (state === 'selected' || state === 'correct' || state === 'revealed' || state === 'wrong') {
+      return 2
+    }
     return 1.5
   }
 
-  private getOptionShadow(opt: string | number): ShadowOptions {
-    const state = this.getOptionState(opt)
-    if (state === 'selected') {
-      return { radius: 12, color: '#1F000000', offsetY: 4 }
-    }
-    return { radius: 8, color: '#1F000000', offsetY: 2 }
-  }
-
-  private shadeHex(color: string, factor: number): string {
-    if (!color.startsWith('#') || color.length !== 7) {
-      return color
-    }
-    const r = parseInt(color.substring(1, 3), 16)
-    const g = parseInt(color.substring(3, 5), 16)
-    const b = parseInt(color.substring(5, 7), 16)
-    const newR = Math.max(0, Math.min(255, Math.floor(r * factor)))
-    const newG = Math.max(0, Math.min(255, Math.floor(g * factor)))
-    const newB = Math.max(0, Math.min(255, Math.floor(b * factor)))
-    const toHex = (n: number): string => {
-      const h = n.toString(16)
-      return h.length === 1 ? '0' + h : h
-    }
-    return `#${toHex(newR)}${toHex(newG)}${toHex(newB)}`
-  }
-
   private getCardBackgroundColor(): string {
-    return this.isDarkMode ? withColorAlpha(this.themePrimary, '18') : withColorAlpha(this.themePrimary, '12')
+    return withColorAlpha(KIDS_MATH, '0E')
   }
 
   build() {
@@ -494,34 +472,33 @@ export struct MathQuizCard {
         : '再想想～ 可以点「草稿纸」算一算试试')
         .fontSize(13)
         .fontWeight(FontWeight.Medium)
-        .fontColor(this.themePrimary)
+        .fontColor(KIDS_MATH_INK)
     }
     .width('100%')
     .padding(10)
     .borderRadius(8)
-    .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '24' : '14'))
+    .backgroundColor(withColorAlpha(KIDS_MATH, '12'))
   }
 
   @Builder
-  OptionButton(opt: string | number, index: number) {
+  OptionButton(opt: string | number) {
     Stack({ alignContent: Alignment.TopEnd }) {
       Column() {
         Text(`${opt}`)
           .fontSize(28)
           .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
-          .shadow({ radius: 1, color: '#40000000', offsetY: 1 })
+          .fontColor(this.getOptionTextColor(opt))
       }
       .width('100%')
       .height(64)
       .justifyContent(FlexAlign.Center)
-      .linearGradient(this.getOptionGradient(opt, index))
-      .borderRadius(14)
+      .backgroundColor(this.getOptionBackground(opt))
+      .borderRadius(12)
       .border({
         width: this.getOptionBorderWidth(opt),
-        color: this.getOptionBorderColor(opt, index)
+        color: this.getOptionBorderColor(opt),
+        radius: 12
       })
-      .shadow(this.getOptionShadow(opt))
 
       // 答对时, 在按钮右上角盖一颗星星印章
       if (this.showResult && this.isCorrect && opt === this.quiz.correctAnswer) {
@@ -577,13 +554,13 @@ export struct MathQuizCard {
           Text('草稿纸')
             .fontSize(13)
             .fontWeight(FontWeight.Medium)
-            .fontColor(this.themePrimary)
+            .fontColor(KIDS_MATH_INK)
         }
         .height(34)
         .padding({ left: 14, right: 14 })
         .borderRadius(17)
-        .border({ width: 1.5, color: withColorAlpha(this.themePrimary, '66') })
-        .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '24' : '0D'))
+        .border({ width: 1.5, color: withColorAlpha(KIDS_MATH_INK, '66') })
+        .backgroundColor(withColorAlpha(KIDS_MATH, '0D'))
         .onClick(() => {
           this.showScratchSheet = true
         })
@@ -603,7 +580,7 @@ export struct MathQuizCard {
             .fontSize(quiz.wordProblem ? 17 : 15)
             .fontWeight(quiz.wordProblem ? FontWeight.Medium : FontWeight.Normal)
             .lineHeight(quiz.wordProblem ? 24 : 22)
-            .fontColor($r('app.color.text_primary'))
+            .fontColor(KIDS_FG)
             .width('100%')
             .padding(quiz.wordProblem ? { top: 4, bottom: 6 } : { bottom: 2 })
         }
@@ -617,23 +594,23 @@ export struct MathQuizCard {
                 Text(getOpDisplay(token.value))
                   .fontSize(22)
                   .fontWeight(FontWeight.Bold)
-                  .fontColor(withColorAlpha(this.themePrimary, '90'))
+                  .fontColor(KIDS_MUTED)
               } else {
                 Text(token.value)
                   .fontSize(28)
                   .fontWeight(FontWeight.Bold)
-                  .fontColor(this.themePrimary)
+                  .fontColor(KIDS_MATH_INK)
               }
             }, (token: ExpressionToken, idx: number) => `tok_${idx}_${token.value}`)
             Text('=')
               .fontSize(22)
               .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.text_secondary'))
+              .fontColor(KIDS_MUTED)
               .margin({ left: 4 })
             Text('?')
               .fontSize(28)
               .fontWeight(FontWeight.Bold)
-              .fontColor(this.themePrimary)
+              .fontColor(KIDS_MATH_INK)
           }
           .width('100%')
           .justifyContent(FlexAlign.Center)
@@ -646,7 +623,7 @@ export struct MathQuizCard {
             Grid() {
               ForEach(quiz.options, (opt: number, idx: number) => {
                 GridItem() {
-                  this.OptionButton(opt, idx)
+                  this.OptionButton(opt)
                 }
               }, (opt: number, idx: number) => `opt_${idx}_${opt}`)
             }
@@ -662,63 +639,64 @@ export struct MathQuizCard {
     .width('100%')
     .padding(12)
     .backgroundColor(this.getCardBackgroundColor())
-    .borderRadius(10)
+    .borderRadius(12)
+    .border({ width: 1, color: withColorAlpha(KIDS_MATH, '30'), radius: 12 })
   }
 
   // ---- 图形认知 (math_shapes) ----
 
   @Builder
   ShapePrimitive(shape: string) {
-    // 圆/方/长方形用 ArkUI 原生; 其余用文字符号
+    // 圆/方/长方形用 ArkUI 原生; 其余用文字符号。暖白面上统一数学蓝实心图形
     if (shape === 'circle') {
-      Circle().width(48).height(48).fill(Color.White)
+      Circle().width(48).height(48).fill(KIDS_MATH)
     } else if (shape === 'square') {
-      Rect().width(48).height(48).fill(Color.White).radius(4)
+      Rect().width(48).height(48).fill(KIDS_MATH).radius(4)
     } else if (shape === 'rectangle') {
-      Rect().width(64).height(36).fill(Color.White).radius(3)
+      Rect().width(64).height(36).fill(KIDS_MATH).radius(3)
     } else if (shape === 'triangle') {
       Text('△')
         .fontSize(46)
         .fontWeight(FontWeight.Bold)
-        .fontColor(Color.White)
+        .fontColor(KIDS_MATH_INK)
     } else if (shape === 'pentagon') {
       Text('⬠')
         .fontSize(44)
         .fontWeight(FontWeight.Bold)
-        .fontColor(Color.White)
+        .fontColor(KIDS_MATH_INK)
     } else if (shape === 'star') {
       Text('★')
         .fontSize(46)
         .fontWeight(FontWeight.Bold)
-        .fontColor(Color.White)
+        .fontColor(KIDS_MATH_INK)
     } else if (shape === 'heart') {
       Text('♥')
         .fontSize(44)
         .fontWeight(FontWeight.Bold)
-        .fontColor(Color.White)
+        .fontColor(KIDS_MATH_INK)
     } else {
       // 未知名 (LLM 幻觉) — 不渲染, 按钮仍可点
       Text('?')
         .fontSize(28)
         .fontWeight(FontWeight.Bold)
-        .fontColor(Color.White)
+        .fontColor(KIDS_MUTED)
     }
   }
 
   @Builder
-  ShapeOptionButton(shape: string, index: number) {
+  ShapeOptionButton(shape: string) {
     Stack({ alignContent: Alignment.Center }) {
       this.ShapePrimitive(shape)
     }
     .width('100%')
     .height(72)
-    .linearGradient(this.getOptionGradient(shape, index))
-    .borderRadius(14)
+    .backgroundColor(this.getOptionBackground(shape))
+    .borderRadius(12)
     .border({
       width: this.getOptionBorderWidth(shape),
-      color: this.getOptionBorderColor(shape, index)
+      color: this.getOptionBorderColor(shape),
+      radius: 12
     })
-    .shadow(this.getOptionShadow(shape))
     .onClick(() => {
       this.handleSelectOption(shape)
     })
@@ -731,7 +709,7 @@ export struct MathQuizCard {
       if (this.quiz.question !== '') {
         Text(this.quiz.question)
           .fontSize(15)
-          .fontColor($r('app.color.text_primary'))
+          .fontColor(KIDS_FG)
           .width('100%')
       }
 
@@ -740,7 +718,7 @@ export struct MathQuizCard {
           Grid() {
             ForEach(this.quiz.options, (opt: string | number, idx: number) => {
               GridItem() {
-                this.ShapeOptionButton(String(opt), idx)
+                this.ShapeOptionButton(String(opt))
               }
             }, (opt: string | number, idx: number) => `shape_${idx}_${opt}`)
           }
@@ -755,7 +733,8 @@ export struct MathQuizCard {
     .width('100%')
     .padding(12)
     .backgroundColor(this.getCardBackgroundColor())
-    .borderRadius(10)
+    .borderRadius(12)
+    .border({ width: 1, color: withColorAlpha(KIDS_MATH, '30'), radius: 12 })
   }
 
   // ---- 大小比较 (math_comparison) ----
@@ -766,19 +745,18 @@ export struct MathQuizCard {
       Text(op)
         .fontSize(36)
         .fontWeight(FontWeight.Bold)
-        .fontColor(Color.White)
-        .shadow({ radius: 1, color: '#40000000', offsetY: 1 })
+        .fontColor(this.getOptionTextColor(op))
     }
     .layoutWeight(1)
     .height(64)
     .justifyContent(FlexAlign.Center)
-    .linearGradient(this.getOptionGradient(op, 0))
-    .borderRadius(14)
+    .backgroundColor(this.getOptionBackground(op))
+    .borderRadius(12)
     .border({
       width: this.getOptionBorderWidth(op),
-      color: this.getOptionBorderColor(op, 0)
+      color: this.getOptionBorderColor(op),
+      radius: 12
     })
-    .shadow(this.getOptionShadow(op))
     .onClick(() => {
       this.handleSelectOption(op)
     })
@@ -791,7 +769,7 @@ export struct MathQuizCard {
       if (this.quiz.question !== '') {
         Text(this.quiz.question)
           .fontSize(15)
-          .fontColor($r('app.color.text_primary'))
+          .fontColor(KIDS_FG)
           .width('100%')
       }
 
@@ -800,15 +778,15 @@ export struct MathQuizCard {
         Text(`${this.quiz.leftValue}`)
           .fontSize(42)
           .fontWeight(FontWeight.Bold)
-          .fontColor(this.themePrimary)
+          .fontColor(KIDS_MATH_INK)
         Text(this.selectedOption !== -1 ? String(this.selectedOption) : '○')
           .fontSize(42)
           .fontWeight(FontWeight.Bold)
-          .fontColor(this.themePrimary)
+          .fontColor(this.selectedOption !== -1 ? KIDS_MATH_INK : KIDS_MUTED)
         Text(`${this.quiz.rightValue}`)
           .fontSize(42)
           .fontWeight(FontWeight.Bold)
-          .fontColor(this.themePrimary)
+          .fontColor(KIDS_MATH_INK)
       }
       .width('100%')
       .justifyContent(FlexAlign.Center)
@@ -826,29 +804,30 @@ export struct MathQuizCard {
     .width('100%')
     .padding(12)
     .backgroundColor(this.getCardBackgroundColor())
-    .borderRadius(10)
+    .borderRadius(12)
+    .border({ width: 1, color: withColorAlpha(KIDS_MATH, '30'), radius: 12 })
   }
 
   // ---- 时间认知 (math_time) ----
 
   @Builder
-  TimeOptionButton(timeStr: string, index: number) {
+  TimeOptionButton(timeStr: string) {
     Stack({ alignContent: Alignment.Center }) {
       Text(timeStr)
-        .fontSize(24)
+        .fontSize(20)
         .fontWeight(FontWeight.Bold)
-        .fontColor(Color.White)
-        .shadow({ radius: 1, color: '#40000000', offsetY: 1 })
+        .fontColor(this.getOptionTextColor(timeStr))
+        .textAlign(TextAlign.Center)
     }
     .width('100%')
     .height(64)
-    .linearGradient(this.getOptionGradient(timeStr, index))
-    .borderRadius(14)
+    .backgroundColor(this.getOptionBackground(timeStr))
+    .borderRadius(12)
     .border({
       width: this.getOptionBorderWidth(timeStr),
-      color: this.getOptionBorderColor(timeStr, index)
+      color: this.getOptionBorderColor(timeStr),
+      radius: 12
     })
-    .shadow(this.getOptionShadow(timeStr))
     .onClick(() => {
       this.handleSelectOption(timeStr)
     })
@@ -867,7 +846,7 @@ export struct MathQuizCard {
     Column({ space: 12 }) {
       Text(this.quiz.question !== '' ? this.quiz.question : '现在是几点呀?')
         .fontSize(15)
-        .fontColor($r('app.color.text_primary'))
+        .fontColor(KIDS_FG)
         .width('100%')
 
       // 钟面: 仅当 AI 传了有效 hour/minute 时渲染; 缺字段时退化到纯文字 question
@@ -883,10 +862,10 @@ export struct MathQuizCard {
         Column({ space: 10 }) {
           Grid() {
             ForEach(this.quiz.options, (opt: string | number, idx: number) => {
-              GridItem() {
-                this.TimeOptionButton(String(opt), idx)
-              }
-            }, (opt: string | number, idx: number) => `time_${idx}_${opt}`)
+            GridItem() {
+              this.TimeOptionButton(String(opt))
+            }
+          }, (opt: string | number, idx: number) => `time_${idx}_${opt}`)
           }
           .columnsTemplate('1fr 1fr')
           .columnsGap(10)
@@ -899,7 +878,8 @@ export struct MathQuizCard {
     .width('100%')
     .padding(12)
     .backgroundColor(this.getCardBackgroundColor())
-    .borderRadius(10)
+    .borderRadius(12)
+    .border({ width: 1, color: withColorAlpha(KIDS_MATH, '30'), radius: 12 })
   }
 
   // ---- 计时经过 (math_time, elapsed_time 子类型) ----
@@ -911,7 +891,7 @@ export struct MathQuizCard {
     Column({ space: 10 }) {
       Text(this.quiz.question !== '' ? this.quiz.question : '从开始到结束, 经过多久呀?')
         .fontSize(15)
-        .fontColor($r('app.color.text_primary'))
+        .fontColor(KIDS_FG)
         .width('100%')
 
       // 两个钟面上下排列 + 中间 ↓ 箭头; 任意一个钟面有效即渲染
@@ -920,7 +900,7 @@ export struct MathQuizCard {
         Column({ space: 4 }) {
           Text('开始')
             .fontSize(11)
-            .fontColor($r('app.color.text_tertiary'))
+            .fontColor(KIDS_MUTED)
           this.ClockFace(this.quiz.startHour, this.quiz.startMinute, 120)
         }
         .width('100%')
@@ -930,7 +910,7 @@ export struct MathQuizCard {
         Text('↓')
           .fontSize(20)
           .fontWeight(FontWeight.Bold)
-          .fontColor(this.themePrimary)
+          .fontColor(KIDS_MATH_INK)
           .width('100%')
           .textAlign(TextAlign.Center)
 
@@ -938,7 +918,7 @@ export struct MathQuizCard {
         Column({ space: 4 }) {
           Text('结束')
             .fontSize(11)
-            .fontColor($r('app.color.text_tertiary'))
+            .fontColor(KIDS_MUTED)
           this.ClockFace(this.quiz.endHour, this.quiz.endMinute, 120)
         }
         .width('100%')
@@ -950,10 +930,10 @@ export struct MathQuizCard {
         Column({ space: 10 }) {
           Grid() {
             ForEach(this.quiz.options, (opt: string | number, idx: number) => {
-              GridItem() {
-                this.TimeOptionButton(String(opt), idx)
-              }
-            }, (opt: string | number, idx: number) => `elapsed_${idx}_${opt}`)
+            GridItem() {
+              this.TimeOptionButton(String(opt))
+            }
+          }, (opt: string | number, idx: number) => `elapsed_${idx}_${opt}`)
           }
           .columnsTemplate('1fr 1fr')
           .columnsGap(10)
@@ -966,6 +946,7 @@ export struct MathQuizCard {
     .width('100%')
     .padding(12)
     .backgroundColor(this.getCardBackgroundColor())
-    .borderRadius(10)
+    .borderRadius(12)
+    .border({ width: 1, color: withColorAlpha(KIDS_MATH, '30'), radius: 12 })
   }
 }

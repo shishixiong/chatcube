@@ -10,7 +10,8 @@ export interface MathTeachValidationResult {
   error: string
 }
 
-const TEACH_MODES: string[] = ['number_bond', 'ten_frame', 'balance', 'clock']
+const TEACH_MODES: string[] = ['number_bond', 'ten_frame', 'break_ten', 'place_value',
+  'number_line', 'balance', 'clock']
 const SKILL_KEYS: string[] = ['math_number_sense', 'math_counting', 'math_addition',
   'math_subtraction', 'math_multiply', 'math_divide', 'math_shapes', 'math_comparison',
   'math_time', 'math_word_problem']
@@ -108,6 +109,54 @@ function validateModeArgs(mode: string, args: Record<string, Object>): MathTeach
     if (sum <= 10) {
       return fail('ten_frame 只讲 20 以内进位加法：a+b 必须大于 10' +
         '（⚠️ 严禁 a+b 不超过 10 时使用 ten_frame，那样的题不需要凑十）')
+    }
+  } else if (mode === 'break_ten') {
+    const a: number = getNumber(args, 'a')
+    const b: number = getNumber(args, 'b')
+    if (!inRange(a, 11, 18)) { return fail('break_ten 的 a 必须是 11-18 的整数（被减数是十几）') }
+    if (!inRange(b, 2, 9)) { return fail('break_ten 的 b 必须是 2-9 的整数（减数）') }
+    if (b <= a - 10) {
+      return fail('break_ten 只讲 20 以内退位减法：减数必须大于被减数个位' +
+        '（⚠️ 严禁 ' + a + '−' + b + ' 这类不退位减法用 break_ten，直接口算）')
+    }
+  } else if (mode === 'place_value') {
+    const action: string = getString(args, 'action')
+    if (action !== 'bundle' && action !== 'unbundle') {
+      return fail('place_value 的 action 必须是 bundle（捆扎课讲进位）或 unbundle（拆捆课讲退位）')
+    }
+    const tens: number = getNumber(args, 'tens')
+    const ones: number = getNumber(args, 'ones')
+    if (action === 'bundle') {
+      if (!inRange(tens, 0, 8)) { return fail('place_value bundle 的 tens 必须是 0-8 的整数（捆完不超过 9 捆，不引入百位）') }
+      if (!inRange(ones, 1, 9)) { return fail('place_value bundle 的 ones 必须是 1-9 的整数（至少 1 根才有添满十可演）') }
+    } else {
+      if (!inRange(tens, 1, 9)) { return fail('place_value unbundle 的 tens 必须是 1-9 的整数（⚠️ 严禁 tens=0，没有捆可拆）') }
+      if (!inRange(ones, 0, 9)) { return fail('place_value unbundle 的 ones 必须是 0-9 的整数') }
+    }
+  } else if (mode === 'number_line') {
+    const op: string = getString(args, 'op')
+    const opVal: string = op === '' ? 'add' : op
+    if (opVal !== 'add' && opVal !== 'sub') {
+      return fail('number_line 的 op 必须是 add（凑十跳）或 sub（破十跳）')
+    }
+    const start: number = getNumber(args, 'start')
+    const step: number = getNumber(args, 'step')
+    if (opVal === 'add') {
+      if (!inRange(start, 6, 9)) { return fail('number_line add 的 start 必须是 6-9 的整数（保证第一跳存在）') }
+      if (!inRange(step, 1, 10)) { return fail('number_line add 的 step 必须是 1-10 的整数') }
+      const sum: number = start + step
+      if (sum > 20) { return fail('number_line add 的 start+step 不能超过 20') }
+      if (sum <= 10) {
+        return fail('number_line add 只讲 20 以内进位加法：start+step 必须大于 10' +
+          '（⚠️ 严禁和不超过 10 时用凑十跳，那样的题不需要凑十）')
+      }
+    } else {
+      if (!inRange(start, 11, 18)) { return fail('number_line sub 的 start 必须是 11-18 的整数（被减数是十几）') }
+      if (!inRange(step, 2, 9)) { return fail('number_line sub 的 step 必须是 2-9 的整数') }
+      if (step <= start - 10) {
+        return fail('number_line sub 只讲退位减法：step 必须大于 start 的个位' +
+          '（⚠️ 严禁跳不过 10 的减法用破十跳，直接口算）')
+      }
     }
   } else if (mode === 'balance') {
     const left: number = getNumber(args, 'left')

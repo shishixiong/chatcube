@@ -16,19 +16,23 @@ function asJson(a: Record<string, Object>): string {
 
 export default function mathTeachValidationTest() {
   describe('mathTeachValidation', () => {
-    it('四个mode合法参数通过', 0, () => {
+    it('七个mode合法参数通过', 0, () => {
       const c1: Record<string, Object> = baseArgs('number_bond'); c1['total'] = 9
       const c2: Record<string, Object> = baseArgs('ten_frame'); c2['a'] = 9; c2['b'] = 5
       const c3: Record<string, Object> = baseArgs('balance'); c3['left'] = 9; c3['right'] = 5
       const c4: Record<string, Object> = baseArgs('clock'); c4['hour'] = 9; c4['minute'] = 30
+      const c5: Record<string, Object> = baseArgs('break_ten'); c5['a'] = 15; c5['b'] = 9; c5['skill_key'] = 'math_subtraction'
+      const c6: Record<string, Object> = baseArgs('place_value'); c6['tens'] = 2; c6['ones'] = 8; c6['action'] = 'bundle'; c6['skill_key'] = 'math_counting'
+      const c7: Record<string, Object> = baseArgs('number_line'); c7['start'] = 9; c7['step'] = 5; c7['op'] = 'add'
       expect(validateMathTeachArgs(asJson(c1), null).ok).assertTrue()
       expect(validateMathTeachArgs(asJson(c2), null).ok).assertTrue()
       expect(validateMathTeachArgs(asJson(c3), null).ok).assertTrue()
       expect(validateMathTeachArgs(asJson(c4), null).ok).assertTrue()
+      expect(validateMathTeachArgs(asJson(c5), null).ok).assertTrue()
+      expect(validateMathTeachArgs(asJson(c6), null).ok).assertTrue()
+      expect(validateMathTeachArgs(asJson(c7), null).ok).assertTrue()
     })
-    it('已下线mode拒绝', 0, () => {
-      expect(validateMathTeachArgs(asJson(baseArgs('number_line')), null).ok).assertFalse()
-      expect(validateMathTeachArgs(asJson(baseArgs('place_value')), null).ok).assertFalse()
+    it('未实现mode拒绝', 0, () => {
       expect(validateMathTeachArgs(asJson(baseArgs('shape')), null).ok).assertFalse()
       expect(validateMathTeachArgs(asJson(baseArgs('bar_model')), null).ok).assertFalse()
     })
@@ -120,6 +124,82 @@ export default function mathTeachValidationTest() {
       expect(validateMathTeachArgs(asJson(bad2), null).ok).assertFalse()
       expect(validateMathTeachArgs(asJson(bad3), null).ok).assertFalse()
       expect(validateMathTeachArgs(asJson(bad4), null).ok).assertFalse()
+    })
+    it('break_ten退位边界_15减5拒_15减6收_11减2收_18减9收', 0, () => {
+      const bad: Record<string, Object> = baseArgs('break_ten'); bad['a'] = 15; bad['b'] = 5
+      expect(validateMathTeachArgs(asJson(bad), null).ok).assertFalse()
+      const ok1: Record<string, Object> = baseArgs('break_ten'); ok1['a'] = 15; ok1['b'] = 6
+      expect(validateMathTeachArgs(asJson(ok1), null).ok).assertTrue()
+      const ok2: Record<string, Object> = baseArgs('break_ten'); ok2['a'] = 11; ok2['b'] = 2
+      expect(validateMathTeachArgs(asJson(ok2), null).ok).assertTrue()
+      const ok3: Record<string, Object> = baseArgs('break_ten'); ok3['a'] = 18; ok3['b'] = 9
+      expect(validateMathTeachArgs(asJson(ok3), null).ok).assertTrue()
+    })
+    it('break_ten范围越界与缺参拒绝', 0, () => {
+      const badA1: Record<string, Object> = baseArgs('break_ten'); badA1['a'] = 10; badA1['b'] = 9
+      const badA2: Record<string, Object> = baseArgs('break_ten'); badA2['a'] = 19; badA2['b'] = 9
+      const badB1: Record<string, Object> = baseArgs('break_ten'); badB1['a'] = 15; badB1['b'] = 1
+      const badB2: Record<string, Object> = baseArgs('break_ten'); badB2['a'] = 15; badB2['b'] = 10
+      const badFrac: Record<string, Object> = baseArgs('break_ten'); badFrac['a'] = 15.5; badFrac['b'] = 9
+      const missing: Record<string, Object> = baseArgs('break_ten'); missing['a'] = 15
+      expect(validateMathTeachArgs(asJson(badA1), null).ok).assertFalse()
+      expect(validateMathTeachArgs(asJson(badA2), null).ok).assertFalse()
+      expect(validateMathTeachArgs(asJson(badB1), null).ok).assertFalse()
+      expect(validateMathTeachArgs(asJson(badB2), null).ok).assertFalse()
+      expect(validateMathTeachArgs(asJson(badFrac), null).ok).assertFalse()
+      expect(validateMathTeachArgs(asJson(missing), null).ok).assertFalse()
+    })
+    it('place_value_action白名单与两分支范围', 0, () => {
+      const okB: Record<string, Object> = baseArgs('place_value'); okB['tens'] = 0; okB['ones'] = 9; okB['action'] = 'bundle'
+      const okB2: Record<string, Object> = baseArgs('place_value'); okB2['tens'] = 8; okB2['ones'] = 1; okB2['action'] = 'bundle'
+      const okU: Record<string, Object> = baseArgs('place_value'); okU['tens'] = 1; okU['ones'] = 0; okU['action'] = 'unbundle'
+      const okU2: Record<string, Object> = baseArgs('place_value'); okU2['tens'] = 9; okU2['ones'] = 9; okU2['action'] = 'unbundle'
+      expect(validateMathTeachArgs(asJson(okB), null).ok).assertTrue()
+      expect(validateMathTeachArgs(asJson(okB2), null).ok).assertTrue()
+      expect(validateMathTeachArgs(asJson(okU), null).ok).assertTrue()
+      expect(validateMathTeachArgs(asJson(okU2), null).ok).assertTrue()
+      const badAct: Record<string, Object> = baseArgs('place_value'); badAct['tens'] = 2; badAct['ones'] = 8; badAct['action'] = 'split'
+      const badB1: Record<string, Object> = baseArgs('place_value'); badB1['tens'] = 9; badB1['ones'] = 8; badB1['action'] = 'bundle'
+      const badB2: Record<string, Object> = baseArgs('place_value'); badB2['tens'] = 2; badB2['ones'] = 0; badB2['action'] = 'bundle'
+      const badU1: Record<string, Object> = baseArgs('place_value'); badU1['tens'] = 0; badU1['ones'] = 5; badU1['action'] = 'unbundle'
+      const badU2: Record<string, Object> = baseArgs('place_value'); badU2['tens'] = 3; badU2['ones'] = 10; badU2['action'] = 'unbundle'
+      const missingAct: Record<string, Object> = baseArgs('place_value'); missingAct['tens'] = 2; missingAct['ones'] = 8
+      expect(validateMathTeachArgs(asJson(badAct), null).ok).assertFalse()
+      expect(validateMathTeachArgs(asJson(badB1), null).ok).assertFalse()
+      expect(validateMathTeachArgs(asJson(badB2), null).ok).assertFalse()
+      expect(validateMathTeachArgs(asJson(badU1), null).ok).assertFalse()
+      expect(validateMathTeachArgs(asJson(badU2), null).ok).assertFalse()
+      expect(validateMathTeachArgs(asJson(missingAct), null).ok).assertFalse()
+    })
+    it('number_line_add凑十边界_和10拒_11收_19收_step越界拒', 0, () => {
+      const bad1: Record<string, Object> = baseArgs('number_line'); bad1['start'] = 6; bad1['step'] = 4; bad1['op'] = 'add'
+      const ok1: Record<string, Object> = baseArgs('number_line'); ok1['start'] = 6; ok1['step'] = 5; ok1['op'] = 'add'
+      const ok2: Record<string, Object> = baseArgs('number_line'); ok2['start'] = 9; ok2['step'] = 10; ok2['op'] = 'add'
+      const bad2: Record<string, Object> = baseArgs('number_line'); bad2['start'] = 9; bad2['step'] = 12; bad2['op'] = 'add'
+      expect(validateMathTeachArgs(asJson(bad1), null).ok).assertFalse()
+      expect(validateMathTeachArgs(asJson(ok1), null).ok).assertTrue()
+      expect(validateMathTeachArgs(asJson(ok2), null).ok).assertTrue()
+      expect(validateMathTeachArgs(asJson(bad2), null).ok).assertFalse()
+      const badStart: Record<string, Object> = baseArgs('number_line'); badStart['start'] = 5; badStart['step'] = 8; badStart['op'] = 'add'
+      expect(validateMathTeachArgs(asJson(badStart), null).ok).assertFalse()
+    })
+    it('number_line_op缺省add_sub破十边界', 0, () => {
+      const dflt: Record<string, Object> = baseArgs('number_line'); dflt['start'] = 9; dflt['step'] = 5
+      expect(validateMathTeachArgs(asJson(dflt), null).ok).assertTrue()
+      const badOp: Record<string, Object> = baseArgs('number_line'); badOp['start'] = 9; badOp['step'] = 5; badOp['op'] = 'mul'
+      expect(validateMathTeachArgs(asJson(badOp), null).ok).assertFalse()
+      const badSub: Record<string, Object> = baseArgs('number_line'); badSub['start'] = 15; badSub['step'] = 5; badSub['op'] = 'sub'
+      expect(validateMathTeachArgs(asJson(badSub), null).ok).assertFalse()
+      const okSub: Record<string, Object> = baseArgs('number_line'); okSub['start'] = 15; okSub['step'] = 6; okSub['op'] = 'sub'
+      expect(validateMathTeachArgs(asJson(okSub), null).ok).assertTrue()
+      const okSub2: Record<string, Object> = baseArgs('number_line'); okSub2['start'] = 11; okSub2['step'] = 2; okSub2['op'] = 'sub'
+      expect(validateMathTeachArgs(asJson(okSub2), null).ok).assertTrue()
+      const okSub3: Record<string, Object> = baseArgs('number_line'); okSub3['start'] = 18; okSub3['step'] = 9; okSub3['op'] = 'sub'
+      expect(validateMathTeachArgs(asJson(okSub3), null).ok).assertTrue()
+      const badStart: Record<string, Object> = baseArgs('number_line'); badStart['start'] = 10; badStart['step'] = 9; badStart['op'] = 'sub'
+      const badStep: Record<string, Object> = baseArgs('number_line'); badStep['start'] = 15; badStep['step'] = 1; badStep['op'] = 'sub'
+      expect(validateMathTeachArgs(asJson(badStart), null).ok).assertFalse()
+      expect(validateMathTeachArgs(asJson(badStep), null).ok).assertFalse()
     })
   })
 }

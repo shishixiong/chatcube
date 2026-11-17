@@ -1635,7 +1635,7 @@ function createMathQuizToolConfig(): ToolConfig {
 }
 
 // ===== math_teach 工具 =====
-// 数学讲解板：先摆一摆再讲算理的交互教具, 四种 mode 四选一。
+// 数学讲解板：先摆一摆再讲算理的交互教具, 七种 mode 七选一。
 // 真实交互在 ToolExecutionService.handleMathTeach 特殊路径, 由前端讲解板卡片处理。
 
 class MathTeachExecutor implements ToolExecutor {
@@ -1650,14 +1650,20 @@ function createMathTeachToolDefinition(): ToolDefinition {
   const rawSchemaJson: string = `{
     "type": "object",
     "properties": {
-      "mode": {"type": "string", "enum": ["number_bond","ten_frame","balance","clock"], "description": "讲解板类型四选一。number_bond 数的分与合（skill_key 配 math_number_sense）/ ten_frame 十格阵凑十（math_addition）/ balance 天平比大小（math_comparison）/ clock 时钟拨一拨认读（math_time）"},
+      "mode": {"type": "string", "enum": ["number_bond","ten_frame","break_ten","place_value","number_line","balance","clock"], "description": "讲解板类型七选一。number_bond 数的分与合（skill_key 配 math_number_sense）/ ten_frame 十格阵凑十（math_addition）/ break_ten 破十减法（math_subtraction）/ place_value 小棒与数位（math_counting）/ number_line 数轴跳一跳（op=add 配 math_addition，op=sub 配 math_subtraction）/ balance 天平比大小（math_comparison）/ clock 时钟拨一拨认读（math_time）"},
       "stage": {"type": "string", "enum": ["warm_up","presentation","practice","production","review"], "description": "五步课当前环节标签，缺省 presentation。只影响卡片头部显示，不影响玩法"},
       "difficulty": {"type": "number", "description": "难度 1-5 整数，须与画像等级偏差不超过 1；画像该维度 level 为 0（未评估）时可自选"},
       "concept": {"type": "string", "description": "给孩子看的一句话知识点标题，如「凑十法：先凑成 10 再加」"},
       "skill_key": {"type": "string", "description": "对应画像维度，与 mode 的映射见 mode 描述。用于难度校验与画像更新提示"},
       "total": {"type": "number", "description": "number_bond 专用：分成两部分的合数，2-99 整数。两步演示课自动推荐最佳分法：11-99 按整十+剩余拆（28→20 和 8），6-10 按 5 锚定（9→5 和 4）"},
-      "a": {"type": "number", "description": "ten_frame 专用：十格阵里已有的个数，5-9 整数"},
-      "b": {"type": "number", "description": "ten_frame 专用：框外散点个数，1-10 整数。a+b 必须大于 10 且不超过 20（⚠️ 严禁 a+b 不超过 10 时使用 ten_frame）"},
+      "a": {"type": "number", "description": "ten_frame：十格阵里已有的个数，5-9 整数；break_ten：被减数，11-18 整数（十几）"},
+      "b": {"type": "number", "description": "ten_frame：框外散点个数，1-10 整数，a+b 必须大于 10 且不超过 20（⚠️ 严禁 a+b 不超过 10 时使用 ten_frame）；break_ten：减数，2-9 整数且必须大于 a 的个位（⚠️ 严禁不退位的减法如 15−3 使用 break_ten）"},
+      "tens": {"type": "number", "description": "place_value 专用：十位捆数。action=bundle 时 0-8 整数（捆完不超过 9 捆，不引入百位）；action=unbundle 时 1-9 整数（⚠️ 严禁 tens=0，没有捆可拆）"},
+      "ones": {"type": "number", "description": "place_value 专用：个位散棒数。action=bundle 时 1-9 整数（至少 1 根才有添满十可演）；action=unbundle 时 0-9 整数"},
+      "action": {"type": "string", "enum": ["bundle","unbundle"], "description": "place_value 专用：bundle 捆扎课（添棒满十捆一捆，讲竖式进位「进 1」的算理）/ unbundle 拆捆课（拆一捆变十根总数不变，讲竖式退位「借 1 当 10」的算理）"},
+      "start": {"type": "number", "description": "number_line 专用：起跳点。op=add 时 6-9 整数；op=sub 时 11-18 整数（十几）"},
+      "step": {"type": "number", "description": "number_line 专用：跳的总量（加数/减数）。op=add 时 1-10 整数且 start+step 必须大于 10 且不超过 20；op=sub 时 2-9 整数且必须大于 start 的个位（⚠️ 严禁跳不过 10 的减法用破十跳）"},
+      "op": {"type": "string", "enum": ["add","sub"], "description": "number_line 专用：方向，缺省 add。add 凑十跳（先跳到 10 再跳余数，skill_key 配 math_addition）/ sub 破十跳（先跳回 10 再跳回余数，skill_key 配 math_subtraction）"},
       "left": {"type": "number", "description": "balance 专用：天平左盘数，1-99999 整数（万位以内，可教万以内数的大小比较）"},
       "right": {"type": "number", "description": "balance 专用：天平右盘数，1-99999 整数（万位以内，可教万以内数的大小比较）"},
       "hour": {"type": "number", "description": "clock 专用：时针位置，1-12 整数"},
@@ -1671,7 +1677,7 @@ function createMathTeachToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     MATH_TEACH_TOOL_ID,
-    '数学讲解板：先摆一摆再讲算理的交互教具。孩子先在讲解板上动手操作看懂算理，之后你再出操练题。四种 mode 四选一，每种 mode 有专属参数。调用前必须先 child_profile(action:read) 读画像，difficulty 与对应 skill_key 的画像等级偏差不超过 1 级。讲解完成后孩子会按「我学会了」回传 {mode, skill_key, stage, completed, interactions}，收到回执后按五步课协议继续出操练题（math_quiz）。⚠️ 严禁连续出题不讲解；⚠️ 严禁讲解参数与算理矛盾（声明凑十却出不用凑十的题）；⚠️ 严禁在 ten_frame 里讲不进位加法（和必须大于 10 才用这块板）。',
+    '数学讲解板：先摆一摆再讲算理的交互教具。孩子先在讲解板上动手操作看懂算理，之后你再出操练题。七种 mode 七选一，每种 mode 有专属参数。调用前必须先 child_profile(action:read) 读画像，difficulty 与对应 skill_key 的画像等级偏差不超过 1 级。讲解完成后孩子会按「我学会了」回传 {mode, skill_key, stage, completed, interactions}，收到回执后按五步课协议继续出操练题（math_quiz）。⚠️ 严禁连续出题不讲解；⚠️ 严禁讲解参数与算理矛盾（声明凑十却出不用凑十的题）；⚠️ 严禁在 ten_frame 里讲不进位加法（和必须大于 10 才用这块板）；⚠️ 严禁不需要退位的减法（减数不大于被减数个位，如 15−3）使用 break_ten；⚠️ 严禁 number_line op=sub 时 step 不大于 start 的个位（跳不过 10 就不需要破十）；⚠️ 严禁 place_value action=unbundle 时 tens=0（没有捆可拆）。',
     parameters
   )
 

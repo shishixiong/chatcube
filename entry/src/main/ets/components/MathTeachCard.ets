@@ -1,7 +1,7 @@
 /**
  * MathTeachCard - 数学讲解板互动卡片（math_teach 工具）
  *
- * 解析 toolCall.arguments 中的讲解参数（4 种 mode），分发到对应讲解板组件；
+ * 解析 toolCall.arguments 中的讲解参数（7 种 mode），分发到对应讲解板组件；
  * 孩子在板内动手操作（onInteract 计数），达到门槛后可点「我学会了 · 继续」
  * 提交 MathTeachResult。无对错判定，完成即成功。
  *
@@ -17,6 +17,9 @@ import { KIDS_MATH_INK, KIDS_MUTED } from './kids/KidsBrandTokens'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { NumberBondBoard } from './mathTeach/NumberBondBoard'
 import { TenFrameBoard } from './mathTeach/TenFrameBoard'
+import { BreakTenBoard } from './mathTeach/BreakTenBoard'
+import { PlaceValueBoard } from './mathTeach/PlaceValueBoard'
+import { NumberLineBoard } from './mathTeach/NumberLineBoard'
 import { BalanceBoard } from './mathTeach/BalanceBoard'
 import { ClockBoard } from './mathTeach/ClockBoard'
 
@@ -38,6 +41,12 @@ interface MathTeachArgsView {
   total: number
   a: number
   b: number
+  tens: number
+  ones: number
+  action: string
+  start: number
+  step: number
+  op: string
   left: number
   right: number
   hour: number
@@ -47,6 +56,9 @@ interface MathTeachArgsView {
 const TEACH_MODES_ZH: Record<string, string> = {
   'number_bond': '数的分与合',
   'ten_frame': '十格阵凑十',
+  'break_ten': '破十减法',
+  'place_value': '小棒与数位',
+  'number_line': '数轴跳一跳',
   'balance': '天平比大小',
   'clock': '时钟拨一拨'
 }
@@ -77,7 +89,8 @@ function getStr(obj: Record<string, Object>, key: string, dflt: string): string 
 function createDefaultArgsView(): MathTeachArgsView {
   const view: MathTeachArgsView = {
     valid: false, mode: '', stage: 'presentation', difficulty: 1, concept: '', skill_key: '',
-    total: 9, a: 9, b: 5, left: 9, right: 5, hour: 9, minute: 0
+    total: 9, a: 9, b: 5, tens: 2, ones: 8, action: 'bundle', start: 9, step: 5, op: 'add',
+    left: 9, right: 5, hour: 9, minute: 0
   }
   return view
 }
@@ -104,6 +117,12 @@ export function parseMathTeachArgs(raw: string): MathTeachArgsView {
     view.total = getNum(obj, 'total', 9)
     view.a = getNum(obj, 'a', 9)
     view.b = getNum(obj, 'b', 5)
+    view.tens = getNum(obj, 'tens', 2)
+    view.ones = getNum(obj, 'ones', 8)
+    view.action = getStr(obj, 'action', 'bundle')
+    view.start = getNum(obj, 'start', 9)
+    view.step = getNum(obj, 'step', 5)
+    view.op = getStr(obj, 'op', 'add')
     view.left = getNum(obj, 'left', 9)
     view.right = getNum(obj, 'right', 5)
     view.hour = getNum(obj, 'hour', 9)
@@ -152,6 +171,11 @@ export struct MathTeachCard {
     if (this.argsView.mode === 'number_bond') { return 2 }
     // ten_frame 凑十课：讲解 4 步各计一次（练习答对也计一次，见 TenFrameBoard）
     if (this.argsView.mode === 'ten_frame') { return 4 }
+    // break_ten 破十课：讲解 4 步各计一次（练习答对也计一次，见 BreakTenBoard）
+    if (this.argsView.mode === 'break_ten') { return 4 }
+    // place_value / number_line 两步演示课：每步各计一次
+    if (this.argsView.mode === 'place_value') { return 2 }
+    if (this.argsView.mode === 'number_line') { return 2 }
     // clock 时钟拨一拨：认一认图例 / 拖拽松手 / 步进 / 步长切换 / 引导步进 各计一次（见 ClockBoard）
     if (this.argsView.mode === 'clock') { return 4 }
     return 1
@@ -224,6 +248,35 @@ export struct MathTeachCard {
       })
     } else if (this.argsView.mode === 'ten_frame') {
       TenFrameBoard({ a: this.argsView.a, b: this.argsView.b, readonly: this.isAnswered, onInteract: () => { this.countInteract() } })
+    } else if (this.argsView.mode === 'break_ten') {
+      BreakTenBoard({ a: this.argsView.a, b: this.argsView.b, readonly: this.isAnswered, onInteract: () => { this.countInteract() } })
+    } else if (this.argsView.mode === 'place_value') {
+      PlaceValueBoard({
+        tens: this.argsView.tens,
+        ones: this.argsView.ones,
+        action: this.argsView.action,
+        readonly: this.isAnswered,
+        onInteract: () => {
+          this.countInteract()
+        },
+        onFinish: () => {
+          // 板内「本课完成」提前结课：markStepDone 已先计一次，这里直接提交（幂等守卫在 submit 内）
+          this.submit()
+        }
+      })
+    } else if (this.argsView.mode === 'number_line') {
+      NumberLineBoard({
+        start: this.argsView.start,
+        step: this.argsView.step,
+        op: this.argsView.op,
+        readonly: this.isAnswered,
+        onInteract: () => {
+          this.countInteract()
+        },
+        onFinish: () => {
+          this.submit()
+        }
+      })
     } else if (this.argsView.mode === 'balance') {
       BalanceBoard({ left: this.argsView.left, right: this.argsView.right, readonly: this.isAnswered, onInteract: () => { this.countInteract() } })
     } else if (this.argsView.mode === 'clock') {
