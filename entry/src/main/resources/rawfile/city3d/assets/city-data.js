@@ -50,6 +50,13 @@
       en: 'Animals',
       color: '#C3A6F5',
       icon: '<ellipse cx="12" cy="15" rx="5.2" ry="4.2"/><circle cx="6.4" cy="9.6" r="2.1"/><circle cx="11" cy="7.2" r="2.1"/><circle cx="16.4" cy="8.4" r="2.1"/><circle cx="19.2" cy="13" r="1.9"/>'
+    },
+    {
+      id: 'indoor',
+      label: '室内',
+      en: 'Indoors',
+      color: '#E0A458',
+      icon: '<path d="M4 10.5 12 4l8 6.5V20H4v-9.5Z"/><path d="M9.6 20v-5.4h4.8V20"/>'
     }
   ];
 
@@ -127,12 +134,71 @@
     { id: 'hospital_zone', label: '医院', en: 'Hospital', hint: '医院 · 消防站' }
   ];
 
+  /* ============================================================
+     室内场景
+     ------------------------------------------------------------
+     每栋可进入的建筑对应一个 interior：进入时隐藏街道、显示室内，
+     相机切到室内视角，退出时原样恢复。
+
+     坐标约定：室内以房间中心为原点，房间尺寸由 w / d / h 给出，
+     房间「正面」朝 +z（也就是玩家进入的方向）。
+     物品摆位都用房间的局部坐标，方便整栋房间平移/复用。
+
+     zone 用 'interior' 标记，让词汇表能单独分组、寻宝不会把
+     室内词当街道词抽到。
+     ============================================================ */
+  var interiors = {
+    supermarket: {
+      id: 'supermarket',
+      name: '超市',
+      en: 'Supermarket',
+      // 房间尺寸（米）：宽 22、深 16、高 4.6
+      w: 22, d: 16, h: 4.6,
+      /* 室内镜头：机位在门口内侧、胸口高度，平视看进去。
+         phi 越接近 π/2 越水平，1.45 几乎平视（相机高度 ≈ target.y + r*cos(1.45) ≈ 1.5 + 2.3）。
+         radius 10 让相机退到门边，视野刚好罩住整间屋子。
+         正面墙不建模，所以不会挡住视线。 */
+      view: { target: [0, 1.4, -1.5], radius: 13.0, phi: 1.16, theta: 0 },
+      floorColor: '#E8DFCB',
+      wallColor: '#F6EEE0',
+      accent: '#E5484D',
+      ambient: true
+    },
+    library: {
+      id: 'library',
+      name: '图书馆',
+      en: 'Library',
+      w: 20, d: 17, h: 4.8,
+      view: { target: [0, 1.4, -1.6], radius: 12.5, phi: 1.16, theta: 0 },
+      floorColor: '#E3D8C4',
+      wallColor: '#F3EBDC',
+      accent: '#6FA8DC',
+      ambient: true
+    }
+  };
+
+  /* 室内专属单词：category 用 'indoor'，zone 用 'interior'。
+     interior 字段指明它属于哪栋建筑。 */
+  var indoorObjects = [
+    /* ---- 超市 ---- */
+    { id: 'shelf', word: 'shelf', phonetic: '/ʃelf/', zh: '货架', kidDefinition: '一层一层摆满商品的架子。', example: 'The milk is on the shelf.', category: 'indoor', zone: 'interior', interior: 'supermarket' },
+    { id: 'cart', word: 'cart', phonetic: '/kɑːrt/', zh: '购物车', kidDefinition: '推着走、装满东西的小车。', example: 'We put apples in the cart.', category: 'indoor', zone: 'interior', interior: 'supermarket' },
+    { id: 'basket', word: 'basket', phonetic: '/ˈbæskɪt/', zh: '购物篮', kidDefinition: '提在手上装东西的篮子。', example: 'She carries a basket.', category: 'indoor', zone: 'interior', interior: 'supermarket' },
+    { id: 'cashier', word: 'cashier', phonetic: '/kæˈʃɪr/', zh: '收银员', kidDefinition: '在出口帮你算钱的人。', example: 'The cashier says thank you.', category: 'indoor', zone: 'interior', interior: 'supermarket' },
+
+    /* ---- 图书馆 ---- */
+    { id: 'bookshelf', word: 'bookshelf', phonetic: '/ˈbʊkʃelf/', zh: '书架', kidDefinition: '排满书的高架子。', example: 'Books are on the bookshelf.', category: 'indoor', zone: 'interior', interior: 'library' },
+    { id: 'book', word: 'book', phonetic: '/bʊk/', zh: '书', kidDefinition: '一页一页、可以读故事的东西。', example: 'I read a book every night.', category: 'indoor', zone: 'interior', interior: 'library' },
+    { id: 'desk', word: 'desk', phonetic: '/desk/', zh: '书桌', kidDefinition: '坐下来看书、写字用的桌子。', example: 'My book is on the desk.', category: 'indoor', zone: 'interior', interior: 'library' },
+    { id: 'librarian', word: 'librarian', phonetic: '/laɪˈbreriən/', zh: '图书管理员', kidDefinition: '在图书馆帮你找书的人。', example: 'The librarian helps me find books.', category: 'indoor', zone: 'interior', interior: 'library' }
+  ];
+
   var views = {
     overview: { target: [0, 0, 0], fit: [142, 110], phi: 0.62, theta: -0.52 },
-    main_street: { target: [-20, 2.5, 10], radius: 60, phi: 1.0, theta: -0.3 },
-    school_zone: { target: [14, 2.5, -14], radius: 62, phi: 1.0, theta: 0.24 },
-    park_zone: { target: [30, 2, 21], radius: 64, phi: 1.02, theta: 0.12 },
-    hospital_zone: { target: [-34, 3.5, -17], radius: 66, phi: 0.98, theta: -0.14 }
+    main_street: { target: [-18, 3, 12], radius: 78, phi: 0.82, theta: -0.42 },
+    school_zone: { target: [20, 3, -18], radius: 82, phi: 0.84, theta: 0.34 },
+    park_zone: { target: [25, 2.5, 21], radius: 70, phi: 0.84, theta: 0.02 },
+    hospital_zone: { target: [-36, 4, -18], radius: 80, phi: 0.82, theta: -0.22 }
   };
 
   /* 相机通用限制 */
@@ -231,6 +297,11 @@
     views: views,
     camera: camera,
     traffic: traffic,
+    // 室内：场景定义 + 室内专属单词
+    interiors: interiors,
+    indoorObjects: indoorObjects,
+    // 可进入的建筑（室内 id 与街道上的单词 id 同名）
+    enterable: ['supermarket', 'library'],
     storageKey: 'wordcity.discovered.v1',
     onboardKey: 'wordcity.onboarded.v1'
   };

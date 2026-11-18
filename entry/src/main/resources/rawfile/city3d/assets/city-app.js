@@ -16,6 +16,16 @@
   var catById = {};
   var zoneById = {};
   D.objects.forEach(function (o) { byId[o.id] = o; });
+  // 室内词与街道词共用一个查表，单词卡 / 词汇表 / 进度都不用改分支
+  (D.indoorObjects || []).forEach(function (o) { byId[o.id] = o; });
+  // 全部单词（街道 + 室内）。统计口径统一走这个，避免各算各的。
+  var allWords = D.objects.concat(D.indoorObjects || []);
+  // 室内状态提早声明：buildVocab 等早于业务函数执行的代码也要读它
+  var interior = {
+    inside: false,
+    id: null,
+    savedZone: 'overview'
+  };
   D.categories.forEach(function (c) { catById[c.id] = c; });
   D.zones.forEach(function (z) { zoneById[z.id] = z; });
 
@@ -28,6 +38,11 @@
     currentZone: 'overview',
     labelsOn: window.innerWidth >= 900,
     nightOn: false,
+    tourOn: false,
+    hour: 10,
+    timeFlow: false,
+    weather: 'clear',
+    instantWeather: false,
     sheetOpen: false,
     celebrating: false,
     completeOnLoad: false
@@ -107,13 +122,17 @@
 
   function cacheEls() {
     [
-      'zoneTabs', 'view', 'labels', 'btnLabels', 'btnReset', 'btnNight', 'btnVocab',
+      'zoneTabs', 'view', 'labels', 'btnLabels', 'btnReset', 'btnNight', 'btnVocab', 'btnTour', 'tourLabel', 'btnHunt',
+      'skyBar', 'skyClock', 'skyPhase', 'skyFill', 'hourRange', 'btnTimeFlow',
       'loading', 'webglError', 'errorRetry', 'errorVocab',
       'onboarding', 'obStep', 'obTitle', 'obText', 'obIcon', 'obNext', 'obDots',
       'hintChip', 'panel', 'panelHandle', 'panelScroll', 'panelZone',
       'wordCard', 'wcChip', 'wcIndex', 'wcClose', 'wcWord', 'wcPhonetic',
       'wcZh', 'wcDefIcon', 'wcDefText', 'wcExample', 'wcExampleText',
       'wcSpeak', 'wcPrev', 'wcNext', 'wcState', 'panelEmpty', 'panelPeek',
+      'wcEnter',
+      'enterTip', 'enterBtn', 'enterLabel', 'enterName',
+      'interiorBar', 'interiorBack', 'interiorTitle',
       'peekText', 'peekCount', 'panelCount', 'dotGrid', 'progressCount',
       'badgeCard', 'vocabModal', 'vocabClose', 'vocabCount', 'vocabSearch',
       'vocabClear', 'vocabBody', 'vocabEmpty', 'vocabLive', 'toast',
@@ -172,8 +191,14 @@
   }
 
   function buildVocab() {
+    // 室内只列本屋的词；在街上不列室内词（免得列出一堆看不见的东西）
+    var scopeWords = interior.inside
+      ? allWords.filter(function (o) { return o.interior === interior.id; })
+      : allWords.filter(function (o) { return !o.interior; });
+
     D.categories.forEach(function (cat) {
-      var words = D.objects.filter(function (o) { return o.category === cat.id; });
+      var words = scopeWords.filter(function (o) { return o.category === cat.id; });
+      if (!words.length) { return; }
       var section = document.createElement('section');
       section.className = 'vocab-group';
       section.dataset.cat = cat.id;
@@ -286,7 +311,7 @@
 
   function updateCounts() {
     var n = state.discovered.size;
-    var total = D.objects.length;
+    var total = allWords.length;
     if (els.panelCount) { els.panelCount.textContent = n + '/' + total; }
     if (els.progressCount) { els.progressCount.textContent = String(n); }
     if (els.peekCount) { els.peekCount.textContent = n + '/' + total; }
@@ -394,8 +419,8 @@
     els.wcChip.appendChild(dot);
     els.wcChip.appendChild(label);
 
-    var idx = D.objects.indexOf(o) + 1;
-    els.wcIndex.textContent = idx + ' / ' + D.objects.length;
+    var idx = allWords.indexOf(o) + 1;
+    els.wcIndex.textContent = idx + ' / ' + allWords.length;
     els.wcWord.textContent = o.word;
     els.wcPhonetic.textContent = o.phonetic;
     els.wcZh.textContent = o.zh;
@@ -408,6 +433,19 @@
     els.wordCard.hidden = false;
     els.panelEmpty.hidden = true;
     els.wordCard.setAttribute('aria-label', o.word + '，' + o.zh);
+
+    /* 可进入的建筑：卡上多一个「推门进去」的入口。
+       室内词不显示（避免在屋里点屋里）。 */
+    if (els.wcEnter) {
+      var canEnter = !interior.inside && isEnterable(o.id);
+      els.wcEnter.hidden = !canEnter;
+      if (canEnter) {
+        els.wcEnter.dataset.target = o.id;
+        var idef = window.WordCityInterior.getDef(o.id);
+        els.wcEnter.querySelector('.wce-text').textContent =
+          '推门进' + (idef ? idef.name : '里面') + '看看';
+      }
+    }
   }
 
   function openWord(id, opts) {
@@ -426,7 +464,7 @@
       updateDot(id, true);
       updateVocabItem(id);
       updateVocabCounts();
-      if (state.discovered.size === D.objects.length && !state.completeOnLoad) {
+      if (state.discovered.size === allWords.length && !state.completeOnLoad) {
         celebrate();
       }
     }
@@ -501,7 +539,7 @@
       els.peekText.textContent = '点一点小城里的建筑、车子和动物';
     }
     if (els.peekCount) {
-      els.peekCount.textContent = state.discovered.size + '/' + D.objects.length;
+      els.peekCount.textContent = state.discovered.size + '/' + allWords.length;
     }
   }
 
@@ -565,17 +603,113 @@
     }
   }
 
-  function setNight(on, fromUser) {
-    state.nightOn = !!on;
-    if (els.view) { els.view.classList.toggle('is-night', state.nightOn); }
-    if (els.btnNight) {
-      els.btnNight.setAttribute('aria-pressed', state.nightOn ? 'true' : 'false');
-      els.btnNight.setAttribute('aria-label', state.nightOn ? '关闭黄昏夜灯，回到白天' : '打开黄昏光照与夜间路灯');
-      els.btnNight.title = state.nightOn ? '回到白天' : '黄昏光照 · 夜间路灯';
+  /* ---------------- 时间与天气 ---------------- */
+
+  // 时段名：由场景层按 hour 推算，UI 只负责显示
+  function phaseLabel(h) {
+    if (h < 4.5) { return '深夜'; }
+    if (h < 7.5) { return '清晨'; }
+    if (h < 11.5) { return '上午'; }
+    if (h < 14.5) { return '正午'; }
+    if (h < 17.5) { return '下午'; }
+    if (h < 19.8) { return '黄昏'; }
+    return '夜晚';
+  }
+
+  function syncSkyUI(h) {
+    if (els.hourRange && document.activeElement !== els.hourRange) {
+      els.hourRange.value = String(h.toFixed(2));
     }
-    if (sceneReady && S.setNight) { S.setNight(state.nightOn); }
+    if (els.skyClock) { els.skyClock.textContent = S.hourLabel ? S.hourLabel(h) : ''; }
+    if (els.skyPhase) { els.skyPhase.textContent = phaseLabel(h); }
+    if (els.skyFill) { els.skyFill.style.width = (h / 24 * 100).toFixed(1) + '%'; }
+    // 夜色 / 暖色强度由场景层统一算，UI 只负责写进 CSS 变量
+    var st = (sceneReady && S.getSkyState) ? S.getSkyState() : null;
+    var night = st ? st.night : nightAmount(h);
+    var warm = st ? st.warm * 0.72 : warmAmount(h);
+    if (els.view) {
+      els.view.style.setProperty('--night-op', night.toFixed(3));
+      els.view.style.setProperty('--warm-op', warm.toFixed(3));
+      // 雨雪天让背景层也偏灰，避免出现「灰色3D + 蓝天CSS」的割裂
+      if (st) {
+        var wet = Math.max(st.rain, st.snow);
+        els.view.style.setProperty('--wet-op', (wet * 0.62).toFixed(3));
+      }
+    }
+    state.nightOn = night > 0.5;
+  }
+
+  // 与场景层 sampleSky 的派生量保持一致（只用于 UI 配色）
+  function nightAmount(h) {
+    if (h >= 18.5) { return Math.min(1, (h - 18.5) / 2.4); }
+    if (h <= 5.4) { return Math.max(0, Math.min(1, 1 - (h - 4.0) / 1.4)); }
+    return 0;
+  }
+  function warmAmount(h) {
+    var d = (h >= 16.5 && h <= 20) ? Math.sin(((h - 16.5) / 3.5) * Math.PI) : 0;
+    var w = (h >= 4.6 && h <= 7.6) ? Math.sin(((h - 4.6) / 3.0) * Math.PI) : 0;
+    return Math.max(d, w) * 0.72;
+  }
+
+  var lastPushedHour = -1;
+
+  function setHour(h, fromUser, instant) {
+    h = ((h % 24) + 24) % 24;
+    state.hour = h;
+    if (sceneReady && S.setHour) { S.setHour(h, !!instant); }
+    // 立即模式下场景已经跳变，UI 也要马上对齐
+    if (instant) { lastPushedHour = h; }
+    syncSkyUI(h);
     if (fromUser) {
-      toast(state.nightOn ? '黄昏来了，路灯亮起来了' : '回到明亮的白天');
+      hideHint();
+      // 用户拖动时如果时间在流动，先停下，免得刚拖完又跑走
+      if (state.timeFlow) { setTimeFlow(false, false); }
+    }
+  }
+
+  function setTimeFlow(on, fromUser) {
+    state.timeFlow = !!on;
+    if (sceneReady && S.setTimeFlow) { S.setTimeFlow(state.timeFlow); }
+    if (els.btnTimeFlow) {
+      els.btnTimeFlow.setAttribute('aria-pressed', state.timeFlow ? 'true' : 'false');
+      els.btnTimeFlow.setAttribute('aria-label', state.timeFlow ? '暂停时间流动' : '播放一天的时间流动');
+      els.btnTimeFlow.title = state.timeFlow ? '暂停时间' : '让时间自己走（约 5 分钟过完一天）';
+    }
+    if (fromUser) {
+      toast(state.timeFlow ? '时间开始流动，从早到晚慢慢走过' : '时间停住了');
+      hideHint();
+    }
+  }
+
+  var WEATHER_LABEL = { clear: '晴天', rain: '下雨了', snow: '下雪了' };
+
+  function setWeather(kind, fromUser) {
+    if (kind !== 'clear' && kind !== 'rain' && kind !== 'snow') { kind = 'clear'; }
+    state.weather = kind;
+    if (sceneReady && S.setWeather) { S.setWeather(kind, !fromUser && state.instantWeather); }
+    // 按钮状态
+    var btns = document.querySelectorAll('.weather-btn');
+    for (var i = 0; i < btns.length; i++) {
+      var on = btns[i].getAttribute('data-weather') === kind;
+      btns[i].classList.toggle('is-on', on);
+      btns[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    if (fromUser) {
+      toast(kind === 'clear' ? '雨停雪停，太阳出来啦'
+        : kind === 'rain' ? '下雨了，大家都撑起了伞'
+        : '下雪了，整个小城都变白了');
+      hideHint();
+    }
+  }
+
+  /* 把 setNight 保留成旧接口：宿主原生按钮仍然调它。
+     它现在只是「跳到晚上 / 跳回白天」的语法糖。 */
+  function setNight(on, fromUser) {
+    var target = on ? 20.5 : 10;
+    if (state.timeFlow) { setTimeFlow(false, false); }
+    setHour(target, fromUser);
+    if (fromUser) {
+      toast(on ? '黄昏来了，路灯亮起来了' : '回到明亮的白天');
       hideHint();
     }
   }
@@ -628,7 +762,7 @@
     els.vocabClear.hidden = !q;
     els.vocabLive.textContent = q
       ? '找到 ' + visible + ' 个单词'
-      : '共 ' + D.objects.length + ' 个单词，已收集 ' + state.discovered.size + ' 个';
+      : '共 ' + allWords.length + ' 个单词，已收集 ' + state.discovered.size + ' 个';
   }
 
   function openVocab() {
@@ -686,6 +820,220 @@
     }
   }
 
+  /* ---------------- 自动巡游 ---------------- */
+
+  // 巡游顺序：从商业街出发，绕学校、公园、医院一圈，回到全城俯视。
+  var TOUR_ZONES = ['main_street', 'school_zone', 'park_zone', 'hospital_zone', 'overview'];
+  var tourStopTimer = 0;
+
+  function setTour(on, fromUser) {
+    if (!sceneReady || !S.startTour) { return; }
+    state.tourOn = !!on;
+    if (state.tourOn) {
+      closeCard();
+      S.startTour(TOUR_ZONES, function (id, index) {
+        state.currentZone = id;
+        syncZoneTabs();
+        if (els.tourLabel) {
+          els.tourLabel.textContent = '巡游 ' + (index + 1) + '/' + TOUR_ZONES.length;
+        }
+      });
+      if (els.btnTour) {
+        els.btnTour.classList.add('is-on');
+        els.btnTour.setAttribute('aria-pressed', 'true');
+      }
+      if (fromUser) { toast('小城巡游开始了，点一下画面就能自己走'); }
+      hideHint();
+    } else {
+      S.stopTour();
+      if (els.btnTour) {
+        els.btnTour.classList.remove('is-on');
+        els.btnTour.setAttribute('aria-pressed', 'false');
+      }
+      if (els.tourLabel) { els.tourLabel.textContent = '自动巡游'; }
+    }
+  }
+
+  // 用户一拖动画面，巡游就自动停下（场景层已经 stopTour，这里同步 UI）
+  function syncTourUI() {
+    if (!state.tourOn) { return; }
+    if (S.isTouring && !S.isTouring()) {
+      state.tourOn = false;
+      if (els.btnTour) {
+        els.btnTour.classList.remove('is-on');
+        els.btnTour.setAttribute('aria-pressed', 'false');
+      }
+      if (els.tourLabel) { els.tourLabel.textContent = '自动巡游'; }
+    }
+  }
+
+  /* ---------------- 建筑内部 ---------------- */
+
+  /* 可进入的建筑：街道上的建筑 id 与室内 id 同名。
+     点中建筑时先弹单词卡，卡上给一个「推门进去」的按钮；
+     也可以直接点门口的提示条进去。 */
+
+  function isEnterable(id) {
+    return !!(window.WordCityScene && window.WordCityScene.hasInterior &&
+      window.WordCityScene.hasInterior(id));
+  }
+
+  function enterInterior(id, immediate) {
+    if (!isEnterable(id)) {
+      toast('这栋楼还没有开放内部哦');
+      return false;
+    }
+    if (window.WordCityHunt && window.WordCityHunt.isActive()) {
+      toast('先退出寻宝再进去逛吧');
+      return false;
+    }
+    closeVocab();
+    closeCard();
+    hideEnterTip();
+
+    interior.savedZone = state.currentZone;
+    var ok = window.WordCityScene.enterInterior(id, !!immediate);
+    if (!ok) { return false; }
+    interior.inside = true;
+    interior.id = id;
+
+    var def = window.WordCityInterior.getDef(id);
+    document.body.classList.add('is-indoor');
+    if (els.interiorBar) {
+      els.interiorBar.hidden = false;
+      if (els.interiorTitle) { els.interiorTitle.textContent = def ? def.name : '室内'; }
+    }
+    // 室内词才 3~4 个，标签开着反而好找，直接打开
+    setLabels(true, false);
+    // 把词汇表的可点范围切到室内
+    refreshVocabScope();
+    return true;
+  }
+
+  function exitInterior() {
+    if (!interior.inside) { return false; }
+    closeCard();
+    window.WordCityScene.exitInterior();
+    interior.inside = false;
+    interior.id = null;
+    document.body.classList.remove('is-indoor');
+    if (els.interiorBar) { els.interiorBar.hidden = true; }
+    refreshVocabScope();
+    return true;
+  }
+
+  /* 词汇表在室内只列这间屋子的词；在街上不列室内词 */
+  function refreshVocabScope() {
+    if (typeof buildVocab === 'function') { buildVocab(); }
+  }
+
+  function showEnterTip(id) {
+    if (!els.enterTip || interior.inside) { return; }
+    var def = window.WordCityInterior ? window.WordCityInterior.getDef(id) : null;
+    if (!def) { hideEnterTip(); return; }
+    els.enterTip.hidden = false;
+    els.enterTip.dataset.target = id;
+    if (els.enterName) { els.enterName.textContent = def.name; }
+    if (els.enterLabel) { els.enterLabel.textContent = '推门进去看看'; }
+  }
+
+  function hideEnterTip() {
+    if (!els.enterTip) { return; }
+    els.enterTip.hidden = true;
+    els.enterTip.dataset.target = '';
+  }
+
+  function bindInterior() {
+    if (els.enterBtn) {
+      els.enterBtn.addEventListener('click', function () {
+        var id = els.enterTip ? els.enterTip.dataset.target : '';
+        if (id) { enterInterior(id); }
+      });
+    }
+    if (els.interiorBack) {
+      els.interiorBack.addEventListener('click', function () { exitInterior(); });
+    }
+    // 单词卡上的「推门进去」
+    if (els.wcEnter) {
+      els.wcEnter.addEventListener('click', function () {
+        var id = els.wcEnter.dataset.target;
+        if (id) { enterInterior(id); }
+      });
+    }
+    // Esc 退出室内
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') { return; }
+      if (interior.inside) {
+        e.preventDefault();
+        exitInterior();
+      }
+    });
+  }
+
+  /* ---------------- 单词寻宝 ---------------- */
+
+  function huntActive() {
+    return !!(window.WordCityHunt && window.WordCityHunt.isActive && window.WordCityHunt.isActive());
+  }
+
+  // 进寻宝前把界面收拾干净：关卡片、关词表、记下标签开关再关掉
+  var huntPrevLabels = null;
+
+  function enterHuntMode() {
+    if (!window.WordCityHunt) { return false; }
+    if (!sceneReady) { toast('小城还在搭建，稍等一下'); return false; }
+    closeVocab();
+    closeCard();
+    if (state.tourOn) { setTour(false, false); }
+    huntPrevLabels = state.labelsOn;
+    // 英文标签会把答案直接写在墙上，进游戏必须关掉
+    setLabels(false, false);
+
+    var ok = window.WordCityHunt.start();
+    if (ok) {
+      if (els.btnHunt) { els.btnHunt.classList.add('is-on'); }
+      hideHint();
+    }
+    return ok;
+  }
+
+  function exitHuntMode() {
+    if (els.btnHunt) { els.btnHunt.classList.remove('is-on'); }
+    if (huntPrevLabels !== null) {
+      setLabels(huntPrevLabels, false);
+      huntPrevLabels = null;
+    }
+  }
+
+  function bindHunt() {
+    if (!window.WordCityHunt) { return; }
+    window.WordCityHunt.init({
+      data: D,
+      scene: {
+        setHuntTarget: function (id, strength) {
+          if (sceneReady && S.setHuntTarget) { S.setHuntTarget(id, strength); }
+        },
+        burstAt: function (id) { if (sceneReady && S.burstAt) { S.burstAt(id); } },
+        setView: function (id, immediate) { if (sceneReady) { S.setView(id, immediate); } },
+        getWordScreenPos: function (id) { return sceneReady && S.getWordScreenPos ? S.getWordScreenPos(id) : null; },
+        distanceToWord: function (id) { return sceneReady && S.distanceToWord ? S.distanceToWord(id) : Infinity; }
+      },
+      toast: toast,
+      openWord: function (id) { openWord(id); },
+      onEnter: function () { /* 已由 enterHuntMode 处理 */ },
+      onExit: exitHuntMode
+    });
+    if (els.btnHunt) {
+      els.btnHunt.addEventListener('click', function () {
+        if (huntActive()) {
+          window.WordCityHunt.stop(false);
+        } else {
+          enterHuntMode();
+        }
+      });
+    }
+  }
+
   /* ---------------- 新手引导 ---------------- */
 
   var OB_STEPS = [
@@ -721,6 +1069,13 @@
   }
 
   function maybeShowOnboarding() {
+    // ?onboard=0 用于截图 / 嵌入演示，直接跳过新手引导
+    try {
+      if (/(?:^|[?&])onboard=0(?:&|$)/.test(window.location.search)) {
+        els.onboarding.hidden = true;
+        return;
+      }
+    } catch (err) { /* 忽略 */ }
     var done = false;
     try { done = !!window.localStorage.getItem(D.onboardKey); } catch (err) { /* 忽略 */ }
     if (done || state.discovered.size > 0) {
@@ -756,6 +1111,57 @@
     document.body.classList.toggle('is-host', !!on);
   }
 
+  /* 深链参数：让「打开就是某个画面」成为可能
+     ?hour=18.5     直接跳到某个时刻（0..24）
+     ?flow=1        打开就播放时间流动
+     ?weather=rain  天气：clear / rain / snow
+     ?night=1       兼容旧参数，等于 ?hour=20.5
+     ?zone=park_zone 直接飞到某个分区
+     ?labels=0/1    英文标签开关
+     ?select=tree   打开某个单词卡 */
+  function applyDeepLink() {
+    var q;
+    try { q = new URLSearchParams(window.location.search); } catch (err) { return; }
+    if (!q) { return; }
+    var night = q.get('night');
+    if (night === '1' || night === 'true') { setHour(20.5, false, true); }
+    var hourParam = q.get('hour');
+    if (hourParam !== null && hourParam !== '' && isFinite(parseFloat(hourParam))) {
+      // 深链要直接落到那一刻，不走缓动（否则截图和分享链接的首帧都是错的）
+      setHour(parseFloat(hourParam), false, true);
+    }
+    var w = q.get('weather');
+    if (w === 'rain' || w === 'snow' || w === 'clear') {
+      state.instantWeather = true;
+      setWeather(w, false);
+    }
+    var flow = q.get('flow');
+    if (flow === '1' || flow === 'true') { setTimeFlow(true, false); }
+    // 直接进入寻宝：分享「来挑战一轮」的链接时用
+    var huntQ = q.get('hunt');
+    if (huntQ === '1' || huntQ === 'true') {
+      window.setTimeout(function () { enterHuntMode(); }, 420);
+    }
+    // 直接进屋：?inside=supermarket，方便分享「超市里有什么」的链接
+    var insideQ = q.get('inside');
+    if (insideQ && window.WordCityScene && window.WordCityScene.hasInterior(insideQ)) {
+      window.setTimeout(function () { enterInterior(insideQ, true); }, 500);
+    }
+    var labels = q.get('labels');
+    if (labels === '1' || labels === 'true') { setLabels(true, false); }
+    else if (labels === '0' || labels === 'false') { setLabels(false, false); }
+    var zone = q.get('zone');
+    if (zone && zoneById[zone] && zone !== state.currentZone) {
+      state.currentZone = zone;
+      syncZoneTabs();
+      if (sceneReady) { S.setView(zone, true); }
+    }
+    var sel = q.get('select');
+    if (sel && byId[sel]) {
+      window.setTimeout(function () { openWord(sel, { silentFocus: true }); }, 260);
+    }
+  }
+
   /* ---------------- 事件绑定 ---------------- */
 
   function bindUI() {
@@ -789,7 +1195,39 @@
     els.btnNight.addEventListener('click', function () {
       setNight(!state.nightOn, true);
     });
+
+    /* 时间轴：拖动即时生效，松手才提示 */
+    if (els.hourRange) {
+      els.hourRange.addEventListener('input', function () {
+        setHour(parseFloat(els.hourRange.value), false);
+      });
+      els.hourRange.addEventListener('change', function () {
+        var h = parseFloat(els.hourRange.value);
+        setHour(h, false);
+        if (state.timeFlow) { setTimeFlow(false, false); }
+        toast('现在是 ' + (S.hourLabel ? S.hourLabel(h) : '') + ' · ' + phaseLabel(h));
+        hideHint();
+      });
+    }
+    if (els.btnTimeFlow) {
+      els.btnTimeFlow.addEventListener('click', function () {
+        setTimeFlow(!state.timeFlow, true);
+      });
+    }
+    /* 天气三态 */
+    var weatherBtns = document.querySelectorAll('.weather-btn');
+    for (var wi2 = 0; wi2 < weatherBtns.length; wi2++) {
+      weatherBtns[wi2].addEventListener('click', function () {
+        setWeather(this.getAttribute('data-weather'), true);
+      });
+    }
+    if (els.btnTour) {
+      els.btnTour.addEventListener('click', function () {
+        setTour(!state.tourOn, true);
+      });
+    }
     els.btnReset.addEventListener('click', function () {
+      if (state.tourOn) { setTour(false, false); }
       if (sceneReady) { S.resetView(); }
       hideHint();
     });
@@ -866,6 +1304,24 @@
     ['pointerdown', 'wheel', 'touchstart'].forEach(function (evt) {
       els.view.addEventListener(evt, hideHint, { passive: true });
     });
+    // 巡游时用户一旦手动操作画面，立刻同步按钮状态
+    ['pointerdown', 'wheel', 'dblclick'].forEach(function (evt) {
+      els.view.addEventListener(evt, function () {
+        window.setTimeout(syncTourUI, 0);
+      }, { passive: true });
+    });
+    window.setInterval(syncTourUI, 400);
+    // 时间流动 / 缓动时，UI 时钟与滑块的 CSS 变量要跟着场景走
+    window.setInterval(function () {
+      if (!sceneReady || !S.getHour) { return; }
+      var h = S.getHour();
+      if (Math.abs(h - lastPushedHour) < 0.004) { return; }
+      lastPushedHour = h;
+      state.hour = h;
+      syncSkyUI(h);
+    }, 120);
+    bindHunt();
+    bindInterior();
     scheduleHint();
   }
 
@@ -883,10 +1339,16 @@
         reducedMotion: reduced,
         labels: state.labelsOn,
         onPick: function (id) {
+          // 寻宝进行中：点击交给游戏判定，不弹单词卡
+          if (huntActive() && window.WordCityHunt.handlePick(id)) { return; }
           if (!id) {
             closeCard();
+            hideEnterTip();
           } else {
             openWord(id);
+            // 点中可进入的建筑时，门口给一个更明显的「推门」提示
+            if (isEnterable(id) && !interior.inside) { showEnterTip(id); }
+            else { hideEnterTip(); }
           }
         },
         onLabels: updateLabels
@@ -921,7 +1383,7 @@
     buildVocab();
 
     loadProgress();
-    state.completeOnLoad = state.discovered.size === D.objects.length;
+    state.completeOnLoad = state.discovered.size === allWords.length;
     updateAllDots();
     refreshAllVocab();
     updateCounts();
@@ -931,7 +1393,8 @@
 
     bindUI();
     initScene();
-    setNight(state.nightOn, false);
+    setHour(state.hour, false);
+    setWeather(state.weather, false);
     maybeShowOnboarding();
 
     if (els.btnLabels) {
@@ -941,8 +1404,20 @@
     window.WordCityApp = {
       select: function (id) { openWord(id); },
       setLabels: function (on) { setLabels(!!on, false); },
+      // 旧接口保留：宿主原生夜灯按钮仍调用它
       setNight: function (on) { setNight(!!on, false); },
       setView: function (id) { setZone(id); },
+      // 时间与天气
+      setHour: function (h) { setHour(h, false); },
+      getHour: function () { return S.getHour ? S.getHour() : state.hour; },
+      setTimeFlow: function (on) { setTimeFlow(!!on, false); },
+      isTimeFlowing: function () { return state.timeFlow; },
+      setWeather: function (kind) { setWeather(kind, false); },
+      getWeather: function () { return state.weather; },
+      // 单词寻宝
+      startHunt: function (zone) { return enterHuntMode(); },
+      stopHunt: function () { if (window.WordCityHunt) { window.WordCityHunt.stop(true); } exitHuntMode(); },
+      isHunting: function () { return huntActive(); },
       ids: function () { return D.objects.map(function (o) { return o.id; }); },
       discovered: function () { return Array.from(state.discovered); },
       openVocab: openVocab,
@@ -955,10 +1430,15 @@
       }
     } catch (err) { /* 忽略 */ }
 
-    if (state.discovered.size === D.objects.length) {
+    // 深链参数：?night=1 直接进黄昏夜灯，?zone=park_zone 直接飞到某个分区，
+    // ?labels=0/1 控制英文标签，?select=tree 直接打开某个单词卡。
+    // 宿主或分享链接都可用，参数非法时静默忽略。
+    applyDeepLink();
+
+    if (state.discovered.size === allWords.length) {
       els.badgeCard.hidden = false;
     }
-    console.info('[WordCity] 小词城已就绪：' + D.objects.length + ' 个单词。');
+    console.info('[WordCity] 小词城已就绪：' + allWords.length + ' 个单词（街道 ' + D.objects.length + ' + 室内 ' + (D.indoorObjects || []).length + '）。');
   }
 
   // 页面已构建完成后启动（脚本放在 body 末尾）

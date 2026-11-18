@@ -296,19 +296,57 @@ ul { list-style: none; }
     linear-gradient(180deg, var(--sky) 0%, #e9f8f1 46%, #f4fbf7 100%);
 }
 
+/* 昼夜不再是开关：--night-op / --warm-op / --wet-op 由 3D 层每帧写入（0..1），
+   黄昏暖色层、夜空星图层、雨雪灰调层各自按强度叠加，时间流动时能连续过渡。 */
+.view {
+  --night-op: 0;
+  --warm-op: 0;
+  --wet-op: 0;
+}
+
+/* 天气灰调层：雨雪天让天空整体变灰，和 3D 里的雾色对齐 */
+.sky-wet {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: var(--wet-op);
+  background:
+    linear-gradient(180deg, rgba(140, 152, 162, 0.9) 0%, rgba(158, 168, 176, 0.72) 45%, rgba(176, 184, 190, 0.6) 100%);
+}
+
 .view::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  opacity: 0;
-  transition: opacity 700ms var(--ease-out);
+  opacity: var(--night-op);
+  /* CSS 星空：与 three.js 星点叠加，俯视视角下也能保证夜色可读 */
   background:
-    radial-gradient(120% 86% at 52% 7%, rgba(255, 214, 166, 0.92) 0%, rgba(255, 214, 166, 0) 56%),
-    linear-gradient(180deg, #f3b58c 0%, #dd9591 34%, #8d6e94 68%, #4a4261 100%);
+    radial-gradient(1.6px 1.6px at 12% 18%, rgba(255, 250, 235, 0.95) 50%, rgba(255, 250, 235, 0) 51%),
+    radial-gradient(1.4px 1.4px at 26% 9%, rgba(255, 246, 220, 0.9) 50%, rgba(255, 246, 220, 0) 51%),
+    radial-gradient(1.8px 1.8px at 41% 22%, rgba(255, 252, 240, 0.95) 50%, rgba(255, 252, 240, 0) 51%),
+    radial-gradient(1.3px 1.3px at 58% 11%, rgba(255, 246, 220, 0.85) 50%, rgba(255, 246, 220, 0) 51%),
+    radial-gradient(1.7px 1.7px at 73% 20%, rgba(255, 250, 235, 0.9) 50%, rgba(255, 250, 235, 0) 51%),
+    radial-gradient(1.4px 1.4px at 88% 8%, rgba(255, 246, 220, 0.9) 50%, rgba(255, 246, 220, 0) 51%),
+    radial-gradient(1.5px 1.5px at 6% 6%, rgba(255, 252, 240, 0.8) 50%, rgba(255, 252, 240, 0) 51%),
+    radial-gradient(1.3px 1.3px at 92% 26%, rgba(255, 246, 220, 0.8) 50%, rgba(255, 246, 220, 0) 51%),
+    radial-gradient(130% 90% at 50% 6%, rgba(126, 108, 168, 0.55) 0%, rgba(88, 74, 128, 0.2) 46%, rgba(30, 24, 48, 0) 74%),
+    linear-gradient(180deg, #2a2440 0%, #3c3352 26%, #4b3f5e 52%, #3a3350 78%, #241f36 100%);
 }
-.view.is-night::before { opacity: 1; }
+
+/* 黄昏 / 黎明暖色层：强度由 --warm-op 控制，和夜色层互不抢 */
+.sky-warm {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: var(--warm-op);
+  background:
+    radial-gradient(110% 76% at 68% 84%, rgba(255, 168, 92, 0.95) 0%, rgba(255, 168, 92, 0) 62%),
+    linear-gradient(180deg, rgba(255, 206, 150, 0.92) 0%, rgba(250, 170, 118, 0.8) 34%, rgba(198, 126, 130, 0.62) 68%, rgba(128, 98, 132, 0.42) 100%);
+}
 
 .view canvas {
   position: absolute;
@@ -336,7 +374,13 @@ ul { list-style: none; }
   z-index: 2;
 }
 
-.view.is-night::after {
+/* 夜间暗角跟着 --night-op 一起加深，而不是硬切 */
+.view-night-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: var(--night-op);
   background:
     linear-gradient(180deg, rgba(32, 22, 45, 0.26) 0%, rgba(32, 22, 45, 0) 22%),
     linear-gradient(0deg, rgba(18, 13, 28, 0.4) 0%, rgba(18, 13, 28, 0) 34%);
@@ -454,6 +498,182 @@ ul { list-style: none; }
 }
 .map-label.is-current .label-dot { background: #4a2a08; }
 .map-label.is-explored .label-dot { background: var(--green); }
+
+/* ---------------- 时间与天气条 ---------------- */
+
+.sky-bar {
+  position: absolute;
+  z-index: 12;
+  left: 16px;
+  bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px 7px 7px;
+  border-radius: 999px;
+  background: rgba(255, 253, 248, 0.9);
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 18px rgba(45, 42, 38, 0.13);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  /* 右侧给工具按钮留出固定空间，避免任何宽度下挤在一起 */
+  max-width: calc(100% - 400px);
+  min-width: 0;
+}
+
+
+
+.sky-play {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background-color 160ms var(--ease-out), color 160ms var(--ease-out);
+}
+.sky-play:hover { background: var(--surface-3); }
+.sky-play[aria-pressed="true"] {
+  background: var(--brand);
+  border-color: var(--brand-deep);
+  color: #3a2306;
+}
+
+.sky-clock {
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  min-width: 40px;
+}
+
+.sky-track {
+  position: relative;
+  flex: 1 1 120px;
+  min-width: 76px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+}
+
+/* 时间轴底色：白天蓝 → 黄昏橙 → 夜里紫，让滑块本身能读出时段 */
+.sky-track::before {
+  content: "";
+  position: absolute;
+  inset: 8px 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg,
+    #2a2440 0%, #3c3352 8%, #c9b0c6 22%, #dff2ff 34%,
+    #eef8ff 52%, #f2b48c 74%, #4a4060 88%, #241f36 100%);
+  opacity: 0.85;
+}
+
+.sky-fill {
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.42);
+  pointer-events: none;
+}
+
+.sky-range {
+  position: relative;
+  width: 100%;
+  height: 22px;
+  margin: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+.sky-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fffdf8;
+  border: 2px solid var(--ink);
+  box-shadow: 0 1px 4px rgba(45, 42, 38, 0.3);
+  cursor: grab;
+}
+.sky-range::-webkit-slider-thumb:active { cursor: grabbing; }
+.sky-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fffdf8;
+  border: 2px solid var(--ink);
+}
+.sky-range::-webkit-slider-runnable-track { background: transparent; height: 22px; }
+
+.sky-phase {
+  flex: none;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--muted);
+  min-width: 26px;
+}
+
+.sky-sep {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 2px;
+}
+
+.weather-group {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--surface-3);
+}
+.weather-btn {
+  width: 30px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background-color 160ms var(--ease-out), color 160ms var(--ease-out);
+}
+.weather-btn:hover { color: var(--ink); background: rgba(255, 255, 255, 0.7); }
+.weather-btn.is-on {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 4px rgba(45, 42, 38, 0.16);
+}
+.weather-btn[data-weather="rain"].is-on { color: #2f7fa8; }
+.weather-btn[data-weather="snow"].is-on { color: #4d7fa8; }
+
+/* 竖屏：时间条压到画布底部，天气按钮保留 */
+@media (max-width: 760px) {
+  .sky-bar {
+    left: 10px;
+    right: 10px;
+    bottom: 96px;
+    max-width: none;
+    padding: 6px 9px 6px 6px;
+    gap: 6px;
+  }
+  .sky-clock { min-width: 36px; font-size: 12px; }
+  .sky-phase { display: none; }
+  .sky-sep { display: none; }
+  .weather-btn { width: 28px; }
+}
 
 /* ---------------- View tools ---------------- */
 
@@ -671,6 +891,29 @@ ul { list-style: none; }
   .hint-chip { bottom: 238px; font-size: 11px; }
   #btnNight { width: 44px; min-width: 44px; padding: 0; }
   #btnNight .btn-label { display: none; }
+}
+
+@media (max-width: 1240px) {
+  .sky-bar {
+    left: 16px;
+    right: 16px;
+    max-width: none;
+    gap: 6px;
+    padding: 6px 8px 6px 6px;
+    /* 时间条压到底部一行 */
+    bottom: 14px;
+  }
+  .sky-track { flex-basis: 70px; min-width: 52px; }
+  .sky-clock { min-width: 34px; font-size: 12px; }
+  .sky-phase { min-width: 22px; font-size: 11px; }
+  /* 工具按钮上移一行，和时间条彻底分开 */
+  .view-tools {
+    bottom: 62px;
+    right: 16px;
+    left: auto;
+    width: auto;
+  }
+  .hint-chip { bottom: 62px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
