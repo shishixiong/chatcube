@@ -85,7 +85,7 @@ export const DEFAULT_ASSISTANT_SYSTEM_PROMPT: string = [
   '【学写字】3 维:fine_motor / english_writing / chinese_writing。用 handwriting_practice,type 必填 letter / number / chinese,每次只练 1 个字。',
   '【分类】1 维:categorization。用 categorization 工具,2-3 桶 4-9 件,引导小朋友说分类理由。',
   '【迷宫】spatial_reasoning 路径型练习。用 maze 工具,孩子在网格迷宫里点击相邻格子走出,锻炼方向感 + 路径规划 + 死胡同识别。难度:difficulty 1=简单 4×4(适合 5 岁),2=进阶 6×6(适合 6-7 岁),3=挑战 8×8(适合 7-8 岁)。按 child_profile.spatial_reasoning 的 level 选难度(level 0-1→1,level 2-3→2,level 4-5→3)。走通给 1/2/3 星,放弃 0 星;死胡同里藏有可收集的星星(不阻塞通关,纯趣味奖励)。',
-  '【贪吃蛇】spatial_reasoning 反应型练习。用 snake_game 工具,硬墙模式(撞到边界或自己的身体都直接结束)。难度 1=慢慢爬·吃满 8 颗果子过关(适合 5 岁),2=正常速·12 颗(适合 6-7 岁),3=飞快·16 颗(适合熟练的孩子)。按 child_profile.spatial_reasoning / logic_thinking 的 level 选难度(level 0-1→1,level 2-3→2,level 4-5→3)。开场先跟小朋友说「屏幕按钮、键盘方向键、手指滑动都能让小蛇转弯,吃满 N 颗果子就过关,小心别撞墙撞到自己」。通关按难度给 1/2/3 星,中途撞墙给 1 星,放弃 0 星。',
+  '【贪吃蛇】spatial_reasoning 反应型练习。用 snake_game 工具,硬墙模式(撞到边界或自己的身体都直接结束)。难度 1=慢慢爬·吃满 8 颗果子过关(适合 5 岁),2=正常速·12 颗(适合 6-7 岁),3=飞快·16 颗(适合熟练的孩子)。按 child_profile.spatial_reasoning / logic_thinking 的 level 选难度(level 0-1→1,level 2-3→2,level 4-5→3)。开场先跟小朋友说「屏幕按钮、键盘方向键、手指滑动都能让小蛇转弯,吃满 N 颗果子就过关,小心别撞墙撞到自己」。星级:吃过 4 颗给 1 星(鼓励参与),难度 1/2 通关给 2 星,难度 3 通关给 3 星,放弃 0 星。孩子撞墙时别只说「再试一次」,告诉他还差几颗就能拿到星星。',
   '【竖式演示】加减乘除的标准竖式步骤(数位对齐、进位、退位、部分积、长除法)用 vertical_math,所有参数都可空,卡片内可自由输入或修改。vertical_math 适合「教怎么算」,math_quiz 适合「测会不会」;演示后用 math_quiz 出 1-2 题巩固效果最好。',
   '',
   '## 分类小管家主题库',

@@ -250,7 +250,7 @@ DB 行 `DailyLessonPlanRow`（行 248-263）→ 表 `daily_lesson_plans`，状�
 | `sudoku` | `completed === true` | 按难度 1/2/3/5/7 |
 | `matching_pairs` | 全对 0 失误 / 有失误 / 放弃 | 难度 1/2/3 / 1 / 0 |
 | `memory_match` | `completed === true` | 难度基数 1-5 星，评级调节（3★ 满额 / 2★ 减 1 / 1★ 给 1）；放弃 0 |
-| `snake_game` | 通关（吃满目标果子）/ 撞墙未通关 / 放弃 | 按难度 1/2/3 星 / 1 星（参与）/ 0 |
+| `snake_game` | 通关（吃满目标果子）/ 吃满 4 颗未通关 / 不足 4 颗或放弃 | 难度 1/2 给 2、难度 3 给 3 / 1 / 0 |
 | `music_ear` | `completed === true` 且首答正确 ≥ ceil(total×0.8) / 完成但未达标 / 未完成（cancelled） | min(3, difficulty+1) / 1 / 0 |
 | `chat_correct` | 聊天答对 | 1 |
 

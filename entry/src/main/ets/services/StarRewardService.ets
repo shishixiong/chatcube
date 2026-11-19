@@ -198,17 +198,17 @@ export class StarRewardService {
       if (completed !== true) {
         return 0
       }
-      // 贪吃蛇(目标果子制): 通关(吃满目标果子)按难度授星——1=1星, 2=2星, 3=3星。
-      // 未通关: 必须吃到目标的一半才给 1 星参与奖, 否则 0 星。
-      // 原实现对「completed && !won」无条件给 1 星, 而通关难度 1 也只有 1 星——
-      // 于是「开局直接撞墙 2 秒」和「认真打通简单关」拿到的星星完全一样, 这个漏洞
-      // 会把孩子推向最省力的刷星路径, 同时污染 AI 回写的 logic_thinking 画像。
+      // 贪吃蛇(目标果子制)星级规则 (2026-11-19 调整):
+      //   通关: 难度1/2 给 2 星, 难度3 给 3 星
+      //   未通关: 吃满 4 颗给 1 星, 不足 4 颗 0 星
+      // 调整原因: 原规则要求吃到目标的一半 (难度2 = 6 颗) 才给参与星, 对 6-7 岁
+      // 孩子门槛偏高; 12 颗通关本身已是有难度的目标, 参与星应当更早兑现。
+      // 「4 颗」是三档统一的固定门槛 (不按目标比例换算), 让孩子记一条规则就够。
+      // 注: 难度3 目标 16 颗, 4 颗 = 1/4 即可拿星, 门槛偏松是已知的取舍 ——
+      // 保留 3 星上限作为「真的打穿」的激励, 不让参与星成为终点。
       if (payload['won'] === true) {
         const difficulty = (payload['difficulty'] as number) ?? 1
-        if (difficulty >= 3) {
-          return 3
-        }
-        return difficulty >= 2 ? 2 : 1
+        return difficulty >= 3 ? 3 : 2
       }
       const eaten = (payload['apples_eaten'] as number) ?? 0
       const target = (payload['target_fruits'] as number) ?? 0
@@ -216,7 +216,7 @@ export class StarRewardService {
       if (target <= 0) {
         return 1
       }
-      return eaten * 2 >= target ? 1 : 0
+      return eaten >= 4 ? 1 : 0
     }
     if (activityType === 'pinyin_card') {
       // 拼音小课堂 (讲解型): 完成「我学会了」回执即授星

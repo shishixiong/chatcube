@@ -30,8 +30,8 @@
  *   + 键盘方向键 (棋盘 focusable + focusOnTouch + onKeyEvent, 开局/恢复时
  *   requestFocus; 点棋盘也可重新聚焦)
  * - 最佳得分按难度持久化 (snake_best_score_<difficulty>, bestScoresLoaded 竞态守卫
- *   镜像 MemoryMatchCard); 星级由 StarRewardService 计算: 通关(吃满目标果子)
- *   按难度 1/2/3 星, 中途撞墙未通关 1 星, 放弃 0 星
+ *   镜像 MemoryMatchCard); 星级由 StarRewardService 计算: 吃满 4 颗给 1 星,
+ *   难度 1/2 通关给 2 星, 难度 3 通关给 3 星, 不足 4 颗或放弃 0 星
  *   (session 模型下 won 取「本次最好一局是否通关」, 见 submitAnswer)
  * - 音效不做 (HTML 的 WebAudio 在 ArkTS 无对应简单基建), 保留 +N 得分飘字
  *
@@ -117,6 +117,13 @@ const GOLD_WARN_MS: number = 1100
 const DIR_ACK_MS: number = 130
 /** 滑动判定阈值 (vp): 与 PanGesture distance 一致, 避免手指微小抖动误触发 */
 const SWIPE_MIN_OFFSET: number = 14
+/**
+ * 拿 1 星所需的最小果子数。
+ * 必须与 StarRewardService.computeStars('snake_game') 的未通关分支保持一致
+ * (那边是 `eaten >= 4 ? 1 : 0`)。改一处必须改两处 —— 这里只用于结算文案播报,
+ * 不影响实际授星。
+ */
+const STAR_THRESHOLD: number = 4
 
 // 棋盘配色 (镜像原型)
 const BOARD_BG: string = '#101B33'
@@ -979,13 +986,17 @@ export struct SnakeCard {
     // 横幅一出现就压住棋盘且不会消失, 会挡住孩子看下一局。结论放进覆盖层。
     this.overlayCount = ''
     this.overlayTitle = won ? '果园大通关！' : '撞到啦，没关系'
-    // 未通关时把「差几颗」说清楚: 原实现只报「这一局吃掉 3/12 颗」,
-    // 孩子算不出差距, 也不知道下一局的目标感在哪
+    // 未通关时按「就近可达的奖励」播报, 而不是只报离通关还差多少。
+    // 只报「再吃 9 颗」对 5-7 岁是个看不见的距离, 会让孩子直接放弃;
+    // 4 颗就能拿星, 所以优先告诉他这个马上够得着的目标。
     if (won) {
       this.overlaySub = `吃掉 ${this.applesEaten} 颗果子 · 得 ${this.score} 分`
+    } else if (this.applesEaten >= STAR_THRESHOLD) {
+      // 已过拿星线: 明确告诉他星星已经拿到了, 再把通关差距当前进目标
+      this.overlaySub = `⭐ 星星到手啦！再吃 ${Math.max(0, this.targetFruits - this.applesEaten)} 颗就通关`
     } else {
-      const left = Math.max(0, this.targetFruits - this.applesEaten)
-      this.overlaySub = `再吃 ${left} 颗就过关了 · 这局 ${this.score} 分`
+      // 未到拿星线: 只播报离星星还差几颗 (这个数字小, 够得着)
+      this.overlaySub = `再吃 ${STAR_THRESHOLD - this.applesEaten} 颗就能得到 1 颗星`
     }
     this.overlayBtnText = '再来一局'
     this.overlayShowSessionDone = true
@@ -1486,11 +1497,17 @@ export struct SnakeCard {
   ProgressPips() {
     Row({ space: 3 }) {
       ForEach(this.pipIndexes(), (i: number) => {
+        // 第 4 格 (拿星门槛) 用金色描边标出来, 其余是普通红点。
+        // 不加标记的话, 孩子只知道「吃了几个」, 不知道「吃到哪一格就有星星」——
+        // 4 颗拿星这条新规则就等于不存在。
         Row()
           .width(12)
           .height(12)
           .borderRadius(3)
           .backgroundColor(i < this.applesEaten ? APPLE_RED : 'rgba(0,0,0,0.10)')
+          .border(i === STAR_THRESHOLD - 1
+            ? { width: 2, color: i < this.applesEaten ? GOLD_STAR : SUCCESS_GREEN }
+            : { width: 0, color: Color.Transparent })
       }, (i: number) => 'pip_' + i.toString())
     }
     .width('100%')
