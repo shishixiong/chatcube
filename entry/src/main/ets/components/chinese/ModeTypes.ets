@@ -21,6 +21,8 @@ export interface ChineseQuizModeArgs {
   words: string[]
   options: string[]
   answer: string
+  // 答错后给孩子看的解析 (2026-11-19 新增, 服务于六步识字法的「明义」)
+  explanation: string
   difficulty: number
   skillKey: string
 }
@@ -79,6 +81,7 @@ export function parseChineseQuizModeArgs(raw: string): ChineseQuizModeArgs {
     words: [],
     options: [],
     answer: '',
+    explanation: '',
     difficulty: 1,
     skillKey: 'chinese_vocab'
   }
@@ -108,6 +111,7 @@ export function parseChineseQuizModeArgs(raw: string): ChineseQuizModeArgs {
     args.words = getStringArray(obj, 'words')
     args.options = getStringArray(obj, 'options')
     args.answer = getStr(obj, 'answer', '')
+    args.explanation = getStr(obj, 'explanation', '')
     args.difficulty = getNum(obj, 'difficulty', 1)
     const skillRaw = getStr(obj, 'skill_key', '')
     args.skillKey = skillRaw !== '' ? skillRaw : (args.mode === 'sentence_order' ? 'chinese_reading' : 'chinese_vocab')

@@ -30,6 +30,7 @@ export struct SentenceOrderBody {
   @Local pool: string[] = []
   @Local placed: string[] = []
   @Local correctAnswer: string = ''
+  @Local explanation: string = ''
   @Local skillKey: string = 'chinese_reading'
   @Local showResult: boolean = false
   @Local isCorrect: boolean = false
@@ -52,6 +53,7 @@ export struct SentenceOrderBody {
     const args: ChineseQuizModeArgs = parseChineseQuizModeArgs(this.toolCall.arguments)
     this.words = args.words
     this.correctAnswer = args.answer
+    this.explanation = args.explanation
     this.skillKey = args.skillKey
     this.shellConfig = {
       title: '连词成句',
@@ -151,6 +153,9 @@ export struct SentenceOrderBody {
     this.isCorrect = correct
     this.shellState.submitted = true
     this.shellState.isCorrect = correct
+    if (this.explanation !== '') {
+      this.shellState.feedbackDetail = this.explanation
+    }
     const payload: ChineseQuizAnswerPayload = {
       answered: true,
       mode: 'sentence_order',

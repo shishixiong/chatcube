@@ -22,6 +22,9 @@ export interface PinyinCardResult {
   syllable: string
   skill_key: string
   completed: boolean
+  // 下一步动作: 'quiz' = 孩子点了「去考一考」, 请老师立刻用 pinyin_quiz 考同一音节
+  // (首答对才给星); 'skip' = 直接继续。
+  next_action: string
 }
 
 interface PinyinCardExampleView {
@@ -237,7 +240,7 @@ export struct PinyinCard {
     return this.hasListened
   }
 
-  private submit(): void {
+  private submit(nextAction: string): void {
     if (this.submitted || !this.canSubmit() || this.isAnswered) {
       return
     }
@@ -245,7 +248,8 @@ export struct PinyinCard {
     const result: PinyinCardResult = {
       syllable: this.argsView.syllable,
       skill_key: this.argsView.skillKey,
-      completed: true
+      completed: true,
+      next_action: nextAction
     }
     this.onAnswer(this.toolCall.id, JSON.stringify(result))
   }
@@ -388,13 +392,14 @@ export struct PinyinCard {
       .justifyContent(FlexAlign.Center)
       .width('100%')
     } else if (this.argsView.valid) {
-      Column({ space: 4 }) {
+      Column({ space: 8 }) {
         if (!this.canSubmit()) {
           Text('先点上面的拼音听一听')
             .fontSize(12)
             .fontColor(KIDS_MUTED)
         }
-        Button('我学会了 · 继续')
+        // 主路径: 讲完就考——听懂了要立刻验证, 不能靠孩子自己说「来考我吧」
+        Button('🎯 去考一考')
           .width('100%').height(44)
           .fontSize(15)
           .backgroundColor(this.canSubmit() ? KIDS_MATH_INK : withColorAlpha(KIDS_MATH_INK, '33'))
@@ -402,7 +407,17 @@ export struct PinyinCard {
           .enabled(this.canSubmit())
           .opacity(this.canSubmit() ? 1 : 0.55)
           .onClick(() => {
-            this.submit()
+            this.submit('quiz')
+          })
+        Button('我会读了 · 跳过')
+          .width('100%').height(36)
+          .fontSize(13)
+          .backgroundColor(Color.Transparent)
+          .fontColor(KIDS_MUTED)
+          .enabled(this.canSubmit())
+          .opacity(this.canSubmit() ? 1 : 0.4)
+          .onClick(() => {
+            this.submit('skip')
           })
       }
       .width('100%')

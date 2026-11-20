@@ -42,6 +42,8 @@ import cartoonLibraryUtilsTest from './utils/CartoonLibraryUtils.test';
 import cartoonPromptUtilsTest from './utils/CartoonPromptUtils.test';
 import cartoonCardUtilsTest from './utils/CartoonCardUtils.test';
 import cartoonPlayerSessionTest from './utils/CartoonPlayerSession.test';
+import chineseQuizValidationTest from './utils/ChineseQuizValidation.test';
+import pinyinCardValidationTest from './utils/PinyinCardValidation.test';
 
 export default function testsuite() {
   abilityTest();
@@ -88,4 +90,6 @@ export default function testsuite() {
   cartoonPromptUtilsTest();
   cartoonCardUtilsTest();
   cartoonPlayerSessionTest();
+  chineseQuizValidationTest();
+  pinyinCardValidationTest();
 }

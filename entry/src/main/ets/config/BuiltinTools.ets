@@ -3715,6 +3715,7 @@ interface ChineseQuizArgs {
   words?: string[]
   options?: string[]
   answer: string
+  explanation?: string
   difficulty: number
   skill_key: string
 }
@@ -3772,6 +3773,10 @@ function createChineseQuizToolDefinition(): ToolDefinition {
         "type": "string",
         "description": "正确答案。word_build=能跟本字组词的那个词（必须含本字）；sentence_order=按正确语序拼接的完整句子；lookalike=填入空位的正确单字；antonym=意思相反的词。"
       },
+      "explanation": {
+        "type": "string",
+        "description": "必填：一句给 6-7 岁孩子听的解析（≤40 字），答错后展示。要讲清「为什么是这个」，不是重复答案。例：word_build「花」→「花朵是花开的，'火车'跟花没关系呀」；antonym「大」→「大和小是反过来的，一个多一个少」；lookalike「爬」→「爬山要用脚，'爪'是爪子的爪」。"
+      },
       "difficulty": {
         "type": "number",
         "description": "Difficulty 1-3. 1=明显，3=易混。"
@@ -3782,7 +3787,7 @@ function createChineseQuizToolDefinition(): ToolDefinition {
       },
       "purpose": {"type": "string", "enum": ["new", "review"], "description": "出题目的。new=考新词或常规巩固(默认);review=显式复习近期学过的词,可绕过同题型冷却但仍受会话间隔限制。复现旧词时必须传 review,缺省视为 new"}
     },
-    "required": ["mode", "answer", "difficulty", "skill_key"]
+    "required": ["mode", "answer", "explanation", "difficulty", "skill_key"]
   }`
 
   const parameters = new ToolParameters()

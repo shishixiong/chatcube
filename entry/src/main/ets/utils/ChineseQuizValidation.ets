@@ -201,5 +201,16 @@ export function validateChineseQuizArgs(args: string): ChineseQuizValidationResu
   if (typeof difficulty !== 'number' || (difficulty as number) < 1 || (difficulty as number) > 3) {
     return fail('chinese_quiz 的 difficulty 必须是 1-3')
   }
+
+  // explanation 必填 (2026-11-19): 语文是「明义」型学科, 答错只高亮正确答案
+  // 等于让孩子记住「是这个」却不知道「为什么是这个」。与 categorization 的 why 字段对齐。
+  const explanationRaw = parsed['explanation']
+  const explanation = typeof explanationRaw === 'string' ? (explanationRaw as string).trim() : ''
+  if (explanation === '') {
+    return fail('chinese_quiz 必须提供 explanation (一句给孩子听的解析, 讲清为什么是这个答案, ≤40 字)')
+  }
+  if (explanation.length > 60) {
+    return fail(`chinese_quiz 的 explanation 有 ${explanation.length} 字, 太长; 请压到 40 字以内, 用孩子听得懂的话`)
+  }
   return pass()
 }

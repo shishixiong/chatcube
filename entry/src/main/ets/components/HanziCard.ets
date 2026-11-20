@@ -27,6 +27,9 @@ export interface HanziCardResult {
   skill_key: string
   completed: boolean
   watched_strokes: boolean
+  // 下一步动作: 'practice' = 孩子点了「跟着写一遍」, 请老师立刻用 handwriting_practice
+  // 练同一个字; 'skip' = 直接「继续」。授星按此判定, 见 StarRewardService.computeStars。
+  next_action: string
 }
 
 interface HanziCardLookalikeView {
@@ -432,7 +435,7 @@ export struct HanziCard {
     return this.hasWatchedStrokes
   }
 
-  private submit(): void {
+  private submit(nextAction: string): void {
     if (this.submitted || !this.canSubmit() || this.isAnswered) {
       return
     }
@@ -446,7 +449,8 @@ export struct HanziCard {
       character: this.argsView.character,
       skill_key: this.argsView.skillKey,
       completed: true,
-      watched_strokes: true
+      watched_strokes: true,
+      next_action: nextAction
     }
     this.onAnswer(this.toolCall.id, JSON.stringify(result))
   }
@@ -624,16 +628,37 @@ export struct HanziCard {
       .justifyContent(FlexAlign.Center)
       .width('100%')
     } else if (this.argsView.valid) {
-      Button('我学会了 · 继续')
-        .width('100%').height(44)
-        .fontSize(15)
-        .backgroundColor(this.canSubmit() ? KIDS_MATH_INK : withColorAlpha(KIDS_MATH_INK, '33'))
-        .fontColor(Color.White)
-        .enabled(this.canSubmit())
-        .opacity(this.canSubmit() ? 1 : 0.55)
-        .onClick(() => {
-          this.submit()
-        })
+      Column({ space: 8 }) {
+        if (!this.canSubmit()) {
+          Text('先点「看笔顺」看完这个字怎么一笔一笔写')
+            .fontSize(12)
+            .fontColor(KIDS_MUTED)
+        }
+        // 主路径: 讲完就练——「先讲后练」的练必须由讲解卡直接给出入口,
+        // 不能靠孩子自己想起来说「我要写一遍」
+        Button('✏️ 跟着写一遍')
+          .width('100%').height(44)
+          .fontSize(15)
+          .backgroundColor(this.canSubmit() ? KIDS_MATH_INK : withColorAlpha(KIDS_MATH_INK, '33'))
+          .fontColor(Color.White)
+          .enabled(this.canSubmit())
+          .opacity(this.canSubmit() ? 1 : 0.55)
+          .onClick(() => {
+            this.submit('practice')
+          })
+        // 次路径: 孩子已经会写, 跳过练习
+        Button('我会写了 · 跳过')
+          .width('100%').height(36)
+          .fontSize(13)
+          .backgroundColor(Color.Transparent)
+          .fontColor(KIDS_MUTED)
+          .enabled(this.canSubmit())
+          .opacity(this.canSubmit() ? 1 : 0.4)
+          .onClick(() => {
+            this.submit('skip')
+          })
+      }
+      .width('100%')
     }
   }
 

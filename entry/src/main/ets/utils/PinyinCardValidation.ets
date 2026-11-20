@@ -76,8 +76,29 @@ export function applyToneMark(final: string, tone: number): string {
   return final.substring(0, target) + mark + final.substring(target + 1)
 }
 
-/** 拼合 syllable = initial + 带调 final。tone 0 (轻声) 不加调号。 */
+/**
+ * 拼合 syllable = initial + 带调 final。tone 0 (轻声) 不加调号。
+ *
+ * ü 行韵母按《汉语拼音方案》规范省写 (2026-11-19 修正):
+ * - j/q/x/y 后省写两点 —— jü→ju (jū 居)、qüe→que (què 却)、xüan→xuan (xuān 宣)
+ * - 零声母时前加 y 并省写两点 —— ü→yu (yú 鱼)、üe→yue (yuè 月)
+ * - n/l 后保留两点 —— nǚ 女、lǜ 绿
+ * 修正前一律拼成 jǖ / qǘ / xǚ / yǜ, 会把正确的 jū 判为错误并让模型改成错拼。
+ */
 export function composeSyllable(initial: string, final: string, tone: number): string {
+  const first = initial.charAt(0).toLowerCase()
+  const lower = final.toLowerCase()
+  const startsWithUmlaut = lower.charAt(0) === 'ü' || lower.charAt(0) === 'v'
+  if (startsWithUmlaut) {
+    const rest = final.substring(1)
+    if (first === 'j' || first === 'q' || first === 'x' || first === 'y') {
+      return initial + applyToneMark('u' + rest, tone)
+    }
+    if (initial === '') {
+      return 'y' + applyToneMark('u' + rest, tone)
+    }
+    return initial + applyToneMark('ü' + rest, tone)
+  }
   return initial + applyToneMark(final, tone)
 }
 

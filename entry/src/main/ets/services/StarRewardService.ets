@@ -189,9 +189,18 @@ export class StarRewardService {
       return 1
     }
     if (activityType === 'hanzi_card') {
-      // 汉字小课堂 (讲解型): 完成「我学会了」回执即授星
+      // 汉字小课堂 (讲解型): 只有点「跟着写一遍」(next_action=practice) 才授星,
+      // 与数学讲解板 math_teach 不授星的口径保持一致——「看了」不等于「学会了」。
+      // 老客户端回执无 next_action 字段时按 completed 兼容, 避免历史会话全部 0 星。
       const completed = payload['completed']
-      return completed === true ? 1 : 0
+      if (completed !== true) {
+        return 0
+      }
+      const action = payload['next_action']
+      if (action === undefined || action === '') {
+        return 1
+      }
+      return action === 'practice' ? 1 : 0
     }
     if (activityType === 'snake_game') {
       const completed = payload['completed']
@@ -219,9 +228,17 @@ export class StarRewardService {
       return eaten >= 4 ? 1 : 0
     }
     if (activityType === 'pinyin_card') {
-      // 拼音小课堂 (讲解型): 完成「我学会了」回执即授星
+      // 拼音小课堂 (讲解型): 只有点「去考一考」(next_action=quiz) 才授星。
+      // 讲了就必须考, 这个星是对「答应去考」的即时鼓励, 不是对「听了一遍」的奖励。
       const completed = payload['completed']
-      return completed === true ? 1 : 0
+      if (completed !== true) {
+        return 0
+      }
+      const action = payload['next_action']
+      if (action === undefined || action === '') {
+        return 1
+      }
+      return action === 'quiz' ? 1 : 0
     }
     if (activityType === 'picture_talk') {
       // 看图说话 (表达型): 完成一次表达即授星

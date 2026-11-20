@@ -283,6 +283,13 @@ export struct CardShell {
               .width('100%')
             }
 
+            if (this.state.feedbackDetail !== '') {
+              Text(this.state.feedbackDetail)
+                .fontSize(13)
+                .fontColor($r('app.color.text_secondary'))
+                .width('100%')
+            }
+
             if (this.config.usesConfirm && !this.isAnswered) {
               Row() {
                 Text(CardShellCopy.RETRY)

@@ -32,6 +32,7 @@ export struct ChineseChoiceBody {
   @Local character: string = ''
   @Local options: string[] = []
   @Local correctAnswer: string = ''
+  @Local explanation: string = ''
   @Local skillKey: string = 'chinese_vocab'
   @Local selectedOption: string = ''
   @Local showResult: boolean = false
@@ -61,6 +62,7 @@ export struct ChineseChoiceBody {
     this.options = shuffleStringOptions(args.options, hashSeedFromString(this.toolCall.id))
     this.correctAnswer = args.answer
     this.skillKey = args.skillKey
+    this.explanation = args.explanation
     this.shellConfig = {
       title: '语文小练习',
       subtitle: chineseModeDisplayName(args.mode) + ` · 难度 ${args.difficulty}`,
@@ -110,6 +112,10 @@ export struct ChineseChoiceBody {
     this.shellState.hasSelection = true
     this.shellState.submitted = true
     this.shellState.isCorrect = correct
+    // 解析给孩子看: 答错必须知道「为什么」，不是只记住「是这个」
+    if (this.explanation !== '') {
+      this.shellState.feedbackDetail = this.explanation
+    }
 
     const payload: ChineseQuizAnswerPayload = {
       answered: true,

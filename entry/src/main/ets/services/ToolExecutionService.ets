@@ -533,9 +533,13 @@ export class ToolExecutionService {
         sessionId: context.sessionId,
         now: now
       }
-      // 3D 探索是「讲解教学」而非出题: 只记曝光, 不进入会话环形缓冲,
-      // 这样讲完 3 个词立刻 read_aloud 复测不会被 session_gap 误拦。
+      // 讲解型工具是「教学」而非出题: 只记曝光, 不进入会话环形缓冲。
+      // 否则「讲完一个字立刻练同一个字」会被 session_gap 误拦——
+      // hanzi_card 与 chinese_quiz(word_build) 共用 zh:char:<字> 键,
+      // pinyin_card 与 pinyin_quiz 共用 zh:pinyin:<音节> 键, 同 key 必撞门禁。
       const taughtOnly = toolId === 'room_english' || toolId === 'city_english' || toolId === 'farm_english'
+        || toolId === HANZI_CARD_TOOL_ID || toolId === PINYIN_CARD_TOOL_ID
+        || toolId === PICTURE_TALK_TOOL_ID
       const ledger = getLearningLedgerService()
       if (taughtOnly) {
         ledger.recordTaught(record).catch((_e: Object) => {
@@ -1628,11 +1632,45 @@ export class ToolExecutionService {
     this.recordStarEvent('hanzi_card', toolCall, context, answerJson)
     return new ToolResult(
       toolCall.id,
-      answerJson,
+      this.appendNextActionHint(answerJson),
       false,
       toolCall.displayName,
       toolCall.sourceLabel
     )
+  }
+
+  /**
+   * 讲解卡回执补一句「下一步该做什么」的指令 (2026-11-19)。
+   *
+   * 讲解卡的 next_action 是孩子点的按钮, 但模型看到的只是 JSON 回执——
+   * 不显式要求它衔接, 它就会把回执当「这节讲完了」直接跳到下一个字,
+   * 六步识字法的「讲完必须练」就断在这里。这里把按钮翻译成动作指令。
+   */
+  private appendNextActionHint(answerJson: string): string {
+    let parsed: Record<string, Object>
+    try {
+      parsed = JSON.parse(answerJson) as Record<string, Object>
+    } catch (_e) {
+      return answerJson
+    }
+    const action = (parsed['next_action'] as string) ?? ''
+    if (action === '') {
+      return answerJson
+    }
+    let hint = ''
+    if (action === 'practice') {
+      const character = (parsed['character'] as string) ?? ''
+      hint = `孩子点了「跟着写一遍」。请立刻调用 handwriting_practice(type:"chinese", character:"${character}")`
+        + ` 让他跟写这个字, 不要换字、不要只说话不动手。`
+    } else if (action === 'quiz') {
+      const syllable = (parsed['syllable'] as string) ?? ''
+      hint = `孩子点了「去考一考」。请立刻调用 pinyin_quiz 考同一个音节「${syllable}」`
+        + ` (purpose:"new", correct_answer 必须与刚讲的音节一致), 不要换别的音节。`
+    }
+    if (hint === '') {
+      return answerJson
+    }
+    return `${answerJson}\n\n【下一步】${hint}`
   }
 
   // map_card 特殊路径: 中国地图小课堂讲解卡, 由 MapCard 收集「我学会了」完成回执。
@@ -2406,7 +2444,7 @@ export class ToolExecutionService {
     this.recordStarEvent('pinyin_card', toolCall, context, answerJson)
     return new ToolResult(
       toolCall.id,
-      answerJson,
+      this.appendNextActionHint(answerJson),
       false,
       toolCall.displayName,
       toolCall.sourceLabel
