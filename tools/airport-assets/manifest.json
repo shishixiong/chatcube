@@ -1,0 +1,422 @@
+[
+  {
+    "assetId": "terminal-structure-bay-ea2467",
+    "wordId": "terminal",
+    "title": "Terminal Structure Bay",
+    "previewUrl": "https://polyfork.dev/cdn/terminal-structure-bay-ea2467-preview.glb",
+    "triangles": 1012
+  },
+  {
+    "assetId": "terminal-facade-module-5574b6",
+    "wordId": "",
+    "title": "Terminal Facade Module",
+    "previewUrl": "https://polyfork.dev/cdn/terminal-facade-module-5574b6-preview.glb",
+    "triangles": 500
+  },
+  {
+    "assetId": "control-tower-c95a65",
+    "wordId": "control_tower",
+    "title": "Control Tower",
+    "previewUrl": "https://polyfork.dev/cdn/control-tower-c95a65-preview.glb",
+    "triangles": 1752
+  },
+  {
+    "assetId": "taxiway-centreline-stud-run-7a6020",
+    "wordId": "taxiway",
+    "title": "Taxiway Centreline Stud Run",
+    "previewUrl": "https://polyfork.dev/cdn/taxiway-centreline-stud-run-7a6020-preview.glb",
+    "triangles": 520
+  },
+  {
+    "assetId": "apron-tile-8670c1",
+    "wordId": "apron",
+    "title": "Apron Tile",
+    "previewUrl": "https://polyfork.dev/cdn/apron-tile-8670c1-preview.glb",
+    "triangles": 478
+  },
+  {
+    "assetId": "maintenance-hangar-6fab99",
+    "wordId": "hangar",
+    "title": "Maintenance Hangar",
+    "previewUrl": "https://polyfork.dev/cdn/maintenance-hangar-6fab99-preview.glb",
+    "triangles": 1718
+  },
+  {
+    "assetId": "cargo-shed-bcb2a8",
+    "wordId": "cargo_shed",
+    "title": "Cargo Shed",
+    "previewUrl": "https://polyfork.dev/cdn/cargo-shed-bcb2a8-preview.glb",
+    "triangles": 2332
+  },
+  {
+    "assetId": "airport-fire-station-92c6b7",
+    "wordId": "fire_station",
+    "title": "Airport Fire Station",
+    "previewUrl": "https://polyfork.dev/cdn/airport-fire-station-92c6b7-preview.glb",
+    "triangles": 1950
+  },
+  {
+    "assetId": "airport-hotel-1a1e0a",
+    "wordId": "airport_hotel",
+    "title": "Airport Hotel",
+    "previewUrl": "https://polyfork.dev/cdn/airport-hotel-1a1e0a-preview.glb",
+    "triangles": 1318
+  },
+  {
+    "assetId": "multi-storey-car-park-021465",
+    "wordId": "car_park",
+    "title": "Multi-Storey Car Park",
+    "previewUrl": "https://polyfork.dev/cdn/multi-storey-car-park-021465-preview.glb",
+    "triangles": 1744
+  },
+  {
+    "assetId": "jet-bridge-4f39c0",
+    "wordId": "jet_bridge",
+    "title": "Jet Bridge",
+    "previewUrl": "https://polyfork.dev/cdn/jet-bridge-4f39c0-preview.glb",
+    "triangles": 1666
+  },
+  {
+    "assetId": "gate-lounge-module-5ebc23",
+    "wordId": "gate",
+    "title": "Gate Lounge Module",
+    "previewUrl": "https://polyfork.dev/cdn/gate-lounge-module-5ebc23-preview.glb",
+    "triangles": 914
+  },
+  {
+    "assetId": "gate-seating-row-cc0ff3",
+    "wordId": "",
+    "title": "Gate Seating Row",
+    "previewUrl": "https://polyfork.dev/cdn/gate-seating-row-cc0ff3-preview.glb",
+    "triangles": 548
+  },
+  {
+    "assetId": "check-in-desk-run-b96c12",
+    "wordId": "check_in",
+    "title": "Check-In Desk Run",
+    "previewUrl": "https://polyfork.dev/cdn/check-in-desk-run-b96c12-preview.glb",
+    "triangles": 564
+  },
+  {
+    "assetId": "baggage-reclaim-carousel-7ceef0",
+    "wordId": "baggage_carousel",
+    "title": "Baggage Reclaim Carousel",
+    "previewUrl": "https://polyfork.dev/cdn/baggage-reclaim-carousel-7ceef0-preview.glb",
+    "triangles": 276
+  },
+  {
+    "assetId": "widebody-airliner-ae0a5a",
+    "wordId": "airplane",
+    "title": "Widebody Airliner",
+    "previewUrl": "https://polyfork.dev/cdn/widebody-airliner-ae0a5a-preview.glb",
+    "triangles": 7483
+  },
+  {
+    "assetId": "narrow-body-airliner-619183",
+    "wordId": "jet",
+    "title": "Narrow-Body Airliner",
+    "previewUrl": "https://polyfork.dev/cdn/narrow-body-airliner-619183-preview.glb",
+    "triangles": 5885
+  },
+  {
+    "assetId": "regional-turboprop-097f26",
+    "wordId": "turboprop",
+    "title": "Regional Turboprop",
+    "previewUrl": "https://polyfork.dev/cdn/regional-turboprop-097f26-preview.glb",
+    "triangles": 4788
+  },
+  {
+    "assetId": "business-jet-684611",
+    "wordId": "private_jet",
+    "title": "Business Jet",
+    "previewUrl": "https://polyfork.dev/cdn/business-jet-684611-preview.glb",
+    "triangles": 4493
+  },
+  {
+    "assetId": "cargo-freighter-b4377e",
+    "wordId": "cargo_plane",
+    "title": "Cargo Freighter",
+    "previewUrl": "https://polyfork.dev/cdn/cargo-freighter-b4377e-preview.glb",
+    "triangles": 5151
+  },
+  {
+    "assetId": "helicopter-9d1986",
+    "wordId": "helicopter",
+    "title": "Helicopter",
+    "previewUrl": "https://polyfork.dev/cdn/helicopter-9d1986-preview.glb",
+    "triangles": 4429
+  },
+  {
+    "assetId": "pushback-tug-8eab46",
+    "wordId": "pushback_tug",
+    "title": "Pushback Tug",
+    "previewUrl": "https://polyfork.dev/cdn/pushback-tug-8eab46-preview.glb",
+    "triangles": 2579
+  },
+  {
+    "assetId": "baggage-tug-fb69f7",
+    "wordId": "baggage_tug",
+    "title": "Baggage Tug",
+    "previewUrl": "https://polyfork.dev/cdn/baggage-tug-fb69f7-preview.glb",
+    "triangles": 2946
+  },
+  {
+    "assetId": "baggage-cart-b1bb82",
+    "wordId": "baggage_cart",
+    "title": "Baggage Cart",
+    "previewUrl": "https://polyfork.dev/cdn/baggage-cart-b1bb82-preview.glb",
+    "triangles": 2348
+  },
+  {
+    "assetId": "container-loader-254a74",
+    "wordId": "container_loader",
+    "title": "Container Loader",
+    "previewUrl": "https://polyfork.dev/cdn/container-loader-254a74-preview.glb",
+    "triangles": 2688
+  },
+  {
+    "assetId": "belt-loader-3d84fd",
+    "wordId": "belt_loader",
+    "title": "Belt Loader",
+    "previewUrl": "https://polyfork.dev/cdn/belt-loader-3d84fd-preview.glb",
+    "triangles": 2690
+  },
+  {
+    "assetId": "aviation-fuel-tanker-truck-37ed29",
+    "wordId": "fuel_truck",
+    "title": "Aviation Fuel Tanker Truck",
+    "previewUrl": "https://polyfork.dev/cdn/aviation-fuel-tanker-truck-37ed29-preview.glb",
+    "triangles": 3359
+  },
+  {
+    "assetId": "catering-truck-496150",
+    "wordId": "catering_truck",
+    "title": "Catering Truck",
+    "previewUrl": "https://polyfork.dev/cdn/catering-truck-496150-preview.glb",
+    "triangles": 2764
+  },
+  {
+    "assetId": "airstairs-truck-de0f4b",
+    "wordId": "airstairs_truck",
+    "title": "Airstairs Truck",
+    "previewUrl": "https://polyfork.dev/cdn/airstairs-truck-de0f4b-preview.glb",
+    "triangles": 2954
+  },
+  {
+    "assetId": "apron-passenger-bus-c46aef",
+    "wordId": "airport_bus",
+    "title": "Apron Passenger Bus",
+    "previewUrl": "https://polyfork.dev/cdn/apron-passenger-bus-c46aef-preview.glb",
+    "triangles": 2662
+  },
+  {
+    "assetId": "follow-me-car-b3c6a5",
+    "wordId": "follow_me_car",
+    "title": "Follow-Me Car",
+    "previewUrl": "https://polyfork.dev/cdn/follow-me-car-b3c6a5-preview.glb",
+    "triangles": 3010
+  },
+  {
+    "assetId": "airport-crash-tender-2422ba",
+    "wordId": "fire_truck",
+    "title": "Airport Crash Tender",
+    "previewUrl": "https://polyfork.dev/cdn/airport-crash-tender-2422ba-preview.glb",
+    "triangles": 3324
+  },
+  {
+    "assetId": "apron-sweeper-truck-937ca0",
+    "wordId": "sweeper",
+    "title": "Apron Sweeper Truck",
+    "previewUrl": "https://polyfork.dev/cdn/apron-sweeper-truck-937ca0-preview.glb",
+    "triangles": 2656
+  },
+  {
+    "assetId": "airline-pilot-63226a",
+    "wordId": "pilot",
+    "title": "Airline Pilot",
+    "previewUrl": "https://polyfork.dev/cdn/airline-pilot-63226a-preview.glb",
+    "triangles": 3981
+  },
+  {
+    "assetId": "flight-attendant-befaf4",
+    "wordId": "flight_attendant",
+    "title": "Flight Attendant",
+    "previewUrl": "https://polyfork.dev/cdn/flight-attendant-befaf4-preview.glb",
+    "triangles": 4679
+  },
+  {
+    "assetId": "traveller-92f20c",
+    "wordId": "traveller",
+    "title": "Traveller",
+    "previewUrl": "https://polyfork.dev/cdn/traveller-92f20c-preview.glb",
+    "triangles": 4555
+  },
+  {
+    "assetId": "airport-security-officer-8fd38a",
+    "wordId": "security_officer",
+    "title": "Airport Security Officer",
+    "previewUrl": "https://polyfork.dev/cdn/airport-security-officer-8fd38a-preview.glb",
+    "triangles": 4023
+  },
+  {
+    "assetId": "baggage-handler-0823f5",
+    "wordId": "baggage_handler",
+    "title": "Baggage Handler",
+    "previewUrl": "https://polyfork.dev/cdn/baggage-handler-0823f5-preview.glb",
+    "triangles": 4527
+  },
+  {
+    "assetId": "windsock-d5df79",
+    "wordId": "windsock",
+    "title": "Windsock",
+    "previewUrl": "https://polyfork.dev/cdn/windsock-d5df79-preview.glb",
+    "triangles": 744
+  },
+  {
+    "assetId": "air-traffic-radar-mast-3e5642",
+    "wordId": "radar",
+    "title": "Air Traffic Radar Mast",
+    "previewUrl": "https://polyfork.dev/cdn/air-traffic-radar-mast-3e5642-preview.glb",
+    "triangles": 807
+  },
+  {
+    "assetId": "rotating-airport-beacon-e1ea5a",
+    "wordId": "beacon",
+    "title": "Rotating Airport Beacon",
+    "previewUrl": "https://polyfork.dev/cdn/rotating-airport-beacon-e1ea5a-preview.glb",
+    "triangles": 756
+  },
+  {
+    "assetId": "runway-edge-light-run-ebe7e1",
+    "wordId": "runway_lights",
+    "title": "Runway Edge Light Run",
+    "previewUrl": "https://polyfork.dev/cdn/runway-edge-light-run-ebe7e1-preview.glb",
+    "triangles": 760
+  },
+  {
+    "assetId": "papi-unit-adc7c4",
+    "wordId": "papi",
+    "title": "PAPI Unit",
+    "previewUrl": "https://polyfork.dev/cdn/papi-unit-adc7c4-preview.glb",
+    "triangles": 826
+  },
+  {
+    "assetId": "overhead-wayfinding-sign-64d4e8",
+    "wordId": "sign",
+    "title": "Overhead Wayfinding Sign",
+    "previewUrl": "https://polyfork.dev/cdn/overhead-wayfinding-sign-64d4e8-preview.glb",
+    "triangles": 482
+  },
+  {
+    "assetId": "fuel-farm-tank-ed67f0",
+    "wordId": "fuel_tank",
+    "title": "Fuel Farm Tank",
+    "previewUrl": "https://polyfork.dev/cdn/fuel-farm-tank-ed67f0-preview.glb",
+    "triangles": 1762
+  },
+  {
+    "assetId": "apron-floodlight-mast-e0d04a",
+    "wordId": "floodlight",
+    "title": "Apron Floodlight Mast",
+    "previewUrl": "https://polyfork.dev/cdn/apron-floodlight-mast-e0d04a-preview.glb",
+    "triangles": 730
+  },
+  {
+    "assetId": "passport-control-booth-7724c6",
+    "wordId": "passport_control",
+    "title": "Passport Control Booth",
+    "previewUrl": "https://polyfork.dev/cdn/passport-control-booth-7724c6-preview.glb",
+    "triangles": 692
+  },
+  {
+    "assetId": "x-ray-baggage-conveyor-b3d1cc",
+    "wordId": "x_ray",
+    "title": "X-Ray Baggage Conveyor",
+    "previewUrl": "https://polyfork.dev/cdn/x-ray-baggage-conveyor-b3d1cc-preview.glb",
+    "triangles": 678
+  },
+  {
+    "assetId": "departures-board-7b85c8",
+    "wordId": "departures_board",
+    "title": "Departures Board",
+    "previewUrl": "https://polyfork.dev/cdn/departures-board-7b85c8-preview.glb",
+    "triangles": 994
+  },
+  {
+    "assetId": "moving-walkway-run-9f078a",
+    "wordId": "moving_walkway",
+    "title": "Moving Walkway Run",
+    "previewUrl": "https://polyfork.dev/cdn/moving-walkway-run-9f078a-preview.glb",
+    "triangles": 378
+  },
+  {
+    "assetId": "terminal-escalator-b80f37",
+    "wordId": "escalator",
+    "title": "Terminal Escalator",
+    "previewUrl": "https://polyfork.dev/cdn/terminal-escalator-b80f37-preview.glb",
+    "triangles": 695
+  },
+  {
+    "assetId": "uld-container-a055c6",
+    "wordId": "",
+    "title": "ULD Container",
+    "previewUrl": "https://polyfork.dev/cdn/uld-container-a055c6-preview.glb",
+    "triangles": 688
+  },
+  {
+    "assetId": "crew-minivan-2ed5f1",
+    "wordId": "",
+    "title": "Crew Minivan",
+    "previewUrl": "https://polyfork.dev/cdn/crew-minivan-2ed5f1-preview.glb",
+    "triangles": 3617
+  },
+  {
+    "assetId": "security-body-scanner-ef6fcd",
+    "wordId": "",
+    "title": "Security Body Scanner",
+    "previewUrl": "https://polyfork.dev/cdn/security-body-scanner-ef6fcd-preview.glb",
+    "triangles": 588
+  },
+  {
+    "assetId": "queue-barrier-stanchion-run-1836c8",
+    "wordId": "",
+    "title": "Queue Barrier Stanchion Run",
+    "previewUrl": "https://polyfork.dev/cdn/queue-barrier-stanchion-run-1836c8-preview.glb",
+    "triangles": 476
+  },
+  {
+    "assetId": "departures-kerb-canopy-run-d1ed9e",
+    "wordId": "",
+    "title": "Departures Kerb Canopy Run",
+    "previewUrl": "https://polyfork.dev/cdn/departures-kerb-canopy-run-d1ed9e-preview.glb",
+    "triangles": 630
+  },
+  {
+    "assetId": "cargo-forklift-91f591",
+    "wordId": "",
+    "title": "Cargo Forklift",
+    "previewUrl": "https://polyfork.dev/cdn/cargo-forklift-91f591-preview.glb",
+    "triangles": 2546
+  },
+  {
+    "assetId": "taxi-rank-sign-f5f39d",
+    "wordId": "",
+    "title": "Taxi Rank Sign",
+    "previewUrl": "https://polyfork.dev/cdn/taxi-rank-sign-f5f39d-preview.glb",
+    "triangles": 418
+  },
+  {
+    "assetId": "lit-taxiway-sign-206955",
+    "wordId": "",
+    "title": "Lit Taxiway Sign",
+    "previewUrl": "https://polyfork.dev/cdn/lit-taxiway-sign-206955-preview.glb",
+    "triangles": 408
+  },
+  {
+    "assetId": "runway-guard-light-5a6541",
+    "wordId": "",
+    "title": "Runway Guard Light",
+    "previewUrl": "https://polyfork.dev/cdn/runway-guard-light-5a6541-preview.glb",
+    "triangles": 588
+  }
+]

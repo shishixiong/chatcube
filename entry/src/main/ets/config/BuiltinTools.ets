@@ -53,6 +53,7 @@ import {
   ROOM_ENGLISH_TOOL_ID,
   CITY_ENGLISH_TOOL_ID,
   FARM_ENGLISH_TOOL_ID,
+  AIRPORT_ENGLISH_TOOL_ID,
   NUMBER_BLOCKS_TOOL_ID
 } from '../utils/SearchToolIdentityUtils'
 import { getPinyinCharsJoined } from './PinyinData'
@@ -4236,7 +4237,7 @@ function createCityEnglishToolDefinition(): ToolDefinition {
       "focus": {
         "type": "string",
         "enum": ["overview", "main_street", "school_zone", "park_zone", "hospital_zone"],
-        "description": "可选。本次重点探索的区域：overview=全城 3/4 全景（默认），main_street=商业街（超市 / 面包店 / 咖啡馆 / 邮局 / 电影院 / 公交站），school_zone=学校区（学校 / 图书馆 / 校门斑马线），park_zone=公园区（公园 / 池塘 / 游乐场 / 小桥），hospital_zone=医院区（医院 / 消防站 / 救护车）。传 all 等同于 overview。"
+        "description": "可选。本次重点探索的区域：overview=全城 3/4 全景（默认），main_street=商业街（超市 / 面包店 / 咖啡馆 / 邮局 / 电影院 / 公交站），school_zone=学校区（学校 / 图书馆 / 校门斑马线），park_zone=公园区（公园 / 池塘 / 游乐场 / 小桥），hospital_zone=医院区（医院 / 消防站 / 救护车）。"
       },
       "words": {
         "type": "array",
@@ -4333,7 +4334,7 @@ function createFarmEnglishToolDefinition(): ToolDefinition {
       "focus": {
         "type": "string",
         "enum": ["overview", "farmyard_zone", "field_zone", "pasture_zone", "orchard_pond_zone"],
-        "description": "可选。本次重点探索的区域：overview=全农场（默认），farmyard_zone=农舍区（农舍 / 谷仓 / 鸡舍 / 马厩 / 筒仓 / 风车 / 水井 / 拖拉机），field_zone=田地区（小麦 / 玉米 / 土豆 / 胡萝卜 / 向日葵 / 温室），pasture_zone=牧场区（奶牛 / 绵羊 / 马 / 山羊 / 小山），orchard_pond_zone=果园池塘（苹果 / 草莓 / 池塘 / 鸭子 / 花）。传 all 等同于 overview。"
+        "description": "可选。本次重点探索的区域：overview=全农场（默认），farmyard_zone=农舍区（农舍 / 谷仓 / 鸡舍 / 马厩 / 筒仓 / 风车 / 水井 / 拖拉机），field_zone=田地区（小麦 / 玉米 / 土豆 / 胡萝卜 / 向日葵 / 温室），pasture_zone=牧场区（奶牛 / 绵羊 / 马 / 山羊 / 小山），orchard_pond_zone=果园池塘（苹果 / 草莓 / 池塘 / 鸭子 / 花）。"
       },
       "words": {
         "type": "array",
@@ -4372,6 +4373,89 @@ function createFarmEnglishToolConfig(): ToolConfig {
     ToolSourceType.BUILTIN,
     'builtin',
     FARM_ENGLISH_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+
+
+// ===== airport_english 工具 =====
+// 3D 机场英语探索（讲解型）：polyfork Airport kit 的 50 个可点击实体（地点 14 / 飞机 6 / 车辆 12 /
+// 人物 5 / 设施 13），5 个分区镜头（全机场 / 航站楼 / 停机坪 / 跑道 / 机库维修），
+// 点实体开单词卡并朗读（先中文后英文）。交互由前端 AirportEnglishCard（Web 容器）处理，
+// 后台 ToolExecutionService.handleAirportEnglish 拦截。讲解型工具不授星。
+
+interface AirportEnglishArgs {
+  focus?: string
+  words?: string[]
+  skill_key: string
+}
+
+class AirportEnglishExecutor implements ToolExecutor {
+  async execute(_args: string): Promise<string> {
+    // airport_english 的交互由前端 AirportEnglishCard 组件处理。
+    // 后台由 ToolExecutionService.handleAirportEnglish 拦截处理。
+    try {
+      const params = JSON.parse(_args) as AirportEnglishArgs
+      return JSON.stringify({
+        opened: true,
+        focus: params.focus ?? 'overview',
+        words: params.words ?? [],
+        skill_key: 'english_vocab'
+      })
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`airport_english error: ${JSON.stringify(error)}`))
+    }
+  }
+}
+
+function createAirportEnglishToolDefinition(): ToolDefinition {
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "focus": {
+        "type": "string",
+        "enum": ["overview", "terminal_zone", "apron_zone", "runway_zone", "hangar_zone"],
+        "description": "可选。本次重点探索的区域：overview=全机场（默认），terminal_zone=航站楼（值机 / 安检 / 登机口 / 行李转盘），apron_zone=停机坪（飞机 / 登机桥 / 地勤车），runway_zone=跑道（塔台 / 跑道灯 / 风向袋 / 雷达），hangar_zone=机库维修（机库 / 货运棚 / 消防站 / 油罐）。"
+      },
+      "words": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "可选。本次想重点教的单词 id，最多 8 个，传了会选中第一个词的单词卡。合法 id：地点 terminal control_tower runway taxiway apron hangar cargo_shed fire_station airport_hotel car_park jet_bridge gate check_in baggage_carousel；飞机 airplane jet turboprop private_jet cargo_plane helicopter；车辆 pushback_tug baggage_tug baggage_cart container_loader belt_loader fuel_truck catering_truck airstairs_truck airport_bus follow_me_car fire_truck sweeper；人物 pilot flight_attendant traveller security_officer baggage_handler；设施 windsock radar beacon runway_lights papi sign fuel_tank floodlight passport_control x_ray departures_board moving_walkway escalator。"
+      },
+      "skill_key": {
+        "type": "string",
+        "enum": ["english_vocab"],
+        "description": "固定传 english_vocab（英语词汇）。"
+      }
+    },
+    "required": ["skill_key"]
+  }`
+
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as Object)
+
+  const func = new ToolFunction(
+    AIRPORT_ENGLISH_TOOL_ID,
+    'Open the 3D airport (3D 机场英语探索): a rotatable low-poly airport with five camera zones (overview, terminal, apron, runway, hangar) and 50 tappable objects — places (terminal, control tower, runway, taxiway, apron, hangar, cargo shed, fire station, airport hotel, car park, jet bridge, gate, check-in desk, baggage carousel), aircraft (airplane, jet, turboprop, private jet, cargo plane, helicopter), ground vehicles (pushback tug, baggage tug, baggage cart, container loader, belt loader, fuel truck, catering truck, airstairs truck, airport bus, follow-me car, fire truck, sweeper), people (pilot, flight attendant, traveller, security officer, baggage handler) and facilities (windsock, radar, beacon, runway lights, PAPI, sign, fuel tank, floodlight, passport control, X-ray machine, departures board, moving walkway, escalator). Tapping an object opens a kid-friendly word card with the English word, phonetic, Chinese meaning, a one-line kid definition, an example sentence and a TTS pronunciation button. Use this INSTEAD of describing an airport in plain text when teaching airport, aircraft, ground vehicle, airport people or facility vocabulary. Pass words (max 8 ids) to open a specific word card; pass focus (overview, terminal_zone, apron_zone, runway_zone or hangar_zone) to fly to a zone. After the receipt, follow up with english_quiz read_aloud to check 2-3 target words and award stars — airport_english itself awards no stars.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createAirportEnglishToolConfig(): ToolConfig {
+  return new ToolConfig(
+    AIRPORT_ENGLISH_TOOL_ID,
+    '3D 机场英语探索',
+    '走进 3D 机场：航站楼、塔台、跑道、停机坪、机库，点飞机、地勤车和房子听英文发音、看单词卡，认识 50 个机场单词。',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    AIRPORT_ENGLISH_TOOL_ID,
     '内置工具',
     ToolPermissionLevel.READ
   )
@@ -4867,6 +4951,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(AIRPORT_ENGLISH_TOOL_ID)) {
+    const airportEnglishTool = new RegisteredTool(
+      AIRPORT_ENGLISH_TOOL_ID,
+      createAirportEnglishToolConfig(),
+      createAirportEnglishToolDefinition(),
+      new AirportEnglishExecutor()
+    )
+    registry.registerTool(airportEnglishTool)
+    registeredNow += 1
+  }
+
   if (!registry.isToolRegistered(NUMBER_BLOCKS_TOOL_ID)) {
     const numberBlocksTool = new RegisteredTool(
       NUMBER_BLOCKS_TOOL_ID,
@@ -4886,5 +4981,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, MUSIC_EAR_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID, MAP_CARD_TOOL_ID, MAP_QUIZ_TOOL_ID, MAP_PUZZLE_TOOL_ID, ROOM_ENGLISH_TOOL_ID, CITY_ENGLISH_TOOL_ID, FARM_ENGLISH_TOOL_ID, NUMBER_BLOCKS_TOOL_ID, PLAY_CARTOON_TOOL_ID]
+  return [LEGACY_WEB_SEARCH_TOOL_ID, SEARCH_WEB_TOOL_ID, SCRAPE_WEB_TOOL_ID, ASK_USER_TOOL_ID, GET_TIME_INFO_TOOL_ID, IMAGE_GENERATION_TOOL_ID, CHILD_PROFILE_TOOL_ID, MATH_VERIFY_TOOL_ID, MATH_QUIZ_TOOL_ID, MATH_TEACH_TOOL_ID, ENGLISH_QUIZ_TOOL_ID, NUMBER_PUZZLE_TOOL_ID, HANDWRITING_PRACTICE_TOOL_ID, CATEGORIZATION_TOOL_ID, VERTICAL_MATH_TOOL_ID, MAZE_TOOL_ID, SUDOKU_TOOL_ID, PICTURE_VOCAB_TOOL_ID, LISTENING_QUIZ_TOOL_ID, PINYIN_QUIZ_TOOL_ID, MATCHING_PAIRS_TOOL_ID, MEMORY_MATCH_TOOL_ID, SNAKE_GAME_TOOL_ID, MUSIC_EAR_TOOL_ID, GRANT_STAR_TOOL_ID, HANZI_CARD_TOOL_ID, PINYIN_CARD_TOOL_ID, PICTURE_TALK_TOOL_ID, CHINESE_QUIZ_TOOL_ID, MAP_CARD_TOOL_ID, MAP_QUIZ_TOOL_ID, MAP_PUZZLE_TOOL_ID, ROOM_ENGLISH_TOOL_ID, CITY_ENGLISH_TOOL_ID, FARM_ENGLISH_TOOL_ID, AIRPORT_ENGLISH_TOOL_ID, NUMBER_BLOCKS_TOOL_ID, PLAY_CARTOON_TOOL_ID]
 }

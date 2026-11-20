@@ -55,6 +55,9 @@ const CITY_KEYWORDS: string[] = [
 const FARM_KEYWORDS: string[] = [
   'farm_english'
 ]
+const AIRPORT_KEYWORDS: string[] = [
+  'airport_english'
+]
 const NUMBER_BLOCKS_KEYWORDS: string[] = [
   'number_blocks'
 ]
@@ -137,6 +140,9 @@ export function resolveToolSymbol(functionName: string): Resource {
   }
   if (matchesAny(name, FARM_KEYWORDS)) {
     return $r('sys.symbol.leaf')
+  }
+  if (matchesAny(name, AIRPORT_KEYWORDS)) {
+    return $r('sys.symbol.satellite_map')
   }
   if (matchesAny(name, NUMBER_BLOCKS_KEYWORDS)) {
     return $r('sys.symbol.dot_grid_2x2')

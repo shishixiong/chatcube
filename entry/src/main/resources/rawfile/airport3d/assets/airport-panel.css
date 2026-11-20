@@ -1,0 +1,131 @@
+.panel {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  max-height: 44%;
+  display: flex; flex-direction: column;
+  background: var(--paper);
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -10px 30px rgba(30, 48, 60, 0.18);
+  transform: translateY(calc(100% - 62px));
+  transition: transform 260ms cubic-bezier(0.22, 0.8, 0.3, 1);
+  z-index: 15;
+}
+.panel[data-state="expanded"] { transform: translateY(0); }
+.panel-grab {
+  display: grid; place-items: center;
+  height: 14px; flex: none; cursor: pointer;
+}
+.panel-grab span { width: 38px; height: 4px; border-radius: 99px; background: rgba(36, 50, 60, 0.18); }
+.panel-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 2px 16px 8px; flex: none;
+}
+.panel-head-main { display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0; }
+.panel-zone { font-size: 14px; font-weight: 600; }
+.panel-count { font-size: 11px; color: var(--ink-3); }
+.panel-toggle {
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 1px solid var(--line); background: transparent;
+  display: grid; place-items: center; cursor: pointer;
+}
+.panel-toggle svg { width: 16px; height: 16px; transition: transform 260ms ease; }
+.panel[data-state="expanded"] .panel-toggle svg { transform: rotate(180deg); }
+.panel-peek {
+  margin: 0 16px 10px; font-size: 12px; color: var(--ink-2); line-height: 1.5;
+}
+.panel[data-state="expanded"] .panel-peek { display: none; }
+.panel-body { overflow-y: auto; padding: 0 16px 18px; min-height: 0; }
+
+.empty-state { padding: 8px 0 14px; }
+.empty-state h2 { margin: 0 0 6px; font-size: 15px; }
+.empty-state p { margin: 0; font-size: 12px; color: var(--ink-2); line-height: 1.55; }
+
+/* ---------- word card ---------- */
+.word-card {
+  background: linear-gradient(180deg, #ffffff, var(--paper-2));
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.card-top { display: flex; align-items: center; gap: 8px; }
+.cat-chip {
+  font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: #2f6f92; background: rgba(191, 227, 245, 0.55);
+  padding: 3px 8px; border-radius: 999px;
+}
+.card-index { margin-left: auto; font-size: 10px; color: var(--ink-3); }
+.card-close { width: 28px; height: 28px; border: 0; background: transparent; color: var(--ink-3); cursor: pointer; display: grid; place-items: center; }
+.card-close svg { width: 16px; height: 16px; }
+.card-word { margin: 8px 0 2px; font-size: 28px; line-height: 1.1; letter-spacing: 0.01em; }
+.card-phon { font-size: 12px; color: var(--ink-3); }
+.card-zh { margin-top: 6px; font-size: 15px; font-weight: 600; color: var(--brick); }
+.card-def { margin: 6px 0 10px; font-size: 12px; color: var(--ink-2); line-height: 1.5; }
+.example {
+  width: 100%; display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: 11px;
+  border: 1px dashed rgba(36, 50, 60, 0.18);
+  background: rgba(255, 255, 255, 0.6);
+  font-size: 12px; color: var(--ink-2); text-align: left; cursor: pointer;
+}
+.example svg { width: 15px; height: 15px; flex: none; color: #2f6f92; }
+.card-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.card-actions .primary-btn { background: #2f6f92; }
+.card-nav { margin-left: auto; display: flex; gap: 6px; }
+.nav-btn {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1px solid var(--line); background: #fff;
+  display: grid; place-items: center; cursor: pointer; color: var(--ink-2);
+}
+.nav-btn svg { width: 16px; height: 16px; }
+
+/* ---------- passport ---------- */
+.passport { margin-top: 4px; }
+.passport-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.passport-head h3 { margin: 0; font-size: 13px; }
+.passport-head span { margin-left: auto; font-size: 11px; color: var(--ink-3); }
+.passport-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(30px, 1fr)); gap: 6px; }
+.passport-dot {
+  aspect-ratio: 1; border-radius: 9px;
+  display: grid; place-items: center;
+  font-size: 9px; font-weight: 700; color: rgba(36, 50, 60, 0.35);
+  background: rgba(36, 50, 60, 0.05);
+  border: 1px solid transparent;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 0 2px;
+}
+.passport-dot.got {
+  color: #fff; background: linear-gradient(145deg, #4f93b8, #2f6f92);
+}
+
+/* ---------- vocabulary ---------- */
+.vocab { margin-top: 10px; }
+.vocab-head { display: flex; align-items: center; margin-bottom: 8px; }
+.vocab-head h3 { margin: 0; font-size: 13px; }
+.vocab-head .nav-btn { margin-left: auto; }
+.vocab-list { display: flex; flex-direction: column; gap: 4px; }
+.vocab-group { margin: 8px 0 2px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.vocab-item {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 7px 9px; border-radius: 10px;
+  background: rgba(36, 50, 60, 0.035);
+  cursor: pointer; border: 0; text-align: left; width: 100%;
+}
+.vocab-item:hover { background: rgba(191, 227, 245, 0.4); }
+.vocab-item strong { font-size: 13px; }
+.vocab-item span { font-size: 11px; color: var(--ink-3); }
+.vocab-item .vocab-zh { margin-left: auto; color: var(--brick); }
+.credits { margin: 14px 0 0; font-size: 10px; color: var(--ink-3); line-height: 1.5; }
+.credits a { color: #2f6f92; }
+
+@media (min-width: 900px) {
+  .panel {
+    position: relative; inset: auto; max-height: none; height: 100%;
+    border-radius: 0; transform: none;
+    box-shadow: -10px 0 30px rgba(30, 48, 60, 0.12);
+    z-index: 5;
+  }
+  .panel[data-state="collapsed"] { transform: none; }
+  .panel-grab, .panel-toggle { display: none; }
+  .panel-body { padding-bottom: 24px; }
+  .panel-peek { display: none; }
+}

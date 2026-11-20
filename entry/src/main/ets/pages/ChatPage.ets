@@ -151,6 +151,7 @@ import { MapPuzzleCard, MapPuzzleResult } from '../components/map/MapPuzzleCard'
 import { RoomEnglishAnswerPayload, RoomEnglishCard } from '../components/room/RoomEnglishCard'
 import { CityEnglishAnswerPayload, CityEnglishCard } from '../components/city/CityEnglishCard'
 import { FarmEnglishAnswerPayload, FarmEnglishCard } from '../components/farm/FarmEnglishCard'
+import { AirportEnglishAnswerPayload, AirportEnglishCard } from '../components/airport/AirportEnglishCard'
 import { NumberBlocksAnswerPayload, NumberBlocksCard } from '../components/numberblocks/NumberBlocksCard'
 import { MusicEarCard } from '../components/MusicEarCard'
 import { MapQuizCard } from '../components/map/MapQuizCard'
@@ -347,6 +348,9 @@ export struct ChatPage {
   @Local showFarmEnglishSheet: boolean = false
   @Local farmEnglishToolCall: ToolCall = new ToolCall()
   @Local farmEnglishAnswered: boolean = false
+  @Local showAirportEnglishSheet: boolean = false
+  @Local airportEnglishToolCall: ToolCall = new ToolCall()
+  @Local airportEnglishAnswered: boolean = false
   @Local showNumberBlocksSheet: boolean = false
   @Local numberBlocksToolCall: ToolCall = new ToolCall()
   @Local numberBlocksAnswered: boolean = false
@@ -357,6 +361,7 @@ export struct ChatPage {
   private roomEnglishDismissPayload: (() => string) | null = null
   private cityEnglishDismissPayload: (() => string) | null = null
   private farmEnglishDismissPayload: (() => string) | null = null
+  private airportEnglishDismissPayload: (() => string) | null = null
   private numberBlocksDismissPayload: (() => string) | null = null
   @Local toolExecutionApprovalName: string = ''
   @Local showStarSheet: boolean = false
@@ -2613,6 +2618,12 @@ export struct ChatPage {
             this.farmEnglishDismissPayload = null
             this.showFarmEnglishSheet = true
           },
+          onOpenAirportEnglishSheet: (toolCall: ToolCall): void => {
+            this.airportEnglishToolCall = toolCall
+            this.airportEnglishAnswered = false
+            this.airportEnglishDismissPayload = null
+            this.showAirportEnglishSheet = true
+          },
           onOpenNumberBlocksSheet: (toolCall: ToolCall): void => {
             this.numberBlocksToolCall = toolCall
             this.numberBlocksAnswered = false
@@ -3218,6 +3229,41 @@ export struct ChatPage {
                 this.handleAskUserAnswer(this.farmEnglishToolCall.id, resultJson)
               }
               this.showFarmEnglishSheet = false
+            }
+          })
+
+        Column()
+          .width(0)
+          .height(0)
+          .bindSheet($$this.showAirportEnglishSheet, this.AirportEnglishSheetBuilder(), {
+            height: SheetSize.LARGE,
+            dragBar: true,
+            showClose: true,
+            blurStyle: BlurStyle.Thick,
+            backgroundColor: this.themeBackground,
+            preferType: SheetType.BOTTOM,
+            onDisappear: () => {
+              if (this.showAirportEnglishSheet && !this.airportEnglishAnswered) {
+                const provider = this.airportEnglishDismissPayload
+                let resultJson: string = ''
+                if (provider !== null) {
+                  resultJson = provider()
+                }
+                if (resultJson === '') {
+                  const dismissResult: AirportEnglishAnswerPayload = {
+                    completed: false,
+                    explored_count: 0,
+                    words: [],
+                    focus: 'overview',
+                    skill_key: 'english_vocab',
+                    cancelled: false
+                  }
+                  resultJson = JSON.stringify(dismissResult)
+                }
+                this.airportEnglishAnswered = true
+                this.handleAskUserAnswer(this.airportEnglishToolCall.id, resultJson)
+              }
+              this.showAirportEnglishSheet = false
             }
           })
 
@@ -3888,6 +3934,27 @@ export struct ChatPage {
       },
       onRegisterDismissPayload: (provider: () => string): void => {
         this.farmEnglishDismissPayload = provider
+      }
+    })
+  }
+
+  @Builder
+  AirportEnglishSheetBuilder() {
+    AirportEnglishCard({
+      toolCall: this.airportEnglishToolCall,
+      isAnswered: false,
+      answeredPayload: '',
+      largeSize: true,
+      onAnswer: (toolCallId: string, answerJson: string): void => {
+        this.airportEnglishAnswered = true
+        this.handleAskUserAnswer(toolCallId, answerJson)
+        this.showAirportEnglishSheet = false
+      },
+      onRequestClose: (): void => {
+        this.showAirportEnglishSheet = false
+      },
+      onRegisterDismissPayload: (provider: () => string): void => {
+        this.airportEnglishDismissPayload = provider
       }
     })
   }

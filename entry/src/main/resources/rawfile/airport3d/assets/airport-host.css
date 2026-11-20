@@ -1,0 +1,8 @@
+/* Host mode: the native card supplies its own title bar and actions. */
+body.host .topbar { display: none; }
+body.host .app { grid-template-rows: minmax(0, 1fr); }
+body.host .workspace { height: 100%; }
+body.host .stage-ui { top: 8px; }
+@media (min-width: 900px) {
+  body.host .workspace { grid-template-columns: minmax(0, 1fr) 340px; }
+}

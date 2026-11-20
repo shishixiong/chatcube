@@ -1,0 +1,72 @@
+# 3D 机场模型署名（airport_english）
+
+本工具的 3D 模型来自 [Polyfork Airport Kit](https://polyfork.dev/kit/airport-43b137)，每个 GLB 网格按 **CC BY 4.0** 使用。改动：将 `preview_glb` 打包为离线 base64、按 4m 网格重新摆放到自制机场场景、统一使用平面着色材质。
+
+素材只作为 App 内嵌资源，不作为独立资产包再分发。
+
+```
+3D models: Polyfork Airport Kit (https://polyfork.dev/kit/airport-43b137)
+License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+Changes: bundled offline as base64, repacked as JS data files, rendered with flat shading.
+
+Terminal Structure Bay by Polyfork (https://polyfork.dev/asset/terminal-structure-bay-ea2467), CC BY 4.0
+Terminal Facade Module by Polyfork (https://polyfork.dev/asset/terminal-facade-module-5574b6), CC BY 4.0
+Control Tower by Polyfork (https://polyfork.dev/asset/control-tower-c95a65), CC BY 4.0
+Taxiway Centreline Stud Run by Polyfork (https://polyfork.dev/asset/taxiway-centreline-stud-run-7a6020), CC BY 4.0
+Apron Tile by Polyfork (https://polyfork.dev/asset/apron-tile-8670c1), CC BY 4.0
+Maintenance Hangar by Polyfork (https://polyfork.dev/asset/maintenance-hangar-6fab99), CC BY 4.0
+Cargo Shed by Polyfork (https://polyfork.dev/asset/cargo-shed-bcb2a8), CC BY 4.0
+Airport Fire Station by Polyfork (https://polyfork.dev/asset/airport-fire-station-92c6b7), CC BY 4.0
+Airport Hotel by Polyfork (https://polyfork.dev/asset/airport-hotel-1a1e0a), CC BY 4.0
+Multi-Storey Car Park by Polyfork (https://polyfork.dev/asset/multi-storey-car-park-021465), CC BY 4.0
+Jet Bridge by Polyfork (https://polyfork.dev/asset/jet-bridge-4f39c0), CC BY 4.0
+Gate Lounge Module by Polyfork (https://polyfork.dev/asset/gate-lounge-module-5ebc23), CC BY 4.0
+Gate Seating Row by Polyfork (https://polyfork.dev/asset/gate-seating-row-cc0ff3), CC BY 4.0
+Check-In Desk Run by Polyfork (https://polyfork.dev/asset/check-in-desk-run-b96c12), CC BY 4.0
+Baggage Reclaim Carousel by Polyfork (https://polyfork.dev/asset/baggage-reclaim-carousel-7ceef0), CC BY 4.0
+Widebody Airliner by Polyfork (https://polyfork.dev/asset/widebody-airliner-ae0a5a), CC BY 4.0
+Narrow-Body Airliner by Polyfork (https://polyfork.dev/asset/narrow-body-airliner-619183), CC BY 4.0
+Regional Turboprop by Polyfork (https://polyfork.dev/asset/regional-turboprop-097f26), CC BY 4.0
+Business Jet by Polyfork (https://polyfork.dev/asset/business-jet-684611), CC BY 4.0
+Cargo Freighter by Polyfork (https://polyfork.dev/asset/cargo-freighter-b4377e), CC BY 4.0
+Helicopter by Polyfork (https://polyfork.dev/asset/helicopter-9d1986), CC BY 4.0
+Pushback Tug by Polyfork (https://polyfork.dev/asset/pushback-tug-8eab46), CC BY 4.0
+Baggage Tug by Polyfork (https://polyfork.dev/asset/baggage-tug-fb69f7), CC BY 4.0
+Baggage Cart by Polyfork (https://polyfork.dev/asset/baggage-cart-b1bb82), CC BY 4.0
+Container Loader by Polyfork (https://polyfork.dev/asset/container-loader-254a74), CC BY 4.0
+Belt Loader by Polyfork (https://polyfork.dev/asset/belt-loader-3d84fd), CC BY 4.0
+Aviation Fuel Tanker Truck by Polyfork (https://polyfork.dev/asset/aviation-fuel-tanker-truck-37ed29), CC BY 4.0
+Catering Truck by Polyfork (https://polyfork.dev/asset/catering-truck-496150), CC BY 4.0
+Airstairs Truck by Polyfork (https://polyfork.dev/asset/airstairs-truck-de0f4b), CC BY 4.0
+Apron Passenger Bus by Polyfork (https://polyfork.dev/asset/apron-passenger-bus-c46aef), CC BY 4.0
+Follow-Me Car by Polyfork (https://polyfork.dev/asset/follow-me-car-b3c6a5), CC BY 4.0
+Airport Crash Tender by Polyfork (https://polyfork.dev/asset/airport-crash-tender-2422ba), CC BY 4.0
+Apron Sweeper Truck by Polyfork (https://polyfork.dev/asset/apron-sweeper-truck-937ca0), CC BY 4.0
+Airline Pilot by Polyfork (https://polyfork.dev/asset/airline-pilot-63226a), CC BY 4.0
+Flight Attendant by Polyfork (https://polyfork.dev/asset/flight-attendant-befaf4), CC BY 4.0
+Traveller by Polyfork (https://polyfork.dev/asset/traveller-92f20c), CC BY 4.0
+Airport Security Officer by Polyfork (https://polyfork.dev/asset/airport-security-officer-8fd38a), CC BY 4.0
+Baggage Handler by Polyfork (https://polyfork.dev/asset/baggage-handler-0823f5), CC BY 4.0
+Windsock by Polyfork (https://polyfork.dev/asset/windsock-d5df79), CC BY 4.0
+Air Traffic Radar Mast by Polyfork (https://polyfork.dev/asset/air-traffic-radar-mast-3e5642), CC BY 4.0
+Rotating Airport Beacon by Polyfork (https://polyfork.dev/asset/rotating-airport-beacon-e1ea5a), CC BY 4.0
+Runway Edge Light Run by Polyfork (https://polyfork.dev/asset/runway-edge-light-run-ebe7e1), CC BY 4.0
+PAPI Unit by Polyfork (https://polyfork.dev/asset/papi-unit-adc7c4), CC BY 4.0
+Overhead Wayfinding Sign by Polyfork (https://polyfork.dev/asset/overhead-wayfinding-sign-64d4e8), CC BY 4.0
+Fuel Farm Tank by Polyfork (https://polyfork.dev/asset/fuel-farm-tank-ed67f0), CC BY 4.0
+Apron Floodlight Mast by Polyfork (https://polyfork.dev/asset/apron-floodlight-mast-e0d04a), CC BY 4.0
+Passport Control Booth by Polyfork (https://polyfork.dev/asset/passport-control-booth-7724c6), CC BY 4.0
+X-Ray Baggage Conveyor by Polyfork (https://polyfork.dev/asset/x-ray-baggage-conveyor-b3d1cc), CC BY 4.0
+Departures Board by Polyfork (https://polyfork.dev/asset/departures-board-7b85c8), CC BY 4.0
+Moving Walkway Run by Polyfork (https://polyfork.dev/asset/moving-walkway-run-9f078a), CC BY 4.0
+Terminal Escalator by Polyfork (https://polyfork.dev/asset/terminal-escalator-b80f37), CC BY 4.0
+ULD Container by Polyfork (https://polyfork.dev/asset/uld-container-a055c6), CC BY 4.0
+Crew Minivan by Polyfork (https://polyfork.dev/asset/crew-minivan-2ed5f1), CC BY 4.0
+Security Body Scanner by Polyfork (https://polyfork.dev/asset/security-body-scanner-ef6fcd), CC BY 4.0
+Queue Barrier Stanchion Run by Polyfork (https://polyfork.dev/asset/queue-barrier-stanchion-run-1836c8), CC BY 4.0
+Departures Kerb Canopy Run by Polyfork (https://polyfork.dev/asset/departures-kerb-canopy-run-d1ed9e), CC BY 4.0
+Cargo Forklift by Polyfork (https://polyfork.dev/asset/cargo-forklift-91f591), CC BY 4.0
+Taxi Rank Sign by Polyfork (https://polyfork.dev/asset/taxi-rank-sign-f5f39d), CC BY 4.0
+Lit Taxiway Sign by Polyfork (https://polyfork.dev/asset/lit-taxiway-sign-206955), CC BY 4.0
+Runway Guard Light by Polyfork (https://polyfork.dev/asset/runway-guard-light-5a6541), CC BY 4.0
+```

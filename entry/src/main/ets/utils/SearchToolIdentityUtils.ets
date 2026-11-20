@@ -51,6 +51,9 @@ export const CITY_ENGLISH_TOOL_ID: string = 'city_english'
 // 阳光农场 3D 英语探索（2026-11-06）：讲解型农场工具。50 个可点击单词（地点/动物/农作物/农机/自然/人物）
 // + 5 个分区镜头 + 单词卡 + TTS 发音，参考 open-design 原型 sunny-farm（140m × 110m 低多边形农场）。
 export const FARM_ENGLISH_TOOL_ID: string = 'farm_english'
+// 3D 机场英语探索（2026-11-20）：讲解型机场工具。50 个可点击单词（地点/飞机/车辆/人物/设施）
+// + 5 个分区镜头 + 单词卡 + TTS 发音，模型取自 polyfork Airport kit。
+export const AIRPORT_ENGLISH_TOOL_ID: string = 'airport_english'
 // 本地动画片播放（2026-11-10）：只给 kids_games。全屏横屏播放，
 // 单次连续 20 分钟 / 每天 60 分钟硬闸，不授星。
 export const PLAY_CARTOON_TOOL_ID: string = 'play_cartoon'
@@ -226,6 +229,10 @@ export function isFarmEnglishFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === FARM_ENGLISH_TOOL_ID
 }
 
+export function isAirportEnglishFunctionName(functionName: string): boolean {
+  return normalizeToolFunctionName(functionName) === AIRPORT_ENGLISH_TOOL_ID
+}
+
 export function isPlayCartoonFunctionName(functionName: string): boolean {
   return normalizeToolFunctionName(functionName) === PLAY_CARTOON_TOOL_ID
 }
@@ -314,6 +321,7 @@ export function isInteractiveQuizFunctionName(functionName: string): boolean {
     isRoomEnglishFunctionName(functionName) ||
     isCityEnglishFunctionName(functionName) ||
     isFarmEnglishFunctionName(functionName) ||
+    isAirportEnglishFunctionName(functionName) ||
     isNumberBlocksFunctionName(functionName)
 }
 

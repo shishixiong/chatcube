@@ -16,6 +16,7 @@ import { validateRoomEnglishArgs } from '../utils/RoomEnglishValidation'
 import { validateCityEnglishArgs } from '../utils/CityEnglishValidation'
 import { validateMusicEarArgs } from '../utils/MusicEarValidation'
 import { validateFarmEnglishArgs } from '../utils/FarmEnglishValidation'
+import { validateAirportEnglishArgs } from '../utils/AirportEnglishValidation'
 import { validateNumberBlocksArgs } from '../utils/NumberBlocksValidation'
 import { getToolRegistry, RegisteredTool, ToolRegistry } from './ToolRegistry'
 import {
@@ -69,6 +70,7 @@ import {
   isRoomEnglishFunctionName,
   isCityEnglishFunctionName,
   isFarmEnglishFunctionName,
+  isAirportEnglishFunctionName,
   isNumberBlocksFunctionName,
   isMapQuizFunctionName,
   isMapPuzzleFunctionName,
@@ -78,6 +80,7 @@ import {
   ROOM_ENGLISH_TOOL_ID,
   CITY_ENGLISH_TOOL_ID,
   FARM_ENGLISH_TOOL_ID,
+  AIRPORT_ENGLISH_TOOL_ID,
   NUMBER_BLOCKS_TOOL_ID,
   PLAY_CARTOON_TOOL_ID,
   isScrapeWebFunctionName,
@@ -537,7 +540,7 @@ export class ToolExecutionService {
       // 否则「讲完一个字立刻练同一个字」会被 session_gap 误拦——
       // hanzi_card 与 chinese_quiz(word_build) 共用 zh:char:<字> 键,
       // pinyin_card 与 pinyin_quiz 共用 zh:pinyin:<音节> 键, 同 key 必撞门禁。
-      const taughtOnly = toolId === 'room_english' || toolId === 'city_english' || toolId === 'farm_english'
+      const taughtOnly = toolId === 'room_english' || toolId === 'city_english' || toolId === 'farm_english' || toolId === 'airport_english'
         || toolId === HANZI_CARD_TOOL_ID || toolId === PINYIN_CARD_TOOL_ID
         || toolId === PICTURE_TALK_TOOL_ID
       const ledger = getLearningLedgerService()
@@ -2221,6 +2224,98 @@ export class ToolExecutionService {
     toolCall.approvalState = 'answered'
     toolCall.approvalReason = answerJson
     console.info('ToolExecutionService', `farm_english answered: ${toolCall.id}`)
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
+
+  // airport_english 特殊路径: 3D 机场英语探索（讲解型）。
+  // 前端 AirportEnglishCard 用 Web 容器承载 3D 机场场景, 收集孩子点开的单词; 点「我学会了」完成回执。
+  // 讲解型工具: 不授星（与 farm_english / room_english / city_english 一致）——星星由后续 english_quiz 给。
+  private async handleAirportEnglish(toolCall: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    toolCall.toolId = AIRPORT_ENGLISH_TOOL_ID
+    if (toolCall.displayName.trim() === '') {
+      toolCall.displayName = '3D 机场英语探索'
+    }
+    toolCall.sourceType = ToolSourceType.BUILTIN
+    if (toolCall.sourceLabel.trim() === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
+    toolCall.permissionLevel = ToolPermissionLevel.READ
+
+    // 0. 预校验: skill_key / focus 枚举 / words 必须命中 50 个机场单词 id
+    const cardValidation = validateAirportEnglishArgs(toolCall.arguments)
+    if (!cardValidation.ok) {
+      console.warn('ToolExecutionService', `airport_english validation failed: ${cardValidation.error}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: 'validation_failed',
+          message: cardValidation.error,
+          should_retry: true
+        }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    // 1. 立即设置 pending 状态, 让卡片立即出现
+    toolCall.approvalState = 'pending'
+    this.recordLedgerServed('airport_english', toolCall, context)
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAnswers.delete(toolCall.id)
+        }
+        const snapshot = this.buildAskUserSnapshot(toolCall, context)
+        snapshot.kind = PendingToolInteractionKind.ASK_USER
+        snapshot.toolId = AIRPORT_ENGLISH_TOOL_ID
+        this.pendingAnswers.set(toolCall.id, new PendingToolAnswerRuntime(snapshot, resolve))
+        this.publishPendingInteractionChanged()
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `airport_english answer callback failed: ${JSON.stringify(error)}`)
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `airport_english 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      console.info('ToolExecutionService', 'airport_english cancelled by external stop')
+      toolCall.approvalState = 'denied'
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      toolCall.approvalState = 'denied'
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ cancelled: true, error: '小朋友未完成本课学习' }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    toolCall.approvalState = 'answered'
+    toolCall.approvalReason = answerJson
+    console.info('ToolExecutionService', `airport_english answered: ${toolCall.id}`)
     return new ToolResult(
       toolCall.id,
       answerJson,
@@ -4025,6 +4120,12 @@ export class ToolExecutionService {
     // 阳光农场 3D 英语探索讲解卡, 由 FarmEnglishCard 收集「我学会了」完成回执。
     if (isFarmEnglishFunctionName(normalizedFunctionName)) {
       return await this.handleFarmEnglish(toolCall, context)
+    }
+
+    // === airport_english 特殊路径 ===
+    // 3D 机场英语探索讲解卡, 由 AirportEnglishCard 收集「我学会了」完成回执。
+    if (isAirportEnglishFunctionName(normalizedFunctionName)) {
+      return await this.handleAirportEnglish(toolCall, context)
     }
 
     // === number_blocks 特殊路径 ===
